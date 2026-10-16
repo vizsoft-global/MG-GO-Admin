@@ -29,7 +29,7 @@ const MAKE_MODEL_RE = /^[\p{L}\p{N} \-]{1,40}$/u;
 const LOCATION_RE = /^[\p{L}\p{N} \-,]{1,80}$/u;
 const YEAR_RE = /^(199[0-9]|20[0-9]{2}|2100)$/;
 const CHIP_RE = /^[A-Za-z0-9-]{1,32}$/;
-const FUEL_RE = /^\d{1,5}(\.\d{1,3})?$/;
+const FUEL_RE = /^(\d{1,5}(\.\d{1,3})?|\.\d{1,3})$/;
 
 function trim(value: string): string {
   return value.trim();
@@ -96,12 +96,20 @@ export function filterChip(raw: string): string {
   return raw.replace(/[^A-Za-z0-9-]/g, "").slice(0, 32);
 }
 
+/**
+ * Fuel limit keeps digits and one dot. A leading dot is accepted only when a
+ * digit follows it, because `.5` means `0.5` — dropping the dot turned it into
+ * `5` and silently changed the limit by 10× (QA #21). A stray `.` on its own
+ * stays noise.
+ */
 export function filterFuelLimit(raw: string): string {
+  const chars = [...raw];
   let out = "";
   let dot = false;
   let intDigits = 0;
   let frac = 0;
-  for (const ch of raw) {
+  for (let index = 0; index < chars.length; index += 1) {
+    const ch = chars[index] as string;
     if (ch >= "0" && ch <= "9") {
       if (!dot && intDigits < 5) {
         out += ch;
@@ -110,7 +118,11 @@ export function filterFuelLimit(raw: string): string {
         out += ch;
         frac += 1;
       }
-    } else if (ch === "." && !dot && intDigits > 0) {
+    } else if (
+      ch === "." &&
+      !dot &&
+      (intDigits > 0 || chars.slice(index + 1).some((c) => c >= "0" && c <= "9"))
+    ) {
       out += ".";
       dot = true;
     }

@@ -137,7 +137,7 @@ export function TemplateBuilderPageShell({ templateId }: { templateId?: string }
         ? await updateNotificationTemplate(templateId!, buildInput())
         : await saveNotificationTemplate(buildInput());
       if ("error" in result) {
-        toast.error(t("errors.saveFailed"));
+        toast.error(t("errors.templateSaveFailed"));
         return;
       }
       toast.success(isEdit ? t("templateUpdated") : t("templateCreated"));
@@ -150,7 +150,7 @@ export function TemplateBuilderPageShell({ templateId }: { templateId?: string }
     startTransition(async () => {
       const result = await archiveNotificationTemplate(templateId);
       if ("error" in result) {
-        toast.error(t("errors.saveFailed"));
+        toast.error(t("errors.templateSaveFailed"));
         return;
       }
       toast.success(t("templateArchived"));

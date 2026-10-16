@@ -25,6 +25,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // QA #36: the rider app's Wrong Actions screen reads its own rows straight
+    // from Firestore and was denied. A rider may only see rows whose
+    // `driver_id` is their own uid; writes still go through the Admin SDK.
+    match /wrong_actions/{actionId} {
+      allow read: if request.auth != null && resource.data.driver_id == request.auth.uid;
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

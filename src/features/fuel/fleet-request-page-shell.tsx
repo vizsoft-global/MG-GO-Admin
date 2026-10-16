@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
   AppListControls,
   GroupedSections,
@@ -61,9 +62,16 @@ export function FleetRequestPageShell({
   embedded?: boolean;
 }) {
   const t = useTranslations("pages.fleetFuelQueue");
+  const withHub = useFleetBreadcrumbs();
   const statusT = useTranslations("pages.requests.status");
   const labels = useListControlLabels();
   const { prefs, update: updateListPrefs } = useListViewPrefs(fleetRequestPrefsKey(type));
+  const pageTitle =
+    type === "fuel"
+      ? t("requestsTitle")
+      : type === "fuel_refund"
+        ? t("refundsTitle")
+        : t("assetsTitle");
   const { data, isPending } = useFleetRequests(type);
   const rows = data?.rows ?? [];
   const isLoading = data === undefined || isPending;
@@ -304,7 +312,8 @@ export function FleetRequestPageShell({
   return (
     <AppPage>
       <AppPageHeader
-        title={type === "fuel" ? t("requestsTitle") : type === "fuel_refund" ? t("refundsTitle") : t("assetsTitle")}
+        breadcrumbs={withHub({ label: pageTitle })}
+        title={pageTitle}
         description={
           type === "fuel"
             ? t("requestsSubtitle")

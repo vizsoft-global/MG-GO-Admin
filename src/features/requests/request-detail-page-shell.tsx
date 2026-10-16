@@ -79,7 +79,11 @@ import {
 } from "./request-create-utils";
 import { FleetAttachmentRow } from "@/features/fleet/fleet-attachment-row";
 import { CarTypeBadge, FuelCompanyBadge, ProjectBadge } from "@/features/fleet/fleet-badges";
-import { parseDriverProjectKey } from "@/features/fleet/fleet-labels";
+import {
+  isVehicleCarType,
+  isVehicleFuelCompany,
+  parseDriverProjectKey,
+} from "@/features/fleet/fleet-labels";
 import { FleetDetailRow } from "@/features/fleet/fleet-record-dialog";
 import { RequestRecordBody } from "./request-record-body";
 import { RequesterHeader } from "./requester-header";
@@ -493,7 +497,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
       )}
 
       {request.is_confidential ? (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
           {wave4Layout && isComplaint
             ? tRcm("decision.confidentialBanner")
             : t("detail.confidentialBanner")}
@@ -966,16 +970,34 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
         }
         vehicle={
           <>
-            <FleetDetailRow label={fleetT("fieldPlate")}>—</FleetDetailRow>
-            <FleetDetailRow label={fleetT("fieldModel")}>—</FleetDetailRow>
-            <FleetDetailRow label={fleetT("colVehicleCompany")}>—</FleetDetailRow>
+            <FleetDetailRow label={fleetT("fieldPlate")}>
+              {request.vehicle?.plate ?? "—"}
+            </FleetDetailRow>
+            <FleetDetailRow label={fleetT("fieldModel")}>
+              {[request.vehicle?.make, request.vehicle?.model].filter(Boolean).join(" ") || "—"}
+            </FleetDetailRow>
+            <FleetDetailRow label={fleetT("colVehicleCompany")}>
+              {request.vehicle?.company ?? "—"}
+            </FleetDetailRow>
             {request.request_type === "fuel" || request.request_type === "fuel_refund" ? (
               <>
                 <FleetDetailRow label={fleetT("fieldCarType")}>
-                  <CarTypeBadge value={null} />
+                  <CarTypeBadge
+                    value={
+                      isVehicleCarType(request.vehicle?.car_type)
+                        ? request.vehicle.car_type
+                        : null
+                    }
+                  />
                 </FleetDetailRow>
                 <FleetDetailRow label={fleetT("colFuelCompany")}>
-                  <FuelCompanyBadge value={null} />
+                  <FuelCompanyBadge
+                    value={
+                      isVehicleFuelCompany(request.vehicle?.fuel_company)
+                        ? request.vehicle.fuel_company
+                        : null
+                    }
+                  />
                 </FleetDetailRow>
               </>
             ) : null}

@@ -2,6 +2,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { FieldValue, getFirestore, Timestamp } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { parseId, parseInstant } from "../core/query";
+import { kuwaitDayString } from "../core/kuwait";
 import { requireStaff } from "../core/staff";
 import { asSpec, pickValue } from "./notification-audience";
 
@@ -189,6 +190,47 @@ export const enqueueNotificationAutomationEvent = onCall(async (request) => {
   return ref.id;
 });
 
+/**
+ * `notification_analytics_daily` — one row per (day, campaign) (QA #24).
+ *
+ * The Analytics tab reads this rollup and had no writer at all, so the page
+ * stayed permanently empty even for a campaign every rider had opened. The row
+ * is keyed `${day}_${campaignId}` and recomputed from the campaign's own
+ * counters on every delivery / open / click / failure event, which keeps it
+ * idempotent and cheaper than aggregating `notification_client_events` on read.
+ */
+async function upsertAnalyticsDailyRow(input: {
+  campaignId: string;
+  campaign: Record<string, unknown>;
+  fallbackDay: string;
+}): Promise<void> {
+  const sentAt = input.campaign["sent_at"];
+  const sentDate =
+    sentAt instanceof Timestamp ? sentAt.toDate() : sentAt instanceof Date ? sentAt : null;
+  const metricDate = sentDate ? kuwaitDayString(sentDate) : input.fallbackDay;
+  const count = (value: unknown): number =>
+    typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : 0;
+  const delivered = count(input.campaign["delivered_count"]);
+  const failed = count(input.campaign["failed_count"]);
+
+  await getFirestore()
+    .collection(COLLECTIONS.notificationAnalyticsDaily)
+    .doc(`${metricDate}_${input.campaignId}`)
+    .set(
+      {
+        metric_date: metricDate,
+        campaign_id: input.campaignId,
+        sent_count: delivered + failed,
+        delivered_count: delivered,
+        opened_count: count(input.campaign["opened_count"]),
+        clicked_count: count(input.campaign["clicked_count"]),
+        failed_count: failed,
+        updated_at: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+}
+
 export const recordNotificationClientEvent = onCall(async (request) => {
   const driverId = request.auth?.uid ?? null;
   if (!driverId) throw new HttpsError("unauthenticated", "not_authenticated");
@@ -271,6 +313,15 @@ export const recordNotificationClientEvent = onCall(async (request) => {
       } catch (error) {
         const campaign = await campaignRef.get();
         if (campaign.exists) throw error;
+      }
+      // QA #24: refresh the day's rollup so Analytics reflects this event.
+      const afterUpdate = await campaignRef.get();
+      if (afterUpdate.exists) {
+        await upsertAnalyticsDailyRow({
+          campaignId,
+          campaign: afterUpdate.data() ?? {},
+          fallbackDay: kuwaitDayString(eventAt),
+        });
       }
       break;
     }

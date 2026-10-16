@@ -15,6 +15,8 @@ import {
   type VehicleFuelType,
 } from "@/features/fleet/fleet-labels";
 import type { DocumentData, Firestore } from "firebase-admin/firestore";
+import { getPresignedGetUrl } from "@/lib/storage/r2-client";
+import { isR2Configured } from "@/lib/storage/r2-config";
 import { parseFuelFillRow } from "./fuel-week";
 import type { FuelFillListItem } from "./types";
 
@@ -75,6 +77,18 @@ export async function fetchFuelFillAttachmentUrl(
   const objectKey = normalized.startsWith("fuel-fills/")
     ? normalized.slice("fuel-fills/".length)
     : normalized;
+
+  // QA #28: rider uploads now land in R2 (`driverGetUploadUrl` presigns the same
+  // `fuel-fills/<objectKey>` path), so Admin has to read from R2 too. GCS stays
+  // as the fallback for any object written before the migration.
+  if (await isR2Configured()) {
+    try {
+      const url = await getPresignedGetUrl(`fuel-fills/${objectKey}`, 300);
+      return { url: url ?? null };
+    } catch (error) {
+      console.error("[fuel] r2 presign(read) failed:", error);
+    }
+  }
 
   const storage = await getFirebaseStorage();
   if (!storage) return { url: null, error: "not_configured" };

@@ -319,7 +319,7 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
           ) : null}
           <div className="space-y-2 rounded-lg border border-border p-3">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-accent">{t("screenshotAttemptsTitle")}</p>
+              <p className="text-xs font-semibold text-foreground">{t("screenshotAttemptsTitle")}</p>
               <span className="text-xs text-muted-foreground">
                 {t("screenshotAttemptsCount", { count: screenshotEvents?.length ?? 0 })}
               </span>

@@ -82,6 +82,15 @@ export function shiftSessionInstant(shiftDate: string, time: ShiftTime, dayOffse
   return new Date(midnight + (time.hours * 3600 + time.minutes * 60 + time.seconds) * 1000);
 }
 
+export function shiftStartAt(row: {
+  shift_date: string;
+  session1_start: string;
+}): Date | null {
+  const s1Start = parseShiftTime(row.session1_start);
+  if (!s1Start) return null;
+  return shiftSessionInstant(row.shift_date, s1Start, 0);
+}
+
 export function shiftEndAt(row: {
   shift_date: string;
   shift_type: string;

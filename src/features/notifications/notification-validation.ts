@@ -111,7 +111,29 @@ export function isDeliveryStepValid(scheduleMode: "now" | "later", scheduledFor:
   return !Number.isNaN(when.getTime()) && when.getTime() > Date.now();
 }
 
-export function isActionStepValid(): boolean {
+/**
+ * The action step is only complete once the chosen preset can actually be
+ * delivered (QA #6). A plain screen jump needs nothing; a record jump needs its
+ * id, a URL jump needs an absolute URL, and an advanced payload must parse.
+ */
+export function isActionStepValid(fields: Record<string, string> = {}): boolean {
+  const preset = fields.preset ?? "open_home";
+  if (preset === "open_record") {
+    return Boolean((fields.recordId ?? "").trim()) && Boolean((fields.module ?? "").trim());
+  }
+  if (preset === "open_url") {
+    return /^https?:\/\//i.test((fields.url ?? "").trim());
+  }
+  if (preset === "advanced") {
+    const payload = (fields.payload ?? "").trim();
+    if (!payload) return true;
+    try {
+      const parsed: unknown = JSON.parse(payload);
+      return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed);
+    } catch {
+      return false;
+    }
+  }
   return true;
 }
 

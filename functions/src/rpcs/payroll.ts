@@ -237,6 +237,27 @@ async function loadPayrollContext(input: {
       .get(),
   ]));
 
+  // Requests created by the rider app carry only `driver_id`, so the AO grid's
+  // rider column falls back to `profiles.full_name` instead of a dash.
+  const requestDriverIds = [
+    ...new Set(
+      requestsSnap.docs
+        .map((doc) => asString(doc.get("driver_id")))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const requestProfileNames = new Map<string, string>();
+  for (let index = 0; index < requestDriverIds.length; index += GET_ALL_CHUNK) {
+    const chunk = requestDriverIds.slice(index, index + GET_ALL_CHUNK);
+    const snaps = await db.getAll(
+      ...chunk.map((id) => db.collection(COLLECTIONS.profiles).doc(id)),
+    );
+    for (const snap of snaps) {
+      const name = trimmedOrNull((snap.data() ?? {})["full_name"]);
+      if (name) requestProfileNames.set(snap.id, name);
+    }
+  }
+
   const [recon, verifiedByDriverDay] = await timedPhase(phases, "reconMs", () =>
     Promise.all([
       loadReconOrders(firstDay, lastDay),
@@ -301,6 +322,7 @@ async function loadPayrollContext(input: {
     offStructure,
     workedByDriverDay,
     adjustmentByDriverDay,
+    requestProfileNames,
   };
 }
 
@@ -586,6 +608,17 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
   const covers = new Map<string, Cover>();
   const requestRows: Array<Record<string, unknown>> = [];
 
+  // `profiles.full_name ?? drivers.name ?? driver_code` — the same ladder the
+  // rider app uses, so a request row never prints "—" for a real rider.
+  const driverNameById = new Map<string, string>();
+  const driverCodeById = new Map<string, string>();
+  for (const doc of ctx.driverSnap.docs) {
+    const name = trimmedOrNull(doc.get("name"));
+    const code = trimmedOrNull(doc.get("driver_code"));
+    if (name) driverNameById.set(doc.id, name);
+    if (code) driverCodeById.set(doc.id, code);
+  }
+
   for (const doc of ctx.requestsSnap.docs) {
     const raw = doc.data();
     const driverId = asString(raw["driver_id"]);
@@ -638,8 +671,18 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
       id: doc.id,
       code: asString(raw["request_code"]) ?? doc.id,
       driverId,
-      riderName: asString(raw["driver_name"]) ?? "—",
-      riderCode: asString(raw["driver_code"]) ?? asString(raw["employee_id"]) ?? "—",
+      riderName:
+        asString(raw["driver_name"]) ??
+        ctx.requestProfileNames.get(driverId) ??
+        driverNameById.get(driverId) ??
+        asString(raw["driver_code"]) ??
+        driverCodeById.get(driverId) ??
+        "—",
+      riderCode:
+        asString(raw["driver_code"]) ??
+        asString(raw["employee_id"]) ??
+        driverCodeById.get(driverId) ??
+        "—",
       tile,
       day: windowStart,
       zone: asString(raw["zone_name"]) ?? "—",

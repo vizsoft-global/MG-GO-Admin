@@ -54,7 +54,7 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
               ) : overdue ? (
                 <AlertTriangle className="h-[18px] w-[18px] text-danger" />
               ) : isActive ? (
-                <span className="mt-px block size-[18px] rounded-full border-2 border-orange-500 bg-amber-50" />
+                <span className="mt-px block size-[18px] rounded-full border-2 border-orange-500 bg-amber-50 dark:border-orange-400 dark:bg-amber-950/40" />
               ) : (
                 <Circle className="h-[18px] w-[18px] text-muted-foreground/40" />
               )}
@@ -62,7 +62,8 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
             <div
               className={cn(
                 "min-w-0 flex-1",
-                isActive && "rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5",
+                isActive &&
+                  "rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 dark:border-amber-800 dark:bg-amber-950/30",
               )}
             >
               <p
@@ -74,7 +75,7 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
               >
                 {step.step_name}
               </p>
-              <p className={cn("text-[11px]", isActive ? "font-medium text-orange-700" : "text-muted-foreground")}>
+              <p className={cn("text-[11px]", isActive ? "font-medium text-orange-700 dark:text-orange-300" : "text-muted-foreground")}>
                 {isCompleted
                   ? formatStamp(step.decided_at)
                   : isRejected

@@ -128,8 +128,10 @@ export function AttendanceCorrectionSheet({
               <div>
                 <p className="text-xs text-muted-foreground">{t("colDriver")}</p>
                 <p className="font-medium">
-                  {row.driver_name}{" "}
-                  <span className="text-muted-foreground">#{row.driver_code}</span>
+                  {row.driver_name}
+                  {row.driver_code ? (
+                    <span className="text-muted-foreground"> #{row.driver_code}</span>
+                  ) : null}
                 </p>
               </div>
               <div>

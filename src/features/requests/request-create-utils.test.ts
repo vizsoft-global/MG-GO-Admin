@@ -10,6 +10,7 @@ import {
   parseCreateRequestError,
   parseDriverAckNote,
   REQUEST_CREATE_TYPE_SEEDS,
+  salaryAmountsMissing,
   seedCreateRequestType,
   shouldOfferRequestDocumentsAction,
   shouldShowCreateField,
@@ -185,6 +186,36 @@ describe("isAttachRequiredAction", () => {
     assert.equal(isAttachRequiredAction("attach_send"), true);
     assert.equal(isAttachRequiredAction("attach_breakdown"), true);
     assert.equal(isAttachRequiredAction("approve"), false);
+  });
+});
+
+describe("salary justification amounts", () => {
+  it("wants at least one amount, and never demands both", () => {
+    assert.equal(salaryAmountsMissing({}), true);
+    assert.equal(salaryAmountsMissing({ expected_amount: "" }), true);
+    assert.equal(salaryAmountsMissing({ expected_amount: "250" }), false);
+    assert.equal(salaryAmountsMissing({ received_amount: "200" }), false);
+    assert.equal(salaryAmountsMissing({ expected_amount: "250", received_amount: "200" }), false);
+    assert.deepEqual(parseCreateRequestError("salary_amount_required"), {
+      key: "salary_amount_required",
+    });
+  });
+});
+
+describe("quantity cap copy", () => {
+  it("gives the quantity cap its own sentence and keeps it generic elsewhere", () => {
+    assert.deepEqual(parseCreateRequestError("number_too_large:quantity"), {
+      key: "quantity_too_large",
+      field: "quantity",
+    });
+    assert.deepEqual(parseCreateRequestError("number_too_large:amount_kwd"), {
+      key: "number_too_large",
+      field: "amount_kwd",
+    });
+    assert.deepEqual(parseCreateRequestError("number_too_small:tenure_months"), {
+      key: "number_too_small",
+      field: "tenure_months",
+    });
   });
 });
 

@@ -465,12 +465,22 @@ async function loadDriverRows(
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
   const multiCutoff = new Date(now.getTime() - MULTI_DEVICE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
-  const [partnerSnap, zoneSnap, companySnap, restaurantLinkSnap, restaurantSnap, deliverySnap, deviceSnap] =
+  const [
+    partnerSnap,
+    zoneSnap,
+    companySnap,
+    restaurantLinkSnap,
+    intakeRestaurantLinkSnap,
+    restaurantSnap,
+    deliverySnap,
+    deviceSnap,
+  ] =
     await timedPhase(marks, "parallelMs", () => Promise.all([
       db.collection(COLLECTIONS.partners).get(),
       db.collection(COLLECTIONS.zones).get(),
       db.collection(COLLECTIONS.sourceCompanies).get(),
       db.collection(COLLECTIONS.driverRestaurants).get(),
+      db.collection(COLLECTIONS.driverIntakeRestaurants).get(),
       db.collection(COLLECTIONS.restaurants).get(),
       deferLive
         ? Promise.resolve(null)
@@ -527,8 +537,9 @@ async function loadDriverRows(
   }
 
   /** `array_agg(name ORDER BY name, id)` from an (owner, restaurant) edge list. */
+  const restaurantLinkDocs = [...restaurantLinkSnap.docs, ...intakeRestaurantLinkSnap.docs];
   const collectRestaurants = (ownerKey: string) => {
-    const edges = restaurantLinkSnap.docs.map((doc) => {
+    const edges = restaurantLinkDocs.map((doc) => {
       const data = doc.data() as Dict;
       const restaurantId = asStr(data["restaurant_id"]) ?? "";
       return {

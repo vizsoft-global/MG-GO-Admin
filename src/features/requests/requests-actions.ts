@@ -565,6 +565,8 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
   const r = asRecord(payload.request);
   const requesterRaw = asRecord(payload.requester);
   const senderRaw = asRecord(payload.sender);
+  const vehicleRaw = asRecord(payload.vehicle);
+  const vehicleId = vehicleRaw.id != null ? String(vehicleRaw.id) : "";
   return {
     request: {
       id: String(r.id),
@@ -591,6 +593,18 @@ export async function fetchAdminRequestDetail(requestId: string): Promise<{
                 String(requesterRaw.project_key ?? senderRaw.project_key ?? "") || null,
             }
           : null,
+      vehicle: vehicleId
+        ? {
+            id: vehicleId,
+            plate: vehicleRaw.plate != null ? String(vehicleRaw.plate) : null,
+            make: vehicleRaw.make != null ? String(vehicleRaw.make) : null,
+            model: vehicleRaw.model != null ? String(vehicleRaw.model) : null,
+            company: vehicleRaw.company != null ? String(vehicleRaw.company) : null,
+            car_type: vehicleRaw.car_type != null ? String(vehicleRaw.car_type) : null,
+            fuel_company:
+              vehicleRaw.fuel_company != null ? String(vehicleRaw.fuel_company) : null,
+          }
+        : null,
       amount_kwd: r.amount_kwd != null ? Number(r.amount_kwd) : null,
       start_date: r.start_date != null ? String(r.start_date) : null,
       end_date: r.end_date != null ? String(r.end_date) : null,

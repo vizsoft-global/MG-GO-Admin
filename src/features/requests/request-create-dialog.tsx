@@ -32,6 +32,7 @@ import {
   inclusiveDurationDays,
   isNeededByInPast,
   parseCreateRequestError,
+  salaryAmountsMissing,
   seedCreateRequestType,
   shouldShowCreateField,
   staticOptionsForField,
@@ -230,6 +231,7 @@ export function RequestCreateDialog({
     !driverId ||
     (hasDates && (!value("start_date") || !value("end_date"))) ||
     (hasDeclaration && !declaration) ||
+    (type === "salary_justification" && salaryAmountsMissing(draft)) ||
     typedRequired.some((key) => !value(key).trim()) ||
     (typedRequiresAmount(type) && !value("amount_kwd").trim()) ||
     Boolean(missingKind) ||
@@ -411,7 +413,7 @@ export function RequestCreateDialog({
           </div>
 
           {blocked ? (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
               <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>{t(`create.gated.${blocked}` as "create.gated.tenure")}</span>
             </div>

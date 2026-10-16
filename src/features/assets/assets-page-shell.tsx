@@ -20,6 +20,7 @@ import {
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
   AppListControls,
   GroupedSections,
@@ -132,6 +133,7 @@ function AssetsPageSkeleton() {
 
 function AssetsPageContent() {
   const t = useTranslations("pages.assets");
+  const withHub = useFleetBreadcrumbs();
   const { can } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -274,6 +276,7 @@ function AssetsPageContent() {
   return (
     <AppPage>
       <AppPageHeader
+        breadcrumbs={withHub({ label: t("title") })}
         title={t("title")}
         description={
           tab === "assignments"

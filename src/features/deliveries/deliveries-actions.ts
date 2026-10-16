@@ -1261,7 +1261,7 @@ export async function rejectDelivery(
 const BULK_UPDATE_MAX = 100;
 
 export type BulkUpdateDeliveriesResult =
-  | { ok: true; updated: number; skipped: number; failed: number }
+  | { ok: true; updated: number; skipped: number; already: number; failed: number }
   | { error: DeliveryActionError; errorDetail?: string };
 
 function bulkUpdateErrorFromMessage(message: string | undefined): DeliveryActionError {
@@ -1283,7 +1283,7 @@ export async function bulkUpdateDeliveries(
   const session = await requireDeliveriesManage();
   if (!session) return { error: "not_authorized" };
   const ids = [...new Set(deliveryIds.filter(Boolean))];
-  if (ids.length === 0) return { ok: true, updated: 0, skipped: 0, failed: 0 };
+  if (ids.length === 0) return { ok: true, updated: 0, skipped: 0, already: 0, failed: 0 };
   if (ids.length > BULK_UPDATE_MAX) return { error: "too_many" };
   if (status === "rejected" && !rejectionReason?.trim()) return { error: "reason_required" };
 
@@ -1296,16 +1296,22 @@ export async function bulkUpdateDeliveries(
     return { error: bulkUpdateErrorFromMessage(error.message), errorDetail: formatPgErrorDetail(error) };
   }
 
-  const payload = (data ?? {}) as { updated?: number; skipped?: number; failed?: number };
+  const payload = (data ?? {}) as {
+    updated?: number;
+    skipped?: number;
+    already?: number;
+    failed?: number;
+  };
   const updated = Number(payload.updated ?? 0);
-  const skipped = Number(payload.skipped ?? 0);
+  const already = Number(payload.already ?? payload.skipped ?? 0);
+  const skipped = Number(payload.skipped ?? already);
   const failed = Number(payload.failed ?? 0);
 
   void logAdminMutation({
     action: "update",
     entityType: "delivery",
     routeName: "bulkUpdateDeliveries",
-    context: { status, requested: ids.length, updated, skipped, failed },
+    context: { status, requested: ids.length, updated, skipped, already, failed },
   });
 
   if (status === "verified" && updated > 0) {
@@ -1322,7 +1328,7 @@ export async function bulkUpdateDeliveries(
     }
   }
 
-  return { ok: true, updated, skipped, failed };
+  return { ok: true, updated, skipped, already, failed };
 }
 
 export async function deleteDelivery(deliveryId: string): Promise<DeliveryMutationResult> {

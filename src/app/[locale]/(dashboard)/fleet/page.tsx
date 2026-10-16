@@ -92,11 +92,9 @@ export default async function FleetHubPage({
 
   return (
     <AppPage className="space-y-4">
-      <AppPageHeader
-        breadcrumbs={[{ label: t("breadcrumb") }]}
-        title={t("title")}
-        description={t("subtitle")}
-      />
+      {/* The H1 is already "Fleet Hub" — a same-named breadcrumb above it was
+          the duplicate the panel reported. */}
+      <AppPageHeader title={t("title")} description={t("subtitle")} />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => {

@@ -20,6 +20,7 @@ import {
   dutyIsOn,
   minutesLateOf,
 } from "./attendance-live-plan";
+import { attendanceDisplayName, attendanceIdentityMissing } from "./attendance-stamp";
 
 const ATT = FIELDS.attendanceLogs;
 
@@ -201,6 +202,7 @@ export async function loadAttendanceRows(
   const today = kuwaitDayString(now);
   const staleBefore = new Date(now.getTime() - settings.attendance_gps_stale_minutes * 60_000);
   const locationIds: string[] = [];
+  const identityIds: string[] = [];
   let anyOnDuty = false;
   for (const doc of raw) {
     const data = doc.data() ?? {};
@@ -210,6 +212,7 @@ export async function loadAttendanceRows(
     const logDate = asString(data[ATT.logDate]) ?? today;
     const minutesLate = minutesLateOf(checkIn, scheduledStart, settings.attendance_late_grace_minutes);
     if (dutyIsOn(data[ATT.isOnDuty] === true, checkIn, checkOut, logDate, today)) anyOnDuty = true;
+    if (attendanceIdentityMissing(data)) identityIds.push(asString(data[ATT.driverId]) ?? doc.id);
     if (attendanceNeedsLocation({
       storedStatus: asString(data[ATT.status]),
       hasScheduledStart: Boolean(scheduledStart),
@@ -222,12 +225,15 @@ export async function loadAttendanceRows(
   }
 
   const locationByDriver = await timedPhase(phases, "locationsMs", () => loadLocations(locationIds));
+  const identity = identityIds.length
+    ? await timedPhase(phases, "identityMs", () => loadIdentity(identityIds))
+    : new Map<string, AttendanceIdentity>();
   const openSessions = attendanceNeedsSessions(anyOnDuty)
     ? await timedPhase(phases, "sessionsMs", () => loadOpenSessions())
     : new Map<string, Date>();
 
   return raw.map((doc) =>
-    composeRow(doc, now, today, staleBefore, settings, locationByDriver, openSessions),
+    composeRow(doc, now, today, staleBefore, settings, locationByDriver, openSessions, identity),
   );
 }
 
@@ -241,6 +247,54 @@ async function loadLocations(driverIds: Array<string | null>) {
       ...chunk.map((id) => db.collection(COLLECTIONS.driverLocations).doc(id)),
     );
     for (const snap of snaps) out.set(snap.id, snap);
+  }
+  return out;
+}
+
+type AttendanceIdentity = {
+  full_name: string | null;
+  name: string | null;
+  driver_code: string | null;
+  employee_id: string | null;
+};
+
+/**
+ * The identity columns a legacy `attendance_logs` row never stored. Only the
+ * rows that are actually missing one of them are looked up, so a healthy month
+ * costs nothing and an un-backfilled one still prints a name instead of "#".
+ */
+async function loadIdentity(driverIds: string[]): Promise<Map<string, AttendanceIdentity>> {
+  const db = getFirestore();
+  const ids = [...new Set(driverIds.filter((id) => Boolean(id)))];
+  const out = new Map<string, AttendanceIdentity>();
+  const blank = (): AttendanceIdentity => ({
+    full_name: null,
+    name: null,
+    driver_code: null,
+    employee_id: null,
+  });
+  for (let index = 0; index < ids.length; index += GET_ALL_CHUNK) {
+    const chunk = ids.slice(index, index + GET_ALL_CHUNK);
+    const [driverSnaps, profileSnaps] = await Promise.all([
+      db.getAll(...chunk.map((id) => db.collection(COLLECTIONS.drivers).doc(id))),
+      db.getAll(...chunk.map((id) => db.collection(COLLECTIONS.profiles).doc(id))),
+    ]);
+    for (const snap of driverSnaps) {
+      const raw = snap.data() ?? {};
+      out.set(snap.id, {
+        ...(out.get(snap.id) ?? blank()),
+        name: asString(raw[FIELDS.drivers.name]),
+        driver_code: asString(raw[FIELDS.drivers.driverCode]),
+        employee_id: asString(raw[FIELDS.drivers.employeeId]),
+      });
+    }
+    for (const snap of profileSnaps) {
+      const raw = snap.data() ?? {};
+      out.set(snap.id, {
+        ...(out.get(snap.id) ?? blank()),
+        full_name: asString(raw["full_name"]),
+      });
+    }
   }
   return out;
 }
@@ -265,6 +319,7 @@ function composeRow(
   settings: AppSettings,
   locations: Map<string, DocumentSnapshot>,
   openSessions: Map<string, Date>,
+  identity: Map<string, AttendanceIdentity>,
 ): AttendanceRow {
   const raw = doc.data() ?? {};
   const driverId = asString(raw[ATT.driverId]) ?? doc.id;
@@ -358,12 +413,19 @@ function composeRow(
     complianceScore = 100;
   }
 
+  const identityRow = identity.get(driverId);
+  const fallbackName = attendanceDisplayName(
+    identityRow?.full_name,
+    identityRow?.name,
+    identityRow?.driver_code,
+  );
+
   return {
     driver_id: driverId,
     log_date: logDate,
-    driver_code: asString(raw[ATT.driverCode]),
-    employee_id: asString(raw[ATT.employeeId]),
-    driver_name: asString(raw[ATT.driverName]) ?? "",
+    driver_code: asString(raw[ATT.driverCode]) ?? identityRow?.driver_code ?? null,
+    employee_id: asString(raw[ATT.employeeId]) ?? identityRow?.employee_id ?? null,
+    driver_name: asString(raw[ATT.driverName]) ?? fallbackName ?? "",
     driver_phone: asString(raw[ATT.driverPhone]),
     partner_id: asString(raw[ATT.partnerId]),
     partner_name: asString(raw[ATT.partnerName]),

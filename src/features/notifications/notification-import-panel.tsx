@@ -115,12 +115,17 @@ export function NotificationImportPanel({
 
   const handleFile = async (file: File) => {
     const parsed = await parseSpreadsheetFile(file);
-    const employeeHeader = parsed.headers.find((h) => /employee\s*id/i.test(h)) ?? "";
+    const employeeHeader = parsed.headers.find((h) => /employee\s*id|am\s*id/i.test(h)) ?? "";
     const codeHeader =
       parsed.headers.find((h) => /driver\s*code|mg\s*id/i.test(h)) ?? "";
     const identityHeaders = new Set([employeeHeader, codeHeader].filter(Boolean));
+    // QA #38: with no "Employee ID" column the first column used to be copied
+    // into `employee_id`, so an MG-ID-only sheet was resolved as if its values
+    // were AM IDs. Keep each column under the name it actually carries and leave
+    // the other blank — the resolver reports a row it cannot prove instead of
+    // accepting it as Ready.
     const mapping: NotificationImportSpec["column_mapping"] = {
-      employee_id: employeeHeader || parsed.headers[0] || "",
+      employee_id: employeeHeader,
       driver_code: codeHeader,
     };
     const variable_columns = parsed.headers.filter((h) => !identityHeaders.has(h));

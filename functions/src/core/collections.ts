@@ -30,7 +30,11 @@ export const COLLECTIONS = {
   partners: "partners",
   restaurants: "restaurants",
   driverRestaurants: "driver_restaurants",
+  /** Add Driver / intake mappings. Live linked riders use `driver_restaurants`. */
+  driverIntakeRestaurants: "driver_intake_restaurants",
   driverGroups: "driver_groups",
+  /** Group membership junction. `driver_groups.member_ids` mirrors this. */
+  driverGroupMembers: "driver_group_members",
   sourceCompanies: "source_companies",
   vehicles: "vehicles",
   fuelFills: "fuel_fills",
@@ -48,6 +52,8 @@ export const COLLECTIONS = {
   payoutRuns: "payout_runs",
   driverDailyShifts: "driver_daily_shifts",
   driverOffStructure: "driver_off_structure",
+  /** Operations-uploaded Invalid / Rejected / Cancelled rows, keyed `{driverId}_{day}`. */
+  riderComplianceDaily: "rider_compliance_daily",
   orderReconRows: "order_recon_rows",
   orderReconRuns: "order_recon_runs",
   notificationCampaigns: "notification_campaigns",
@@ -97,6 +103,8 @@ export const COLLECTIONS = {
   visitBlockedDates: "visit_blocked_dates",
   notificationTemplates: "notification_templates",
   notificationEvents: "notification_events",
+  /** Day x campaign funnel rollup; written from notification events (QA #24). */
+  notificationAnalyticsDaily: "notification_analytics_daily",
   notificationDispatchRuns: "notification_dispatch_runs",
   notificationDispatchItems: "notification_dispatch_items",
   notificationAutomations: "notification_automations",

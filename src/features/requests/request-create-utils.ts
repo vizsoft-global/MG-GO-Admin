@@ -124,6 +124,14 @@ export function typedRequiredPayloadKeys(
   }
 }
 
+/**
+ * Salary justification amounts are alternatives, not a pair (QA #25). One of
+ * `expected_amount` / `received_amount` is enough; neither is not.
+ */
+export function salaryAmountsMissing(draft: Record<string, string>): boolean {
+  return !(draft.expected_amount ?? "").trim() && !(draft.received_amount ?? "").trim();
+}
+
 export function shouldShowCreateField(
   key: string,
   draft: Record<string, string>,
@@ -218,6 +226,17 @@ export function parseCreateRequestError(error: string | undefined): {
   if (option) return { key: "invalid_option", field: option[1] };
   const required = /^field_required:(.+)$/.exec(error);
   if (required) return { key: "field_required", field: required[1] };
+  const tooLarge = /^number_too_large:(.+)$/.exec(error);
+  if (tooLarge) {
+    // The asset quantity cap is the panel's common case and reads badly as a
+    // generic "too large", so it keeps the cap in its own sentence (QA #39).
+    return {
+      key: tooLarge[1] === "quantity" ? "quantity_too_large" : "number_too_large",
+      field: tooLarge[1],
+    };
+  }
+  const tooSmall = /^number_too_small:(.+)$/.exec(error);
+  if (tooSmall) return { key: "number_too_small", field: tooSmall[1] };
   return { key: error };
 }
 

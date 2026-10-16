@@ -326,7 +326,13 @@ async function syncGroupMembers(
   }
   await db
     .from("driver_groups")
-    .update({ member_count: unique.length, updated_at: new Date().toISOString() })
+    .update({
+      member_count: unique.length,
+      // QA #37: the audience compiler reads this array. Without the mirror a
+      // group saved here matched no recipients.
+      member_ids: unique,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", groupId);
 }
 

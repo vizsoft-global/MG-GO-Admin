@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { groupCounts, groupRows } from "./group-rows";
-import { fieldSearchMatch } from "./search-match";
+import { fieldSearchMatch, searchClearVisible } from "./search-match";
 
 type Row = { name: string; zone: string | null; id: string };
 
@@ -33,5 +33,12 @@ describe("AppListControls helpers", () => {
       { key: "Hawally", count: 2 },
       { key: "unassigned", count: 1 },
     ]);
+  });
+
+  it("shows the clear button exactly when the box has text", () => {
+    assert.equal(searchClearVisible(""), false);
+    assert.equal(searchClearVisible(undefined), false);
+    assert.equal(searchClearVisible(null), false);
+    assert.equal(searchClearVisible("ali"), true);
   });
 });

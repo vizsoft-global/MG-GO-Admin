@@ -49,6 +49,9 @@ describe("vehicle form filters", () => {
     assert.equal(filterChip("12#3"), "123");
     assert.equal(filterFuelLimit("12.3456"), "12.345");
     assert.equal(filterFuelLimit("....,,,,----"), "");
+    // A leading dot is a real value, not noise: `.5` means 0.5.
+    assert.equal(filterFuelLimit(".5"), ".5");
+    assert.equal(filterFuelLimit("0.5"), "0.5");
   });
 });
 
@@ -68,6 +71,9 @@ describe("validateVehicleForm", () => {
     assert.equal(validateVehicleForm({ ...valid, chipNo: "??" }), "invalid_chip");
     assert.equal(validateVehicleForm({ ...valid, fuelMonthlyLimitKwd: "abc" }), "invalid_fuel_limit");
     assert.equal(validateVehicleForm({ ...valid, fuelMonthlyLimitKwd: "0" }), "invalid_fuel_limit");
+    // `.5` is 0.5, and a leading zero keeps the whole number.
+    assert.equal(validateVehicleForm({ ...valid, fuelMonthlyLimitKwd: ".5" }), null);
+    assert.equal(validateVehicleForm({ ...valid, fuelMonthlyLimitKwd: "0.5" }), null);
   });
 
   it("allows empty optional fields", () => {

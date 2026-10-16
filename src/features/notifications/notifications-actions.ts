@@ -24,6 +24,8 @@ import { pickLatestPushTokenByDriver } from "./push-token-select";
 import { resolveScreenshotRestricted } from "./screenshot-restriction";
 import { resolveDriversByLookupIds } from "@/features/drivers/resolve-drivers-by-lookup-ids";
 import { searchActiveDrivers } from "@/features/drivers/search-active-drivers";
+import { fetchDriversPage } from "@/features/drivers/drivers-list-actions";
+import { DEFAULT_DRIVERS_SORT } from "@/features/drivers/drivers-list-query";
 import {
   decideImportRowMatch,
   lookupToImportMatch,
@@ -907,11 +909,14 @@ export async function getNotificationDashboardKpis(): Promise<NotificationDashbo
 
   const [sentRes, scheduledRes, draftsRes, failedRes, automationsRes, activityRes, campaignsRes] =
     await Promise.all([
+      // QA #15: "Sent today" matches the campaign list — every campaign that was
+      // dispatched today counts, including one that failed part-way. Excluding
+      // `failed` made the KPI read 0 while the list showed the row.
       panel
         .from("notification_campaigns")
         .select("id", { count: "exact", head: true })
         .gte("sent_at", start)
-        .in("status", ["sent", "delivered", "opened", "clicked"]),
+        .in("status", ["sent", "delivered", "opened", "clicked", "failed"]),
       panel
         .from("notification_campaigns")
         .select("id", { count: "exact", head: true })
@@ -1661,6 +1666,25 @@ async function executeNotificationDispatch(
     })
     .eq("id", campaignId);
 
+  // QA #24: seed the Analytics rollup as soon as the campaign is dispatched, so a
+  // send shows up on the funnel even before the first delivery event arrives.
+  // `opened_count` / `clicked_count` are omitted on purpose — a merge must not
+  // reset engagement the event handler has already counted.
+  await service
+    .from("notification_analytics_daily")
+    .upsert(
+      {
+        id: `${kuwaitToday()}_${campaignId}`,
+        metric_date: kuwaitToday(),
+        campaign_id: campaignId,
+        sent_count: recipientIds.length,
+        delivered_count: pushSentCount,
+        failed_count: pushHardFailedCount,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" },
+    );
+
   if (actorUserId) {
     await logAdminMutation({
       action: "update",
@@ -1886,7 +1910,37 @@ export async function searchDriversForNotification(
   }>
 > {
   await requireNotificationsView();
-  const hits = await searchActiveDrivers(query, limit);
+  const term = query.trim();
+  if (!term) return [];
+
+  // QA #19: the picker used to scan the entire roster (`searchActiveDrivers`:
+  // every driver plus every profile). It now reads the same prefix-indexed page
+  // the Drivers list uses. A notifications-only reviewer has no `drivers.view`,
+  // so they keep the local scan rather than losing the picker outright.
+  const session = await getSessionUser();
+  if (session && hasPermissionInSet(session.permissions, "drivers.view", session.isSuperAdmin)) {
+    const page = await fetchDriversPage(
+      {
+        tab: "all",
+        search: term,
+        searchField: "all",
+        groupBy: "none",
+        filters: {},
+        sort: DEFAULT_DRIVERS_SORT,
+      },
+      0,
+      Math.min(Math.max(limit, 1), 50),
+    );
+    return page.rows.map((d) => ({
+      id: d.id,
+      label: `${d.driver_code} · ${d.full_name}`.trim(),
+      employee_id: d.employee_id ?? "",
+      driver_code: d.driver_code,
+      full_name: d.full_name,
+    }));
+  }
+
+  const hits = await searchActiveDrivers(term, limit);
   return hits.map((d) => ({
     id: d.id,
     label: `${d.driver_code} · ${d.full_name}`,
@@ -2243,6 +2297,9 @@ export async function saveNotificationTemplate(
       action_type: input.actionType,
       action_params: input.actionParams ?? {},
       screenshot_restricted: Boolean(input.screenshotRestricted),
+      // QA #18: new templates must be explicitly un-archived, otherwise they are
+      // invisible to every list that filters on `is_archived = false`.
+      is_archived: false,
       created_by: session.id,
     })
     .select("id")
@@ -2273,25 +2330,47 @@ export async function updateNotificationTemplate(
 
   const screenshotRestricted = Boolean(input.screenshotRestricted);
   const panel = await notificationsDb();
-  const { data, error } = await panel
+  const patch = {
+    name: input.name.trim(),
+    description: input.description?.trim() || null,
+    category: input.category,
+    priority: input.priority,
+    title_template: input.titleTemplate.trim(),
+    body_template: input.bodyTemplate.trim(),
+    variable_schema: input.variableSchema ?? [],
+    action_type: input.actionType,
+    action_params: input.actionParams ?? {},
+    screenshot_restricted: screenshotRestricted,
+    updated_at: new Date().toISOString(),
+  };
+  let { data, error } = await panel
     .from("notification_templates")
-    .update({
-      name: input.name.trim(),
-      description: input.description?.trim() || null,
-      category: input.category,
-      priority: input.priority,
-      title_template: input.titleTemplate.trim(),
-      body_template: input.bodyTemplate.trim(),
-      variable_schema: input.variableSchema ?? [],
-      action_type: input.actionType,
-      action_params: input.actionParams ?? {},
-      screenshot_restricted: screenshotRestricted,
-      updated_at: new Date().toISOString(),
-    })
+    .update(patch)
     .eq("id", id)
     .eq("is_archived", false)
     .select("id")
     .maybeSingle();
+  if (error || !data) {
+    // QA #18: rows written before `is_archived` existed cannot be matched by an
+    // equality filter of `false`. Treat a missing flag as not-archived and only
+    // refuse an explicit `true`.
+    const existing = await panel
+      .from("notification_templates")
+      .select("id, is_archived")
+      .eq("id", id)
+      .maybeSingle();
+    const row = existing.data as { id?: string; is_archived?: boolean } | null;
+    if (row?.id && row.is_archived !== true) {
+      const retry = await panel
+        .from("notification_templates")
+        .update(patch)
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
+      data = retry.data;
+      error = retry.error;
+    }
+  }
   if (error || !data) return { error: "not_found" };
 
   // Refresh stamp on editable campaigns that inherit this template.

@@ -20,3 +20,13 @@ function contains(value: string | number | null | undefined, needle: string): bo
   if (value == null) return false;
   return String(value).toLowerCase().includes(needle);
 }
+
+/**
+ * The clear button belongs to the control, not to each page: it is rendered
+ * exactly when the box holds something to clear. Attendance reported a missing
+ * "x" because the rule lived in the page's copy of the markup, so this one
+ * predicate is what every list reads.
+ */
+export function searchClearVisible(value: string | null | undefined): boolean {
+  return typeof value === "string" && value.length > 0;
+}
