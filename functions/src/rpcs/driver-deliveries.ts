@@ -14,6 +14,7 @@ import {
 } from "../core/geo";
 import { driverRestaurantIds } from "./deliveries-shared";
 import { findActiveShift } from "./driver-shift";
+import { invalidateDriverHomeDailySafe } from "./driver-home";
 import { syncBitesOrderMilestone, type BitesPartnerStamp } from "./bites-order-sync";
 import { BITES_DELIVERY_FIELDS, BITES_ORDER_STATUS } from "../core/bites";
 import {
@@ -638,6 +639,10 @@ export const driverCreatePickup = onCall(async (request) => {
       bites_sync_reason: bites.reason,
     },
   });
+  // A pickup moves the week's delivery count, so the snapshot is invalidated the
+  // moment this commits. The flag is one write; the rider's next Home call
+  // recomputes the count it has to show anyway.
+  await invalidateDriverHomeDailySafe(ctx.uid, "pickup");
   return serializeDelivery(id, row);
 });
 
@@ -741,6 +746,7 @@ export const driverCompleteDelivery = onCall(async (request) => {
       bites_sync_reason: bites.reason,
     },
   });
+  await invalidateDriverHomeDailySafe(ctx.uid, "complete");
   return serializeDelivery(deliveryId, { ...current, ...patch });
 });
 
@@ -814,6 +820,7 @@ export const driverCancelDelivery = onCall(async (request) => {
       proof_count: proofKeys.length,
     },
   });
+  await invalidateDriverHomeDailySafe(ctx.uid, "cancel");
   return serializeDelivery(deliveryId, { ...current, ...patch });
 });
 

@@ -12,6 +12,7 @@ import { kuwaitDayString } from "../core/kuwait";
 import { applyDeliveryRollup } from "../core/rollups";
 import { stampStoredRow } from "../core/search-text";
 import { notifyDriverTransactional as writeTransactionalNotification } from "./visits-shared";
+import { invalidateDriverHomeDailySafe } from "./driver-home";
 import { inboxListMillis, inboxMatchesBefore, mapInboxListItem } from "./driver-push-tokens";
 import type { Dict } from "./_shared";
 
@@ -435,6 +436,20 @@ export const adminExpireStalePickups = onCall(async (request) => {
       status: "cancelled",
     });
   }
+
+  // An auto-cancelled pickup changes the week's delivery count for each rider it
+  // belonged to. One flag write each (capped at 20), recomputed on their next
+  // Home call.
+  const touchedDrivers = [
+    ...new Set(
+      expired
+        .map((doc) => textOrNull(doc.get("driver_id")))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ].slice(0, 20);
+  await Promise.all(
+    touchedDrivers.map((driverId) => invalidateDriverHomeDailySafe(driverId, "expire")),
+  );
 
   return expired.length;
 });

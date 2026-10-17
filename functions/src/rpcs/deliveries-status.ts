@@ -24,6 +24,7 @@ import {
   resolveDeliveryRestaurantId,
 } from "./deliveries-shared";
 import { deliveryDecisionNotice } from "./delivery-notify";
+import { invalidateDriverHomeDailySafe } from "./driver-home";
 import { notifyDriverTransactional } from "./visits-shared";
 
 const MAX_IDS = 100;
@@ -269,6 +270,19 @@ export const adminBulkUpdateDeliveries = onCall(async (request) => {
         }
       }
     }),
+  );
+
+  // Verify / reject moves the week counts and the earnings card. One flag write
+  // per affected rider, capped at 20; the rider's next Home call recomputes.
+  const touchedDrivers = [
+    ...new Set(
+      changed.touches
+        .map((touch) => touch.driverId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ].slice(0, 20);
+  await Promise.all(
+    touchedDrivers.map((driverId) => invalidateDriverHomeDailySafe(driverId, "delivery_status")),
   );
 
   return {

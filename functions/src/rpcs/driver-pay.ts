@@ -22,6 +22,7 @@ import { requireRider } from "../core/rider";
 import { requireStaffAny } from "../core/staff";
 import { pickIdList, type Dict } from "./_shared";
 import { loadActivePushTokens, pickLatestActivePushToken } from "./driver-push-tokens";
+import { invalidateDriverHomeDailySafe } from "./driver-home";
 
 /** One page of deliveries, per range field. Mirrors the home dashboard scan. */
 const SCAN = 5_000;
@@ -343,6 +344,15 @@ export const adminNotifyComplianceRefresh = onCall(async (request) => {
         // A push failure is not an admin-facing error; the panel already synced.
       }
     }),
+  );
+
+  // A compliance upload changes what Home shows, so the same riders are
+  // invalidated. Capped at 20 per call; the rest are covered by their next Home
+  // call and by the hourly repair sweep.
+  await Promise.all(
+    driverIds.slice(0, 20).map((driverId) =>
+      invalidateDriverHomeDailySafe(driverId, "compliance"),
+    ),
   );
 
   return { ok: true, targeted: driverIds.length, sent };

@@ -1,5 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { onCall, type CallableRequest } from "firebase-functions/v2/https";
+import {
+  onCall,
+  type CallableOptions,
+  type CallableRequest,
+} from "firebase-functions/v2/https";
 import {
   AggregateQuery,
   DocumentReference,
@@ -219,12 +223,46 @@ export async function runWithFsMetrics<T>(name: string, fn: () => Promise<T>): P
   return result;
 }
 
-/** Same global `onCall()` options as a bare `onCall(handler)`. No per-function overrides. */
+/**
+ * Same measured handler as before, with optional per-function runtime options.
+ *
+ * `options` is passed straight to `onCall`, so a callable that omits it keeps
+ * inheriting `setGlobalOptions()` from `core/init.ts`. A callable that passes
+ * `{ cpu: 1, concurrency: 8 }` gets its own Cloud Run shape — which is the only
+ * way a read-only handler can share one isolate (and one config cache) between
+ * concurrent riders.
+ */
 export function measureOnCall<T>(
   name: string,
   handler: (request: CallableRequest<unknown>) => Promise<T>,
+  options?: CallableOptions,
 ) {
-  return onCall((request) => runWithFsMetrics(name, () => handler(request)));
+  return onCall(options ?? {}, (request) => runWithFsMetrics(name, () => handler(request)));
+}
+
+/**
+ * Race a read against a deadline.
+ *
+ * `concurrency: 8` means one slow Firestore call holds eight riders, so the
+ * read path takes a deadline instead of trusting the platform timeout. The
+ * rejection is an ordinary error: every caller already has a fallback branch.
+ */
+export async function withReadDeadline<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}_timeout`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
