@@ -175,7 +175,7 @@ export type StampPiece = {
   hPt: number;
 };
 
-export type StampLayout = { pieces: StampPiece[] };
+export type StampLayout = { pieces: StampPiece[]; removed?: StampPieceId[] };
 
 export type StampTextPlacement = {
   xPt: number;
@@ -226,7 +226,25 @@ export function parseStampLayout(raw: unknown): StampLayout | null {
   for (const id of STAMP_CORE_IDS) {
     if (!seen.has(id)) return null;
   }
-  return { pieces };
+  const removed = parseRemovedPieces(raw);
+  return removed.length > 0 ? { pieces, removed } : { pieces };
+}
+
+/** Extras can be deleted by hand, so the panel records which ones an operator took away. */
+export function isExtraStampPiece(id: StampPieceId): boolean {
+  return (STAMP_EXTRA_IDS as readonly string[]).includes(id);
+}
+
+export function parseRemovedPieces(raw: unknown): StampPieceId[] {
+  if (!raw || typeof raw !== "object") return [];
+  const listRaw = (raw as { removed?: unknown }).removed;
+  if (!Array.isArray(listRaw)) return [];
+  const removed: StampPieceId[] = [];
+  for (const item of listRaw) {
+    const id = String(item ?? "") as StampPieceId;
+    if (isExtraStampPiece(id) && !removed.includes(id)) removed.push(id);
+  }
+  return removed;
 }
 
 function labelForPiece(id: StampPieceId, labels: StampTextLabels): string {

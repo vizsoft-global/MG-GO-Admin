@@ -12,9 +12,14 @@ import {
   type PointerEvent,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, ZoomIn, ZoomOut } from "lucide-react";
+import { Loader2, Plus, X, ZoomIn, ZoomOut } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   loadEsignStampSheet,
@@ -27,15 +32,19 @@ import {
 } from "./render/esign-document-layout";
 import { fitEsignSinglePage } from "./render/esign-document-html";
 import {
+  addStampPiece,
   centeredDocumentScroll,
   clampPiece,
   completeStampLayout,
   defaultStampLayout,
+  isExtraStampPiece,
   layoutAroundSignature,
+  missingStampPieces,
   parseStampLayout,
   pieceFromPageRect,
   pieceToCss,
   resizeStampPiece,
+  restoreStampPieces,
   RESIZE_CORNERS,
   stampLayoutKey,
   stampPieceLabelKey,
@@ -68,6 +77,18 @@ type Gesture = {
 };
 
 const FORM_EDIT_SELECTOR = ".sec, .l, .v, .h, .ln > span, .note, .text";
+
+/**
+ * iframe nodes come from another realm, so `node instanceof HTMLElement` is false for every
+ * one of them. Duck-typing is the only check that holds across the document boundary.
+ */
+function isElement(node: unknown): node is HTMLElement {
+  return (
+    !!node &&
+    typeof (node as { hasAttribute?: unknown }).hasAttribute === "function" &&
+    typeof (node as { remove?: unknown }).remove === "function"
+  );
+}
 
 function cornerBoxClass(corner: ResizeCorner): string {
   switch (corner) {
@@ -118,6 +139,7 @@ export const EsignStampPlacer = forwardRef<
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [reason, setReason] = useState("");
   const [editing, setEditing] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
   const [formStatus, setFormStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [formReason, setFormReason] = useState("");
@@ -158,6 +180,41 @@ export const EsignStampPlacer = forwardRef<
       layoutRef.current = updated;
       return updated;
     });
+  }
+
+  function removePiece(id: StampPieceId) {
+    setLayout((current) => {
+      if (!current) return current;
+      const removed = current.removed ?? [];
+      const updated: StampLayout = {
+        pieces: current.pieces.filter((piece) => piece.id !== id),
+        removed: removed.includes(id) ? removed : [...removed, id],
+      };
+      layoutRef.current = updated;
+      return updated;
+    });
+    scheduleSave();
+  }
+
+  function restorePieces() {
+    setLayout((current) => {
+      if (!current) return current;
+      const updated = restoreStampPieces(current);
+      layoutRef.current = updated;
+      return updated;
+    });
+    scheduleSave();
+  }
+
+  function addPiece(id: StampPieceId) {
+    setLayout((current) => {
+      if (!current) return current;
+      const updated = addStampPiece(current, id);
+      layoutRef.current = updated;
+      return updated;
+    });
+    setAdding(false);
+    scheduleSave();
   }
 
   async function persist(): Promise<boolean> {
@@ -321,8 +378,8 @@ export const EsignStampPlacer = forwardRef<
     const line = doc.querySelector('i[data-slot-role="employee"]');
     if (
       !parseStampLayout(stampLayoutRef.current) &&
-      page instanceof HTMLElement &&
-      line instanceof HTMLElement
+      isElement(page) &&
+      isElement(line)
     ) {
       const pageBox = page.getBoundingClientRect();
       const lineBox = line.getBoundingClientRect();
@@ -361,7 +418,7 @@ export const EsignStampPlacer = forwardRef<
     if (!doc) return;
     doc.getElementById("form-edit-style")?.remove();
     doc.querySelectorAll(FORM_EDIT_SELECTOR).forEach((node) => {
-      if (!(node instanceof HTMLElement)) return;
+      if (!isElement(node)) return;
       if (on) {
         node.setAttribute("contenteditable", "true");
         node.setAttribute("data-form-edit", "1");
@@ -427,8 +484,23 @@ export const EsignStampPlacer = forwardRef<
       formDirtyRef.current = true;
       setFormDirty(true);
     };
+    const onEditableKeyDown = (event: Event) => {
+      const key = (event as { key?: unknown }).key;
+      if (key !== "Backspace" && key !== "Delete") return;
+      const target = event.target;
+      if (!isElement(target) || !target.hasAttribute("data-form-edit")) return;
+      if ((target.textContent ?? "").trim() !== "") return;
+      event.preventDefault();
+      target.remove();
+      formDirtyRef.current = true;
+      setFormDirty(true);
+    };
     doc.addEventListener("input", onInput);
-    return () => doc.removeEventListener("input", onInput);
+    doc.addEventListener("keydown", onEditableKeyDown);
+    return () => {
+      doc.removeEventListener("input", onInput);
+      doc.removeEventListener("keydown", onEditableKeyDown);
+    };
   }, [editing, html]);
 
   function beginGesture(
@@ -507,6 +579,8 @@ export const EsignStampPlacer = forwardRef<
     scheduleSave();
   }
 
+  const missingPieces = layout ? missingStampPieces(layout) : [];
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1">
       <div className="relative min-h-0 flex-1">
@@ -541,6 +615,44 @@ export const EsignStampPlacer = forwardRef<
             >
               <ZoomIn />
             </Button>
+            {!editing && missingPieces.length > 0 ? (
+              <Popover open={adding} onOpenChange={setAdding}>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 gap-1 px-2 text-xs"
+                    />
+                  }
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {t("addPiece")}
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-44 origin-(--transform-origin) p-1">
+                  {missingPieces.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className="flex w-full items-center rounded-md px-2 py-1.5 text-start text-xs text-foreground transition-colors hover:bg-muted"
+                      onClick={() => addPiece(id)}
+                    >
+                      {t(stampPieceLabelKey(id))}
+                    </button>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            ) : null}
+            {layout?.removed?.length ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 px-2 text-xs"
+                onClick={restorePieces}
+              >
+                {t("restorePieces", { count: layout.removed.length })}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -640,6 +752,21 @@ export const EsignStampPlacer = forwardRef<
                           <span className="pointer-events-none block truncate px-1">{text}</span>
                         )}
                       </button>
+                      {!editing && isExtraStampPiece(piece.id) ? (
+                        <button
+                          type="button"
+                          aria-label={t("removePiece", { piece: label })}
+                          title={t("removePiece", { piece: label })}
+                          className="absolute -top-4 right-0 z-20 flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-destructive/60 bg-card text-destructive transition-colors hover:bg-destructive/10"
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            removePiece(piece.id);
+                          }}
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      ) : null}
                       {RESIZE_CORNERS.map((corner) => (
                         <button
                           key={corner}
@@ -668,6 +795,7 @@ export const EsignStampPlacer = forwardRef<
         </div>
       </div>
       <p className="text-[10px] text-muted-foreground">{t("placeHint")}</p>
+      {editing ? <p className="text-[10px] text-emerald-800">{t("formDeleteHint")}</p> : null}
       {formStatus === "saving" ? (
         <p className="text-[10px] text-muted-foreground">{t("formSaving")}</p>
       ) : null}

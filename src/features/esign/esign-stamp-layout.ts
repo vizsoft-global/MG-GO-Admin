@@ -35,11 +35,28 @@ export type StampPiece = {
   hPt: number;
 };
 
-export type StampLayout = { pieces: StampPiece[] };
+export type StampLayout = { pieces: StampPiece[]; removed?: StampPieceId[] };
 
 function finiteNumber(value: unknown): number | null {
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+/** Extras can be removed, so only a box that is absent *and* not listed in `removed` is refilled. */
+export function isExtraStampPiece(id: StampPieceId): boolean {
+  return (STAMP_EXTRA_IDS as readonly string[]).includes(id);
+}
+
+export function parseRemovedPieces(raw: unknown): StampPieceId[] {
+  if (!raw || typeof raw !== "object") return [];
+  const listRaw = (raw as { removed?: unknown }).removed;
+  if (!Array.isArray(listRaw)) return [];
+  const removed: StampPieceId[] = [];
+  for (const item of listRaw) {
+    const id = String(item ?? "") as StampPieceId;
+    if (isExtraStampPiece(id) && !removed.includes(id)) removed.push(id);
+  }
+  return removed;
 }
 
 /** Drag positions saved on the request. Null until someone places the stamp. */
@@ -73,18 +90,90 @@ export function parseStampLayout(raw: unknown): StampLayout | null {
   for (const id of STAMP_CORE_IDS) {
     if (!seen.has(id)) return null;
   }
-  return { pieces };
+  const removed = parseRemovedPieces(raw);
+  return removed.length > 0 ? { pieces, removed } : { pieces };
 }
 
-/** Older saves have only the four core boxes. The extra employee boxes appear under them. */
+/**
+ * Older saves have only the four core boxes. The extra employee boxes appear under them.
+ *
+ * A box the operator deleted stays deleted, and a whole set of them stays deleted too —
+ * otherwise the last delete would restore the legacy shape and everything would come back.
+ */
 export function completeStampLayout(layout: StampLayout): StampLayout {
   const signature = layout.pieces.find((piece) => piece.id === "signature");
   if (!signature) return layout;
   const defaults = layoutAroundSignature(signature);
   const have = new Set(layout.pieces.map((piece) => piece.id));
-  const missing = defaults.pieces.filter((piece) => !have.has(piece.id));
+  const gone = new Set<StampPieceId>(layout.removed ?? []);
+  const missing = defaults.pieces.filter(
+    (piece) => !have.has(piece.id) && !gone.has(piece.id),
+  );
   if (missing.length === 0) return layout;
-  return { pieces: [...layout.pieces, ...missing] };
+  return { ...layout, pieces: [...layout.pieces, ...missing] };
+}
+
+/** Every box the sheet does not currently carry, in print order. */
+export function missingStampPieces(layout: StampLayout): StampPieceId[] {
+  const have = new Set(layout.pieces.map((piece) => piece.id));
+  return STAMP_PIECE_IDS.filter((id) => !have.has(id));
+}
+
+function boxesOverlap(a: StampPiece, b: StampPiece): boolean {
+  if (a.page !== b.page) return false;
+  return (
+    a.xPt < b.xPt + b.wPt &&
+    b.xPt < a.xPt + a.wPt &&
+    a.yPt < b.yPt + b.hPt &&
+    b.yPt < a.yPt + a.hPt
+  );
+}
+
+/**
+ * Adds one box, even one that was never placed. The default template position is used
+ * first; if the operator has dragged something over it, the box slides up the sheet
+ * until it is clear rather than landing under another box.
+ */
+export function addStampPiece(layout: StampLayout, id: StampPieceId): StampLayout {
+  if (layout.pieces.some((piece) => piece.id === id)) return layout;
+  const signature = layout.pieces.find((piece) => piece.id === "signature");
+  const template = signature
+    ? layoutAroundSignature(signature).pieces.find((piece) => piece.id === id)
+    : null;
+  if (!template) return layout;
+  const placed = freeStampPosition(template, layout.pieces);
+  const removed = (layout.removed ?? []).filter((pieceId) => pieceId !== id);
+  return removed.length > 0
+    ? { pieces: [...layout.pieces, placed], removed }
+    : { pieces: [...layout.pieces, placed] };
+}
+
+function freeStampPosition(piece: StampPiece, existing: StampPiece[]): StampPiece {
+  const step = piece.hPt + 1;
+  const attempts = Math.max(1, Math.floor(piece.yPt / step));
+  for (let attempt = 0; attempt <= attempts; attempt += 1) {
+    const candidate = clampPiece({ ...piece, yPt: piece.yPt - attempt * step });
+    if (!existing.some((other) => boxesOverlap(candidate, other))) return candidate;
+  }
+  return clampPiece(piece);
+}
+
+/** Puts the boxes an operator deleted back where the extras sit today. */
+export function restoreStampPieces(layout: StampLayout): StampLayout {
+  const removed = layout.removed ?? [];
+  if (removed.length === 0) return layout;
+  const signature = layout.pieces.find((piece) => piece.id === "signature");
+  const have = new Set(layout.pieces.map((piece) => piece.id));
+  const pieces = [...layout.pieces];
+  if (signature) {
+    const defaults = layoutAroundSignature(signature);
+    for (const id of STAMP_PIECE_IDS) {
+      if (!removed.includes(id) || have.has(id)) continue;
+      const template = defaults.pieces.find((piece) => piece.id === id);
+      if (template) pieces.push(template);
+    }
+  }
+  return { pieces };
 }
 
 /**
@@ -220,7 +309,7 @@ export function defaultStampLayout(kind: unknown, persistedSlots?: unknown): Sta
 }
 
 export function stampLayoutKey(layout: StampLayout): string {
-  return layout.pieces
+  const pieces = layout.pieces
     .map((piece) => {
       const clamped = clampPiece(piece);
       return [
@@ -234,6 +323,8 @@ export function stampLayoutKey(layout: StampLayout): string {
     })
     .sort()
     .join("|");
+  const removed = (layout.removed ?? []).slice().sort();
+  return removed.length > 0 ? `${pieces}|removed:${removed.join(",")}` : pieces;
 }
 
 /** Keeps the viewport center on the same point of the page when the zoom scale changes. */

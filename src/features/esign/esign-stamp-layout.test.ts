@@ -4,15 +4,19 @@ import { parseStampLayout as parseInFunctions } from "../../../functions/src/rpc
 import { slotsForKind } from "./render/esign-document-layout";
 import { filledEsignSheetHtml } from "./render/esign-filled-sheet";
 import {
+  addStampPiece,
   centeredDocumentScroll,
   completeStampLayout,
   cssToPiece,
   defaultStampLayout,
   layoutAroundSignature,
+  missingStampPieces,
   parseStampLayout,
   pieceFromPageRect,
   pieceToCss,
   resizeStampPiece,
+  restoreStampPieces,
+  stampLayoutKey,
 } from "./esign-stamp-layout";
 import { sanitizeEditedSheetHtml } from "./esign-sheet-edit";
 
@@ -54,6 +58,31 @@ describe("stamp layout", () => {
     };
     assert.equal(parseStampLayout(withExtra)?.pieces.length, 5);
     assert.deepEqual(parseStampLayout(withExtra), parseInFunctions(withExtra));
+    const reopened = parseStampLayout(withExtra);
+    assert.ok(reopened);
+    assert.equal(completeStampLayout(reopened).pieces.length, 9);
+  });
+
+  it("keeps a box an operator deleted and restores it only on request", () => {
+    const raw = { pieces: sample.pieces, removed: ["zone", "civil_id"] };
+    const parsed = parseStampLayout(raw);
+    assert.ok(parsed);
+    assert.deepEqual(parsed, parseInFunctions(raw));
+    const completed = completeStampLayout(parsed);
+    assert.equal(completed.pieces.length, 7);
+    assert.equal(completed.pieces.some((piece) => piece.id === "zone"), false);
+    assert.deepEqual(completeStampLayout(completed).pieces.length, 7);
+    const restored = restoreStampPieces(completed);
+    assert.equal(restored.pieces.length, 9);
+    assert.equal(restored.pieces.filter((piece) => piece.id === "zone").length, 1);
+    assert.equal(restored.removed, undefined);
+    assert.ok(stampLayoutKey(completed) !== stampLayoutKey(restored));
+  });
+
+  it("drops an unknown piece id from the removed list", () => {
+    const parsed = parseStampLayout({ pieces: sample.pieces, removed: ["zone", "nope", "zone"] });
+    assert.ok(parsed);
+    assert.deepEqual(parsed.removed, ["zone"]);
   });
 
   it("grows the south-east corner without moving the left edge", () => {
@@ -163,5 +192,58 @@ describe("stamp layout", () => {
     });
     assert.equal(next.left, 50);
     assert.equal(next.top, 50);
+  });
+
+  it("lists every box that is not on the page, and adds one back", () => {
+    const layout = completeStampLayout({
+      pieces: sample.pieces,
+      removed: ["employee_id", "company"],
+    });
+    const missing = missingStampPieces(layout);
+    assert.equal(missing.includes("employee_id"), true);
+    assert.equal(missing.includes("company"), true);
+    assert.equal(missing.includes("position"), false);
+    assert.equal(missing.includes("signature"), false);
+
+    const added = addStampPiece(layout, "employee_id");
+    assert.ok(added.pieces.some((piece) => piece.id === "employee_id"));
+    assert.equal((added.removed ?? []).includes("employee_id"), false);
+    assert.equal((added.removed ?? []).includes("company"), true);
+    assert.equal(missingStampPieces(added).includes("employee_id"), false);
+  });
+
+  it("does not stack an added box on top of one already there", () => {
+    const layout = completeStampLayout({
+      pieces: sample.pieces,
+      removed: ["employee_id"],
+    });
+    const signature = layout.pieces.find((piece) => piece.id === "signature");
+    assert.ok(signature);
+    const target = layoutAroundSignature(signature).pieces.find(
+      (piece) => piece.id === "employee_id",
+    );
+    assert.ok(target);
+    assert.equal(missingStampPieces(layout).includes("employee_id"), true);
+    const moved = {
+      pieces: layout.pieces.map((piece) =>
+        piece.id === "date" ? { ...piece, xPt: target.xPt, yPt: target.yPt } : piece,
+      ),
+    };
+    const added = addStampPiece(moved, "employee_id");
+    const placed = added.pieces.find((piece) => piece.id === "employee_id");
+    const date = added.pieces.find((piece) => piece.id === "date");
+    assert.ok(placed && date);
+    assert.notEqual(placed.yPt, target.yPt);
+    const overlaps =
+      placed.xPt < date.xPt + date.wPt &&
+      date.xPt < placed.xPt + placed.wPt &&
+      placed.yPt < date.yPt + date.hPt &&
+      date.yPt < placed.yPt + placed.hPt;
+    assert.equal(overlaps, false);
+  });
+
+  it("leaves the layout alone when the box is already on the page", () => {
+    const layout = completeStampLayout({ pieces: sample.pieces });
+    assert.equal(addStampPiece(layout, "signature"), layout);
   });
 });

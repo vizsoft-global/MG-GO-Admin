@@ -159,7 +159,10 @@ export async function saveEsignStampLayout(
   if (!signature) return { ok: false, error: "invalid_stamp_layout" };
   const now = Timestamp.now();
   await ref.update({
-    stamp_layout: { pieces: parsed.pieces },
+    stamp_layout:
+      parsed.removed && parsed.removed.length > 0
+        ? { pieces: parsed.pieces, removed: parsed.removed }
+        : { pieces: parsed.pieces },
     stamp_layout_at: now,
     signature_slots: withEmployeeSlot(row.document_kind, row.signature_slots, signature),
     signed_document_storage_key: outputKey,
@@ -182,6 +185,7 @@ export async function saveEsignStampLayout(
         wPt: piece.wPt,
         hPt: piece.hPt,
       })),
+      removed: parsed.removed ?? [],
     },
   });
 
