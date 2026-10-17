@@ -22,6 +22,12 @@
  *   disagrees.
  * - workerFleetRead, adminIngestDriverPositions, and adminRecordFleetEvents stay
  *   off every lane (onRequest + WORKER_SHARED_SECRET).
+ * - bitesFleetSocketTicket stays off every lane too (onRequest + BITES_BRIDGE_SECRET,
+ *   called server-to-server by the Bites Cloud Functions).
+ * - bitesMirrorSweep is an onSchedule function, so it is off every lane as well
+ *   (see SCHEDULED_FUNCTIONS).
+ * - Firestore triggers are not callables at all, so `assertPartition` here does not
+ *   see them. There are none left: see the note in `index.ts`.
  * - Names that start with `driver` are the rider app's legacy callables, except
  *   driverOpsAuditHealth, which the admin cron calls.
  */
@@ -52,7 +58,19 @@ export const WORKER_HTTP_FUNCTIONS = [
   "workerFleetRead",
   "adminIngestDriverPositions",
   "adminRecordFleetEvents",
+  /** onRequest + BITES_BRIDGE_SECRET, so it gets no lane runtime options. */
+  "bitesFleetSocketTicket",
 ] as const;
+
+/**
+ * Exports that are neither callables nor HTTP handlers.
+ *
+ * `bitesMirrorSweep` is an `onSchedule` function: Cloud Scheduler invokes it, so it
+ * must not be reachable through a lane and must not carry callable options. It is
+ * listed in `LEGACY_MODULES` only so `index.ts` publishes it — every other module
+ * there is a callable the light lane serves.
+ */
+export const SCHEDULED_FUNCTIONS = ["bitesMirrorSweep"] as const;
 
 export const SCAN_FUNCTIONS = [
   "adminPerformanceOpsSnapshot",
@@ -101,6 +119,7 @@ export const HEAVY_FUNCTIONS = [
 const SCAN = new Set<string>(SCAN_FUNCTIONS);
 const HEAVY = new Set<string>(HEAVY_FUNCTIONS);
 const WORKER = new Set<string>(WORKER_HTTP_FUNCTIONS);
+const SCHEDULED = new Set<string>(SCHEDULED_FUNCTIONS);
 
 export const LANE_FUNCTION_NAME: Record<LaneId, LaneExportName> = {
   light: "adminApi",
@@ -120,7 +139,7 @@ export function isDriverAppCallable(name: string): boolean {
 }
 
 export function laneOf(name: string): LaneId | null {
-  if (WORKER.has(name) || isDriverAppCallable(name)) return null;
+  if (WORKER.has(name) || SCHEDULED.has(name) || isDriverAppCallable(name)) return null;
   if (SCAN.has(name)) return "scan";
   if (HEAVY.has(name)) return "heavy";
   if (moduleForFunction(name)) return "light";
@@ -202,7 +221,7 @@ function assertPartition(): void {
   }
   for (const name of [...SCAN_FUNCTIONS, ...HEAVY_FUNCTIONS]) {
     if (!seen.has(name)) throw new Error(`lane member is not an export: ${name}`);
-    if (WORKER.has(name) || isDriverAppCallable(name)) {
+    if (WORKER.has(name) || SCHEDULED.has(name) || isDriverAppCallable(name)) {
       throw new Error(`excluded callable is on a lane: ${name}`);
     }
   }

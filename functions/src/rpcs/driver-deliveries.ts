@@ -14,6 +14,8 @@ import {
 } from "../core/geo";
 import { driverRestaurantIds } from "./deliveries-shared";
 import { findActiveShift } from "./driver-shift";
+import { syncBitesOrderMilestone, type BitesPartnerStamp } from "./bites-order-sync";
+import { BITES_DELIVERY_FIELDS, BITES_ORDER_STATUS } from "../core/bites";
 import {
   IN_FILTER_LIMIT,
   chunk,
@@ -47,6 +49,30 @@ function deliveryIdentityStamp(
     driver_code: driver.driver_code,
     employee_id: driver.employee_id,
   });
+}
+
+/**
+ * The rider identity the Bites order carries.
+ *
+ * The customer app runs on the Bites project and cannot resolve a delivery-side
+ * `users` reference, so the order stores the name and phone inline.
+ */
+function bitesPartnerStamp(
+  uid: string,
+  driver: Record<string, unknown>,
+  profile: Record<string, unknown>,
+): BitesPartnerStamp {
+  return {
+    uid,
+    name:
+      asString(profile["full_name"]) ??
+      asString(driver["full_name"]) ??
+      asString(driver["name"]),
+    phone:
+      asString(profile["phone"]) ??
+      asString(driver["phone"]) ??
+      asString(driver["driver_phone"]),
+  };
 }
 
 async function touchDeliveryStatusRollup(input: {
@@ -92,17 +118,82 @@ function freezeActive(driver: Dict, at: Date): boolean {
   return Boolean(from || until);
 }
 
+/**
+ * A leading Bites app prefix, stripped before validation.
+ *
+ * Orders used to be allocated as `ORDBTS` + a counter. An order printed before that
+ * changed can still be handled: the prefix is dropped so the stored id is the digits
+ * alone, which is what the Bites order carries and what the duplicate check compares.
+ * A bare `ORDBTS` with nothing after it is not a prefix, so it still fails validation.
+ */
+const BITES_ORDER_PREFIX = /^ORDBTS(?=[0-9])/i;
+
 export function normalizeExternalOrderId(raw: string | null | undefined): string {
-  return (raw ?? "").trim().replace(/^#+|#+$/g, "").toLowerCase();
+  return (raw ?? "")
+    .trim()
+    .replace(/^#+|#+$/g, "")
+    .replace(BITES_ORDER_PREFIX, "")
+    .toLowerCase();
 }
 
 export function assertExternalOrderId(raw: string | null | undefined): string | null {
-  const id = (raw ?? "").trim().replace(/^#+|#+$/g, "");
+  const id = (raw ?? "")
+    .trim()
+    .replace(/^#+|#+$/g, "")
+    .replace(BITES_ORDER_PREFIX, "");
   if (!id) return null;
+  // Digits only: the id is the key the Bites order is matched by, so it has to be
+  // exactly what Bites allocated rather than a rider's transcription of it.
   if (!/^[0-9]{1,32}$/.test(id)) {
     throw riderError("invalid-argument", "invalid_order_id");
   }
   return id;
+}
+
+/**
+ * Every exact value a stored `external_order_id` could hold for this id.
+ *
+ * `external_order_id` keeps whatever the rider was allowed to type, and Firestore
+ * cannot compare case-insensitively. The digits form is what the app produces now;
+ * the `ORDBTS` form is what an order handled before the prefix was dropped holds,
+ * and the app always spelled it in capitals. The `#` a printed docket carries never
+ * reaches a stored value: `assertExternalOrderId` strips it.
+ */
+export function orderIdSpellings(orderId: string): string[] {
+  const out: string[] = [orderId];
+  const legacy = `ORDBTS${orderId}`;
+  if (!out.includes(legacy)) out.push(legacy);
+  return out;
+}
+
+/**
+ * Refuses an order id another delivery already holds.
+ *
+ * Scoped to the whole collection rather than the rider's restaurant and day. The id
+ * is the key the Bites order is matched by, so a second row under the same id — at
+ * any store, on any day — lets one order collect two riders' milestones and two sets
+ * of evidence. A cancelled row does not count, so re-attempting a delivery that fell
+ * through still works.
+ */
+async function assertOrderIdUnused(orderId: string | null | undefined): Promise<void> {
+  const normalized = normalizeExternalOrderId(orderId);
+  if (!normalized || !orderId) return;
+  const db = getFirestore();
+  for (const spelling of orderIdSpellings(orderId)) {
+    const snap = await db
+      .collection(COLLECTIONS.deliveries)
+      .where("external_order_id", "==", spelling)
+      .limit(SCAN)
+      .get();
+    const taken = snap.docs.some((doc) => {
+      const row = (doc.data() ?? {}) as Dict;
+      if (row["status"] === "cancelled") return false;
+      return normalizeExternalOrderId(asString(row["external_order_id"])) === normalized;
+    });
+    if (taken) {
+      throw riderError("already-exists", "duplicate_order_id");
+    }
+  }
 }
 
 function parseProofList(items: unknown[]): string[] {
@@ -492,24 +583,7 @@ export const driverCreatePickup = onCall(async (request) => {
     lng,
     proximityMeters: settings.proximityMeters,
   });
-  const normalized = normalizeExternalOrderId(orderId);
-
-  if (normalized && restaurantId) {
-    const dups = await getFirestore()
-      .collection(COLLECTIONS.deliveries)
-      .where("restaurant_id", "==", restaurantId)
-      .where("pickup_day", "==", today)
-      .limit(SCAN)
-      .get();
-    const taken = dups.docs.some((doc) => {
-      const row = (doc.data() ?? {}) as Dict;
-      if (row["status"] === "cancelled") return false;
-      return normalizeExternalOrderId(asString(row["external_order_id"])) === normalized;
-    });
-    if (taken) {
-      throw riderError("already-exists", "duplicate_order_id");
-    }
-  }
+  await assertOrderIdUnused(orderId);
 
   const shiftDate = await resolveShiftDate(ctx.uid, now);
   const id = randomUUID();
@@ -541,6 +615,12 @@ export const driverCreatePickup = onCall(async (request) => {
     day: shiftDate,
     status: "in_transit",
   });
+  const bites = await syncBitesOrderMilestone(orderId, {
+    status: BITES_ORDER_STATUS.picked,
+    timeField: BITES_DELIVERY_FIELDS.pickupTime,
+    at: now,
+    partner: bitesPartnerStamp(ctx.uid, ctx.driver, ctx.profile),
+  });
   await logDriverOperation({
     driverId: ctx.uid,
     module: "delivery",
@@ -554,6 +634,8 @@ export const driverCreatePickup = onCall(async (request) => {
       restaurant_id: restaurantId,
       partner_id: row["partner_id"],
       proof_count: proofKeys.length,
+      bites_synced: bites.synced,
+      bites_sync_reason: bites.reason,
     },
   });
   return serializeDelivery(id, row);
@@ -637,6 +719,12 @@ export const driverCompleteDelivery = onCall(async (request) => {
     day: shiftDate,
     status: "pending",
   });
+  const bites = await syncBitesOrderMilestone(asString(current["external_order_id"]), {
+    status: BITES_ORDER_STATUS.delivered,
+    timeField: BITES_DELIVERY_FIELDS.deliveredTime,
+    at: now,
+    partner: bitesPartnerStamp(ctx.uid, ctx.driver, ctx.profile),
+  });
   await logDriverOperation({
     driverId: ctx.uid,
     module: "delivery",
@@ -649,6 +737,8 @@ export const driverCompleteDelivery = onCall(async (request) => {
       order_id: current["external_order_id"] ?? null,
       restaurant_id: current["restaurant_id"] ?? null,
       proof_count: proofKeys.length,
+      bites_synced: bites.synced,
+      bites_sync_reason: bites.reason,
     },
   });
   return serializeDelivery(deliveryId, { ...current, ...patch });

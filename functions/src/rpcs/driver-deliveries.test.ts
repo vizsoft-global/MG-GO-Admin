@@ -5,6 +5,7 @@ import {
   assertPublishedPickupRestaurant,
   isWithinDeliveryRange,
   normalizeExternalOrderId,
+  orderIdSpellings,
   parseProofKeys,
   resolvePickupRestaurantId,
   restaurantDeliveryAllowed,
@@ -53,14 +54,30 @@ describe("parseProofKeys", () => {
 });
 
 describe("order id", () => {
-  it("strips hashes, lowercases, and rejects non-digits", () => {
-    assert.equal(normalizeExternalOrderId(" #ABC12# "), "abc12");
+  it("keeps the digits and drops a legacy Bites prefix", () => {
+    assert.equal(normalizeExternalOrderId(" #12345# "), "12345");
     assert.equal(assertExternalOrderId("#12345"), "12345");
     assert.equal(assertExternalOrderId("  "), null);
-    assert.throws(() => assertExternalOrderId("12ab"), (error: unknown) => {
-      assert.equal(messageOf(error), "invalid_order_id");
-      return true;
-    });
+    // Orders allocated before the prefix was dropped still work: what is stored is
+    // the digits alone, which is what the Bites order carries.
+    assert.equal(assertExternalOrderId(" ORDBTS1215 "), "1215");
+    assert.equal(assertExternalOrderId("ordbts1215"), "1215");
+    assert.equal(normalizeExternalOrderId("ORDBTS1215"), "1215");
+  });
+
+  it("probes the digits form and the legacy prefixed form a stored row could hold", () => {
+    assert.deepEqual(orderIdSpellings("12345"), ["12345", "ORDBTS12345"]);
+  });
+
+  it("refuses ids that cannot be a merchant order number", () => {
+    for (const bad of ["12 34", "12ab", "ORD BTS", "ORD/1215", "a".repeat(33), "ORDBTS"]) {
+      assert.throws(() => assertExternalOrderId(bad), (error: unknown) => {
+        assert.equal(messageOf(error), "invalid_order_id");
+        return true;
+      });
+    }
+    // Only hashes is the same as typing nothing, which is a "no id", not junk.
+    assert.equal(assertExternalOrderId("#"), null);
   });
 });
 

@@ -6,8 +6,14 @@
  * Cloud Run instance does not construct the other handlers.
  *
  * Stage D: register a new callable in `router/legacy-modules.ts` and a lane in
- * `router/lanes.ts`. This file no longer has static `export { } from` lines.
- * Keep `import "./core/init"` first. Do not call setGlobalOptions again.
+ * `router/lanes.ts`. This file no longer has static `export { } from` lines. Keep
+ * `import "./core/init"` first. Do not call setGlobalOptions again.
+ *
+ * There is no trigger catalog. The one set of Firestore triggers this project had
+ * (`bites-mirror`) could not deploy — the live database is in me-central2, which
+ * this project's agreement blocks for compute — so those writes push inline from
+ * their admin RPCs instead, and `bitesMirrorSweep` reconciles on a schedule to
+ * catch the writes that never went through an RPC.
  */
 import "./core/init";
 import { createRequire } from "node:module";

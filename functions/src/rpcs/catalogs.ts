@@ -4,6 +4,7 @@ import { COLLECTIONS } from "../core/collections";
 import { parseId } from "../core/query";
 import { requireStaff } from "../core/staff";
 import { stampStoredRow } from "../core/search-text";
+import { pushRestaurantMirror } from "./bites-mirror";
 
 const ZONES = COLLECTIONS.zones;
 const ZONE_GEOFENCE_SETTINGS = "zone_geofence_settings";
@@ -307,6 +308,8 @@ export const adminUpsertRestaurant = onCall(async (request) => {
   } else {
     await ref.set({ ...payload, created_at: FieldValue.serverTimestamp() });
   }
+  // Bites-Admin reads its own copy of the catalogue to refuse duplicate store names.
+  await pushRestaurantMirror(db, ref.id);
   return { success: true, id: ref.id };
 });
 
@@ -322,6 +325,8 @@ export const adminDeleteRestaurant = onCall(async (request) => {
   for (const doc of links.docs) batch.delete(doc.ref);
   batch.delete(db.collection(RESTAURANTS).doc(id));
   await batch.commit();
+  // A missing restaurant drops both the catalogue mirror and any store→rider link.
+  await pushRestaurantMirror(db, id);
   return { success: true };
 });
 

@@ -28,6 +28,7 @@ import { COLLECTIONS, UNIQUE_LOCKS } from "../core/collections";
 import { daysInMonth, parseMonthKey, payrollMonths } from "../core/kuwait";
 import { requireStaff, requireStaffFresh, type StaffContext } from "../core/staff";
 import { stampStoredRow } from "../core/search-text";
+import { pushAssignmentMirror, pushDriverIdentityMirror } from "./bites-mirror";
 import {
   BATCH_LIMIT,
   SCAN_CAP,
@@ -255,6 +256,15 @@ export const adminApproveDriver = onCall(async (request) => {
   }
   if (result.ok !== true && created) {
     await getAuth().deleteUser(uid).catch(() => undefined);
+  }
+  if (result.ok === true) {
+    // Firestore triggers cannot run on this database — the live one is in
+    // me-central2, where this project's agreement blocks compute. So the panel's
+    // mirrors are pushed from the RPC that owns the write instead.
+    await Promise.all([
+      pushDriverIdentityMirror(db, uid),
+      ...precheck.restaurantIds.map((restaurantId) => pushAssignmentMirror(db, restaurantId, uid)),
+    ]);
   }
   return result;
 });
