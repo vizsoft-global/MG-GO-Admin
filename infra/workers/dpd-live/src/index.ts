@@ -57,7 +57,10 @@ export default {
       return withCors(await room.fetch(request));
     }
 
-    if (url.pathname === "/archive/register" && request.method === "POST") {
+    if (
+      (url.pathname === "/archive/register" || url.pathname === "/archive/object") &&
+      request.method === "POST"
+    ) {
       return withCors(await room.fetch(request));
     }
 

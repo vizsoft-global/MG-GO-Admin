@@ -242,6 +242,8 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-10-17` — **GPS archive export writes through the Worker binding.** The panel's R2 S3 keys cannot put into `dpd-gps-prod` (`Access Denied`). `POST /archive/object` takes one `import/{id}/{day}/{HH}.jsonl.gz` body behind the admin token and stores it with the `GPS_ARCHIVE` binding. A one-rider-day probe wrote 174 points. The 180-day export is a copy only: `location_gps_r2_since` stays unset and `LOCATION_EVENTS_ARCHIVED` stays off until that copy finishes and the 7-day dual-write compare is clean. `GPS_SINK` stays `off`. Worker `dpd-live` version `b35ed940-fe8a-4469-ba45-f4ca161de306`.
+
 - `[admin only] 2026-10-17` — **Firebase cost Phase 2: live and history reads move to the Worker.**
   - **Live.** FleetRoom answers `GET /latest`, `/fleet-stats`, `/history` and `/history/days` behind the same admin WebSocket token as `/ws` (401 without it). The V1 store opens the `fleet` WebSocket for the whole fleet (`bbox: null`) and drops to the Firestore poll on any socket failure; dashboard, performance map, delivery pin and the V2 fallback read the Worker first.
   - **History.** Day route, history, worktime and delivery trail read R2 through `/history`; ranges older than 7 days show a "Load from archive" action instead of scanning `driver_location_events`.

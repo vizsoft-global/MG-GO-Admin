@@ -6,21 +6,20 @@
  *   CONFIRM_GPS_EXPORT=yes node scripts/gps-archive-export.mjs --from … --before … --apply
  *
  * For each rider-day it writes gzip JSONL hours to `import/{id}/{day}/{HH}.jsonl.gz`
- * in `dpd-gps-prod` (never `rider/…`, which the room owns), registers them in the
- * room's `day_index` via POST /archive/register, and writes `rider_day_stats` with
- * the room's own moving / idle / dwell / distance rules.
+ * in `dpd-gps-prod` through the Worker's R2 binding (`POST /archive/object`),
+ * registers them in the room's `day_index` via POST /archive/register, and writes
+ * `rider_day_stats` with the room's own moving / idle / dwell / distance rules.
  *
  * Firestore rows are not deleted here. Once the export is verified, stamp
  * `location_gps_r2_since` to `--from` (scripts/gps-r2-cutover.mjs), set
  * `LOCATION_EVENTS_ARCHIVED=1` on the functions, and the retention cron shrinks
  * the collection to 7 days.
  *
- * Env: R2_ACCOUNT_ID/R2_S3_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
- * GPS_R2_BUCKET (default dpd-gps-prod), FLEET_WS_URL, FLEET_WS_TOKEN_SECRET, FLEET_ROOM.
+ * Env: FLEET_WS_URL, FLEET_WS_TOKEN_SECRET, FLEET_ROOM. The panel's R2 S3 keys
+ * do not have write access to `dpd-gps-prod`; the Worker binding does.
  */
 import { createHmac } from "node:crypto";
 import { gzipSync } from "node:zlib";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { assertProd, loadEnv, loadServiceAccount } from "./perf-env.mjs";
@@ -61,18 +60,10 @@ const app = getApps()[0] ?? initializeApp({ credential: cert(account), projectId
 const db = getFirestore(app, "default");
 
 const pick = (key) => (process.env[key] ?? env[key] ?? "").trim();
-const bucket = pick("GPS_R2_BUCKET") || "dpd-gps-prod";
-let s3 = null;
+const bucket = "dpd-gps-prod";
 let edgeBase = "";
 let edgeSecret = "";
 if (apply) {
-  const endpoint = pick("R2_S3_ENDPOINT") || `https://${pick("R2_ACCOUNT_ID")}.r2.cloudflarestorage.com`;
-  if (!pick("R2_ACCESS_KEY_ID") || !pick("R2_SECRET_ACCESS_KEY")) throw new Error("R2 keys missing");
-  s3 = new S3Client({
-    region: "auto",
-    endpoint,
-    credentials: { accessKeyId: pick("R2_ACCESS_KEY_ID"), secretAccessKey: pick("R2_SECRET_ACCESS_KEY") },
-  });
   edgeBase = pick("FLEET_WS_URL").replace(/\/+$/, "").replace(/^ws(s?):/i, "http$1:");
   edgeSecret = pick("FLEET_WS_TOKEN_SECRET");
   if (!edgeBase || !edgeSecret) throw new Error("FLEET_WS_URL / FLEET_WS_TOKEN_SECRET missing");
@@ -218,15 +209,15 @@ async function exportRiderDay(driverId, day, entries) {
   const keys = [];
   for (const [hour, lines] of hours) {
     const key = `import/${driverId}/${day}/${hour}.jsonl.gz`;
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: gzipSync(lines.join("\n")),
-        ContentType: "application/x-ndjson",
-        ContentEncoding: "gzip",
-      }),
-    );
+    const response = await fetch(`${edgeBase}/archive/object?key=${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${signToken()}`, "Content-Type": "application/octet-stream" },
+      body: gzipSync(lines.join("\n")),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || payload?.ok !== true) {
+      throw new Error(`put ${key}: HTTP ${response.status} ${payload?.error ?? ""}`.trim());
+    }
     keys.push(key);
   }
   const stats = dayStats(entries);

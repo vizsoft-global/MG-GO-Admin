@@ -32,7 +32,7 @@ import {
   type RuleState,
 } from "./fleet-rules";
 import { hashToken, verifyAdminToken } from "./auth";
-import { GpsArchive, inGpsRollout, kuwaitParts, type ArchivePoint } from "./gps-archive";
+import { GpsArchive, inGpsRollout, isImportHourKey, kuwaitParts, type ArchivePoint } from "./gps-archive";
 import { callWorkerFunction, resolveUserFromToken } from "./supabase";
 import {
   emptyView,
@@ -323,12 +323,17 @@ export class FleetRoom implements DurableObject {
         await this.loadRoster(true);
         return json({ ok: true, drivers: this.entities.size });
       }
-      if (READ_PATHS.has(url.pathname) || url.pathname === "/archive/register") {
+      if (
+        READ_PATHS.has(url.pathname) ||
+        url.pathname === "/archive/register" ||
+        url.pathname === "/archive/object"
+      ) {
         const token = (request.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
         if (!(await verifyAdminToken(this.env.ADMIN_WS_TOKEN_SECRET, token))) {
           return json({ ok: false, error: "unauthorized" }, 401);
         }
         if (url.pathname === "/archive/register") return await this.registerImported(request);
+        if (url.pathname === "/archive/object") return await this.putImportedObject(request, url);
         return await this.read(url);
       }
       if (url.pathname === "/stats") {
@@ -359,6 +364,16 @@ export class FleetRoom implements DurableObject {
   // -------------------------------------------------------------------------
   // Staff reads (panel server, Bearer fleet token)
   // -------------------------------------------------------------------------
+
+  private async putImportedObject(request: Request, url: URL): Promise<Response> {
+    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405);
+    const key = url.searchParams.get("key") ?? "";
+    if (!isImportHourKey(key)) return json({ ok: false, error: "bad_key" }, 400);
+    const body = await request.arrayBuffer();
+    const stored = await this.archive.putImport(key, body);
+    if (!stored) return json({ ok: false, error: "not_stored" }, 500);
+    return json({ ok: true, bytes: body.byteLength });
+  }
 
   private async registerImported(request: Request): Promise<Response> {
     if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405);

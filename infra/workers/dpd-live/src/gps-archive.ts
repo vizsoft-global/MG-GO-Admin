@@ -115,6 +115,15 @@ export function importHourKey(driverId: string, day: string, hour: string): stri
   return `import/${driverId}/${day}/${hour}.jsonl.gz`;
 }
 
+/** True only for one Firestore-export hour file. Rejects anything outside `import/`. */
+export function isImportHourKey(key: string): boolean {
+  const match = /^import\/([^/]+)\/(\d{4}-\d{2}-\d{2})\/(\d{2})\.jsonl\.gz$/.exec(key);
+  if (!match) return false;
+  const [, driverId, day, hour] = match;
+  if (!driverId || driverId.includes("..") || hour < "00" || hour > "23") return false;
+  return key === importHourKey(driverId, day, hour);
+}
+
 export function parsePointLines(text: string): ArchivePoint[] {
   const out: ArchivePoint[] = [];
   for (const line of text.split("\n")) {
@@ -275,6 +284,17 @@ export class GpsArchive {
    * Points and distance take the larger side because dual-write days hold the same fixes
    * in both copies; `readDay` dedupes them by timestamp.
    */
+  /** Writes one export hour file. The caller must already have checked `isImportHourKey`. */
+  async putImport(key: string, body: ArrayBuffer): Promise<boolean> {
+    if (!this.bucket || !isImportHourKey(key) || body.byteLength === 0 || body.byteLength > 8_000_000) {
+      return false;
+    }
+    await this.bucket.put(key, body, {
+      httpMetadata: { contentType: "application/x-ndjson" },
+    });
+    return true;
+  }
+
   registerImported(row: DayIndexRow): void {
     this.ensureSchema();
     const existing = this.dayIndex(row.driverId, row.day, row.day)[0];

@@ -7,6 +7,7 @@ import {
   gzipText,
   importHourKey,
   inGpsRollout,
+  isImportHourKey,
   kuwaitParts,
   parsePointLines,
   riderHourKey,
@@ -210,6 +211,21 @@ test("imported hours merge into day_index and dedupe against compacted fixes", a
     (await archive.readDay("r1", DAY)).map((p) => p.t),
     [BASE - 60_000, BASE, BASE + 5_000],
   );
+});
+
+test("import hour keys stay under import/ and putImport writes only those", async () => {
+  assert.equal(isImportHourKey(importHourKey("r1", DAY, "08")), true);
+  assert.equal(isImportHourKey("rider/r1/2026-10-17/08.jsonl.gz"), false);
+  assert.equal(isImportHourKey("import/../raw/2026-10-17/08.jsonl.gz"), false);
+  assert.equal(isImportHourKey(importHourKey("r1", DAY, "24")), false);
+
+  const bucket = memoryBucket();
+  const archive = new GpsArchive(memorySql(), bucket);
+  const key = importHourKey("r1", DAY, "08");
+  const body = await gzipText('{"t":1,"la":29.3,"lo":47.9}\n');
+  assert.equal(await archive.putImport(key, body), true);
+  assert.equal(bucket.objects.has(key), true);
+  assert.equal(await archive.putImport("raw/x.jsonl.gz", body), false);
 });
 
 test("latest pin survives a new archive instance on the same SQLite", async () => {
