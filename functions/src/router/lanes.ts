@@ -70,7 +70,7 @@ export const WORKER_HTTP_FUNCTIONS = [
  * listed in `LEGACY_MODULES` only so `index.ts` publishes it — every other module
  * there is a callable the light lane serves.
  */
-export const SCHEDULED_FUNCTIONS = ["bitesMirrorSweep"] as const;
+export const SCHEDULED_FUNCTIONS = ["bitesMirrorSweep", "homeSnapshotRepair"] as const;
 
 export const SCAN_FUNCTIONS = [
   "adminPerformanceOpsSnapshot",

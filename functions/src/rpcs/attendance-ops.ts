@@ -36,6 +36,8 @@ import {
   type AttendanceRow,
 } from "./attendance-shared";
 import { applyAttendanceRollup } from "../core/rollups";
+import { invalidateDriverHomeDailySafe } from "./driver-home";
+import { sendDriverHomeRefresh } from "./driver-refresh";
 import {
   attendanceIdentityMissing,
   pickMissingAttendanceDenorm,
@@ -332,6 +334,10 @@ export const adminCorrectAttendance = onCall(async (request) => {
       zoneId: old[ATT.zoneId],
       status: patch[ATT.status],
     });
+    // A correction changes adherence and the online total without any rider
+    // action, so the phone is told and the snapshot is invalidated.
+    await sendDriverHomeRefresh(driverId, "attendance_corrected");
+    await invalidateDriverHomeDailySafe(driverId, "attendance_corrected");
     return serializeLog(doc.id, { ...old, ...patch });
   }
 
@@ -363,6 +369,8 @@ export const adminCorrectAttendance = onCall(async (request) => {
     zoneId: row[ATT.zoneId],
     status: row[ATT.status],
   });
+  await sendDriverHomeRefresh(driverId, "attendance_corrected");
+  await invalidateDriverHomeDailySafe(driverId, "attendance_corrected");
   return serializeLog(ref.id, row);
 });
 
@@ -825,6 +833,14 @@ async function applyCheckout(
   }
 
   await batch.commit();
+
+  // Every caller of this helper is a checkout the rider did not perform: the
+  // auto-checkout sweep, the freeze checkout and the admin correction. Home has
+  // to hear about it twice — a data-only push so the phone refetches, and a
+  // snapshot invalidation so the next response cannot describe an on-duty rider.
+  // Older app builds ignore the unknown `record_type`.
+  await sendDriverHomeRefresh(driverId, `checkout:${reason}`);
+  await invalidateDriverHomeDailySafe(driverId, `checkout:${reason}`);
 }
 
 async function autoCheckoutMinutes(): Promise<number> {

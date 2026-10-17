@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Renders docs/perf/platform-load-map.md to docs/perf/platform-load-map.pdf.
+ * Renders the docs/perf markdown reports to PDF.
  *
- * Markdown -> HTML (marked) -> print (Chrome via Playwright), with the four
- * Mermaid diagrams rendered live and placed on their own landscape pages so the
- * labels stay readable. Mermaid itself is fetched once and cached in the OS temp
- * dir; nothing is written into the repo except the PDF.
+ * Markdown -> HTML (marked) -> print (Chrome via Playwright), with every Mermaid
+ * diagram rendered live and placed on its own landscape page so the labels stay
+ * readable. Mermaid itself is fetched once and cached in the OS temp dir; nothing
+ * is written into the repo except the PDFs.
  *
  *   npm run docs:pdf
  */
@@ -16,11 +16,39 @@ import { marked } from 'marked';
 import { chromium } from 'playwright';
 
 const ROOT = process.cwd();
-const SRC = path.join(ROOT, 'docs/perf/platform-load-map.md');
-const OUT = path.join(ROOT, 'docs/perf/platform-load-map.pdf');
 const WORK = path.join(os.tmpdir(), 'mghub-platform-load-pdf');
 const MERMAID_PATH = path.join(WORK, 'mermaid.min.js');
 const MERMAID_URL = 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js';
+
+/**
+ * One entry per report. `src` is relative to docs/perf, `out` likewise.
+ * The cover carries the title, so a leading H1 in the body is dropped.
+ */
+const DOCS = [
+  {
+    src: 'platform-load-map.md',
+    out: 'platform-load-map.pdf',
+    title: 'Platform load & cost map',
+    paperTitle: 'Platform load & cost map',
+    subtitle:
+      'Firebase, Supabase and Cloudflare — what each layer is billed for, the measured read and write numbers behind it, what a performance drop looks like on each one, and the order to fix them.',
+    chips: ['Firebase · Firestore + Functions', 'Supabase · paused', 'Cloudflare · Workers + DO + R2'],
+  },
+  {
+    src: 'firestore-hotspot-report.md',
+    out: 'firestore-hotspot-report.pdf',
+    title: 'Firestore read & write hotspot report',
+    paperTitle: 'Firestore hotspot report',
+    subtitle:
+      'Which features, modules, Cloud Functions and composite indexes consume the Firebase bill — the cost per call, the symptoms when it degrades, and the order to fix it.',
+    chips: [
+      'Firestore · 186 indexes',
+      'Cloud Functions · me-central1',
+      'Cloudflare · dpd-live',
+      'Cost + latency',
+    ],
+  },
+];
 
 const CHROME_CANDIDATES = [
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
@@ -189,26 +217,18 @@ const MERMAID_INIT = `
   })();
 `;
 
-async function main() {
-  fs.mkdirSync(WORK, { recursive: true });
-  await ensureMermaid();
-
-  let md = fs.readFileSync(SRC, 'utf8');
-  // the cover carries the title; drop the duplicated leading H1 in the body
-  md = md.replace(/^#\s+.*\r?\n/, '');
-
-  const { body, toc } = renderMarkdown(md);
+function buildHtml(doc, body, toc, today) {
   const tocHtml = toc
     .filter((t) => t.depth >= 2 && t.depth <= 3)
     .map((t) => `<div class="toc-row toc-d${t.depth}"><a href="#${t.id}">${t.text}</a></div>`)
     .join('');
-  const today = new Date().toISOString().slice(0, 10);
+  const chips = doc.chips.map((c) => `<span class="cover-chip">${c}</span>`).join('\n        ');
 
-  const html = `<!doctype html>
+  return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Platform load &amp; cost map — Firebase · Supabase · Cloudflare</title>
+<title>${doc.paperTitle}</title>
 <style>${CSS}</style>
 </head>
 <body>
@@ -218,18 +238,15 @@ async function main() {
       <div class="cover-kicker">MGHub · DPD Control Tower</div>
     </div>
     <div class="cover-main">
-      <h1>Platform load &amp; cost map</h1>
+      <h1>${doc.title}</h1>
       <div class="cover-rule"></div>
-      <p class="sub">Firebase, Supabase and Cloudflare — what each layer is billed for, the measured read
-      and write numbers behind it, what a performance drop looks like on each one, and the order to fix them.</p>
+      <p class="sub">${doc.subtitle}</p>
       <div class="cover-layers">
-        <span class="cover-chip">Firebase · Firestore + Functions</span>
-        <span class="cover-chip">Supabase · paused</span>
-        <span class="cover-chip">Cloudflare · Workers + DO + R2</span>
+        ${chips}
       </div>
     </div>
     <div class="cover-meta">
-      <b>Source</b> docs/perf/platform-load-map.md &nbsp;·&nbsp;
+      <b>Source</b> docs/perf/${doc.src} &nbsp;·&nbsp;
       <b>Runtime</b> musallam-delivery-prod &nbsp;·&nbsp;
       <b>Generated</b> ${today}
     </div>
@@ -246,22 +263,27 @@ async function main() {
   <script>${MERMAID_INIT}</script>
 </body>
 </html>`;
+}
 
-  const htmlPath = path.join(WORK, 'platform-load-map.html');
+async function renderDoc(page, doc, today) {
+  const src = path.join(ROOT, 'docs/perf', doc.src);
+  const out = path.join(ROOT, 'docs/perf', doc.out);
+  if (!fs.existsSync(src)) throw new Error(`missing source: ${src}`);
+
+  let md = fs.readFileSync(src, 'utf8');
+  // the cover carries the title; drop the duplicated leading H1 in the body
+  md = md.replace(/^#\s+.*\r?\n/, '');
+
+  const { body, toc } = renderMarkdown(md);
+  const html = buildHtml(doc, body, toc, today);
+  const htmlPath = path.join(WORK, doc.out.replace(/\.pdf$/, '.html'));
   fs.writeFileSync(htmlPath, html, 'utf8');
 
-  const browser = await chromium.launch({
-    ...(chromePath ? { executablePath: chromePath } : { channel: 'chrome' }),
-    args: ['--allow-file-access-from-files'],
-  });
-  const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await page.goto('file:///' + htmlPath.replace(/\\/g, '/'), { waitUntil: 'load' });
   await page.waitForFunction('window.__mermaidDone === true', null, { timeout: 120_000 });
 
-  const failed = await page.evaluate(
-    "[...document.querySelectorAll('.warn')].map(e => e.textContent)",
-  );
-  if (failed.length) throw new Error(`mermaid render failed: ${failed.join(' | ')}`);
+  const failed = await page.evaluate("[...document.querySelectorAll('.warn')].map(e => e.textContent)");
+  if (failed.length) throw new Error(`${doc.out}: mermaid render failed: ${failed.join(' | ')}`);
 
   // a diagram taller than the landscape page shrinks to fit instead of clipping
   await page.evaluate(() => {
@@ -276,33 +298,45 @@ async function main() {
   });
 
   await page.pdf({
-    path: OUT,
+    path: out,
     printBackground: true,
     preferCSSPageSize: true,
     displayHeaderFooter: true,
-    headerTemplate:
-      '<div style="width:100%;font-size:7pt;color:#8a8f99;padding:0 12mm;font-family:Segoe UI,sans-serif;">Platform load &amp; cost map</div>',
+    headerTemplate: `<div style="width:100%;font-size:7pt;color:#8a8f99;padding:0 12mm;font-family:Segoe UI,sans-serif;">${doc.paperTitle}</div>`,
     footerTemplate:
       '<div style="width:100%;font-size:7pt;color:#8a8f99;padding:0 12mm;font-family:Segoe UI,sans-serif;display:flex;justify-content:space-between;"><span>MGHub · DPD Control Tower</span><span class="pageNumber"></span></div>',
   });
 
-  await browser.close();
-
-  const bytes = fs.statSync(OUT).size;
   const mediaBoxes = [
-    ...fs
-      .readFileSync(OUT)
-      .toString('latin1')
-      .matchAll(/\/MediaBox\s*\[([^\]]+)\]/g),
+    ...fs.readFileSync(out).toString('latin1').matchAll(/\/MediaBox\s*\[([^\]]+)\]/g),
   ].map((m) => m[1].trim());
   const landscape = mediaBoxes.filter((b) => {
     const [, , w, h] = b.split(/\s+/).map(Number);
     return w > h;
   }).length;
+  const kb = (fs.statSync(out).size / 1024).toFixed(0);
 
   console.log(
-    `wrote ${path.relative(ROOT, OUT)} — ${mediaBoxes.length} pages (${landscape} landscape diagrams), ${(bytes / 1024).toFixed(0)} KB`,
+    `wrote ${path.relative(ROOT, out)} — ${mediaBoxes.length} pages (${landscape} landscape diagrams), ${kb} KB`,
   );
+}
+
+async function main() {
+  fs.mkdirSync(WORK, { recursive: true });
+  await ensureMermaid();
+
+  const browser = await chromium.launch({
+    ...(chromePath ? { executablePath: chromePath } : { channel: 'chrome' }),
+    args: ['--allow-file-access-from-files'],
+  });
+  const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    for (const doc of DOCS) await renderDoc(page, doc, today);
+  } finally {
+    await browser.close();
+  }
 }
 
 main().catch((err) => {

@@ -24,6 +24,7 @@ import {
 } from "../core/incentive-store";
 import { driverRestaurantIds as restaurantIdsOf } from "./deliveries-shared";
 import { applyDeliveryRollup } from "../core/rollups";
+import { invalidateDriverHomeDailySafe } from "./driver-home";
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_RANGE_DAYS = 400;
@@ -680,13 +681,20 @@ export const recalculateDriverEarnings = onCall(async (request) => {
   const approvedBy = trimmedOrNull(data["approvedBy"] ?? data["p_approved_by"]);
   const context = await loadIncentiveContext();
 
-  return recalculateDriverEarningsCore({
+  const result = await recalculateDriverEarningsCore({
     driverId,
     earnDate,
     approvedBy,
     context,
     companyCache: new Map(),
   });
+  // Only today's snapshot can change. A historical recalc must not rewrite the
+  // rider's current Home, and `rebuildDriverHomeDaily` would rebuild today's doc
+  // for a day that is already closed.
+  if (earnDate === kuwaitDayString(new Date())) {
+    await invalidateDriverHomeDailySafe(driverId, "earnings");
+  }
+  return result;
 });
 
 /**

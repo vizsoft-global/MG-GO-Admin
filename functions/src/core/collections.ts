@@ -51,6 +51,13 @@ export const COLLECTIONS = {
   driverPayouts: "driver_payouts",
   payoutRuns: "payout_runs",
   driverDailyShifts: "driver_daily_shifts",
+  /**
+   * One read-only Home payload snapshot per rider per shift day
+   * (`{driverId}_{shiftDate}`). Written by `rebuildDriverHomeDaily`; the Home
+   * RPC serves it only while it is fresh and only under
+   * `app_settings.home_snapshot_enabled`.
+   */
+  driverHomeDaily: "driver_home_daily",
   driverOffStructure: "driver_off_structure",
   /** Operations-uploaded Invalid / Rejected / Cancelled rows, keyed `{driverId}_{day}`. */
   riderComplianceDaily: "rider_compliance_daily",

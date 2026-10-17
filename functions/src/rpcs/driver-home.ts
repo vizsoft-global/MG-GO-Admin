@@ -1,5 +1,5 @@
 import { AggregateField, getFirestore, Timestamp, type Firestore } from "../core/fs";
-import { measureBlock, measureOnCall } from "../core/fs-metrics";
+import { measureBlock, measureOnCall, withReadDeadline } from "../core/fs-metrics";
 import { createConfigCache, readConfigEpochs } from "../core/config-cache";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import {
@@ -9,11 +9,14 @@ import {
   kuwaitDayString,
 } from "../core/kuwait";
 import { kuwaitWeekStart } from "../core/money";
-import { loadAppSettings } from "../core/settings";
+import { loadAppSettings, loadHomeSnapshotFlags } from "../core/settings";
 import { requireRider, riderError } from "../core/rider";
 import { applyAttendanceRollup } from "../core/rollups";
 import { computeIncentiveAmount, type IncentiveRule, type IncentiveTier } from "../core/incentive";
 import { driverRestaurantIds } from "./deliveries-shared";
+import { sendDriverHomeRefresh } from "./driver-refresh";
+import { logger } from "firebase-functions";
+import { FUNCTIONS_REGION } from "../router/lanes";
 import {
   isoTimestamp,
   logDriverOperation,
@@ -1135,33 +1138,65 @@ async function loadBanner(
   return pickBanner(rows, memberGroups, zoneId, partnerId, now);
 }
 
-export async function loadRiderHomeDashboard(args: {
+/**
+ * Everything the Home payload needs that is *not* fleet-wide config.
+ *
+ * The same record is produced by the 25-document source path and read back from
+ * `driver_home_daily`. Rule matching, the weekly incentive and the banner stay
+ * per call against the config cache, which is why the snapshot stores values
+ * and not the response: a rule edit is never hidden by a snapshot.
+ */
+export type HomeSourceValues = {
+  today: string;
+  weekStart: string;
+  zoneId: string | null;
+  partnerId: string | null;
+  restaurantIds: string[];
+  forceAppUpdate: boolean;
+  forceMin: number | null;
+  partnerName: string | null;
+  partnerLogoUrl: string | null;
+  sessionOnline: boolean;
+  wentOnlineAt: string | null;
+  openSince: string | null;
+  speedMps: number | null;
+  distanceTodayMeters: number;
+  earnings: number;
+  deliveries: number;
+  onlineSeconds: number;
+  /** Today's closed-session seconds. The live open interval is added at read time. */
+  elapsedBaseSeconds: number;
+  performance: Dict;
+  /** `shift_adherence` without `online_seconds` — that number is derived per call. */
+  adherence: Dict;
+  compliance: WeekCompliance;
+};
+
+/**
+ * The 25-document path, as one value record.
+ *
+ * Every read here is the same read the deployed response already made; the only
+ * change is that the result is returned as data instead of being assembled into
+ * the wire payload inline, so the snapshot writer and the RPC share it.
+ */
+async function loadHomeSourceValues(args: {
   uid: string;
   driver: Dict;
   profile: Dict;
-  now?: Date;
-}): Promise<Dict> {
-  const now = args.now ?? new Date();
-  const today = kuwaitDayString(now);
+  now: Date;
+  configEpoch: number;
+  today?: string;
+}): Promise<HomeSourceValues> {
+  const now = args.now;
+  const today = args.today ?? kuwaitDayString(now);
   const weekStart = kuwaitWeekStart(today);
   const zoneId = asString(args.driver["zone_id"]);
   const partnerId = asString(args.driver["partner_id"]);
   const forceAt = args.driver["force_app_update_at"];
   const forceMin = numberOrNull(args.driver["force_app_update_min_code"]);
-  const forceAppUpdate = forceAt != null && forceMin !== null;
-
-  // One epoch read for every fleet-wide collection this response needs. Once
-  // the isolate is warm that single read is the *entire* cost of the delivery
-  // rules, their scopes, the incentive rules, their scopes and tiers, and the
-  // banners — the collections themselves come from the isolate memory cache.
-  const epochs = await step("home.epochs", () => readConfigEpochs());
-  const configEpoch = epochs.config;
 
   const restaurantIds = await step("home.assignedRestaurants", () =>
     assignedRestaurantIds(args.uid, args.driver),
-  );
-  const hideWeekly = await step("home.companyIncentive", () =>
-    companyHidesWeeklyIncentive(args.driver, configEpoch),
   );
 
   const [
@@ -1174,76 +1209,609 @@ export async function loadRiderHomeDashboard(args: {
     performance,
     adherence,
     compliance,
-  ] = await Promise.all([
-      partnerId
-        ? step("home.partner", () =>
-            getFirestore().collection(COLLECTIONS.partners).doc(partnerId).get(),
-          )
-        : Promise.resolve(null),
-      step("home.latestSession", () => latestSession(args.uid)),
-      step("home.location", () => locationOf(args.uid)),
-      step("home.weekEarnings", () => weekEarnings(args.uid, weekStart, today)),
-      step("home.weekDeliveries", () => weekDeliveryCount(args.uid, weekStart, today)),
-      step("home.weekOnlineSeconds", () => weekOnlineSeconds(args.uid, weekStart, today, now)),
-      step("home.performanceCounts", () => performanceCounts(args.uid)),
-      step("home.shiftAdherence", () => shiftAdherence(args.uid, today)),
-      step("home.weekCompliance", () => weekCompliance(args.uid, weekStart, today)),
-    ]);
+  ] = await withReadDeadline(
+    Promise.all([
+    partnerId
+      ? step("home.partner", () =>
+          getFirestore().collection(COLLECTIONS.partners).doc(partnerId).get(),
+        )
+      : Promise.resolve(null),
+    step("home.latestSession", () => latestSession(args.uid)),
+    step("home.location", () => locationOf(args.uid)),
+    step("home.weekEarnings", () => weekEarnings(args.uid, weekStart, today)),
+    step("home.weekDeliveries", () => weekDeliveryCount(args.uid, weekStart, today)),
+    step("home.weekOnlineSeconds", () => weekOnlineSeconds(args.uid, weekStart, today, now)),
+    step("home.performanceCounts", () => performanceCounts(args.uid)),
+    step("home.shiftAdherence", () => shiftAdherence(args.uid, today)),
+    step("home.weekCompliance", () => weekCompliance(args.uid, weekStart, today)),
+    ]),
+    HOME_READ_TIMEOUT_MS,
+    "home_sources",
+  );
 
   const partner = partnerSnap?.exists ? ((partnerSnap.data() ?? {}) as Dict) : {};
-  const [ruleConfig, incentiveConfig, banner] = await Promise.all([
-    step("home.deliveryRules", () => deliveryRuleCache.get(configEpoch, loadDeliveryRuleConfig)),
-    hideWeekly
-      ? Promise.resolve(null)
-      : step("home.incentiveRules", () => incentiveRuleCache.get(configEpoch, loadIncentiveConfig)),
-    step("home.banner", () => loadBanner(args.uid, zoneId, partnerId, now, configEpoch)),
-  ]);
+  const sessionOnline = session ? asBool(session["is_online"]) : false;
+  const wentOnlineAt = session ? (isoTimestamp(session["went_online_at"]) ?? null) : null;
+  const { online_seconds: elapsedBase, ...adherenceRest } = adherence;
 
-  const rules = matchingDeliveryRules(ruleConfig, {
+  return {
     today,
+    weekStart,
     zoneId,
     partnerId,
     restaurantIds,
+    forceAppUpdate: forceAt != null && forceMin !== null,
+    forceMin,
+    partnerName: asString(partner["name"]),
+    partnerLogoUrl: asString(partner["logo_url"]),
+    sessionOnline,
+    wentOnlineAt,
+    openSince: sessionOnline ? wentOnlineAt : null,
+    speedMps: numberOrNull(location["speed_mps"]),
+    distanceTodayMeters: numberOrNull(location["distance_today_meters"]) ?? 0,
+    earnings,
+    deliveries,
+    onlineSeconds,
+    elapsedBaseSeconds: Math.max(0, Math.trunc(numberOrNull(elapsedBase) ?? 0)),
+    performance,
+    adherence: adherenceRest,
+    compliance,
+  };
+}
+
+/**
+ * Rule / incentive / banner — all three are served from the config cache, so
+ * this costs one `driver_group_members` query at most on a warm isolate.
+ */
+async function decorateHomeValues(args: {
+  uid: string;
+  driver: Dict;
+  values: HomeSourceValues;
+  configEpoch: number;
+  now: Date;
+}): Promise<{ rules: Dict[]; incentive: Dict | null; banner: Dict | null }> {
+  const { values } = args;
+  const hideWeekly = await step("home.companyIncentive", () =>
+    companyHidesWeeklyIncentive(args.driver, args.configEpoch),
+  );
+  const [ruleConfig, incentiveConfig, banner] = await Promise.all([
+    step("home.deliveryRules", () => deliveryRuleCache.get(args.configEpoch, loadDeliveryRuleConfig)),
+    hideWeekly
+      ? Promise.resolve(null)
+      : step("home.incentiveRules", () => incentiveRuleCache.get(args.configEpoch, loadIncentiveConfig)),
+    step("home.banner", () =>
+      loadBanner(args.uid, values.zoneId, values.partnerId, args.now, args.configEpoch),
+    ),
+  ]);
+
+  const rules = matchingDeliveryRules(ruleConfig, {
+    today: values.today,
+    zoneId: values.zoneId,
+    partnerId: values.partnerId,
+    restaurantIds: values.restaurantIds,
   });
   const incentive = incentiveConfig
-    ? primaryWeeklyIncentive(incentiveConfig, { today, zoneId, partnerId, restaurantIds })
+    ? primaryWeeklyIncentive(incentiveConfig, {
+        today: values.today,
+        zoneId: values.zoneId,
+        partnerId: values.partnerId,
+        restaurantIds: values.restaurantIds,
+      })
     : null;
 
+  return { rules, incentive, banner };
+}
+
+
+/** `elapsed_base + (now - open_since)` — the total is never stored. */
+export function liveOpenSeconds(openSince: string | null, today: string, now: Date): number {
+  if (!openSince) return 0;
+  const at = new Date(openSince);
+  if (Number.isNaN(at.getTime())) return 0;
+  if (kuwaitDayString(at) !== today) return 0;
+  return Math.max(0, Math.floor((now.getTime() - at.getTime()) / 1000));
+}
+
+/**
+ * Assemble the wire payload.
+ *
+ * One implementation for both read paths, so a snapshot response and a source
+ * response cannot drift into different shapes — which is exactly what the
+ * shadow week is looking for.
+ */
+function composeHomePayload(args: {
+  driver: Dict;
+  profile: Dict;
+  values: HomeSourceValues;
+  rules: Dict[];
+  incentive: Dict | null;
+  banner: Dict | null;
+  configEpoch: number;
+  now: Date;
+  snapshotAgeMs: number | null;
+}): Dict {
+  const v = args.values;
+  const todayOnlineSeconds =
+    v.elapsedBaseSeconds + liveOpenSeconds(v.openSince, v.today, args.now);
   return {
     driver: {
       full_name: asString(args.profile["full_name"]) ?? "Driver",
       is_on_duty: asBool(args.driver["is_on_duty"]),
-      partner_name: asString(partner["name"]),
-      partner_logo_url: asString(partner["logo_url"]),
+      partner_name: v.partnerName,
+      partner_logo_url: v.partnerLogoUrl,
     },
     session: {
-      is_online: asBool(session?.["is_online"]),
-      went_online_at: isoTimestamp(session?.["went_online_at"]),
-      speed_mps: numberOrNull(location["speed_mps"]),
-      distance_today_meters: numberOrNull(location["distance_today_meters"]) ?? 0,
+      is_online: v.sessionOnline,
+      went_online_at: v.wentOnlineAt,
+      speed_mps: v.speedMps,
+      distance_today_meters: v.distanceTodayMeters,
+      // The two fields the client needs to keep the timer ticking without a
+      // call. `today_online_seconds` below is the same number already summed.
+      online_seconds_base: v.elapsedBaseSeconds,
+      open_since: v.openSince,
     },
     week: {
-      start_date: weekStart,
-      end_date: today,
-      earnings_kwd: earnings,
-      deliveries_count: deliveries,
-      online_seconds: onlineSeconds,
-      invalid_days: compliance.invalid_days,
-      rejected_orders: compliance.rejected_orders,
-      cancelled_orders: compliance.cancelled_orders,
+      start_date: v.weekStart,
+      end_date: v.today,
+      earnings_kwd: v.earnings,
+      deliveries_count: v.deliveries,
+      online_seconds: v.onlineSeconds,
+      invalid_days: v.compliance.invalid_days,
+      rejected_orders: v.compliance.rejected_orders,
+      cancelled_orders: v.compliance.cancelled_orders,
     },
-    primary_weekly_incentive: incentive,
-    delivery_rules: rules,
-    shift_adherence: adherence,
-    today_online_seconds:
-      typeof adherence["online_seconds"] === "number"
-        ? adherence["online_seconds"]
-        : 0,
-    performance,
-    banner,
-    force_app_update: forceAppUpdate,
-    force_app_update_min_code: forceMin,
+    primary_weekly_incentive: args.incentive,
+    delivery_rules: args.rules,
+    shift_adherence: { ...v.adherence, online_seconds: todayOnlineSeconds },
+    today_online_seconds: todayOnlineSeconds,
+    performance: v.performance,
+    banner: args.banner,
+    force_app_update: v.forceAppUpdate,
+    force_app_update_min_code: v.forceMin,
+    // Step 2: the two fields the phone cache keys on.
+    config_epoch: args.configEpoch,
+    server_day: v.today,
+    /** `null` when the response came from source. */
+    snapshot_age_ms: args.snapshotAgeMs,
   };
+}
+
+
+/**
+ * The Home snapshot — `driver_home_daily/{driverId}_{shiftDate}`.
+ *
+ * A snapshot is only ever a cache of values that have a source: every field is
+ * recomputed by `rebuildDriverHomeDaily`, never incremented. The read path
+ * serves it only when it is fresh, on the same shift day, and about the same
+ * zone/partner the driver document currently says — a zone move is an admin
+ * write that no rider action would otherwise notice.
+ */
+const HOME_SNAPSHOT_VERSION = 1;
+/** Older than this and the RPC pays the source path instead of showing stale numbers. */
+const HOME_SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000;
+/** Writers may call the rebuild freely; the recompute itself is the expensive part. */
+const HOME_SNAPSHOT_REBUILD_MIN_MS = 10 * 60 * 1000;
+/** One hung read must not hold eight concurrent riders. */
+const HOME_READ_TIMEOUT_MS = 8_000;
+
+export function homeSnapshotId(driverId: string, day: string): string {
+  return `${driverId}_${day}`;
+}
+
+function snapshotAgeMs(raw: Dict, now: Date): number | null {
+  const ms = numberOrNull(raw["updated_at_ms"]);
+  return ms === null ? null : now.getTime() - ms;
+}
+
+export function snapshotFresh(raw: Dict, today: string, now: Date, driver: Dict): boolean {
+  if (numberOrNull(raw["schema_version"]) !== HOME_SNAPSHOT_VERSION) return false;
+  if (raw["stale"] === true) return false;
+  if (asDay(raw["shift_date"]) !== today) return false;
+  const age = snapshotAgeMs(raw, now);
+  if (age === null || age < -60_000 || age > HOME_SNAPSHOT_MAX_AGE_MS) return false;
+  if (asString(raw["zone_id"]) !== asString(driver["zone_id"])) return false;
+  if (asString(raw["partner_id"]) !== asString(driver["partner_id"])) return false;
+  return true;
+}
+
+/** One read, raced against a deadline; any failure is a cache miss. */
+async function readHomeSnapshot(
+  driverId: string,
+  today: string,
+  now: Date,
+): Promise<{ raw: Dict; ageMs: number } | null> {
+  try {
+    const snap = await withReadDeadline(
+      getFirestore()
+        .collection(COLLECTIONS.driverHomeDaily)
+        .doc(homeSnapshotId(driverId, today))
+        .get(),
+      HOME_READ_TIMEOUT_MS,
+      "home_snapshot",
+    );
+    if (!snap.exists) return null;
+    const raw = (snap.data() ?? {}) as Dict;
+    return { raw, ageMs: Math.max(0, snapshotAgeMs(raw, now) ?? 0) };
+  } catch {
+    return null;
+  }
+}
+
+/** The stored document, as the same value record the source path produces. */
+function snapshotToValues(raw: Dict, driver: Dict): HomeSourceValues {
+  const week = (raw["week"] ?? {}) as Dict;
+  const session = (raw["session"] ?? {}) as Dict;
+  const shift = (raw["shift_adherence"] ?? {}) as Dict;
+  const partner = (raw["partner"] ?? {}) as Dict;
+  const forceMin = numberOrNull(driver["force_app_update_min_code"]);
+  const { online_seconds_base: elapsedBase, ...shiftRest } = shift;
+  return {
+    today: asDay(raw["shift_date"]) ?? "",
+    weekStart: asDay(week["start_date"]) ?? "",
+    zoneId: asString(raw["zone_id"]),
+    partnerId: asString(raw["partner_id"]),
+    restaurantIds: listIds(raw["restaurant_ids"]),
+    forceAppUpdate: driver["force_app_update_at"] != null && forceMin !== null,
+    forceMin,
+    partnerName: asString(partner["name"]),
+    partnerLogoUrl: asString(partner["logo_url"]),
+    sessionOnline: asBool(session["is_online"]),
+    wentOnlineAt: asString(session["went_online_at"]),
+    openSince: asString(session["open_since"]),
+    speedMps: numberOrNull(session["speed_mps"]),
+    distanceTodayMeters: numberOrNull(session["distance_today_meters"]) ?? 0,
+    earnings: numberOrNull(week["earnings_kwd"]) ?? 0,
+    deliveries: numberOrNull(week["deliveries_count"]) ?? 0,
+    onlineSeconds: numberOrNull(week["online_seconds"]) ?? 0,
+    elapsedBaseSeconds: Math.max(0, Math.trunc(numberOrNull(elapsedBase) ?? 0)),
+    performance: (raw["performance"] ?? {}) as Dict,
+    adherence: shiftRest,
+    compliance: {
+      invalid_days: asCount(week["invalid_days"]),
+      rejected_orders: asCount(week["rejected_orders"]),
+      cancelled_orders: asCount(week["cancelled_orders"]),
+    },
+  };
+}
+
+/**
+ * One `set` of the whole document. A rebuild never patches: a partial write is
+ * how a snapshot starts disagreeing with its source.
+ */
+async function writeHomeSnapshot(
+  driverId: string,
+  values: HomeSourceValues,
+  now: Date,
+  reason: string,
+): Promise<void> {
+  if (values.today === "" || values.weekStart === "") return;
+  await getFirestore()
+    .collection(COLLECTIONS.driverHomeDaily)
+    .doc(homeSnapshotId(driverId, values.today))
+    .set({
+      driver_id: driverId,
+      shift_date: values.today,
+      schema_version: HOME_SNAPSHOT_VERSION,
+      zone_id: values.zoneId,
+      partner_id: values.partnerId,
+      partner: { name: values.partnerName, logo_url: values.partnerLogoUrl },
+      restaurant_ids: values.restaurantIds,
+      week: {
+        start_date: values.weekStart,
+        end_date: values.today,
+        earnings_kwd: values.earnings,
+        deliveries_count: values.deliveries,
+        online_seconds: values.onlineSeconds,
+        invalid_days: values.compliance.invalid_days,
+        rejected_orders: values.compliance.rejected_orders,
+        cancelled_orders: values.compliance.cancelled_orders,
+      },
+      performance: values.performance,
+      session: {
+        is_online: values.sessionOnline,
+        went_online_at: values.wentOnlineAt,
+        open_since: values.openSince,
+        speed_mps: values.speedMps,
+        distance_today_meters: values.distanceTodayMeters,
+      },
+      shift_adherence: {
+        ...values.adherence,
+        online_seconds_base: values.elapsedBaseSeconds,
+      },
+      // A freshly recomputed document is by definition not invalidated.
+      stale: false,
+      stale_reason: null,
+      stale_at_ms: null,
+      updated_at: Timestamp.fromDate(now),
+      updated_at_ms: now.getTime(),
+      reason,
+    });
+}
+
+/** Field-by-field, so a shadow log names the number that disagreed. */
+export function snapshotMismatchFields(
+  snapshot: HomeSourceValues,
+  source: HomeSourceValues,
+): string[] {
+  const fields: string[] = [];
+  if (snapshot.deliveries !== source.deliveries) fields.push("week.deliveries_count");
+  if (Math.abs(snapshot.earnings - source.earnings) > 0.001) fields.push("week.earnings_kwd");
+  if (Math.abs(snapshot.onlineSeconds - source.onlineSeconds) > 120) fields.push("week.online_seconds");
+  if (Math.abs(snapshot.elapsedBaseSeconds - source.elapsedBaseSeconds) > 120) {
+    fields.push("today_online_seconds");
+  }
+  if (JSON.stringify(snapshot.performance) !== JSON.stringify(source.performance)) {
+    fields.push("performance");
+  }
+  if (
+    snapshot.compliance.invalid_days !== source.compliance.invalid_days ||
+    snapshot.compliance.rejected_orders !== source.compliance.rejected_orders ||
+    snapshot.compliance.cancelled_orders !== source.compliance.cancelled_orders
+  ) {
+    fields.push("week.compliance");
+  }
+  if (snapshot.sessionOnline !== source.sessionOnline) fields.push("session.is_online");
+  if (snapshot.restaurantIds.length !== source.restaurantIds.length) fields.push("restaurant_ids");
+  return fields;
+}
+
+/**
+ * Shadow week: compute the source path as well and log only the fields that
+ * disagree. It costs a second read pass, which is why it is a temporary flag and
+ * not how the RPC normally runs.
+ */
+async function logSnapshotShadow(args: {
+  uid: string;
+  driver: Dict;
+  profile: Dict;
+  values: HomeSourceValues;
+  configEpoch: number;
+  now: Date;
+}): Promise<void> {
+  try {
+    const source = await loadHomeSourceValues({
+      uid: args.uid,
+      driver: args.driver,
+      profile: args.profile,
+      now: args.now,
+      configEpoch: args.configEpoch,
+      today: args.values.today,
+    });
+    const fields = snapshotMismatchFields(args.values, source);
+    if (fields.length === 0) return;
+    logger.warn({
+      perf: "home",
+      name: "driverGetHomeDashboard",
+      snapshot_shadow: true,
+      uid: args.uid,
+      shift_date: args.values.today,
+      fields,
+      snapshot_deliveries: args.values.deliveries,
+      source_deliveries: source.deliveries,
+    });
+  } catch {
+    logger.warn({
+      perf: "home",
+      name: "driverGetHomeDashboard",
+      snapshot_shadow: "failed",
+      uid: args.uid,
+    });
+  }
+}
+
+/**
+ * The Home response.
+ *
+ * Warm cost with `home_snapshot_enabled`: `drivers` + `profiles` (from
+ * `requireRider`) + `auth_epochs/current` + `driver_home_daily`, plus one
+ * `driver_group_members` read when a banner is group-targeted. Without the flag,
+ * or on a miss, this is the deployed 25-document path.
+ */
+export async function loadRiderHomeDashboard(args: {
+  uid: string;
+  driver: Dict;
+  profile: Dict;
+  now?: Date;
+}): Promise<Dict> {
+  const now = args.now ?? new Date();
+  const today = kuwaitDayString(now);
+
+  // One epoch read for every fleet-wide collection this response needs. Once
+  // the isolate is warm that single read is the *entire* cost of the delivery
+  // rules, their scopes, the incentive rules, their scopes and tiers, and the
+  // banners — the collections themselves come from the isolate memory cache.
+  const epochs = await step("home.epochs", () => readConfigEpochs());
+  const configEpoch = epochs.config;
+  const flags = await step("home.snapshotFlag", () => loadHomeSnapshotFlags(configEpoch));
+
+  if (flags.enabled) {
+    const snapshot = await step("home.snapshot", () => readHomeSnapshot(args.uid, today, now));
+    if (snapshot && snapshotFresh(snapshot.raw, today, now, args.driver)) {
+      const values = snapshotToValues(snapshot.raw, args.driver);
+      const decorated = await decorateHomeValues({
+        uid: args.uid,
+        driver: args.driver,
+        values,
+        configEpoch,
+        now,
+      });
+      if (flags.shadow) {
+        await logSnapshotShadow({
+          uid: args.uid,
+          driver: args.driver,
+          profile: args.profile,
+          values,
+          configEpoch,
+          now,
+        });
+      }
+      return composeHomePayload({
+        driver: args.driver,
+        profile: args.profile,
+        values,
+        rules: decorated.rules,
+        incentive: decorated.incentive,
+        banner: decorated.banner,
+        configEpoch,
+        now,
+        snapshotAgeMs: snapshot.ageMs,
+      });
+    }
+  }
+
+  const values = await loadHomeSourceValues({
+    uid: args.uid,
+    driver: args.driver,
+    profile: args.profile,
+    now,
+    configEpoch,
+    today,
+  });
+  const decorated = await decorateHomeValues({
+    uid: args.uid,
+    driver: args.driver,
+    values,
+    configEpoch,
+    now,
+  });
+  const payload = composeHomePayload({
+    driver: args.driver,
+    profile: args.profile,
+    values,
+    rules: decorated.rules,
+    incentive: decorated.incentive,
+    banner: decorated.banner,
+    configEpoch,
+    now,
+    snapshotAgeMs: null,
+  });
+  if (flags.enabled) {
+    // Compute-on-miss: this call already paid for these values, so filling the
+    // snapshot costs one document write and no extra read.
+    await writeHomeSnapshot(args.uid, values, now, "home_call").catch(() => undefined);
+  }
+  return payload;
+}
+
+export type HomeSnapshotRebuildResult =
+  | "rebuilt"
+  | "skipped"
+  | "disabled"
+  | "not_today"
+  | "no_driver";
+
+/**
+ * Recompute one rider's Home snapshot from source.
+ *
+ * Idempotent and whole-document: callers are writers, not owners, so a missed or
+ * duplicated call can never leave a field half-updated. The throttle exists
+ * because a pickup immediately followed by a complete would otherwise pay the
+ * full recompute twice for the same numbers; `force` is for the events where the
+ * rider is looking at the screen (duty, checkout, earnings, compliance, zone).
+ */
+export async function rebuildDriverHomeDaily(
+  driverId: string,
+  day: string,
+  reason: string,
+  options: { force?: boolean } = {},
+): Promise<HomeSnapshotRebuildResult> {
+  const now = new Date();
+  const today = kuwaitDayString(now);
+  if (day !== today) return "not_today";
+
+  const epochs = await readConfigEpochs();
+  const flags = await loadHomeSnapshotFlags(epochs.config);
+  if (!flags.enabled) return "disabled";
+
+  const db = getFirestore();
+  const ref = db.collection(COLLECTIONS.driverHomeDaily).doc(homeSnapshotId(driverId, today));
+
+  if (!options.force) {
+    const existing = await ref.get().catch(() => null);
+    const age = existing?.exists ? numberOrNull(existing.get("updated_at_ms")) : null;
+    if (existing?.exists && age !== null && now.getTime() - age < HOME_SNAPSHOT_REBUILD_MIN_MS) {
+      return "skipped";
+    }
+  }
+
+  const [driverSnap, profileSnap] = await Promise.all([
+    db.collection(COLLECTIONS.drivers).doc(driverId).get(),
+    db.collection(COLLECTIONS.profiles).doc(driverId).get(),
+  ]);
+  if (!driverSnap.exists) return "no_driver";
+
+  const values = await loadHomeSourceValues({
+    uid: driverId,
+    driver: (driverSnap.data() ?? {}) as Dict,
+    profile: (profileSnap.data() ?? {}) as Dict,
+    now,
+    configEpoch: epochs.config,
+    today,
+  });
+  await writeHomeSnapshot(driverId, values, now, reason);
+  return "rebuilt";
+}
+
+/**
+ * The shape every writer calls. A rebuild failure is never the writer's failure:
+ * the RPC has a source fallback and the hourly repair re-runs the same function.
+ */
+export async function rebuildDriverHomeDailySafe(
+  driverId: string,
+  reason: string,
+  force = false,
+): Promise<HomeSnapshotRebuildResult | "failed"> {
+  try {
+    return await rebuildDriverHomeDaily(driverId, kuwaitDayString(new Date()), reason, { force });
+  } catch {
+    return "failed";
+  }
+}
+
+export type HomeSnapshotInvalidateResult = "invalidated" | "missing" | "disabled" | "failed";
+
+/**
+ * The signal every writer sends.
+ *
+ * A writer does **not** recompute the snapshot: a full rebuild costs ~35 reads
+ * (week aggregates, lifetime counts, compliance rows, sessions), so doing it on
+ * every pickup and complete would cost more than the Home calls it saves. It
+ * writes one flag instead, and the next Home call — which has to produce the new
+ * numbers anyway — recomputes and rewrites the document at no extra read.
+ *
+ * `update()` on a missing document throws `not-found`, which is the cheapest
+ * "nothing to invalidate" answer: no read, no write.
+ */
+export async function invalidateDriverHomeDaily(
+  driverId: string,
+  reason: string,
+): Promise<HomeSnapshotInvalidateResult> {
+  const epochs = await readConfigEpochs();
+  const flags = await loadHomeSnapshotFlags(epochs.config);
+  if (!flags.enabled) return "disabled";
+  try {
+    await getFirestore()
+      .collection(COLLECTIONS.driverHomeDaily)
+      .doc(homeSnapshotId(driverId, kuwaitDayString(new Date())))
+      .update({ stale: true, stale_reason: reason, stale_at_ms: Date.now() });
+    return "invalidated";
+  } catch (error) {
+    const code = (error as { code?: number | string }).code;
+    if (code === 5 || code === "not-found") return "missing";
+    return "failed";
+  }
+}
+
+/** Writer-safe wrapper. A failed invalidation is covered by the staleness window. */
+export async function invalidateDriverHomeDailySafe(
+  driverId: string,
+  reason: string,
+): Promise<HomeSnapshotInvalidateResult> {
+  try {
+    return await invalidateDriverHomeDaily(driverId, reason);
+  } catch {
+    return "failed";
+  }
 }
 
 export async function applyRiderCheckout(args: {
@@ -1251,6 +1819,8 @@ export async function applyRiderCheckout(args: {
   reason: string;
   now: Date;
   keepDutyWrite?: boolean;
+  /** `false` when the rider's own device is the caller — no push back to it. */
+  notify?: boolean;
 }): Promise<void> {
   const db = getFirestore();
   const today = kuwaitDayString(args.now);
@@ -1333,8 +1903,33 @@ export async function applyRiderCheckout(args: {
     );
   }
   await batch.commit();
+
+  // Step 1 — the phone learns about a checkout it did not perform. Data-only:
+  // no title, no body, so FCM never paints a tray item. A build that does not
+  // know `record_type: "home"` ignores it, which is why this ships alone.
+  if (args.notify !== false) {
+    await sendDriverHomeRefresh(args.driverId, `checkout:${args.reason}`);
+  }
+  // Step 3 — the snapshot must not describe a rider who is still online. One
+  // flag write; the next Home call recomputes the numbers it has to produce
+  // anyway.
+  await invalidateDriverHomeDailySafe(args.driverId, `checkout:${args.reason}`);
 }
 
+/**
+ * Step 4 — its own runtime shape.
+ *
+ * The global set is `cpu: 0.08, concurrency: 1, maxInstances: 2`, which means one
+ * rider per isolate and the ~373-document cold fill for every one of them. This
+ * handler is read-only, so it can share an isolate: `concurrency: 8` lets eight
+ * riders reuse one warm config cache (`373 / 8 ≈ 47` `docsRead` on a cold call),
+ * and `maxInstances: 20` sizes the 08:00 shift-start herd at 160 in flight.
+ *
+ * gen2 rejects `concurrency > 1` under one full CPU, so the CPU has to come up
+ * with it. `region` is passed explicitly: `init.ts` documents why the project
+ * runs in `me-central1` while Firestore lives in `me-central2`, and a runtime
+ * override is exactly where that would otherwise be lost.
+ */
 export const driverGetHomeDashboard = measureOnCall(
   "driverGetHomeDashboard",
   async (request) => {
@@ -1345,8 +1940,24 @@ export const driverGetHomeDashboard = measureOnCall(
       profile: ctx.profile,
     });
   },
+  {
+    region: FUNCTIONS_REGION,
+    cpu: 1,
+    memory: "1GiB",
+    concurrency: 8,
+    maxInstances: 20,
+  },
 );
 
+/**
+ * `driverSetDutyState` keeps the global single-concurrency shape on purpose.
+ *
+ * It writes a batch, an attendance rollup and a session, and its response is a
+ * fresh Home payload. Overlapping two of those on one instance would let two
+ * duty calls for the same rider race on the same session row, and the read win
+ * here is zero — the call runs twice a day. CPU and concurrency change only if a
+ * handler read shows the writes are independent.
+ */
 export const driverSetDutyState = measureOnCall("driverSetDutyState", async (request) => {
   const ctx = await requireRider(request);
   const data = (request.data ?? {}) as Dict;
@@ -1525,8 +2136,17 @@ export const driverSetDutyState = measureOnCall("driverSetDutyState", async (req
       reason: "manual",
       now,
       keepDutyWrite: false,
+      // The phone that made this call already knows; a push back to it is a
+      // cycle of the same refresh.
+      notify: false,
     });
   }
+
+  // A duty transition rewrites the session and the day row, so the snapshot is
+  // invalidated before the response reads it. The response then recomputes and
+  // rewrites the document, which is why the rider sees the new `is_online` and
+  // online timer immediately — the one thing §2 says must never be cached.
+  await invalidateDriverHomeDailySafe(ctx.uid, "duty");
 
   let opKey = "duty.offline";
   if (isOnDuty !== wasOnDuty) {

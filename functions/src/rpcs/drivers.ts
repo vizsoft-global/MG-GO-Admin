@@ -37,6 +37,8 @@ import {
   type Dict,
 } from "./_shared";
 import { canDeferDriverJoin, dedupeRestaurantEdges, rosterKpis } from "./driver-list-plan";
+import { invalidateDriverHomeDailySafe } from "./driver-home";
+import { sendDriverHomeRefresh } from "./driver-refresh";
 
 /** Asia/Kuwait is a fixed UTC+3 with no DST, so the day boundary is arithmetic. */
 const KUWAIT_OFFSET_MS = 3 * 60 * 60 * 1000;
@@ -1124,6 +1126,14 @@ async function endDriverDutyKeepGps(driverId: string, reason: string): Promise<v
     );
   }
   if (!openLogs.empty) await logBatch.commit();
+
+  // The choke point for every admin-side "duty off": status change, freeze and
+  // the blocked clock-out all end up here. Two signals leave together — the
+  // data-only `record_type: "home"` push so the phone refetches, and a snapshot
+  // invalidation so the next Home response is not describing an on-duty rider.
+  // A push failure is not this function's problem; the cron is the net.
+  await sendDriverHomeRefresh(driverId, `duty_off:${reason}`);
+  await invalidateDriverHomeDailySafe(driverId, `duty_off:${reason}`);
 }
 
 /**
@@ -1156,6 +1166,8 @@ export const setDriverAccountStatus = onCall(async (request) => {
   if (status !== "active") {
     await endDriverDutyKeepGps(driverId, "admin");
   }
+  // Activation does not end a duty, so it is not covered by the helper above.
+  await invalidateDriverHomeDailySafe(driverId, `status:${status}`);
 
   return { ok: true, status };
 });
@@ -1206,6 +1218,10 @@ export const setDriverBlocked = onCall(async (request) => {
       recordId: driverId,
       detail: { unblocked_by: request.auth?.uid ?? null },
     });
+    // Unblocking changes what the rider can do but not what Home counts, so the
+    // push is the signal and the invalidation is one write.
+    await sendDriverHomeRefresh(driverId, "unblocked");
+    await invalidateDriverHomeDailySafe(driverId, "unblocked");
     return { ok: true };
   }
 
@@ -1278,6 +1294,12 @@ export const setDriverBlocked = onCall(async (request) => {
       blocked_by: request.auth?.uid ?? null,
     },
   });
+
+  // Blocking is the fourth duty write that used to notify nothing: the rider's
+  // phone would keep showing a live Home until the next poll. Data-only push,
+  // then an invalidation because the session was just closed.
+  await sendDriverHomeRefresh(driverId, "blocked");
+  await invalidateDriverHomeDailySafe(driverId, "blocked");
 
   return { ok: true };
 });

@@ -11,6 +11,11 @@ matched**. Writes bill at roughly **3–6× the read rate**. That single asymmet
 why this map separates "cheap call, high volume" from "expensive call, low
 volume" — they need opposite fixes.
 
+**Deep-dive report:** [firestore-hotspot-report.md](./firestore-hotspot-report.md)
+(PDF: [firestore-hotspot-report.pdf](./firestore-hotspot-report.pdf)) — ranks
+every consumer by per-call document cost, prices it at list rates, explains each
+latency symptom, and gives the fix order with its verification step.
+
 Companions: [firestore-billing-explained.md](./firestore-billing-explained.md) ·
 [firestore-cost-baseline.md](./firestore-cost-baseline.md) ·
 [firestore-read-reduction-plan.md](./firestore-read-reduction-plan.md) ·
