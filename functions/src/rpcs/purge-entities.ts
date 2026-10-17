@@ -3,6 +3,7 @@ import { getFirestore, type Query } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { parseIdList } from "../core/query";
 import { requireStaff } from "../core/staff";
+import { pushRestaurantMirror } from "./bites-mirror";
 
 /** Firestore caps one commit at 500 writes, and an `in` filter at 30 values. */
 export const DELETE_CHUNK = 400;
@@ -180,6 +181,48 @@ export const adminPurgeDeliveries = onCall(async (request) => {
 });
 
 /**
+ * The Bites store ids a set of riders was assigned to, read before their
+ * `driver_restaurants` rows are deleted.
+ *
+ * A purge that skipped a push would otherwise leave the panel showing a deleted
+ * rider, so every store they held is refreshed afterwards. Read first: once the edges
+ * are gone, nothing on this side still names the affected stores.
+ */
+async function assignedStoreIds(driverIds: readonly string[]): Promise<string[]> {
+  const db = getFirestore();
+  const ids = new Set<string>();
+  for (let index = 0; index < driverIds.length; index += IN_CHUNK) {
+    const slice = driverIds.slice(index, index + IN_CHUNK);
+    const snap = await db
+      .collection(COLLECTIONS.driverRestaurants)
+      .where("driver_id", "in", slice)
+      .limit(DELETE_CHUNK)
+      .get();
+    for (const doc of snap.docs) {
+      const restaurantId = (doc.data() ?? {})["restaurant_id"];
+      if (typeof restaurantId === "string" && restaurantId !== "") ids.add(restaurantId);
+    }
+  }
+  return [...ids];
+}
+
+/**
+ * Rebuilds the mirror for stores whose rows were just deleted.
+ *
+ * `pushRestaurantMirror` recomputes the rider from `driver_restaurants`, so a store
+ * that lost its rider is cleared and a store that is itself gone drops both mirror
+ * documents. Best effort: the destructive half has already committed by this point.
+ */
+async function refreshStores(restaurantIds: readonly string[]): Promise<void> {
+  if (restaurantIds.length === 0) return;
+  const db = getFirestore();
+  const at = new Date();
+  for (const restaurantId of restaurantIds) {
+    await pushRestaurantMirror(db, restaurantId, at);
+  }
+}
+
+/**
  * `admin_purge_drivers` — profile, driver row, dependents and the Auth manifest.
  *
  * The Auth user ids are returned rather than deleted here: `deleteUser` is an
@@ -195,6 +238,7 @@ export const adminPurgeDrivers = onCall(async (request) => {
   const db = getFirestore();
   const storageKeys: string[] = [];
   const manifest: Array<{ auth_user_id: string; driver_id: string }> = [];
+  const stores = await assignedStoreIds(ids);
 
   for (const id of ids) {
     const snap = await db.collection(COLLECTIONS.drivers).doc(id).get();
@@ -223,6 +267,7 @@ export const adminPurgeDrivers = onCall(async (request) => {
   await deleteByIds(COLLECTIONS.drivers, ids);
   await deleteByIds(COLLECTIONS.driverIntakes, ids);
   await deleteByIds(COLLECTIONS.profiles, ids);
+  await refreshStores(stores);
 
   return { deleted: ids.length, storage_keys: storageKeys, manifest };
 });
@@ -249,7 +294,7 @@ export const adminPurgeIntakes = onCall(async (request) => {
   return { deleted: ids.length, storage_prefixes: storagePrefixes, storage_keys: storageKeys };
 });
 
-/** `admin_purge_restaurants` — the geofences first, then the merchant. */
+/** `admin_purge_restaurants` — the geofences first, then the merchant and its mirror. */
 export const adminPurgeRestaurants = onCall(async (request) => {
   const data = (request.data ?? {}) as Record<string, unknown>;
   await requireStaff(request, "restaurants.bulk_delete");
@@ -260,6 +305,8 @@ export const adminPurgeRestaurants = onCall(async (request) => {
 
   const storagePrefixes = ids.map((id) => `restaurants/${id}/`);
   await deleteByIds(COLLECTIONS.restaurants, ids);
+  // The rows are gone, so each push drops that store's catalogue and rider mirror.
+  await refreshStores(ids);
 
   return { deleted: ids.length, storage_prefixes: storagePrefixes };
 });

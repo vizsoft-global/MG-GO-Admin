@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   HEAVY_FUNCTIONS,
   SCAN_FUNCTIONS,
+  SCHEDULED_FUNCTIONS,
   WORKER_HTTP_FUNCTIONS,
   functionsForLane,
   isDriverAppCallable,
@@ -17,6 +18,7 @@ function allLaneCoverage(): string[] {
     ...functionsForLane("heavy"),
     ...allLegacyNames().filter((name) => isDriverAppCallable(name)),
     ...WORKER_HTTP_FUNCTIONS,
+    ...SCHEDULED_FUNCTIONS,
   ];
 }
 
@@ -28,6 +30,7 @@ describe("lane membership", () => {
     for (const name of SCAN_FUNCTIONS) assert.equal(laneOf(name), "scan", name);
     for (const name of HEAVY_FUNCTIONS) assert.equal(laneOf(name), "heavy", name);
     for (const name of WORKER_HTTP_FUNCTIONS) assert.equal(laneOf(name), null, name);
+    for (const name of SCHEDULED_FUNCTIONS) assert.equal(laneOf(name), null, name);
   });
 
   it("keeps rider callables off the admin lanes and the audit health check on light", () => {
