@@ -196,7 +196,59 @@ export async function logAdminActivity(args: {
   });
 }
 
-/** The Firestore form of `log_driver_operation`. */
+/**
+ * Sampling for `driver_operation_events`.
+ *
+ * The collection is append-only audit written from ~74 call sites, and no app
+ * path reads it back. The `location` module writes a row on every zone
+ * transition, so its volume tracks GPS frequency rather than a rider decision —
+ * that is the one stream worth sampling. Every other module stays 1:1.
+ *
+ * `DRIVER_OP_LOG_SAMPLE` overrides the table: `location=1,duty=10` samples duty
+ * ten-to-one as well, and `off` logs everything.
+ */
+export const DRIVER_OP_SAMPLE_ENV = "DRIVER_OP_LOG_SAMPLE";
+
+/** Default 1-in-N per module. A missing entry means "log every row". */
+export const DRIVER_OP_SAMPLE_DEFAULT: Readonly<Record<string, number>> = { location: 5 };
+
+export function driverOperationSampleRate(
+  module: string,
+  spec: string | undefined = process.env[DRIVER_OP_SAMPLE_ENV],
+): number {
+  const override = (spec ?? "").trim();
+  if (override === "off" || override === "0") return 1;
+  const table: Record<string, number> = { ...DRIVER_OP_SAMPLE_DEFAULT };
+  if (override !== "") {
+    for (const entry of override.split(",")) {
+      const [rawName, rawRate] = entry.split("=");
+      const name = (rawName ?? "").trim();
+      const rate = Number((rawRate ?? "").trim());
+      if (name === "" || !Number.isFinite(rate) || rate < 1) continue;
+      table[name] = Math.floor(rate);
+    }
+  }
+  const rate = table[module];
+  return typeof rate === "number" && Number.isFinite(rate) && rate >= 1 ? Math.floor(rate) : 1;
+}
+
+/** Test seam for the random draw. */
+export function shouldLogDriverOperation(
+  module: string,
+  random: () => number = Math.random,
+  spec?: string,
+): boolean {
+  const rate = driverOperationSampleRate(module, spec);
+  if (rate <= 1) return true;
+  return random() * rate < 1;
+}
+
+/**
+ * The Firestore form of `log_driver_operation`.
+ *
+ * Sampled by module (see `DRIVER_OP_SAMPLE_DEFAULT`). A failed operation is
+ * always written: it is the row an investigation looks for.
+ */
 export async function logDriverOperation(args: {
   driverId: string;
   module: string;
@@ -207,6 +259,8 @@ export async function logDriverOperation(args: {
   recordId?: string | null;
   detail?: Dict | null;
 }): Promise<void> {
+  const failed = args.success === false;
+  if (!failed && !shouldLogDriverOperation(args.module)) return;
   const db = getFirestore();
   await db.collection(COLLECTIONS.driverOperationEvents).add({
     driver_id: args.driverId,

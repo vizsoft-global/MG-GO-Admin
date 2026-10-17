@@ -1,4 +1,5 @@
 import { onCall, type CallableRequest } from "firebase-functions/v2/https";
+import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, Timestamp } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { daysInMonth, kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
@@ -325,6 +326,77 @@ async function loadRiderDeliveries(driverId: string, statuses: readonly string[]
     .limit(SCAN)
     .get();
   return snap.docs.map((doc) => normaliseDelivery(doc.id, doc.data() ?? {}));
+}
+
+/** One window page per range field: a month of one rider's deliveries. */
+const RANGE_SCAN = 1_000;
+
+/**
+ * A rider's deliveries inside a Kuwait day window.
+ *
+ * This replaces a lifetime `limit(20_000)` read that every rider paid on every
+ * call, to answer a question that is only ever about one day, week or month.
+ * The day test has to follow `shift_date` → `delivered_at` → `pickup_at`, so two
+ * range prefilters cover the stored range fields and the existing in-memory test
+ * still decides. A rider with nothing in the window at all falls back to the
+ * lifetime page, so a pre-trigger row that only carries `pickup_at` is not
+ * silently dropped. An index that is not deployed yet also takes that path.
+ */
+async function loadRiderDeliveriesInRange(
+  driverId: string,
+  statuses: readonly string[],
+  fromDay: string,
+  toDay: string,
+): Promise<RawDelivery[]> {
+  const db = getFirestore();
+  const page = async (field: string) => {
+    try {
+      return await db
+        .collection(COLLECTIONS.deliveries)
+        .where("driver_id", "==", driverId)
+        .where("status", "in", [...statuses])
+        .where(field, ">=", fromDay)
+        .where(field, "<=", toDay)
+        .limit(RANGE_SCAN)
+        .get();
+    } catch {
+      return null;
+    }
+  };
+
+  const [byShift, byDelivered] = await Promise.all([page("shift_date"), page("delivered_day")]);
+  if (!byShift || !byDelivered) return loadRiderDeliveries(driverId, statuses);
+  if (byShift.empty && byDelivered.empty) return loadRiderDeliveries(driverId, statuses);
+
+  const rows = new Map<string, RawDelivery>();
+  for (const snap of [byShift, byDelivered]) {
+    for (const doc of snap.docs) rows.set(doc.id, normaliseDelivery(doc.id, doc.data() ?? {}));
+  }
+  return [...rows.values()];
+}
+
+/**
+ * One month of `driver_attendance` day rows.
+ *
+ * A `YYYY-MM-DD` string range is the normal case — rows are written with a
+ * string day. A `Timestamp`-valued `attendance_date` cannot match that range, so
+ * an empty range falls back to the rider page the range replaced.
+ */
+async function monthAttendancePage(driverId: string, fromDay: string, toDay: string) {
+  const db = getFirestore();
+  try {
+    const ranged = await db
+      .collection(DRIVER_ATTENDANCE)
+      .where("driver_id", "==", driverId)
+      .where("attendance_date", ">=", fromDay)
+      .where("attendance_date", "<=", toDay)
+      .limit(60)
+      .get();
+    if (!ranged.empty) return ranged;
+  } catch {
+    /* fall through to the rider page */
+  }
+  return db.collection(DRIVER_ATTENDANCE).where("driver_id", "==", driverId).limit(400).get();
 }
 
 async function countByStatuses(driverId: string, statuses: readonly string[]): Promise<number> {
@@ -925,12 +997,8 @@ export const driverGetWorkSummary = onCall(async (request) => {
   const presentUntil = today < end ? today : end;
 
   const [attendanceSnap, deliveries] = await Promise.all([
-    getFirestore()
-      .collection(DRIVER_ATTENDANCE)
-      .where("driver_id", "==", ctx.uid)
-      .limit(400)
-      .get(),
-    loadRiderDeliveries(ctx.uid, LIFETIME_STATUSES),
+    monthAttendancePage(ctx.uid, start, presentUntil),
+    loadRiderDeliveriesInRange(ctx.uid, LIFETIME_STATUSES, start, end),
   ]);
 
   let present = 0;
@@ -962,11 +1030,14 @@ export const driverGetWorkSummary = onCall(async (request) => {
 export const driverGetExtraEarnings = onCall(async (request) => {
   const ctx = await requireRider(request);
   const today = kuwaitDayString(new Date());
+  // The widest window any rule can need: a monthly plan counts from the 1st, a
+  // weekly one from the week start, and the company scheme only counts today.
+  const monthStart = periodStart("monthly", today);
   const [context, restaurantIds, company, deliveries] = await Promise.all([
     loadIncentiveContext(),
     assignedRestaurantIds(ctx.uid, ctx.driver as Dict),
     loadSourceCompany(asString(ctx.driver["source_company"])),
-    loadRiderDeliveries(ctx.uid, [...PROGRESS_STATUSES]),
+    loadRiderDeliveriesInRange(ctx.uid, [...PROGRESS_STATUSES], monthStart, today),
   ]);
 
   const companyApplies = companyConfigApplies({
@@ -1294,4 +1365,4 @@ async function riderEarningsDetail(request: CallableRequest<unknown>) {
   };
 }
 
-export const driverGetEarningsDetail = onCall(riderEarningsDetail);
+export const driverGetEarningsDetail = measureOnCall("driverGetEarningsDetail", riderEarningsDetail);

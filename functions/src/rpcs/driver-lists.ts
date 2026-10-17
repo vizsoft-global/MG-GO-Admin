@@ -1,4 +1,5 @@
 import { onCall, type CallableRequest } from "firebase-functions/v2/https";
+import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { requireRider, riderError } from "../core/rider";
@@ -66,7 +67,7 @@ function mapDocs(
   return docs.map((doc) => rowOf(doc.id, (doc.data() ?? {}) as Dict));
 }
 
-export const driverListMyDeliveries = onCall(async (request) => {
+export const driverListMyDeliveries = measureOnCall("driverListMyDeliveries", async (request) => {
   const ctx = await driverListsDeps.requireRider(request);
   const limit = clampLimit(asData(request), 50, 200, "limit", "p_limit");
   const snap = await driverListsDeps

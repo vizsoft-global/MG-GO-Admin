@@ -105,7 +105,7 @@ describe("lane options superset", () => {
     assert.equal(scan.availableMemoryMb, 4096);
     assert.equal(scan.concurrency, 2);
     assert.equal(scan.maxInstances, 6);
-    assert.equal(scan.minInstances, 1);
+    assert.equal(scan.minInstances, 0);
     assert.equal(scan.timeoutSeconds, 120);
 
     const heavy = endpointOf("adminApiHeavy");

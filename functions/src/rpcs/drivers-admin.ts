@@ -26,7 +26,7 @@ import {
 import { getAuth } from "firebase-admin/auth";
 import { COLLECTIONS, UNIQUE_LOCKS } from "../core/collections";
 import { daysInMonth, parseMonthKey, payrollMonths } from "../core/kuwait";
-import { requireStaff, type StaffContext } from "../core/staff";
+import { requireStaff, requireStaffFresh, type StaffContext } from "../core/staff";
 import { stampStoredRow } from "../core/search-text";
 import {
   BATCH_LIMIT,
@@ -227,7 +227,7 @@ async function resolveAuthUser(
  * failed approval never leaves an orphan login behind.
  */
 export const adminApproveDriver = onCall(async (request) => {
-  await requireStaff(request);
+  await requireStaffFresh(request);
 
   const data = (request.data ?? {}) as Dict;
   const intakeId = pickId(data, "intakeId", "p_intake_id");
@@ -530,7 +530,7 @@ async function endDriverAppSession(db: Firestore, driverId: string): Promise<voi
  * the live app session the way the `drivers_end_session_on_archive` trigger did.
  */
 export const archiveDriverIntake = onCall(async (request) => {
-  await requireStaff(request);
+  await requireStaffFresh(request);
 
   const data = (request.data ?? {}) as Dict;
   const intakeId = pickId(data, "intakeId", "p_intake_id");
@@ -583,7 +583,7 @@ export const archiveDriverIntake = onCall(async (request) => {
 
 /** `restore_driver_intake` — clears `archived_at` and takes the identity locks back. */
 export const restoreDriverIntake = onCall(async (request) => {
-  await requireStaff(request);
+  await requireStaffFresh(request);
 
   const data = (request.data ?? {}) as Dict;
   const intakeId = pickId(data, "intakeId", "p_intake_id");
@@ -642,7 +642,7 @@ export const restoreDriverIntake = onCall(async (request) => {
 
 /** `regenerate_driver_app_passcode` — mints a fresh code and releases the old lock. */
 export const regenerateDriverAppPasscode = onCall(async (request) => {
-  await requireStaff(request);
+  await requireStaffFresh(request);
 
   const data = (request.data ?? {}) as Dict;
   const driverId = pickId(data, "driverId", "p_driver_id");
@@ -722,7 +722,7 @@ function driverDisplayName(driver: Dict, profile: Dict | undefined): string | nu
  * Drivers import writes Number of OFFs through the same door.
  */
 export const adminSetDriverOffStructure = onCall(async (request) => {
-  const ctx = await requireStaff(request);
+  const ctx = await requireStaffFresh(request);
   if (!holdsAny(ctx, PAYROLL_WRITE_SLUGS) && !holdsAny(ctx, DRIVER_WRITE_SLUGS)) {
     throw new HttpsError("permission-denied", "not_authorized");
   }
@@ -836,7 +836,7 @@ function millisOf(value: unknown): number {
  * value equal to the 2-day default deletes the override instead of storing it.
  */
 export const adminBulkSetDriverOffStructure = onCall(async (request) => {
-  const ctx = await requireStaff(request);
+  const ctx = await requireStaffFresh(request);
   if (!holdsAny(ctx, PAYROLL_WRITE_SLUGS)) {
     throw new HttpsError("permission-denied", "not_authorized");
   }

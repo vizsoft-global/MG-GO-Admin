@@ -2,7 +2,7 @@ import { onCall } from "firebase-functions/v2/https";
 import { getFirestore, type Query } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { parseId } from "../core/query";
-import { requireStaff } from "../core/staff";
+import { requireStaff, requireStaffFresh } from "../core/staff";
 import { Timestamp } from "../core/fs";
 import {
   asDate,
@@ -369,7 +369,7 @@ const TRANSFER_TYPES = new Set(["cash", "salary"]);
  * accepts a correction.
  */
 export const adminSetFuelTransferType = onCall(async (request) => {
-  const staff = await requireStaff(request);
+  const staff = await requireStaffFresh(request);
   if (!staff.permissionSlugs.has("requests.approve") && !staff.permissionSlugs.has("requests.manage")) {
     return { ok: false, error: "not_authorized" };
   }

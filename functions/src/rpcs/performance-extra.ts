@@ -5,7 +5,7 @@ import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { parseId } from "../core/query";
 import { loadAppSettings, type AppSettings } from "../core/settings";
-import { requireStaff, type StaffContext } from "../core/staff";
+import { requireStaff, requireStaffFresh, type StaffContext } from "../core/staff";
 
 const PERFORMANCE_RATING_TEAMS = "performance_rating_teams";
 const DELIVERY_SLA_OVERRIDES = "delivery_sla_overrides";
@@ -874,7 +874,7 @@ export const adminListPerformanceRatingTeams = onCall(async (request) => {
 });
 
 export const adminDeleteDriverPerformanceRating = onCall(async (request) => {
-  const staff = await requireStaff(request, "performance.rate");
+  const staff = await requireStaffFresh(request, "performance.rate");
 
   const db = getFirestore();
   const data: Json = isRecord(request.data) ? request.data : {};
@@ -924,7 +924,7 @@ export const adminDeleteDriverPerformanceRating = onCall(async (request) => {
 // ---------------------------------------------------------------------------
 
 export const adminRunPerformanceDailyRollup = onCall(async (request) => {
-  await requireStaff(request);
+  await requireStaffFresh(request);
 
   const data: Json = isRecord(request.data) ? request.data : {};
   const rawLookback = numberOf(pick(data, "lookbackDays", "p_lookback_days"));
@@ -939,7 +939,7 @@ export const adminRunPerformanceDailyRollup = onCall(async (request) => {
 });
 
 export const adminDriverPerformanceDaily = onCall(async (request) => {
-  await requireStaff(request);
+  await requireStaffFresh(request);
 
   const db = getFirestore();
   const data: Json = isRecord(request.data) ? request.data : {};

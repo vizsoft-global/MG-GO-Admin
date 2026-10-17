@@ -172,7 +172,15 @@ export function setFsMetricsClassesForTests(loader: (() => FsMetricClasses) | nu
   loadClasses = loader ?? defaultClasses;
 }
 
-export async function runWithFsMetrics<T>(name: string, fn: () => Promise<T>): Promise<T> {
+type Captured<T> = { result: T; metrics: FsMetrics; ms: number };
+
+/**
+ * Reads inside `fn` land on this counter only. Totals are added to the
+ * enclosing counter on the way out, so a `measureBlock` inside a measured
+ * handler still shows up in the handler's own `docsRead`.
+ */
+async function runCaptured<T>(name: string, fn: () => Promise<T>): Promise<Captured<T>> {
+  const parent = storage.getStore() ?? null;
   const metrics: FsMetrics = {
     name,
     reads: 0,
@@ -183,21 +191,32 @@ export async function runWithFsMetrics<T>(name: string, fn: () => Promise<T>): P
   };
   const started = Date.now();
   try {
-    return await storage.run(metrics, fn);
+    const result = await storage.run(metrics, fn);
+    return { result, metrics, ms: Date.now() - started };
   } finally {
-    if (process.env.PERF_METRICS !== "0") {
-      console.info(
-        JSON.stringify({
-          perf: "handler",
-          name,
-          reads: metrics.reads,
-          docsRead: metrics.docsRead,
-          sequentialAwaits: metrics.sequentialAwaits,
-          ms: Date.now() - started,
-        }),
-      );
+    if (parent) {
+      parent.reads += metrics.reads;
+      parent.docsRead += metrics.docsRead;
     }
   }
+}
+
+function logMetrics(payload: Record<string, unknown>): void {
+  if (process.env.PERF_METRICS === "0") return;
+  console.info(JSON.stringify(payload));
+}
+
+export async function runWithFsMetrics<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  const { result, metrics, ms } = await runCaptured(name, fn);
+  logMetrics({
+    perf: "handler",
+    name,
+    reads: metrics.reads,
+    docsRead: metrics.docsRead,
+    sequentialAwaits: metrics.sequentialAwaits,
+    ms,
+  });
+  return result;
 }
 
 /** Same global `onCall()` options as a bare `onCall(handler)`. No per-function overrides. */
@@ -208,15 +227,23 @@ export function measureOnCall<T>(
   return onCall((request) => runWithFsMetrics(name, () => handler(request)));
 }
 
+/**
+ * One named step inside a handler. The step gets its own `perf:"block"` line so
+ * a single Home call can be split into "which helper read how much" without a
+ * second deploy, and its totals still land on the enclosing handler counter.
+ */
 export async function measureBlock<T>(
   name: string,
   fn: () => Promise<T>,
 ): Promise<{ result: T; metrics: FsMetrics }> {
-  let captured: FsMetrics | null = null;
-  const result = await runWithFsMetrics(name, async () => {
-    captured = storage.getStore() ?? null;
-    return fn();
+  const { result, metrics, ms } = await runCaptured(`block:${name}`, fn);
+  logMetrics({
+    perf: "block",
+    name,
+    reads: metrics.reads,
+    docsRead: metrics.docsRead,
+    sequentialAwaits: metrics.sequentialAwaits,
+    ms,
   });
-  if (!captured) throw new Error("metrics_missing");
-  return { result, metrics: captured };
+  return { result, metrics };
 }

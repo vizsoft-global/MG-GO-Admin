@@ -1,7 +1,7 @@
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { getFirestore, Timestamp } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
-import { requireStaff } from "../core/staff";
+import { requireStaff, requireStaffFresh } from "../core/staff";
 import { isoTimestamp, loadDocMap, pickCount, pickId, pickIdList, pickObject, pickText, pickTriBool, type Dict } from "./_shared";
 
 const APP_SETTINGS_DOC_ID = "1";
@@ -267,7 +267,7 @@ export const adminDriversMultiDeviceRecent = onCall(async (request) => {
  * opened.
  */
 export const adminForceSignOutDriver = onCall(async (request) => {
-  await requireStaff(request, "driver_devices.view");
+  await requireStaffFresh(request, "driver_devices.view");
 
   const data = (request.data ?? {}) as Dict;
   const driverId = pickId(data, "driverId", "p_driver_id");
@@ -309,7 +309,7 @@ export const adminForceSignOutDriver = onCall(async (request) => {
  * many ids were sent".
  */
 export const adminSetDriverForceUpdate = onCall(async (request) => {
-  const staff = await requireStaff(request, "driver_devices.view");
+  const staff = await requireStaffFresh(request, "driver_devices.view");
 
   const data = (request.data ?? {}) as Dict;
   const driverIds = pickIdList(data, "driverIds", "p_driver_ids") ?? [];
