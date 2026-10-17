@@ -221,7 +221,7 @@ function AttendancePageContent() {
     refetch: refetchDaily,
   } = useAttendanceDailyList(dailyFilters, {
     enabled: dailyEnabled,
-    refetchInterval: tab === "today" ? 30_000 : false,
+    refetchInterval: tab === "today" ? 60_000 : false,
   });
 
   const { data: kpis, refetch: refetchKpis } = useAttendanceReportingKpis(

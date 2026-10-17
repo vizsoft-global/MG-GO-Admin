@@ -36,6 +36,20 @@ export async function bumpEpoch(
     .collection(EPOCH_COLLECTION)
     .doc(EPOCH_DOC_ID)
     .set(incrementPatch(list), { merge: true });
+  if (list.includes("config")) await bumpRiderConfigEpoch(db);
+}
+
+/**
+ * Riders cannot read `auth_epochs`, but every phone already listens to
+ * `app_settings/1`. Mirroring the config counter there is how a fleet-wide rule
+ * change reaches the app without each phone polling for it.
+ */
+export async function bumpRiderConfigEpoch(db: Firestore): Promise<void> {
+  await db
+    .collection("app_settings")
+    .doc("1")
+    .set({ config_epoch: FieldValue.increment(1) }, { merge: true })
+    .catch(() => undefined);
 }
 
 /**
@@ -50,11 +64,13 @@ export async function writeWithEpoch<T>(
 ): Promise<T> {
   const list = (Array.isArray(kinds) ? kinds : [kinds]) as readonly EpochKind[];
   const epochRef = db.collection(EPOCH_COLLECTION).doc(EPOCH_DOC_ID);
-  return db.runTransaction(async (tx) => {
-    const result = await mutate({ tx });
+  const result = await db.runTransaction(async (tx) => {
+    const value = await mutate({ tx });
     if (list.length > 0) {
       tx.set(epochRef, incrementPatch(list), { merge: true });
     }
-    return result;
+    return value;
   });
+  if (list.includes("config")) await bumpRiderConfigEpoch(db);
+  return result;
 }

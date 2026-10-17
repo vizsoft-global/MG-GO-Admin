@@ -9,6 +9,13 @@ import { withCors } from "@/lib/http/cors";
 import { getFirebaseAuth, getFirebaseFirestore } from "@/lib/firebase/admin";
 import { COLLECTIONS } from "@/lib/firebase/db";
 
+/** Firestore TTL on `expire_at`; matches `EVENT_RETENTION_DAYS.driver_operation_events` in functions. */
+const OPERATION_EVENT_RETENTION_DAYS = 30;
+
+function operationEventExpireAt(): Timestamp {
+  return Timestamp.fromMillis(Date.now() + OPERATION_EVENT_RETENTION_DAYS * 86_400_000);
+}
+
 const IN_FILTER_LIMIT = 30;
 const INBOX_LIMIT = 100;
 const SCAN_CAP = 1000;
@@ -194,6 +201,7 @@ async function markRead(db: Firestore, driverId: string, ids: string[] | null): 
         record_id: null,
         detail: { count: group.length, scope },
         occurred_at: FieldValue.serverTimestamp(),
+        expire_at: operationEventExpireAt(),
       });
     }
     await batch.commit();
@@ -237,6 +245,7 @@ async function dismiss(db: Firestore, driverId: string, ids: string[] | null): P
       record_id: null,
       detail: { count: group.length, scope },
       occurred_at: now,
+      expire_at: operationEventExpireAt(),
     });
     await batch.commit();
   }

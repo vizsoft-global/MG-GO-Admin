@@ -4,6 +4,7 @@
  */
 import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
+import { EXPIRE_AT_FIELD, expireAtFor } from "../core/event-expiry";
 import { kuwaitDayString } from "../core/kuwait";
 import { chunk, logDriverOperation, numberOrNull, type Dict } from "./_shared";
 import {
@@ -17,7 +18,9 @@ import {
   clampHistoryRecordedAt,
   parseFleetEventBatch,
   parseIngestBatch,
+  parseRiderDayStats,
   pinWriteAllowed,
+  r2PinWriteDue,
   shouldCoalesceIngestPin,
   sortIngestPoints,
   type FleetEventDraft,
@@ -29,6 +32,22 @@ const LIVENESS_MS = 60_000;
 const WRITE_CHUNK = 400;
 const READ_CHUNK = 100;
 const DRIVER_POOL = 8;
+
+/** Restaurant assignments, zones and range settings change a few times a day; a flush runs every 10s. */
+const GEO_MEMO_MS = 60_000;
+const GEO_MEMO_MAX = 2000;
+const geoMemo = new Map<string, { at: number; value: Promise<unknown> }>();
+
+function memoGeo<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const nowMs = Date.now();
+  const hit = geoMemo.get(key);
+  if (hit && nowMs - hit.at < GEO_MEMO_MS) return hit.value as Promise<T>;
+  if (geoMemo.size >= GEO_MEMO_MAX) geoMemo.clear();
+  const value = load();
+  geoMemo.set(key, { at: nowMs, value });
+  value.catch(() => geoMemo.delete(key));
+  return value;
+}
 
 type Put = { collection: string; id: string; data: Dict };
 
@@ -181,6 +200,7 @@ function historyPut(point: IngestPoint, recordedAt: Date, zoneStatus: string | n
       delivery_id: point.deliveryId,
       recorded_at: Timestamp.fromDate(recordedAt),
       [FIELDS.driverLocations.day]: kuwaitDayString(recordedAt),
+      [EXPIRE_AT_FIELD]: expireAtFor("driver_location_events", recordedAt),
     },
   };
 }
@@ -235,7 +255,8 @@ async function ingestDriver(args: {
   }
 
   const live = args.points.filter((point) => !point.replay);
-  const replay = args.points.filter((point) => point.replay);
+  const replay = args.points.filter((point) => point.replay && !point.historyInR2);
+  const inR2 = live.length > 0 && live.every((point) => point.historyInR2);
   for (const point of replay) {
     outcome.puts.push(
       historyPut(point, point.clientTs, null, `r_${point.driverId}_${point.clientTs.getTime()}`),
@@ -279,10 +300,14 @@ async function ingestDriver(args: {
   const zoneId = text(args.driver.zone_id);
   const [assigned, zone, history] = await Promise.all([
     args.proximityMeters > 0
-      ? loadAssignedRestaurantContext(args.driverId, args.driver)
+      ? memoGeo(`assigned:${args.driverId}`, () =>
+          loadAssignedRestaurantContext(args.driverId, args.driver as Dict),
+        )
       : Promise.resolve([]),
-    args.proximityMeters > 0 ? loadDriverZone(zoneId) : Promise.resolve(null),
-    lastHistory(args.driverId),
+    args.proximityMeters > 0
+      ? memoGeo(`zone:${zoneId ?? ""}`, () => loadDriverZone(zoneId))
+      : Promise.resolve(null),
+    inR2 ? Promise.resolve(null) : lastHistory(args.driverId),
   ]);
   const restaurants = assigned.map((row) => ({ restaurant: row.data, geofences: row.geofences }));
   let lastEvent = history;
@@ -319,6 +344,7 @@ async function ingestDriver(args: {
       day: args.nowDay,
     };
 
+    if (inR2) continue;
     const recordedAt = clampHistoryRecordedAt(point.clientTs, args.now);
     const writeHistory = shouldWriteLocationHistory({
       force: false,
@@ -345,7 +371,31 @@ async function ingestDriver(args: {
   const last = live[live.length - 1];
   if (!last) return outcome;
 
-  const coalesce = shouldCoalesceIngestPin({
+  if (inR2) {
+    if (last.distanceTodayM !== null) distance = last.distanceTodayM;
+    const due = r2PinWriteDue({
+      prev: location
+        ? {
+            updatedAtMs: lastWrite?.getTime() ?? null,
+            zoneStatus: prevZone,
+            trackingStatus: text(location.tracking_status),
+            activeDeliveryId: text(location.active_delivery_id),
+            isMocked: typeof location.is_mocked === "boolean" ? location.is_mocked : null,
+          }
+        : null,
+      nowMs: args.now.getTime(),
+      zoneStatus,
+      trackingStatus: last.trackingStatus,
+      activeDeliveryId: last.activeDeliveryId,
+      isMocked: last.isMocked,
+    });
+    if (!due) {
+      outcome.coalesced += 1;
+      return outcome;
+    }
+  }
+
+  const coalesce = !inR2 && shouldCoalesceIngestPin({
     prev:
       prevSeen && prevLat !== null && prevLng !== null
         ? {
@@ -490,7 +540,7 @@ export async function runIngestDriverPositions(raw: unknown, now = new Date()): 
   const [drivers, locations, settings] = await Promise.all([
     loadDocs(COLLECTIONS.drivers, ids),
     loadDocs(COLLECTIONS.driverLocations, ids),
-    loadProximitySettings(),
+    memoGeo("settings", () => loadProximitySettings()),
   ]);
   const nowDay = kuwaitDayString(now);
   const outcomes = await mapPool(groups, DRIVER_POOL, (group) =>
@@ -532,6 +582,33 @@ export async function runIngestDriverPositions(raw: unknown, now = new Date()): 
     replay_rows: outcomes.reduce((sum, outcome) => sum + outcome.replayRows, 0),
     skipped: outcomes.flatMap((outcome) => (outcome.skipped ? [outcome.skipped] : [])),
   };
+}
+
+/** FleetRoom's hourly per-rider day totals; values are absolute, so a resend is a no-op. */
+export async function runRecordRiderDayStats(raw: unknown, now = new Date()): Promise<number> {
+  const rows = parseRiderDayStats(raw);
+  if (rows.length === 0) return 0;
+  const stamp = Timestamp.fromDate(now);
+  await commitPuts(
+    rows.map((row) => ({
+      collection: COLLECTIONS.riderDayStats,
+      id: `${row.driverId}_${row.day}`,
+      data: {
+        driver_id: row.driverId,
+        day: row.day,
+        moving_s: row.movingS,
+        idle_s: row.idleS,
+        dwell_s: row.dwellS,
+        out_of_zone_s: row.outOfZoneS,
+        mocked_count: row.mockedCount,
+        points: row.points,
+        distance_m: row.distanceM,
+        source: "fleet_edge",
+        updated_at: stamp,
+      },
+    })),
+  );
+  return rows.length;
 }
 
 export async function runRecordFleetEvents(raw: unknown, now = new Date()): Promise<FleetEventResult> {

@@ -10,6 +10,8 @@ import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { fetchEdgeFleetStats } from "@/lib/fleet/edge-read";
+import { gpsR2Since } from "@/lib/fleet/gps-cutover";
 import { parseTrackingStatus } from "@/features/locations/location-status";
 import type { DriverLocationEvent } from "@/features/locations/types";
 import { computeHistorySummary } from "@/features/live-tracking/history-summary-kpis";
@@ -569,12 +571,25 @@ export async function fetchWorktimeList(params: {
   const { from: rangeFrom } = kuwaitDayBounds(params.fromDate);
   const { to: rangeTo } = kuwaitDayBounds(params.toDate);
 
-  const [attendanceRows, logRows, sessionRows, eventRows, shiftRows, adherenceMap] =
+  // From the R2 cutover on, idle/moving come from the room's per-day totals; only
+  // days before it still scan driver_location_events.
+  const since = await gpsR2Since(db);
+  const statsFrom = since && since > params.fromDate ? since : params.fromDate;
+  const useStats = since != null && since <= params.toDate;
+  const eventsTo = useStats ? kuwaitDayBounds(statsFrom).from : rangeTo;
+  const needEvents = !useStats || statsFrom > params.fromDate;
+
+  const [attendanceRows, logRows, sessionRows, eventRows, statsRows, shiftRows, adherenceMap] =
     await Promise.all([
       readStringRange(db, "driver_attendance", "attendance_date", params.fromDate, params.toDate, "asc"),
       readStringRange(db, COLLECTIONS.attendanceLogs, "log_date", params.fromDate, params.toDate, "asc"),
       readTimeRange(db, COLLECTIONS.driverSessions, "went_online_at", rangeFrom, rangeTo),
-      readTimeRange(db, COLLECTIONS.driverLocationEvents, "recorded_at", rangeFrom, rangeTo),
+      needEvents
+        ? readTimeRange(db, COLLECTIONS.driverLocationEvents, "recorded_at", rangeFrom, eventsTo)
+        : Promise.resolve([] as Loose[]),
+      useStats
+        ? readStringRange(db, COLLECTIONS.riderDayStats, "day", statsFrom, params.toDate, "asc")
+        : Promise.resolve([] as Loose[]),
       readStringRange(
         db,
         COLLECTIONS.driverDailyShifts,
@@ -618,6 +633,12 @@ export async function fetchWorktimeList(params: {
     eventsByKey.set(key, list);
   }
 
+  const statsByKey = new Map<string, Loose>();
+  for (const row of statsRows) {
+    const driverId = String(row.driver_id ?? "");
+    if (meta.has(driverId)) statsByKey.set(`${driverId}:${String(row.day ?? "")}`, row);
+  }
+
   const logByKey = new Map<string, Loose>();
   for (const log of logRows) {
     const driverId = String(log.driver_id ?? "");
@@ -652,8 +673,13 @@ export async function fetchWorktimeList(params: {
 
     const att = attendanceByKey.get(key);
     const log = logByKey.get(key);
-    const events = eventsByKey.get(key) ?? [];
-    const summary = computeHistorySummary(events);
+    const stats = statsByKey.get(key);
+    const summary = stats
+      ? {
+          idleMinutes: Math.round((num(stats.idle_s) ?? 0) / 60),
+          movingMinutes: Math.round((num(stats.moving_s) ?? 0) / 60),
+        }
+      : computeHistorySummary(eventsByKey.get(key) ?? []);
     const shiftRow = shiftByKey.get(key);
     const shiftAdherence = adherenceMap.get(key) ?? null;
     const shiftFields = shiftRow ? shiftRowToListFields(shiftRow) : null;
@@ -786,7 +812,11 @@ export async function fetchFleetOpsCounts(): Promise<FleetOpsCounts> {
         .where("attendance_date", "==", today)
         .where("status", "==", "online_unvalidated"),
     ),
-    headCount(() => db.collection(COLLECTIONS.driverLocations).where("zone_status", "==", "out_of_zone")),
+    fetchEdgeFleetStats().then((stats) =>
+      typeof stats?.out_of_zone === "number"
+        ? stats.out_of_zone
+        : headCount(() => db.collection(COLLECTIONS.driverLocations).where("zone_status", "==", "out_of_zone")),
+    ),
   ]);
 
   let onDutyCount = onDuty;
@@ -850,6 +880,13 @@ export async function fetchDriverTodayTrackingSummary(driverId: string): Promise
     return d.toISOString().slice(0, 10);
   })();
 
+  const since = await gpsR2Since(db);
+  const statsSnap =
+    since && since <= today
+      ? await db.collection(COLLECTIONS.riderDayStats).doc(`${driverId}_${today}`).get()
+      : null;
+  const todayStats = statsSnap?.exists ? (statsSnap.data() as Loose) : null;
+
   const [driver, shiftRows, attendance, log, sessions, events, openSession, shiftAdherence] =
     await Promise.all([
       fetchSingleDriverMeta(driverId),
@@ -863,14 +900,16 @@ export async function fetchDriverTodayTrackingSummary(driverId: string): Promise
         ["log_date", today],
       ]),
       readDriverTimeRange(db, COLLECTIONS.driverSessions, driverId, "went_online_at", rangeFrom, rangeTo),
-      readDriverTimeRange(
-        db,
-        COLLECTIONS.driverLocationEvents,
-        driverId,
-        "recorded_at",
-        rangeFrom,
-        rangeTo,
-      ),
+      statsSnap
+        ? Promise.resolve([] as Loose[])
+        : readDriverTimeRange(
+            db,
+            COLLECTIONS.driverLocationEvents,
+            driverId,
+            "recorded_at",
+            rangeFrom,
+            rangeTo,
+          ),
       readMaybe(db, COLLECTIONS.driverSessions, [
         ["driver_id", driverId],
         ["is_online", true],
@@ -891,8 +930,12 @@ export async function fetchDriverTodayTrackingSummary(driverId: string): Promise
   }
 
   const hasOpenSession = Boolean(openSession);
-  const mappedEvents = events.map(toLocationEvent);
-  const summary = computeHistorySummary(mappedEvents);
+  const summary = todayStats
+    ? {
+        idleMinutes: Math.round((num(todayStats.idle_s) ?? 0) / 60),
+        movingMinutes: Math.round((num(todayStats.moving_s) ?? 0) / 60),
+      }
+    : computeHistorySummary(events.map(toLocationEvent));
 
   let sessionCount = 0;
   for (const row of sessions) {

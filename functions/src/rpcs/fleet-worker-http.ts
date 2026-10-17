@@ -13,7 +13,7 @@ import { defineSecret } from "firebase-functions/params";
 import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { buildLiveFleetSnapshot, num, type Dict } from "./fleet";
-import { runIngestDriverPositions, runRecordFleetEvents } from "./fleet-ingest";
+import { runIngestDriverPositions, runRecordFleetEvents, runRecordRiderDayStats } from "./fleet-ingest";
 
 export const workerSharedSecret = defineSecret("WORKER_SHARED_SECRET");
 
@@ -196,8 +196,9 @@ export const workerFleetRead = guarded(async (body, res) => {
 });
 
 export const adminIngestDriverPositions = guarded(async (body, res) => {
+  const dayStats = await runRecordRiderDayStats(body.p_day_stats);
   const result = await runIngestDriverPositions(body.p_events ?? body.events);
-  res.status(result.ok ? 200 : 400).json(result);
+  res.status(result.ok ? 200 : 400).json({ ...result, day_stats: dayStats });
 });
 
 export const adminRecordFleetEvents = guarded(async (body, res) => {

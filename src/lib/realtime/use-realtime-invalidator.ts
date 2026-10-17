@@ -2,12 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { shouldRunBackgroundWork } from "@/lib/browser/visibility";
 
 /**
  * Polls on a fixed interval and invalidates the given TanStack Query keys.
  *
  * There is no live row stream. The same keys a change listener used to refresh
- * are invalidated every 20s instead, so list pages still pick up inserts and
+ * are invalidated every 60s instead (skipped while the tab is hidden), so list pages still pick up inserts and
  * edits from another session. `onChange` fires on every tick so a paused feed
  * can count new rows without waiting for the visible query to refetch.
  */
@@ -40,7 +41,7 @@ export type UseRealtimeInvalidatorOptions = {
   onChange?: () => void;
 };
 
-const POLL_MS = 20_000;
+const POLL_MS = 60_000;
 
 export function useRealtimeInvalidator({
   channel,
@@ -72,16 +73,27 @@ export function useRealtimeInvalidator({
     void debounceMs;
     void tablesKey;
 
+    let missed = false;
     const tick = () => {
+      if (!shouldRunBackgroundWork(document)) {
+        missed = true;
+        return;
+      }
+      missed = false;
       for (const key of keysRef.current) {
         void queryClient.invalidateQueries({ queryKey: key });
       }
       onChangeRef.current?.();
     };
+    const onVisible = () => {
+      if (missed && shouldRunBackgroundWork(document)) tick();
+    };
 
     const handle = setInterval(tick, POLL_MS);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearInterval(handle);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [channel, tablesKey, enabled, debounceMs, queryClient]);
 }

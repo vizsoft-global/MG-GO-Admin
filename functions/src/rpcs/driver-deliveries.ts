@@ -534,6 +534,15 @@ export const driverGetActivePickup = onCall(async (request) => {
   return serializeDelivery(row.id, row.data);
 });
 
+async function pinIsMocked(driverId: string): Promise<boolean> {
+  try {
+    const snap = await getFirestore().collection(COLLECTIONS.driverLocations).doc(driverId).get();
+    return (snap.data() ?? {})["is_mocked"] === true;
+  } catch {
+    return false;
+  }
+}
+
 export const driverCreatePickup = onCall(async (request) => {
   const ctx = await requireRider(request);
   const data = (request.data ?? {}) as Dict;
@@ -586,7 +595,7 @@ export const driverCreatePickup = onCall(async (request) => {
   });
   await assertOrderIdUnused(orderId);
 
-  const shiftDate = await resolveShiftDate(ctx.uid, now);
+  const [shiftDate, mocked] = await Promise.all([resolveShiftDate(ctx.uid, now), pinIsMocked(ctx.uid)]);
   const id = randomUUID();
   const row: Dict = {
     driver_id: ctx.uid,
@@ -603,6 +612,7 @@ export const driverCreatePickup = onCall(async (request) => {
     pickup_day: today,
     created_day: today,
     shift_date: shiftDate,
+    gps_is_mocked: mocked,
     created_at: stamp,
     updated_at: stamp,
     ...deliveryIdentityStamp(ctx.driver, ctx.profile, orderId),
@@ -642,7 +652,7 @@ export const driverCreatePickup = onCall(async (request) => {
   // A pickup moves the week's delivery count, so the snapshot is invalidated the
   // moment this commits. The flag is one write; the rider's next Home call
   // recomputes the count it has to show anyway.
-  await invalidateDriverHomeDailySafe(ctx.uid, "pickup");
+  await invalidateDriverHomeDailySafe(ctx.uid, "pickup", { signal: false });
   return serializeDelivery(id, row);
 });
 
@@ -692,8 +702,9 @@ export const driverCompleteDelivery = onCall(async (request) => {
   const proofKeys = parseProofKeys(
     pick(data, "p_delivery_proof_url", "delivery_proof_url", "deliveryProofUrl"),
   );
-  const shiftDate = await resolveShiftDate(ctx.uid, now);
+  const [shiftDate, mocked] = await Promise.all([resolveShiftDate(ctx.uid, now), pinIsMocked(ctx.uid)]);
   const patch: Dict = {
+    gps_is_mocked: current["gps_is_mocked"] === true || mocked,
     order_proof_url: proofKeys[0] ?? null,
     order_proof_urls: proofKeys,
     delivered_at: stamp,
@@ -746,7 +757,7 @@ export const driverCompleteDelivery = onCall(async (request) => {
       bites_sync_reason: bites.reason,
     },
   });
-  await invalidateDriverHomeDailySafe(ctx.uid, "complete");
+  await invalidateDriverHomeDailySafe(ctx.uid, "complete", { signal: false });
   return serializeDelivery(deliveryId, { ...current, ...patch });
 });
 
@@ -820,7 +831,7 @@ export const driverCancelDelivery = onCall(async (request) => {
       proof_count: proofKeys.length,
     },
   });
-  await invalidateDriverHomeDailySafe(ctx.uid, "cancel");
+  await invalidateDriverHomeDailySafe(ctx.uid, "cancel", { signal: false });
   return serializeDelivery(deliveryId, { ...current, ...patch });
 });
 

@@ -14,6 +14,7 @@ import {
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
+import { bumpRiderSignalInBatch, signalKeysForRecordType } from "../core/rider-signals";
 import {
   applyTransactionalPushResult,
   sendTransactionalPushToDriver,
@@ -666,6 +667,13 @@ export async function notifyDriverTransactional(
       actionParams,
     }),
   });
+  bumpRiderSignalInBatch(
+    db,
+    batch,
+    params.driverId,
+    signalKeysForRecordType(actionParams.record_type),
+    `inbox:${params.category}`,
+  );
   await batch.commit();
 
   if (params.skipPush) {

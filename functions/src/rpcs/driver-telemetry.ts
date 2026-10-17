@@ -1,5 +1,5 @@
 /**
- * Rider client telemetry — port of `driver_ingest_telemetry` /
+ * Rider client telemetry â€” port of `driver_ingest_telemetry` /
  * `_telemetry_sanitize_context` (`20260911100100`).
  *
  * Returns a result object instead of raising so the app can tell "drop this
@@ -8,6 +8,7 @@
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
+import { EXPIRE_AT_FIELD, expireAtFor } from "../core/event-expiry";
 import { requireRider } from "../core/rider";
 import { numberOrNull, pick, type Dict } from "./_shared";
 
@@ -143,7 +144,7 @@ function parseClientTs(value: unknown): Date | null {
 
 /**
  * Four rules, in order, matching `_telemetry_sanitize_context`:
- * allowlist → denylist → scalars only → value bounds.
+ * allowlist â†’ denylist â†’ scalars only â†’ value bounds.
  */
 export function sanitizeTelemetryContext(
   raw: unknown,
@@ -408,6 +409,7 @@ export const driverIngestTelemetry = onCall(async (request) => {
       category: event.category,
       client_ts: Timestamp.fromDate(event.client_ts),
       server_received_at: stamp,
+      [EXPIRE_AT_FIELD]: expireAtFor("driver_telemetry_events"),
       clock_skew_ms: event.clock_skew_ms,
       session_id: event.session_id,
       correlation_id: event.correlation_id,

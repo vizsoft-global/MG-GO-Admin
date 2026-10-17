@@ -14,6 +14,7 @@ import {
   type DocumentSnapshot,
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
+import { EXPIRE_AT_FIELD, expireAtFor } from "../core/event-expiry";
 
 /** Firestore caps a batched write at 500 operations. */
 export const BATCH_LIMIT = 400;
@@ -273,5 +274,6 @@ export async function logDriverOperation(args: {
     record_id: args.recordId ?? null,
     detail: args.detail ?? null,
     occurred_at: FieldValue.serverTimestamp(),
+    [EXPIRE_AT_FIELD]: expireAtFor("driver_operation_events"),
   });
 }

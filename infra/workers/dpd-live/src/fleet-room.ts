@@ -32,6 +32,7 @@ import {
   type RuleState,
 } from "./fleet-rules";
 import { hashToken, verifyAdminToken } from "./auth";
+import { GpsArchive, inGpsRollout, kuwaitParts, type ArchivePoint } from "./gps-archive";
 import { callWorkerFunction, resolveUserFromToken } from "./supabase";
 import {
   emptyView,
@@ -79,6 +80,9 @@ const MAX_PENDING_POINTS = 16;
 /** Entities with no report for this long leave the room entirely. */
 const EVICT_AFTER_MS = 30 * 60_000;
 const OPS_POLL_LIMIT = 200;
+const STATS_SYNC_MS = 60 * 60_000;
+const STATS_SYNC_PAGE = 400;
+const STATS_SYNC_PAGES = 10;
 
 /**
  * Durable-write gates. Deliberately ~the old 5s report cadence, so raising the app to
@@ -258,20 +262,25 @@ export class FleetRoom implements DurableObject {
   private seq = 0;
   private lastFrameAt = 0;
   private lastFlushAt = 0;
+  private lastStatsSyncAt = 0;
   private lastIngestAt = 0;
   private flushSoon = false;
   private alarmSetFor = 0;
 
   private pendingFleetEvents: Array<FleetEventDraft & { driverId: string }> = [];
   private opsCursor: { at: string; id: string } | null = null;
+  private readonly archive: GpsArchive;
+  private archiveSeeded = false;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
     this.env = env;
+    this.archive = new GpsArchive(state.storage.sql, env.GPS_ARCHIVE ?? null);
 
     // Sockets survive eviction; their per-socket runtime does not. Rehydrating the
     // view here (rather than lazily) keeps `webSocketMessage` free of setup.
     for (const ws of state.getWebSockets()) {
+      if (isDriverAttachment(ws.deserializeAttachment())) continue;
       this.sockets.set(ws, {
         view: {
           ...emptyView(),
@@ -293,15 +302,34 @@ export class FleetRoom implements DurableObject {
     return Math.max(500, Number(this.env.TICK_MS) || 2000);
   }
 
+  private get gpsSinkPercent(): number {
+    if (this.env.GPS_SINK !== "r2" || !this.env.GPS_ARCHIVE) return 0;
+    const percent = Number(this.env.GPS_SINK_PERCENT ?? "0");
+    return Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0;
+  }
+
+  private archives(driverId: string): boolean {
+    return inGpsRollout(driverId, this.gpsSinkPercent);
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
     try {
       if (url.pathname === "/ws") return await this.acceptAdminSocket(request, url);
+      if (url.pathname === "/ingest/ws") return await this.acceptDriverSocket(request, url);
       if (url.pathname === "/ingest") return await this.ingest(request);
       if (url.pathname === "/refresh") {
         await this.loadRoster(true);
         return json({ ok: true, drivers: this.entities.size });
+      }
+      if (READ_PATHS.has(url.pathname) || url.pathname === "/archive/register") {
+        const token = (request.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+        if (!(await verifyAdminToken(this.env.ADMIN_WS_TOKEN_SECRET, token))) {
+          return json({ ok: false, error: "unauthorized" }, 401);
+        }
+        if (url.pathname === "/archive/register") return await this.registerImported(request);
+        return await this.read(url);
       }
       if (url.pathname === "/stats") {
         const nowMs = Date.now();
@@ -326,6 +354,125 @@ export class FleetRoom implements DurableObject {
     }
 
     return json({ ok: false, error: "not_found" }, 404);
+  }
+
+  // -------------------------------------------------------------------------
+  // Staff reads (panel server, Bearer fleet token)
+  // -------------------------------------------------------------------------
+
+  private async registerImported(request: Request): Promise<Response> {
+    if (request.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405);
+    const body = (await request.json().catch(() => null)) as { rows?: unknown } | null;
+    const rows = Array.isArray(body?.rows) ? body.rows : [];
+    let registered = 0;
+    for (const raw of rows.slice(0, 500)) {
+      const row = raw as Record<string, unknown>;
+      const driverId = typeof row.driver_id === "string" ? row.driver_id : "";
+      const day = typeof row.day === "string" ? row.day : "";
+      const keys = Array.isArray(row.keys)
+        ? row.keys.filter((key): key is string => typeof key === "string" && key.startsWith(`import/${driverId}/${day}/`))
+        : [];
+      if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(day) || keys.length === 0) continue;
+      this.archive.registerImported({
+        driverId,
+        day,
+        keys,
+        points: Number(row.points) || 0,
+        distanceM: Number(row.distance_m) || 0,
+        firstTs: Number.isFinite(Number(row.first_ts)) ? Number(row.first_ts) : null,
+        lastTs: Number.isFinite(Number(row.last_ts)) ? Number(row.last_ts) : null,
+      });
+      registered += 1;
+    }
+    return json({ ok: true, registered });
+  }
+
+  private async read(url: URL): Promise<Response> {
+    await this.ensureBootstrapped();
+    const nowMs = Date.now();
+    const today = kuwaitParts(nowMs).day;
+
+    if (url.pathname === "/latest") {
+      const drivers = [];
+      const only = url.searchParams.get("driver");
+      const pool = only
+        ? [this.entities.get(only)].filter((entity): entity is Entity => entity != null)
+        : this.entities.values();
+      for (const entity of pool) {
+        if (entity.lat == null || entity.lng == null || entity.lastFixAtMs == null) continue;
+        drivers.push({
+          driver_id: entity.driverId,
+          lat: entity.lat,
+          lng: entity.lng,
+          recorded_at: new Date(entity.lastFixAtMs).toISOString(),
+          speed_mps: entity.speedMps,
+          heading_deg: entity.headingDeg,
+          accuracy_meters: entity.accuracyM,
+          battery_pct: entity.batteryPct,
+          is_mocked: entity.isMocked,
+          tracking_status: entity.trackingStatus,
+          active_delivery_id: entity.activeDeliveryId,
+          status: entity.status,
+          is_on_duty: entity.isOnDuty,
+          is_online: entity.isOnline,
+          location_off: entity.locationOff,
+          range_status: entity.rangeStatus,
+          distance_today_m: this.archive.distanceTodayM(entity.driverId, today),
+        });
+      }
+      return json({ ok: true, generated_at: new Date(nowMs).toISOString(), drivers });
+    }
+
+    if (url.pathname === "/fleet-stats") {
+      let withFix = 0;
+      let onDuty = 0;
+      let live = 0;
+      let outOfZone = 0;
+      const byStatus: Record<string, number> = {};
+      for (const entity of this.entities.values()) {
+        if (entity.isOnDuty) onDuty += 1;
+        if (entity.lastFixAtMs == null) continue;
+        withFix += 1;
+        if (entity.rangeStatus === "out_of_zone") outOfZone += 1;
+        if (nowMs - entity.lastFixAtMs < LIVE_FIX_MS) live += 1;
+        byStatus[entity.status] = (byStatus[entity.status] ?? 0) + 1;
+      }
+      return json({
+        ok: true,
+        generated_at: new Date(nowMs).toISOString(),
+        drivers: this.entities.size,
+        with_fix: withFix,
+        live,
+        on_duty: onDuty,
+        out_of_zone: outOfZone,
+        by_status: byStatus,
+      });
+    }
+
+    const driverId = url.searchParams.get("driver") ?? "";
+    if (!driverId) return json({ ok: false, error: "driver_required" }, 400);
+
+    if (url.pathname === "/history/days") {
+      const from = url.searchParams.get("from") ?? undefined;
+      const to = url.searchParams.get("to") ?? undefined;
+      const days = this.archive.dayIndex(driverId, from, to).map((row) => ({
+        day: row.day,
+        points: row.points,
+        distance_m: row.distanceM,
+        first_ts: row.firstTs,
+        last_ts: row.lastTs,
+        archived: daysBetween(row.day, today) > HOT_HISTORY_DAYS,
+      }));
+      return json({ ok: true, days });
+    }
+
+    const day = url.searchParams.get("day") ?? "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ ok: false, error: "day_required" }, 400);
+    if (daysBetween(day, today) > HOT_HISTORY_DAYS && url.searchParams.get("archive") !== "1") {
+      return json({ ok: false, error: "archive_required" }, 409);
+    }
+    const points = await this.archive.readDay(driverId, day);
+    return json({ ok: true, driver_id: driverId, day, stats: this.archive.dayStats(driverId, day), points });
   }
 
   // -------------------------------------------------------------------------
@@ -385,7 +532,49 @@ export class FleetRoom implements DurableObject {
       if (age > EVICT_AFTER_MS) this.removeEntity(driverId);
     }
 
+    if (!this.archiveSeeded) {
+      this.archiveSeeded = true;
+      this.seedFromArchive();
+    }
+
     this.rosterLoadedAt = nowMs;
+  }
+
+  /**
+   * After an eviction the room's pins come from SQLite, which is as fresh as the last
+   * archive flush; `driver_locations` is only written on state changes or every few
+   * minutes once the R2 sink is on, so it can be older.
+   */
+  private seedFromArchive(): void {
+    if (this.gpsSinkPercent === 0) return;
+    let pins;
+    try {
+      pins = this.archive.latestPins();
+    } catch (error) {
+      console.error("gps_archive_seed_failed", String(error));
+      return;
+    }
+    for (const pin of pins) {
+      const entity = this.entities.get(pin.driverId);
+      if (!entity || (entity.lastFixAtMs ?? 0) >= pin.t) continue;
+      entity.lat = pin.lat;
+      entity.lng = pin.lng;
+      entity.speedMps = pin.speedMps;
+      entity.headingDeg = pin.headingDeg;
+      entity.headingSource = pin.headingDeg == null ? "none" : "gps";
+      entity.accuracyM = pin.accuracyM;
+      entity.batteryPct = pin.batteryPct;
+      entity.isMocked = pin.isMocked;
+      entity.trackingStatus = normalizeTracking(pin.trackingStatus);
+      entity.lastFixAtMs = pin.t;
+      entity.meta = {
+        ...entity.meta,
+        distanceTodayMeters: Math.max(entity.meta.distanceTodayMeters, pin.distanceTodayM),
+      };
+      entity.posVersion += 1;
+      entity.metaVersion += 1;
+      this.refreshDerived(entity, Date.now(), false);
+    }
   }
 
   private allocIdIdx(driverId: string): number {
@@ -604,9 +793,74 @@ export class FleetRoom implements DurableObject {
     if (!driverId) return json({ ok: false, error: "unauthorized" }, 401);
 
     const body = (await request.json().catch(() => null)) as IngestBody | null;
+    const result = await this.applyIngest(driverId, body);
+    return json(result.payload, result.status);
+  }
+
+  /**
+   * Driver GPS over a hibernating WebSocket. Incoming messages bill at 20:1 against
+   * a request, which is the whole point; `/ingest` stays as the app's fallback.
+   */
+  private async acceptDriverSocket(request: Request, url: URL): Promise<Response> {
+    if (request.headers.get("Upgrade") !== "websocket") {
+      return json({ ok: false, error: "expected_websocket" }, 426);
+    }
+    const queryToken = url.searchParams.get("token") ?? "";
+    const authed = queryToken
+      ? new Request(request.url, { headers: { Authorization: `Bearer ${queryToken}` } })
+      : request;
+    const driverId = await this.resolveDriverId(authed);
+    if (!driverId) return json({ ok: false, error: "unauthorized" }, 401);
+
+    const header = authed.headers.get("Authorization") ?? "";
+    const expMs = jwtExpiryMs(header.startsWith("Bearer ") ? header.slice(7).trim() : "");
+
+    const pair = new WebSocketPair();
+    const [client, server] = [pair[0], pair[1]];
+    this.state.acceptWebSocket(server, [`driver:${driverId}`]);
+    const attachment: DriverSocketAttachment = { kind: "driver", driverId, expMs };
+    server.serializeAttachment(attachment);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  private async onDriverSocketMessage(
+    ws: WebSocket,
+    attachment: DriverSocketAttachment,
+    message: string,
+  ): Promise<void> {
+    let frame: DriverClientFrame | null = null;
+    try {
+      frame = JSON.parse(message) as DriverClientFrame;
+    } catch {
+      return;
+    }
+    if (frame?.t === "ping") {
+      safeSend(ws, { t: "pong", ts: Date.now() });
+      return;
+    }
+    if (frame?.t !== "points") return;
+    // The socket carries one token for its whole life; once that token is past its
+    // expiry the app must reconnect with a fresh one, as `/ingest` would demand.
+    if (attachment.expMs != null && Date.now() >= attachment.expMs) {
+      safeSend(ws, { t: "ack", id: frame.id ?? null, status: 401, ok: false, error: "token_expired" });
+      try {
+        ws.close(4001, "token_expired");
+      } catch {
+        // Already closing.
+      }
+      return;
+    }
+    const result = await this.applyIngest(attachment.driverId, frame);
+    safeSend(ws, { t: "ack", id: frame.id ?? null, status: result.status, ...result.payload });
+  }
+
+  private async applyIngest(
+    driverId: string,
+    body: IngestBody | null,
+  ): Promise<{ status: number; payload: Record<string, unknown> }> {
     const points = Array.isArray(body?.points) ? body!.points : [];
-    if (points.length === 0) return json({ ok: false, error: "points_required" }, 400);
-    if (points.length > 200) return json({ ok: false, error: "batch_too_large" }, 413);
+    if (points.length === 0) return { status: 400, payload: { ok: false, error: "points_required" } };
+    if (points.length > 200) return { status: 413, payload: { ok: false, error: "batch_too_large" } };
 
     await this.ensureBootstrapped();
 
@@ -615,7 +869,7 @@ export class FleetRoom implements DurableObject {
     // thundering herd every time a shift starts.
     const entity =
       this.entities.get(driverId) ?? (await this.loadSingleDriver(driverId));
-    if (!entity) return json({ ok: false, error: "unknown_driver" }, 404);
+    if (!entity) return { status: 404, payload: { ok: false, error: "unknown_driver" } };
 
     // A foreground service can outlive the clock-out that was supposed to stop
     // it. Its publishes carry the version from before that clock-out, so they are
@@ -624,7 +878,7 @@ export class FleetRoom implements DurableObject {
     const version = numberOrNull(body?.duty_state_version as number);
     if (version != null) {
       if (entity.dutyStateVersion != null && version < entity.dutyStateVersion) {
-        return json({ ok: false, error: "stale_duty_state" }, 409);
+        return { status: 409, payload: { ok: false, error: "stale_duty_state" } };
       }
       entity.dutyStateVersion = version;
     }
@@ -719,13 +973,16 @@ export class FleetRoom implements DurableObject {
     await this.pump(nowMs);
     await this.scheduleAlarm();
 
-    return json({
-      ok: true,
-      accepted: applied,
-      queued: entity.pending.length,
-      serverTime: nowMs,
-      frameHz: Number(this.env.POSITION_FRAME_HZ) || 4,
-    });
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        accepted: applied,
+        queued: entity.pending.length,
+        serverTime: nowMs,
+        frameHz: Number(this.env.POSITION_FRAME_HZ) || 4,
+      },
+    };
   }
 
   private async loadSingleDriver(driverId: string): Promise<Entity | null> {
@@ -939,6 +1196,11 @@ export class FleetRoom implements DurableObject {
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (typeof message !== "string") return;
+    const attachment = ws.deserializeAttachment();
+    if (isDriverAttachment(attachment)) {
+      await this.onDriverSocketMessage(ws, attachment, message);
+      return;
+    }
     let frame: ClientFrame | null = null;
     try {
       frame = JSON.parse(message) as ClientFrame;
@@ -1165,6 +1427,18 @@ export class FleetRoom implements DurableObject {
       this.state.waitUntil(this.flushPositions());
     }
 
+    if (this.gpsSinkPercent > 0) {
+      this.state.waitUntil(
+        this.archive.maybeFlush(nowMs).catch((error) => {
+          console.error("gps_archive_flush_failed", String(error));
+        }),
+      );
+      if (nowMs - this.lastStatsSyncAt >= STATS_SYNC_MS) {
+        this.lastStatsSyncAt = nowMs;
+        this.state.waitUntil(this.syncDayStats(nowMs));
+      }
+    }
+
     this.state.waitUntil(this.relayOps());
   }
 
@@ -1191,12 +1465,58 @@ export class FleetRoom implements DurableObject {
     }
   }
 
+  private async syncDayStats(nowMs: number): Promise<void> {
+    try {
+      // Stats are persisted on the archive flush; the minute flush above may still be running.
+      await this.archive.maybeFlush(nowMs, true);
+      for (let page = 0; page < STATS_SYNC_PAGES; page += 1) {
+        const rows = this.archive.unsyncedDayStats(STATS_SYNC_PAGE);
+        if (rows.length === 0) return;
+        await callWorkerFunction(this.env, "adminIngestDriverPositions", {
+          p_events: [],
+          p_day_stats: rows.map((row) => ({
+            driver_id: row.driverId,
+            day: row.day,
+            moving_s: Math.round(row.stats.movingS),
+            idle_s: Math.round(row.stats.idleS),
+            dwell_s: Math.round(row.stats.dwellS),
+            out_of_zone_s: Math.round(row.stats.outOfZoneS),
+            mocked_count: row.stats.mockedCount,
+            points: row.stats.points,
+            distance_m: Math.round(row.stats.distanceM),
+          })),
+        });
+        this.archive.markDayStatsSynced(rows, nowMs);
+        if (rows.length < STATS_SYNC_PAGE) return;
+      }
+    } catch (error) {
+      console.error("day_stats_sync_failed", String(error));
+    }
+  }
+
   private async flushPositions(): Promise<void> {
     const events: Array<Record<string, unknown>> = [];
+    const dualWrite = this.env.GPS_DUAL_WRITE === "1";
     for (const entity of this.entities.values()) {
       if (entity.pending.length === 0) continue;
-      for (const point of downsampleForDurability(entity.pending)) {
+      const kept = downsampleForDurability(entity.pending);
+      const archived = this.archives(entity.driverId);
+      let distanceTodayM: number | null = null;
+      if (archived) {
+        try {
+          this.archive.record(entity.driverId, kept.map(toArchivePoint), entity.inAssignedZone);
+          const lastTs = Date.parse(kept[kept.length - 1]?.clientTs ?? "");
+          distanceTodayM = Number.isFinite(lastTs)
+            ? this.archive.distanceTodayM(entity.driverId, kuwaitParts(lastTs).day)
+            : null;
+        } catch (error) {
+          console.error("gps_archive_record_failed", String(error));
+        }
+      }
+      for (const point of kept) {
         events.push({
+          history_in_r2: archived && !dualWrite,
+          distance_today_m: distanceTodayM,
           driver_id: entity.driverId,
           lat: point.lat,
           lng: point.lng,
@@ -1356,6 +1676,43 @@ export class FleetRoom implements DurableObject {
 
 type IngestBody = { points?: unknown[]; duty_state_version?: number };
 
+type DriverSocketAttachment = { kind: "driver"; driverId: string; expMs: number | null };
+
+type DriverClientFrame =
+  | { t: "ping" }
+  | ({ t: "points"; id?: number | string } & IngestBody);
+
+export function isDriverAttachment(value: unknown): value is DriverSocketAttachment {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { kind?: unknown }).kind === "driver" &&
+    typeof (value as { driverId?: unknown }).driverId === "string"
+  );
+}
+
+/** `exp` from an already-verified JWT; null when it cannot be read. */
+export function jwtExpiryMs(token: string): number | null {
+  const part = token.split(".")[1];
+  if (!part) return null;
+  try {
+    const normalized = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const exp = (JSON.parse(atob(padded)) as { exp?: unknown }).exp;
+    return typeof exp === "number" && Number.isFinite(exp) ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeSend(ws: WebSocket, frame: unknown): void {
+  try {
+    ws.send(JSON.stringify(frame));
+  } catch {
+    // Socket closed between the message and the reply.
+  }
+}
+
 type SnapshotDriver = {
   driver_id: string;
   driver_name: string | null;
@@ -1398,6 +1755,15 @@ type SnapshotDriver = {
     session2_end_at: string | null;
   } | null;
 };
+
+const READ_PATHS = new Set(["/latest", "/fleet-stats", "/history", "/history/days"]);
+const LIVE_FIX_MS = 8 * 60_000;
+/** Matches `r2-lifecycle-gps.json`: older hours sit in Infrequent Access and cost a retrieval fee. */
+const HOT_HISTORY_DAYS = 7;
+
+export function daysBetween(fromDay: string, toDay: string): number {
+  return Math.round((Date.parse(`${toDay}T00:00:00Z`) - Date.parse(`${fromDay}T00:00:00Z`)) / 86_400_000);
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -1468,6 +1834,24 @@ function normalizePoint(raw: unknown): PendingPoint | null {
     trackingStatus: normalizeTracking(stringOrNull(point.tracking_status)),
     clientTs,
     replay: point.replay === true,
+  };
+}
+
+export function toArchivePoint(point: PendingPoint): ArchivePoint {
+  const ms = Date.parse(point.clientTs);
+  return {
+    t: Number.isFinite(ms) ? ms : Date.now(),
+    la: point.lat,
+    lo: point.lng,
+    s: point.speedMps,
+    a: point.accuracyM,
+    h: point.headingDeg,
+    b: point.batteryPct,
+    m: point.isMocked === true ? 1 : 0,
+    st: point.trackingStatus,
+    d: point.deliveryId,
+    ad: point.activeDeliveryId,
+    r: point.replay ? 1 : 0,
   };
 }
 

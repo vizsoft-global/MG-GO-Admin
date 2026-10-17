@@ -6,8 +6,29 @@ import {
   downsampleForDurability,
   IDLE_ALARM_MS,
   INGEST_HOT_WINDOW_MS,
+  isDriverAttachment,
+  jwtExpiryMs,
   type PendingPoint,
 } from "./fleet-room";
+
+describe("driver ingest socket helpers", () => {
+  it("reads exp from a JWT payload as milliseconds", () => {
+    const payload = Buffer.from(JSON.stringify({ exp: 1_800_000_000, sub: "u" }))
+      .toString("base64url");
+    assert.equal(jwtExpiryMs(`h.${payload}.s`), 1_800_000_000_000);
+  });
+
+  it("returns null for a malformed token", () => {
+    assert.equal(jwtExpiryMs("nope"), null);
+    assert.equal(jwtExpiryMs("a.!!!.c"), null);
+  });
+
+  it("tells driver attachments from admin socket views", () => {
+    assert.equal(isDriverAttachment({ kind: "driver", driverId: "d1", expMs: null }), true);
+    assert.equal(isDriverAttachment({ bbox: null, statuses: null }), false);
+    assert.equal(isDriverAttachment(null), false);
+  });
+});
 
 const T0 = Date.parse("2026-08-14T10:00:00.000Z");
 const LAT = 29.37;

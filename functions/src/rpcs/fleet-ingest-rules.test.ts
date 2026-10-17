@@ -5,7 +5,10 @@ import {
   clampHistoryRecordedAt,
   parseFleetEventBatch,
   parseIngestBatch,
+  parseRiderDayStats,
   pinWriteAllowed,
+  R2_PIN_HEARTBEAT_MS,
+  r2PinWriteDue,
   shouldCoalesceIngestPin,
   sortIngestPoints,
   type IngestPoint,
@@ -199,5 +202,74 @@ describe("parseFleetEventBatch", () => {
       assert.deepEqual(parsed.events[0]?.context, {});
       assert.equal(parsed.events[0]?.detectedAt.toISOString(), NOW.toISOString());
     }
+  });
+});
+
+describe("history_in_r2 batch fields", () => {
+  it("parses the archive flag and DO odometer", () => {
+    const parsed = parseIngestBatch(
+      [
+        { driver_id: "d1", lat: 29.3, lng: 47.9, history_in_r2: true, distance_today_m: 1234 },
+        { driver_id: "d2", lat: 29.3, lng: 47.9 },
+      ],
+      NOW,
+    );
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(parsed.points[0]?.historyInR2, true);
+    assert.equal(parsed.points[0]?.distanceTodayM, 1234);
+    assert.equal(parsed.points[1]?.historyInR2, false);
+    assert.equal(parsed.points[1]?.distanceTodayM, null);
+  });
+});
+
+describe("r2PinWriteDue", () => {
+  const prev = {
+    updatedAtMs: NOW.getTime(),
+    zoneStatus: "in_zone",
+    trackingStatus: "moving",
+    activeDeliveryId: null,
+    isMocked: false,
+  };
+  const base = {
+    prev,
+    nowMs: NOW.getTime() + 60_000,
+    zoneStatus: "in_zone",
+    trackingStatus: "moving",
+    activeDeliveryId: null,
+    isMocked: false,
+  };
+
+  it("writes the first pin", () => {
+    assert.equal(r2PinWriteDue({ ...base, prev: null }), true);
+  });
+  it("skips an unchanged pin inside the heartbeat", () => {
+    assert.equal(r2PinWriteDue(base), false);
+  });
+  it("writes after the heartbeat", () => {
+    assert.equal(r2PinWriteDue({ ...base, nowMs: NOW.getTime() + R2_PIN_HEARTBEAT_MS }), true);
+  });
+  it("writes on any state change", () => {
+    assert.equal(r2PinWriteDue({ ...base, zoneStatus: "out_of_zone" }), true);
+    assert.equal(r2PinWriteDue({ ...base, trackingStatus: "idle" }), true);
+    assert.equal(r2PinWriteDue({ ...base, activeDeliveryId: "x" }), true);
+    assert.equal(r2PinWriteDue({ ...base, isMocked: true }), true);
+  });
+});
+
+describe("parseRiderDayStats", () => {
+  it("keeps valid rows and rounds counters", () => {
+    const rows = parseRiderDayStats([
+      { driver_id: "d1", day: "2026-10-10", moving_s: 12.6, distance_m: 99.4, points: 3 },
+      { driver_id: "a/b", day: "2026-10-10" },
+      { driver_id: "d2", day: "10-10-2026" },
+    ]);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.movingS, 13);
+    assert.equal(rows[0]?.distanceM, 99);
+    assert.equal(rows[0]?.idleS, 0);
+  });
+  it("ignores a missing body", () => {
+    assert.deepEqual(parseRiderDayStats(undefined), []);
   });
 });

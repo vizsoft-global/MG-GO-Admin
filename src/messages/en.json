@@ -1278,6 +1278,16 @@
         "active": "Active",
         "idle": "Idle",
         "alert": "Alert"
+      },
+      "archive": {
+        "title": "Load from archive",
+        "subtitle": "GPS history for {day}",
+        "banner": "{day} is older than 7 days and lives in the GPS archive.",
+        "load": "Load from archive",
+        "body": "GPS points for {day} are stored in the cold archive. Loading them reads the archive once for this rider and day.",
+        "feeNote": "Archive reads carry a small storage retrieval fee and are recorded in the activity log.",
+        "cancel": "Cancel",
+        "confirm": "Load"
       }
     },
     "drivers": {
@@ -8085,21 +8095,52 @@
             "offDays": "OFF days"
           },
           "columnOverrides": {
-            "drivers": { "todayDeliveries": "Deliveries today" },
-            "vehicles": { "year": "Model year", "kind": "Kind" },
-            "deliveries": { "date": "Created date" },
-            "attendance": { "date": "Log date" },
-            "earnings": { "date": "Earn date" },
-            "payouts": { "date": "Period start" },
-            "requests": { "date": "Created date" },
-            "visits": { "date": "Scheduled date" },
-            "notifications": { "date": "Created date" },
-            "esign": { "date": "Sent date" },
-            "fuel": { "date": "Filled date" },
-            "wrong_actions": { "date": "Occurred date" },
-            "documents": { "date": "Expiry date" },
-            "order_recon": { "date": "From date" },
-            "verifications": { "date": "Service date" }
+            "drivers": {
+              "todayDeliveries": "Deliveries today"
+            },
+            "vehicles": {
+              "year": "Model year",
+              "kind": "Kind"
+            },
+            "deliveries": {
+              "date": "Created date"
+            },
+            "attendance": {
+              "date": "Log date"
+            },
+            "earnings": {
+              "date": "Earn date"
+            },
+            "payouts": {
+              "date": "Period start"
+            },
+            "requests": {
+              "date": "Created date"
+            },
+            "visits": {
+              "date": "Scheduled date"
+            },
+            "notifications": {
+              "date": "Created date"
+            },
+            "esign": {
+              "date": "Sent date"
+            },
+            "fuel": {
+              "date": "Filled date"
+            },
+            "wrong_actions": {
+              "date": "Occurred date"
+            },
+            "documents": {
+              "date": "Expiry date"
+            },
+            "order_recon": {
+              "date": "From date"
+            },
+            "verifications": {
+              "date": "Service date"
+            }
           },
           "panelBannerTitle": "Clear by filter is a permanent delete",
           "panelBannerBody": "Pick a module, then choose values from its columns and review the matching rows before deleting. Only rows matching every filter are removed, with their storage objects and linked Auth users.",

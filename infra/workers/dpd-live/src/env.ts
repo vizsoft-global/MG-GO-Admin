@@ -29,4 +29,15 @@ export type Env = {
   FIREBASE_PROJECT_ID: string;
   /** Shared with the admin app's /api/live-tracking-v2/token route. */
   ADMIN_WS_TOKEN_SECRET: string;
+  /** R2 `dpd-gps-prod`. Optional so a deploy without the binding keeps working. */
+  GPS_ARCHIVE?: R2Bucket;
+  /** `r2` writes minute files and per-rider hourly files to `GPS_ARCHIVE`. */
+  GPS_SINK?: string;
+  /** 0–100: share of riders (by id hash) whose points reach the archive. */
+  GPS_SINK_PERCENT?: string;
+  /**
+   * `1` keeps writing `driver_location_events` for archived riders too, so the
+   * archive can be compared against Firestore before Firestore history stops.
+   */
+  GPS_DUAL_WRITE?: string;
 };

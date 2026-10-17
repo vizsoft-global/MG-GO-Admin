@@ -10,6 +10,10 @@ import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
+import { fetchEdgeHistory, fetchEdgeLatest, type EdgeArchivePoint } from "@/lib/fleet/edge-read";
+import { gpsR2Since } from "@/lib/fleet/gps-cutover";
+import { eventFromArchivePoint, kuwaitDay } from "@/features/locations/archive-event";
+import { bumpRiderSignals } from "@/lib/firebase/rider-signals";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { deleteObject } from "@/lib/storage/r2-client";
 import { isR2ObjectKey } from "@/lib/storage/r2-keys";
@@ -517,6 +521,21 @@ async function hydrateListRows(db: Firestore, rows: Row[]): Promise<DeliveryDbRo
   });
 }
 
+async function fetchGpsMockFlags(rows: Row[]): Promise<Map<string, boolean>> {
+  const result = new Map<string, boolean>();
+  const legacy: string[] = [];
+  for (const row of rows) {
+    const id = str(row.id);
+    if (!id) continue;
+    if (typeof row.gps_is_mocked === "boolean") result.set(id, row.gps_is_mocked);
+    else legacy.push(id);
+  }
+  const fromEvents = await fetchGpsMockFlagsByDeliveryIds(legacy);
+  for (const [id, mocked] of fromEvents) result.set(id, mocked);
+  return result;
+}
+
+/** Rows written before pickup/complete stamped `gps_is_mocked`. */
 async function fetchGpsMockFlagsByDeliveryIds(deliveryIds: string[]): Promise<Map<string, boolean>> {
   const result = new Map<string, boolean>();
   if (deliveryIds.length === 0) return result;
@@ -603,6 +622,56 @@ export async function fetchDeliveryDetailExtras(params: {
   return { proofs };
 }
 
+function timeMs(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "object" && "toMillis" in value && typeof value.toMillis === "function") {
+    return value.toMillis() as number;
+  }
+  const ms = new Date(value as string).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Trail + submit fix from the R2 archive for deliveries on/after the cutover. Null
+ * means "read Firestore": older day, archive-only day, edge down, or no tagged fixes.
+ */
+async function edgeDeliveryGps(deliveryId: string): Promise<{
+  gpsEvent: DriverLocationEvent | null;
+  trail: Array<{ lat: number; lng: number }>;
+} | null> {
+  const db = await openDb();
+  const snap = await db.collection(COLLECTIONS.deliveries).doc(deliveryId).get();
+  const row = snap.data();
+  const driverId = typeof row?.driver_id === "string" ? row.driver_id : null;
+  if (!row || !driverId) return null;
+  const startMs = timeMs(row.pickup_at) ?? timeMs(row.created_at);
+  if (startMs == null) return null;
+  const endMs = timeMs(row.delivered_at) ?? timeMs(row.cancelled_at) ?? startMs;
+
+  const since = await gpsR2Since(db);
+  const firstDay = kuwaitDay(startMs);
+  if (!since || firstDay < since) return null;
+  const days = [...new Set([firstDay, kuwaitDay(endMs)])];
+
+  const points: EdgeArchivePoint[] = [];
+  for (const day of days) {
+    const result = await fetchEdgeHistory(driverId, day, false);
+    if (result.kind !== "ok") return null;
+    for (const point of result.history.points) {
+      if (point.d === deliveryId || point.ad === deliveryId) points.push(point);
+    }
+  }
+  if (points.length === 0) return null;
+  points.sort((a, b) => a.t - b.t);
+  void logAdminRead("gps_archive", "fetchDeliveryGpsAudit", { deliveryId });
+
+  const submit = [...points].reverse().find((point) => point.d === deliveryId) ?? points[points.length - 1];
+  return {
+    gpsEvent: eventFromArchivePoint(driverId, submit),
+    trail: points.map((point) => ({ lat: point.la, lng: point.lo })),
+  };
+}
+
 export async function fetchDeliveryGpsAudit(deliveryId: string): Promise<{
   gpsEvent: DriverLocationEvent | null;
   trail: Array<{ lat: number; lng: number }>;
@@ -610,6 +679,8 @@ export async function fetchDeliveryGpsAudit(deliveryId: string): Promise<{
   await requireDeliveriesView();
   let gpsEvent: DriverLocationEvent | null = null;
   let trail: Array<{ lat: number; lng: number }> = [];
+  const edge = await edgeDeliveryGps(deliveryId).catch(() => null);
+  if (edge) return edge;
   try {
     const [event, events] = await Promise.all([
       fetchLocationEventByDeliveryId(deliveryId),
@@ -922,7 +993,7 @@ export async function fetchDeliveriesPage(
   }
 
   const hydrated = await hydrateListRows(db, loaded.rows);
-  const gpsFlags = await fetchGpsMockFlagsByDeliveryIds(hydrated.map((row) => row.id));
+  const gpsFlags = await fetchGpsMockFlags(loaded.rows);
   const mapped = await mapDeliveryDbRowsToListRows(hydrated, gpsFlags, { resolveAssets: false });
   const enriched = await enrichDeliveryListRows(mapped);
   return {
@@ -1240,6 +1311,14 @@ export async function updateDeliveryStatus(
       });
     }
     if (status === "verified") await sendDpdCongratsFor([str(existing.driver_id)]);
+    if (
+      existing.status !== status &&
+      status !== "verified" &&
+      status !== "rejected" &&
+      str(existing.driver_id)
+    ) {
+      await bumpRiderSignals([str(existing.driver_id)], ["home", "earnings"], `delivery:${status}`);
+    }
   } catch (sideEffectError) {
     console.error("[updateDeliveryStatus] post-update side effect failed", sideEffectError);
   }
@@ -1402,6 +1481,17 @@ export async function fetchLiveDriverLocationForDelivery(
 ): Promise<LiveDriverLocationForDelivery | null> {
   await requireDeliveriesView();
   if (!deliveryId || !driverId) return null;
+  const edge = (await fetchEdgeLatest(driverId))?.drivers.find((pin) => pin.driver_id === driverId);
+  if (edge) {
+    if (edge.active_delivery_id && edge.active_delivery_id !== deliveryId) return null;
+    return {
+      latitude: edge.lat,
+      longitude: edge.lng,
+      lastSeenAt: edge.recorded_at,
+      isMocked: edge.is_mocked,
+      headingDeg: edge.heading_deg,
+    };
+  }
   const db = await openDb();
   const direct = await db.collection(COLLECTIONS.driverLocations).doc(driverId).get();
   const snap = direct.exists
