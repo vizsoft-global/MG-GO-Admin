@@ -212,6 +212,16 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     category: "compliance",
   },
   {
+    slug: "compliance.view",
+    label: "View rider compliance",
+    category: "compliance",
+  },
+  {
+    slug: "compliance.manage",
+    label: "Upload rider compliance",
+    category: "compliance",
+  },
+  {
     slug: "documents.view",
     label: "View document expiry",
     category: "compliance",

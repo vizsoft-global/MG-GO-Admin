@@ -3,7 +3,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarOff, Download, FilterX, Loader2 } from "lucide-react";
+import { Calculator, CalendarOff, Download, FilterX, Loader2 } from "lucide-react";
+import { useRouter } from "@/i18n/navigation";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ const TABS: PayrollHubTab[] = ["payroll", "combined", "attendance-orders", "requ
 export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: PayrollHubTab }) {
   const t = useTranslations("pages.payroll");
   const locale = useLocale();
+  const router = useRouter();
   const { can } = useAuth();
   const canExport = can("payroll.export");
   const canManage = can("payroll.manage");
@@ -168,6 +170,15 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
         description={t("subtitle")}
         actions={
           <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9"
+              onClick={() => router.push("/payroll/pay-plan")}
+            >
+              <Calculator className="size-3.5" />
+              {t("payPlan.title")}
+            </Button>
             {canManage ? (
               <Button type="button" variant="outline" className="h-9" onClick={() => setOffOpen(true)}>
                 <CalendarOff className="size-3.5" />

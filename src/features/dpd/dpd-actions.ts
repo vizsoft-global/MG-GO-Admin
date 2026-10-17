@@ -7,6 +7,7 @@ import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
+import { bumpEpochs } from "@/lib/auth/auth-epochs";
 import {
   applyRestaurantLogoFromForm,
   deleteRestaurantLogoFiles,
@@ -145,6 +146,26 @@ async function dpdDb(): Promise<Firestore> {
   const db = await staffDb();
   if (!db) throw new Error("not_configured");
   return db;
+}
+
+/**
+ * Tell the rider Home dashboard that its cached configuration is stale.
+ *
+ * The rider Cloud Functions keep the active delivery rules, their scopes,
+ * incentive rules, tiers and banners in per-isolate memory keyed on the `config`
+ * counter of `auth_epochs/current`. Editing any of those collections from this
+ * panel has to move that counter, otherwise a rider can keep seeing the old
+ * rule for the 5 minute TTL.
+ *
+ * The bump is best-effort: a save the operator already completed must not fail
+ * because the counter write did, and the TTL still bounds the staleness.
+ */
+async function bumpRiderConfigEpoch(): Promise<void> {
+  try {
+    await bumpEpochs(await dpdDb(), "config");
+  } catch {
+    /* the cache TTL is the fallback */
+  }
 }
 
 function pgFail(err: unknown): PgLikeError {
@@ -829,6 +850,7 @@ export async function saveRestaurant(formData: FormData): Promise<DpdMutationRes
       logPgError("restaurants:update", error);
       return { error: "save_failed", errorDetail: formatPgErrorDetail(error) };
     }
+    await bumpRiderConfigEpoch();
     void logAdminMutation({
       action: "update",
       entityType: "restaurant",
@@ -860,6 +882,7 @@ export async function saveRestaurant(formData: FormData): Promise<DpdMutationRes
     );
   }
 
+  await bumpRiderConfigEpoch();
   void logAdminMutation({
     action: "create",
     entityType: "restaurant",
@@ -887,6 +910,7 @@ export async function deleteRestaurant(id: string): Promise<DpdMutationResult> {
   } catch {
     return { error: "delete_failed" };
   }
+  await bumpRiderConfigEpoch();
   void logAdminMutation({
     action: "delete",
     entityType: "restaurant",
@@ -984,6 +1008,8 @@ export async function saveDeliveryRule(formData: FormData): Promise<DpdMutationR
     };
   }
 
+  await bumpRiderConfigEpoch();
+
   void logAdminMutation({
     action: id ? "update" : "create",
     entityType: "delivery_rule",
@@ -1009,6 +1035,7 @@ export async function deleteDeliveryRule(id: string): Promise<DpdMutationResult>
   } catch {
     return { error: "delete_failed" };
   }
+  await bumpRiderConfigEpoch();
   void logAdminMutation({
     action: "delete",
     entityType: "delivery_rule",
@@ -1231,6 +1258,8 @@ export async function saveIncentiveRule(formData: FormData): Promise<DpdMutation
     };
   }
 
+  await bumpRiderConfigEpoch();
+
   void logAdminMutation({
     action: ruleId ? "update" : "create",
     entityType: "incentive_rule",
@@ -1257,6 +1286,7 @@ export async function deleteIncentiveRule(id: string): Promise<DpdMutationResult
   } catch {
     return { error: "delete_failed" };
   }
+  await bumpRiderConfigEpoch();
   void logAdminMutation({
     action: "delete",
     entityType: "incentive_rule",
@@ -1439,6 +1469,7 @@ export async function applyDpdTargetImport(
     created += 1;
   }
 
+  await bumpRiderConfigEpoch();
   void logAdminMutation({
     action: created > 0 && updated === 0 ? "create" : "update",
     entityType: "delivery_rule",
@@ -1591,6 +1622,7 @@ export async function applyIncentiveRuleImport(
     applied += 1;
   }
 
+  await bumpRiderConfigEpoch();
   void logAdminMutation({
     action: "create",
     entityType: "incentive_rule",

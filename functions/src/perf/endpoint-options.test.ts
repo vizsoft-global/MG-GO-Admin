@@ -7,7 +7,11 @@ import { describe, it } from "node:test";
  * Loading the TypeScript source under tsx exposes unset option getters as
  * circular objects; the built `__endpoint` is the deploy-time value.
  *
- * Stage A baseline, captured before the instrumentation edit.
+ * Stage A baseline, captured before the instrumentation edit. Unchanged by the
+ * Firestore cost programme: raising the global `concurrency` above 1 is rejected
+ * by Cloud Functions while `cpu` is 0.08 ("configured to allow concurrent
+ * execution and less than one full CPU"), and raising `cpu` would raise the
+ * per-instance rate for every legacy callable.
  */
 const BEFORE = {
   availableMemoryMb: 256,

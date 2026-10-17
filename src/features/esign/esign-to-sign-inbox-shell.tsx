@@ -101,13 +101,21 @@ export function EsignToSignInboxShell() {
   const [png, setPng] = useState("");
   const [reason, setReason] = useState("");
 
-  const rows = data?.rows ?? [];
+  const rows = (data?.rows ?? []).filter((row) => row.signer_status === "pending");
+
+  function failureMessage(error: string | undefined, fallback: string) {
+    if (error === "already_signed") return t("alreadySigned");
+    if (error === "already_declined") return t("alreadyDeclined");
+    if (error === "not_assigned") return t("notAssigned");
+    if (error === "not_ready") return t("notReady");
+    return fallback;
+  }
 
   async function sign() {
     if (!active || !png) return;
     const result = await submit.mutateAsync({ request_id: active.request_id, pngBase64: png });
     if (!result.ok) {
-      toast.error(result.error ?? t("signFailed"));
+      toast.error(failureMessage(result.error, t("signFailed")));
       return;
     }
     toast.success(t("signed"));
@@ -119,7 +127,11 @@ export function EsignToSignInboxShell() {
     if (!active) return;
     const result = await decline.mutateAsync({ request_id: active.request_id, reason });
     if (!result.ok) {
-      toast.error(result.error ?? t("declineFailed"));
+      toast.error(failureMessage(result.error, t("declineFailed")));
+      if (result.error === "already_signed" || result.error === "already_declined") {
+        setActive(null);
+        setReason("");
+      }
       return;
     }
     toast.success(t("declined"));

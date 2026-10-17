@@ -113,6 +113,7 @@ export type IncentiveContext = {
   deliveryRules: DeliveryRule[];
   deliveryScopesByRule: Map<string, RuleScope[]>;
   restaurantZoneById: Map<string, string | null>;
+  restaurantPartnerById: Map<string, string | null>;
   bandMathFrom: string | null;
 };
 
@@ -176,16 +177,19 @@ export async function loadIncentiveContext(): Promise<IncentiveContext> {
     ]);
   }
 
-  // Zone fallback needs only the restaurant's own `zone_id`, so the read is
-  // narrowed to the two fields the engine can use.
+  // The two fallbacks need only the restaurant's own `zone_id` and `partner_id`,
+  // so the read is narrowed to those fields.
   const restaurantZoneById = new Map<string, string | null>();
+  const restaurantPartnerById = new Map<string, string | null>();
   const restaurantSnap = await db
     .collection(COLLECTIONS.restaurants)
-    .select("zone_id")
+    .select("zone_id", "partner_id")
     .limit(SCAN_CAP)
     .get();
   for (const doc of restaurantSnap.docs) {
-    restaurantZoneById.set(doc.id, asString(doc.data()?.["zone_id"]));
+    const raw = doc.data() ?? {};
+    restaurantZoneById.set(doc.id, asString(raw["zone_id"]));
+    restaurantPartnerById.set(doc.id, asString(raw["partner_id"]));
   }
 
   return {
@@ -201,6 +205,7 @@ export async function loadIncentiveContext(): Promise<IncentiveContext> {
     deliveryRules,
     deliveryScopesByRule,
     restaurantZoneById,
+    restaurantPartnerById,
     bandMathFrom: settings.incentive_band_math_from,
   };
 }
@@ -220,6 +225,7 @@ export function dpdTargetForRule(context: IncentiveContext, ruleId: string, onDa
             restaurantId,
             onDate,
             restaurantZoneId: context.restaurantZoneById.get(restaurantId) ?? null,
+            restaurantPartnerId: context.restaurantPartnerById.get(restaurantId) ?? null,
             deliveryRules: context.deliveryRules,
             deliveryScopesByRule: context.deliveryScopesByRule,
           }),

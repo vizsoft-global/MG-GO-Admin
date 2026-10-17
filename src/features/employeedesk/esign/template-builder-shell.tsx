@@ -115,6 +115,39 @@ function blankField(templateId: string, sortOrder: number): DraftField {
 }
 
 /**
+ * The printed penalty boxes are one field (`penalty_action`) on the document
+ * tab. An author who opens on Employee Information never sees that row, so the
+ * checklist looks like it has no control. Fill empty options and, when the
+ * field itself is missing, add it so the checklist editor always has a row.
+ */
+function withPenaltyChecklist(templateId: string, rows: DraftField[]): DraftField[] {
+  const filled = rows.map((field) => {
+    if (!isPenaltyActionFieldKey(field.field_key)) return field;
+    const options = defaultPenaltyActionOptions(field);
+    if (options.length === field.options.filter((item) => item.trim()).length) return field;
+    return { ...field, options };
+  });
+  if (filled.some((field) => !field.removed && isPenaltyActionFieldKey(field.field_key))) {
+    return filled;
+  }
+  const sortOrder = filled.reduce((max, field) => Math.max(max, field.sort_order), 0) + 1;
+  const created = blankField(templateId, sortOrder);
+  return [
+    ...filled,
+    {
+      ...created,
+      field_key: "penalty_action",
+      label_en: "Penalty action",
+      label_ar: "إجراء الجزاء",
+      field_type: "select",
+      section_key: "document",
+      source_kind: "entry",
+      options: defaultPenaltyActionOptions({ field_key: "penalty_action", options: [] }),
+    },
+  ];
+}
+
+/**
  * EmployeeDesk V2 template builder.
  *
  * Two panes, matching the reference: a field list on the start side where every
@@ -175,12 +208,7 @@ export function TemplateBuilderShell({
   const [fields, setFields] = useState<DraftField[]>(() => {
     const sorted = [...template.fields].sort((a, b) => a.sort_order - b.sort_order);
     if (template.document_kind !== "penalty") return sorted;
-    return sorted.map((field) => {
-      if (!isPenaltyActionFieldKey(field.field_key)) return field;
-      const options = defaultPenaltyActionOptions(field);
-      if (options.length === field.options.filter((item) => item.trim()).length) return field;
-      return { ...field, options };
-    });
+    return withPenaltyChecklist(template.id, sorted);
   });
   const [selectedId, setSelectedId] = useState<string | null>(
     template.fields[0]?.id ?? null,
@@ -248,6 +276,10 @@ export function TemplateBuilderShell({
     [visibleFields],
   );
   const selected = visibleFields.find((f) => f.id === selectedId) ?? null;
+  const penaltyAction =
+    draft.document_kind === "penalty"
+      ? (visibleFields.find((field) => isPenaltyActionFieldKey(field.field_key)) ?? null)
+      : null;
 
   function patchDraft<K extends keyof typeof draft>(key: K, value: (typeof draft)[K]) {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -611,9 +643,13 @@ export function TemplateBuilderShell({
                       DOCUMENT_KINDS.map((k) => ({ value: k, label: t(`kinds.${k}`) })),
                     )}
                     value={draft.document_kind}
-                    onValueChange={(v) =>
-                      patchDraft("document_kind", v as EsignDocumentKind)
-                    }
+                    onValueChange={(v) => {
+                      const kind = v as EsignDocumentKind;
+                      patchDraft("document_kind", kind);
+                      if (kind === "penalty") {
+                        setFields((prev) => withPenaltyChecklist(template.id, prev));
+                      }
+                    }}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue />
@@ -720,6 +756,59 @@ export function TemplateBuilderShell({
                 </ToggleChip>
               ))}
             </div>
+            {penaltyAction ? (
+              <div className="space-y-2 border-b border-border px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">{t("penaltyChecklistTitle")}</p>
+                  <p className="text-[10px] text-muted-foreground">{t("penaltyOptionsHint")}</p>
+                </div>
+                <div className="space-y-1.5">
+                  {penaltyAction.options.map((option, index) => (
+                    <div key={`${penaltyAction.id}-${index}`} className="flex items-center gap-2">
+                      <span
+                        aria-hidden
+                        className="size-3.5 shrink-0 rounded-[2px] border border-neutral-400"
+                      />
+                      <Input
+                        className="h-9 text-xs"
+                        placeholder={t("optionPlaceholder")}
+                        value={option}
+                        onChange={(e) => {
+                          const next = [...penaltyAction.options];
+                          next[index] = e.target.value;
+                          patchField(penaltyAction.id, { options: next });
+                        }}
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-7 shrink-0 text-destructive hover:bg-destructive/10"
+                        aria-label={t("removeOption")}
+                        onClick={() =>
+                          patchField(penaltyAction.id, {
+                            options: penaltyAction.options.filter((_, i) => i !== index),
+                          })
+                        }
+                      >
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      patchField(penaltyAction.id, {
+                        options: [...penaltyAction.options, ""],
+                      })
+                    }
+                  >
+                    <Plus className="size-3.5" aria-hidden />
+                    {t("addOption")}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
             <CardContent className="divide-y divide-border p-0">
               {/* The system rows of the employee block, drawn as list rows with
                   their own `From the system` badge — the reference puts the badge
@@ -996,7 +1085,8 @@ export function TemplateBuilderShell({
                     stray comma. Blank rows are allowed while typing and dropped
                     on save, so a half-typed option does not block the write. */}
                 {(selected.field_type === "select" ||
-                  isPenaltyActionFieldKey(selected.field_key)) &&
+                  (isPenaltyActionFieldKey(selected.field_key) &&
+                    draft.document_kind !== "penalty")) &&
                 resolveFieldSource(selected) !== "fixed" ? (
                   <Field label={t("options")}>
                     <div className="space-y-1.5">

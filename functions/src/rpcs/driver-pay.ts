@@ -145,7 +145,15 @@ export function parsePayPlan(raw: unknown): PayPlan {
     };
   });
 
-  const ladderRaw = Array.isArray(row.invalid_ladder) ? row.invalid_ladder : null;
+  // `invalid_ladder` is what the panel writes. `invalidLadder` is the legacy
+  // camelCase spelling both TypeScript parsers still accept, so a document that
+  // carries only that key is read as the real ladder here too instead of as the
+  // SOP default. Nothing writes it today; this is a read-side tolerance only.
+  const ladderRaw = Array.isArray(row.invalid_ladder)
+    ? row.invalid_ladder
+    : Array.isArray(row.invalidLadder)
+      ? row.invalidLadder
+      : null;
   const ladder = ladderRaw ?? fallback.invalid_ladder;
   const plan: PayPlan = {
     base_kwd: num(row.base_kwd, fallback.base_kwd),

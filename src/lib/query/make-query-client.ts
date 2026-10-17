@@ -1,7 +1,17 @@
 import { QueryClient } from "@tanstack/react-query";
 
-const staleTime = 60_000;
-const gcTime = 5 * 60_000;
+/**
+ * Panel query defaults.
+ *
+ * `staleTime` used to be 60s, which meant every mounted screen re-read its
+ * Cloud Function on the minute even when the operator had not touched it — the
+ * panel's share of the Firestore bill was mostly this echo. Five minutes matches
+ * the server-side config cache TTL, so a screen that is merely re-rendered does
+ * not ask the backend for data it already has. Screens that genuinely need live
+ * data set their own `refetchInterval`.
+ */
+const staleTime = 5 * 60_000;
+const gcTime = 30 * 60_000;
 
 export function makeQueryClient(): QueryClient {
   return new QueryClient({

@@ -142,6 +142,14 @@ async function loadRetentionDays(key: RetentionSettingKey, fallback: number): Pr
   return Math.max(1, Math.floor(value));
 }
 
+/**
+ * Default retention windows, kept as tight as the audit trail allows.
+ *
+ * These are only the *defaults*: a stored `app_settings` value still wins, so a
+ * tenant that needs a longer window sets it rather than editing code. Each row
+ * kept here is a row every later purge pass has to read and delete, so a wide
+ * window is a permanent storage and write cost, not just a storage cost.
+ */
 function retentionStreamConfig(stream: RetentionStream): StreamConfig {
   switch (stream) {
     case "driver_operation_events":
@@ -149,7 +157,7 @@ function retentionStreamConfig(stream: RetentionStream): StreamConfig {
         collection: COLLECTIONS.driverOperationEvents,
         atField: "occurred_at",
         settingsKey: "driver_ops_log_retention_days",
-        defaultDays: 90,
+        defaultDays: 30,
       };
     case "driver_location_events":
       // SQL column is `recorded_at`; the ported stream stores it as `at`.
@@ -157,14 +165,14 @@ function retentionStreamConfig(stream: RetentionStream): StreamConfig {
         collection: COLLECTIONS.driverLocationEvents,
         atField: FIELDS.driverLocations.at,
         settingsKey: "driver_location_events_retention_days",
-        defaultDays: 180,
+        defaultDays: 90,
       };
     case "driver_telemetry_events":
       return {
         collection: COLLECTIONS.driverTelemetryEvents,
         atField: "server_received_at",
         settingsKey: "driver_telemetry_retention_days",
-        defaultDays: 14,
+        defaultDays: 7,
       };
     default: {
       const unhandled: never = stream;

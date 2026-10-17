@@ -25,12 +25,9 @@ import {
   outgoingHubDraftDecision,
 } from "./outgoing-hub-categories";
 import { fetchMyDeskGrants } from "./desk-grants-actions";
-import {
-  defaultPenaltyActionOptions,
-  isPenaltyActionFieldKey,
-  PENALTY_VISIBLE_FIELD_KEY,
-} from "./esign-penalty-checks";
 import { CHUNK_SIZE } from "./render/esign-batch-cap";
+import { filledEsignDocumentInput } from "./render/esign-filled-sheet";
+import { buildEsignDocumentHtml } from "./render/esign-document-html";
 import { launchEsignBrowser, renderEsignPdf } from "./render/esign-pdf-renderer";
 // Fallback: unsigned template PDFs still compile here via renderEsignPdf (needs Chrome). Signed copies are esignComposeSignedDocument.
 import { snapshotValues, type EsignEmployeeSnapshot } from "./render/esign-placeholders";
@@ -671,78 +668,32 @@ function documentForLocale(
   fieldValues: Record<string, string>,
   description: string,
   logoUrl?: string | null,
+  requestCode?: string,
 ) {
-  const fields = template.fields.map((f) => ({
-    key: f.field_key,
-    label: f.label_en,
-    labelEn: f.label_en,
-    labelAr: f.label_ar || f.label_en,
-    value: fieldValues[f.field_key] ?? "",
-    section: f.section_key,
-    source: f.source_kind,
-    ...(isPenaltyActionFieldKey(f.field_key)
-      ? { options: defaultPenaltyActionOptions(f) }
-      : {}),
-  }));
-  const visible = fieldValues[PENALTY_VISIBLE_FIELD_KEY]?.trim();
-  if (visible) {
-    fields.push({
-      key: PENALTY_VISIBLE_FIELD_KEY,
-      label: "",
-      labelEn: "",
-      labelAr: "",
-      value: visible,
-      section: "document",
-      source: "entry",
-    });
-  }
-  const absenceSpecs: Array<{
-    key: string;
-    aliases: readonly string[];
-    en: string;
-    ar: string;
-  }> = [
-    { key: "absence_from", aliases: ["from_date", "absent_from"], en: "From", ar: "من" },
-    { key: "absence_to", aliases: ["to_date", "absent_to"], en: "To", ar: "إلى" },
-  ];
-  for (const spec of absenceSpecs) {
-    const value =
-      fieldValues[spec.key]?.trim() ||
-      spec.aliases.map((alias) => fieldValues[alias]?.trim()).find(Boolean) ||
-      "";
-    if (
-      !value ||
-      fields.some((field) => field.key === spec.key || spec.aliases.includes(field.key))
-    ) {
-      continue;
-    }
-    fields.push({
-      key: spec.key,
-      label: spec.en,
-      labelEn: spec.en,
-      labelAr: spec.ar,
-      value,
-      section: "document",
-      source: "entry",
-    });
-  }
-  return {
-    language: "en" as const,
-    kind: template.document_kind,
-    headerEn: template.header_en,
-    headerAr: template.header_ar,
-    bodyEn: template.body_en,
-    bodyAr: template.body_ar,
-    declarationEn: template.declaration_en,
-    declarationAr: template.declaration_ar,
-    header: template.header_en,
-    body: template.body_en,
-    declaration: template.declaration_en,
+  return filledEsignDocumentInput({
+    template,
+    snapshot,
+    fieldValues,
     description,
-    fields,
-    employee: snapshot,
     logoUrl,
-  };
+    requestCode,
+  });
+}
+
+/** The request code is allocated inside create, after the first PDF upload. Rewrite that object so Document ID is SIG-####. */
+async function sheetHtmlForStoredPdf(
+  sheet: ReturnType<typeof documentForLocale>,
+  requestCode: unknown,
+  storageKey: string,
+  browser: Awaited<ReturnType<typeof launchEsignBrowser>>,
+): Promise<string> {
+  const code = requestCode != null ? String(requestCode).trim() : "";
+  if (!code) return buildEsignDocumentHtml(sheet);
+  const stamped = { ...sheet, requestCode: code };
+  const pdf = await renderEsignPdf(stamped, browser);
+  const replaced = await putEsignObject(storageKey, pdf, "application/pdf");
+  if (!replaced.ok) return buildEsignDocumentHtml(sheet);
+  return buildEsignDocumentHtml(stamped);
 }
 
 async function uploadPdfBytes(
@@ -794,17 +745,15 @@ export async function createEsignFromTemplate(input: {
   const logoUrl = await esignSheetLogoUrl();
   const browser = await launchEsignBrowser();
   try {
-    const pdf = await renderEsignPdf(
-      documentForLocale(
-        loaded.template,
-        input.locale,
-        snap.snapshot,
-        fieldValues,
-        input.description ?? "",
-        logoUrl,
-      ),
-      browser,
+    const sheet = documentForLocale(
+      loaded.template,
+      input.locale,
+      snap.snapshot,
+      fieldValues,
+      input.description ?? "",
+      logoUrl,
     );
+    const pdf = await renderEsignPdf(sheet, browser);
     const upload = await uploadPdfBytes(pdf);
     if (!upload.ok) return { ok: false, error: upload.error };
 
@@ -832,6 +781,10 @@ export async function createEsignFromTemplate(input: {
       after: { request_code: result.request_code, template_id: input.template_id },
     });
     const id = result.id != null ? String(result.id) : undefined;
+    if (id) {
+      const sheetHtml = await sheetHtmlForStoredPdf(sheet, result.request_code, upload.key, browser);
+      await patchDoc(COLLECTIONS.esignRequests, id, { sheet_html: sheetHtml });
+    }
     if (id && input.resent_from_id) {
       const linked = await callAdminFunction("admin_link_esign_resend", {
         p_id: id,
@@ -1433,17 +1386,15 @@ export async function runEsignBatchChunk(input: {
       const values: Record<string, string> = {};
       for (const [k, v] of Object.entries(fieldValues)) values[k] = String(v ?? "");
       try {
-        const pdf = await renderEsignPdf(
-          documentForLocale(
-            loaded.template,
-            locale,
-            snapshot,
-            values,
-            row.description != null ? String(row.description) : "",
-            logoUrl,
-          ),
-          browser,
+        const sheet = documentForLocale(
+          loaded.template,
+          locale,
+          snapshot,
+          values,
+          row.description != null ? String(row.description) : "",
+          logoUrl,
         );
+        const pdf = await renderEsignPdf(sheet, browser);
         const upload = await uploadPdfBytes(pdf);
         if (!upload.ok) throw new Error(upload.error);
         const { data: createdRow, error: createError } = await callRpc(Boolean(input.asWorker))(
@@ -1466,6 +1417,11 @@ export async function runEsignBatchChunk(input: {
         if (createError) throw new Error(createError.message);
         const result = asRecord(createdRow);
         if (result.ok === false) throw new Error(String(result.error ?? "failed"));
+        const requestId = result.id != null ? String(result.id) : "";
+        if (requestId) {
+          const sheetHtml = await sheetHtmlForStoredPdf(sheet, result.request_code, upload.key, browser);
+          await patchDoc(COLLECTIONS.esignRequests, requestId, { sheet_html: sheetHtml });
+        }
         created += 1;
       } catch (err) {
         await patchDoc(COLLECTIONS.esignBatchRows, rowId, {

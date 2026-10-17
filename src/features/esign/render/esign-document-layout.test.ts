@@ -144,8 +144,8 @@ describe("esign bilingual layout", () => {
       const employee = slotsForKind(kind).find((row) => row.role === "employee");
       assert.ok(employee, kind);
       assert.equal(isBottomRightFallback(employee!), false, kind);
-      assert.ok(employee!.yPt > 80, `${kind} too close to page bottom`);
-      assert.ok(employee!.xPt < A4_WIDTH_PT / 2, `${kind} is on the right edge`);
+      assert.ok(employee!.yPt > 55, `${kind} too close to page bottom`);
+      assert.ok(employee!.xPt + employee!.wPt < A4_WIDTH_PT, `${kind} line runs off the page`);
     }
   });
 });

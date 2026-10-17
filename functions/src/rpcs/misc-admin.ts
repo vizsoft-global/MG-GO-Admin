@@ -1,4 +1,4 @@
-﻿import { HttpsError, onCall } from "firebase-functions/v2/https";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
 import {
   getFirestore,
   FieldPath,
@@ -7,7 +7,7 @@ import {
   type QueryDocumentSnapshot,
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
-import { requireStaff, requireStaffAny } from "../core/staff";
+import { requireStaff, requireStaffFresh, requireStaffAny } from "../core/staff";
 import { kuwaitDayString } from "../core/kuwait";
 import { applyDeliveryRollup } from "../core/rollups";
 import { stampStoredRow } from "../core/search-text";
@@ -104,7 +104,7 @@ function textOrNull(value: unknown): string | null {
 }
 
 /**
- * `driver_list_notifications` â€” the rider inbox.
+ * `driver_list_notifications` — the rider inbox.
  *
  * Dismissed rows are gone from the list but stay in `notification_dispatch_items`
  * because the admin engagement report reads `opened_at` / `clicked_at` off the
@@ -166,7 +166,7 @@ export const driverListNotifications = onCall(async (request) => {
  * `driver_mark_notifications_read`.
  *
  * Only rows that were unread are touched, so the returned count is the number the
- * rider actually cleared rather than the number they asked about â€” which is what
+ * rider actually cleared rather than the number they asked about — which is what
  * the app uses to decide whether to re-render the badge.
  */
 export const driverMarkNotificationsRead = onCall(async (request) => {
@@ -238,7 +238,7 @@ export const driverMarkNotificationsRead = onCall(async (request) => {
   return candidates.length;
 });
 
-/** `driver_dismiss_notifications` â€” soft-clear, never a delete. */
+/** `driver_dismiss_notifications` — soft-clear, never a delete. */
 export const driverDismissNotifications = onCall(async (request) => {
   const driverId = requireDriverId(request);
   const data = (request.data ?? {}) as Record<string, unknown>;
@@ -296,7 +296,7 @@ export const driverDismissNotifications = onCall(async (request) => {
 });
 
 /**
- * `notify_driver_transactional` â€” the campaign, its run and the single inbox row.
+ * `notify_driver_transactional` — the campaign, its run and the single inbox row.
  *
  * Exposed as a callable because the panel's request/visit actions reach it
  * through `.rpc(...)`; the write itself is the shared helper the other modules
@@ -333,7 +333,7 @@ export const notifyDriverTransactional = onCall(async (request) => {
 });
 
 /**
- * `admin_expire_stale_pickups` â€” a stuck `in_transit` pickup blocks the rider from
+ * `admin_expire_stale_pickups` — a stuck `in_transit` pickup blocks the rider from
  * logging any further order, so the sweep is a recovery path, not housekeeping.
  *
  * The SQL compared `COALESCE(pickup_at, created_at)`, which is two queries in
@@ -341,7 +341,7 @@ export const notifyDriverTransactional = onCall(async (request) => {
  * is the `pickup_at IS NULL` half, matched on `created_at`.
  */
 export const adminExpireStalePickups = onCall(async (request) => {
-  await requireStaff(request, "deliveries.manage");
+  await requireStaffFresh(request, "deliveries.manage");
 
   const db = getFirestore();
   const settingsSnap = await db.collection(COLLECTIONS.appSettings).doc("main").get();
@@ -440,7 +440,7 @@ export const adminExpireStalePickups = onCall(async (request) => {
 });
 
 /**
- * `driver_ops_audit_health` â€” the probe the retention cron surfaces to Sentry.
+ * `driver_ops_audit_health` — the probe the retention cron surfaces to Sentry.
  *
  * The SQL asked Vault for a DSN and opened a dblink to prove the autonomous
  * audit path could still write. Firestore has no second connection to prove, so

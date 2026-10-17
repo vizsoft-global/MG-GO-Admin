@@ -20,7 +20,7 @@ import {
   type WriteBatch,
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
-import { requireStaff } from "../core/staff";
+import { requireStaff, requireStaffFresh } from "../core/staff";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { roundKwd } from "../core/money";
 import {
@@ -608,7 +608,7 @@ async function payoutOverlapExists(
 
 /** `generate_payout_run(p_period_start, p_period_end, p_driver_ids, p_notes)` → run id. */
 export const generatePayoutRun = onCall(async (request) => {
-  const staff = await requireStaff(request, "earnings.manage");
+  const staff = await requireStaffFresh(request, "earnings.manage");
   const data = (request.data ?? {}) as Dict;
   const { start, end } = requireRange(
     data,
@@ -742,7 +742,7 @@ async function loadRunLineRefs(runId: string): Promise<
 
 /** `approve_payout_run(p_run_id)`. */
 export const approvePayoutRun = onCall(async (request) => {
-  const staff = await requireStaff(request, "earnings.manage");
+  const staff = await requireStaffFresh(request, "earnings.manage");
   const data = (request.data ?? {}) as Dict;
   const runId = requireRunId(data);
   const db = getFirestore();
@@ -823,7 +823,7 @@ export const approvePayoutRun = onCall(async (request) => {
 
 /** `mark_payout_run_paid(p_run_id, p_paid_at, p_reference)`. */
 export const markPayoutRunPaid = onCall(async (request) => {
-  const staff = await requireStaff(request, "earnings.manage");
+  const staff = await requireStaffFresh(request, "earnings.manage");
   const data = (request.data ?? {}) as Dict;
   const runId = requireRunId(data);
   const paidAt = Timestamp.fromDate(pickInstant(data, "paidAt", "p_paid_at") ?? new Date());
@@ -864,7 +864,7 @@ export const markPayoutRunPaid = onCall(async (request) => {
 
 /** `void_payout_run(p_run_id, p_reason)` — a no-op for a missing or already-voided run. */
 export const voidPayoutRun = onCall(async (request) => {
-  await requireStaff(request, "earnings.manage");
+  await requireStaffFresh(request, "earnings.manage");
   const data = (request.data ?? {}) as Dict;
   const runId = requireRunId(data);
   const reason = pickText(data, "reason", "p_reason");

@@ -67,3 +67,30 @@ export async function writeWithEpoch<T>(
   const written = await writeWithEpochCounters(db, kinds, mutate);
   return written.result;
 }
+
+/**
+ * Counters a panel writer may bump outside a transaction.
+ *
+ * `config` has no reader on this side: it is the key the rider Cloud Functions
+ * use for the delivery rules, incentive rules, tiers and banners they hold in
+ * their isolate cache (`functions/src/core/config-cache.ts`). A panel writer
+ * that edits any of those collections bumps this counter so the next rider Home
+ * call rebuilds that cache instead of waiting for the 5 minute TTL.
+ */
+export type EpochCounterKey = EpochKind | "config";
+
+/**
+ * Standalone counter bump for a writer that is not already inside a transaction.
+ * The data write and the counter are two commits on purpose: a failed bump must
+ * not roll back a save the operator just made, and the TTL is the fallback.
+ */
+export async function bumpEpochs(
+  db: Firestore,
+  kinds: EpochCounterKey | readonly EpochCounterKey[],
+): Promise<void> {
+  const list = (Array.isArray(kinds) ? kinds : [kinds]) as readonly EpochCounterKey[];
+  if (list.length === 0) return;
+  const patch: Record<string, ReturnType<typeof FieldValue.increment>> = {};
+  for (const kind of list) patch[kind] = FieldValue.increment(1);
+  await db.collection(COLLECTIONS.authEpochs).doc(AUTH_EPOCHS_DOC_ID).set(patch, { merge: true });
+}

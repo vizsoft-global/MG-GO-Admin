@@ -4,7 +4,7 @@ import { getFirestore, type Query } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayRange, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { parseId, parseIdList } from "../core/query";
-import { requireStaff } from "../core/staff";
+import { requireStaff, requireStaffFresh } from "../core/staff";
 import { overlayZoneMonthDocs } from "../core/rollups";
 import { EMPTY_ROW, asDate, loadAllDocs, loadDocMap, num, toRow, type Row } from "./fleet";
 
@@ -254,7 +254,7 @@ export const adminListPerformanceTargetDpd = onCall(async (request) => {
 });
 
 export const adminUpsertPerformanceTargetDpd = onCall(async (request) => {
-  await requireStaff(request);
+  await requireStaffFresh(request);
 
   const data = (request.data ?? {}) as Dict;
   const month = requireDay(data.month, "month").slice(0, 7) + "-01";

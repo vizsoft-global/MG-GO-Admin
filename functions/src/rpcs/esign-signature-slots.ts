@@ -31,139 +31,29 @@ export type EsignDocumentKind = "penalty" | "loan" | "payslip" | "general";
 
 const KINDS: readonly EsignDocumentKind[] = ["penalty", "loan", "payslip", "general"];
 
-function fromTop(top: number, height: number): number {
-  return A4_HEIGHT_PT - top - height;
-}
-
-function slot(
-  id: string,
-  role: SignSlotRole,
-  top: number,
-  x: number,
-  w: number,
-  h: number,
-  page = 1,
-): SignSlot {
-  return { id, role, page, xPt: x, yPt: fromTop(top, h), wPt: w, hPt: h };
-}
-
-const FIGMA_PAD_TOP = 20;
-const FIGMA_STACK = 2;
-const FIGMA_PAD_X = 24;
-const FIGMA_CONTENT_W = 547;
-const FIGMA_LABEL_COL = 168;
-const FIGMA_LABEL_GAP = 8;
-const FIGMA_LINE_W = 180;
-const FIGMA_LINE_H = 16;
-const FIGMA_ROW_H = 26;
-
-type FigmaGeom =
-  | { h: number }
-  | { h: number; line: "employee" }
-  | { h: number; boxes: Array<{ role: SignSlotRole; w: number; boxH: number }> }
-  | { h: number; decision: "hr" | "ceo"; boxW: number; boxH: number; dy: number }
-  | { h: number; ack: "ack_received" | "ack_not_received"; boxW: number; boxH: number; dy: number };
-
-const LINE_X = FIGMA_PAD_X + FIGMA_LABEL_COL + FIGMA_LABEL_GAP;
-const LINE_DY = (FIGMA_ROW_H - FIGMA_LINE_H) / 2;
-
-/** Keep identical to PENALTY_GEOM / LOAN_GEOM in esign-document-layout.ts. */
-const PENALTY_GEOM: FigmaGeom[] = [
-  { h: 18 },
-  { h: 1 },
-  { h: 20 },
-  { h: 26 },
-  { h: 26 },
-  { h: 26 },
-  { h: 26 },
-  { h: 26 },
-  { h: 20 },
-  { h: 26 },
-  { h: 26 },
-  { h: 20 },
-  { h: 18 },
-  { h: 18 },
-  { h: 18 },
-  { h: 18 },
-  { h: 18 },
-  { h: 18 },
-  { h: 18 },
-  { h: 18 },
-  { h: 18 },
-  { h: 18 },
-  { h: 18 },
-  { h: 26 },
-  { h: 26, line: "employee" },
-  { h: 20 },
-  { h: 36, boxes: [{ role: "hr", w: 140, boxH: 36 }, { role: "gm", w: 140, boxH: 36 }] },
-  { h: 14 },
-  { h: 16 },
-  { h: 26 },
-  { h: 22 },
+/** Ruled lines on the client sheet dock. Keep identical to esign-document-layout.ts. */
+export const PENALTY_SLOTS: SignSlot[] = [
+  { id: "employee", role: "employee", page: 1, xPt: 446, yPt: 191, wPt: 119, hPt: 23 },
+  { id: "hr", role: "hr", page: 1, xPt: 172, yPt: 69, wPt: 119, hPt: 23 },
+  { id: "gm", role: "gm", page: 1, xPt: 379, yPt: 69, wPt: 119, hPt: 23 },
 ];
 
-const LOAN_GEOM: FigmaGeom[] = [
-  { h: 18 },
-  { h: 1 },
-  { h: 20 },
-  { h: 26 },
-  { h: 26 },
-  { h: 26 },
-  { h: 26 },
-  { h: 26 },
-  { h: 26 },
-  { h: 20 },
-  { h: 26 },
-  { h: 26 },
-  { h: 26 },
-  { h: 26 },
-  { h: 26 },
-  { h: 26 },
-  { h: 26, line: "employee" },
-  { h: 20 },
-  { h: 48, decision: "hr", boxW: 120, boxH: 32, dy: 4 },
-  { h: 48, decision: "ceo", boxW: 120, boxH: 32, dy: 4 },
-  { h: 26 },
-  { h: 26 },
-  { h: 64, ack: "ack_received", boxW: 130, boxH: 30, dy: 16 },
-  { h: 64, ack: "ack_not_received", boxW: 130, boxH: 30, dy: 16 },
+export const LOAN_SLOTS: SignSlot[] = [
+  { id: "employee", role: "employee", page: 1, xPt: 446, yPt: 307, wPt: 119, hPt: 23 },
+  { id: "hr", role: "hr", page: 1, xPt: 172, yPt: 184, wPt: 119, hPt: 23 },
+  { id: "ceo", role: "ceo", page: 1, xPt: 379, yPt: 184, wPt: 119, hPt: 23 },
+  { id: "ack_received", role: "ack_received", page: 1, xPt: 429, yPt: 117, wPt: 119, hPt: 23 },
+  { id: "ack_not_received", role: "ack_not_received", page: 1, xPt: 436, yPt: 59, wPt: 119, hPt: 23 },
 ];
-
-function slotsFromGeom(steps: FigmaGeom[]): SignSlot[] {
-  let y = FIGMA_PAD_TOP;
-  const out: SignSlot[] = [];
-  for (const step of steps) {
-    if ("line" in step) {
-      out.push(slot(step.line, step.line, y + LINE_DY, LINE_X, FIGMA_LINE_W, FIGMA_LINE_H));
-    } else if ("boxes" in step) {
-      let x = FIGMA_PAD_X;
-      for (const box of step.boxes) {
-        out.push(slot(box.role, box.role, y, x, box.w, box.boxH));
-        x += box.w + 12;
-      }
-    } else if ("decision" in step) {
-      const x = FIGMA_PAD_X + FIGMA_CONTENT_W - step.boxW;
-      out.push(slot(step.decision, step.decision, y + step.dy, x, step.boxW, step.boxH));
-    } else if ("ack" in step) {
-      out.push(slot(step.ack, step.ack, y + step.dy, FIGMA_PAD_X, step.boxW, step.boxH));
-    }
-    y += step.h + FIGMA_STACK;
-  }
-  return out;
-}
-
-export const PENALTY_SLOTS: SignSlot[] = slotsFromGeom(PENALTY_GEOM);
-
-export const LOAN_SLOTS: SignSlot[] = slotsFromGeom(LOAN_GEOM);
 
 export const PAYSLIP_SLOTS: SignSlot[] = [
-  slot("employee", "employee", 620, 48, 499, 22),
-  slot("hr", "hr", 670, 48, 140, 36),
+  { id: "employee", role: "employee", page: 1, xPt: 167, yPt: 69, wPt: 119, hPt: 23 },
+  { id: "hr", role: "hr", page: 1, xPt: 435, yPt: 69, wPt: 119, hPt: 23 },
 ];
 
 export const GENERAL_SLOTS: SignSlot[] = [
-  slot("employee", "employee", 620, 48, 499, 22),
-  slot("hr", "hr", 670, 48, 140, 36),
+  { id: "employee", role: "employee", page: 1, xPt: 446, yPt: 191, wPt: 119, hPt: 23 },
+  { id: "hr", role: "hr", page: 1, xPt: 172, yPt: 69, wPt: 119, hPt: 23 },
 ];
 
 export function normalizeDocumentKind(value: unknown): EsignDocumentKind {

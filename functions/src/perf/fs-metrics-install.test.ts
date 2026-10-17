@@ -29,18 +29,26 @@ function classesWithoutAggregate(): FsMetricClasses {
   };
 }
 
+/**
+ * The installed fake must answer every read `requireStaff` makes: it reads the
+ * profile and the `auth_epochs/current` counter in one `getAll`.
+ */
 function fakeDb() {
+  const missing = { exists: false, data: () => undefined };
   return {
     collection() {
       return {
         doc() {
           return {
             async get() {
-              return { exists: false, data: () => undefined };
+              return missing;
             },
           };
         },
       };
+    },
+    async getAll(...refs: unknown[]) {
+      return refs.map(() => missing);
     },
   };
 }

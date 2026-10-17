@@ -29,7 +29,7 @@ import {
   monthLabel,
   parseMonthKey,
 } from "../core/kuwait";
-import { requireStaff, type StaffContext } from "../core/staff";
+import { requireStaff, requireStaffFresh, type StaffContext } from "../core/staff";
 import {
   BATCH_LIMIT,
   chunk,
@@ -278,7 +278,7 @@ const zoneMetricDocId = (zoneId: string, periodMonth: string) => `${zoneId}__${p
  * way the SQL's RAISE rolled the whole call back.
  */
 export const adminApplyPayrollAdjustments = onCall(async (request) => {
-  const staff = await requireStaff(request, "payroll.manage");
+  const staff = await requireStaffFresh(request, "payroll.manage");
   requirePayrollManager(staff);
   const data = argDict(request.data);
   const db = getFirestore();
@@ -969,7 +969,7 @@ export const adminPayrollZoneSettings = onCall(async (request) => {
  * every zone of that month against the new thresholds from the efficiency in force.
  */
 export const adminSavePayrollZoneSettings = onCall(async (request) => {
-  const staff = await requireStaff(request, "payroll.manage");
+  const staff = await requireStaffFresh(request, "payroll.manage");
   requirePayrollManager(staff);
   const data = argDict(request.data);
   const db = getFirestore();
@@ -1039,7 +1039,7 @@ export const adminSavePayrollZoneSettings = onCall(async (request) => {
  * "back to the computed value", which is also the reset path.
  */
 export const adminSavePayrollZoneOverride = onCall(async (request) => {
-  const staff = await requireStaff(request, "payroll.manage");
+  const staff = await requireStaffFresh(request, "payroll.manage");
   requirePayrollManager(staff);
   const data = argDict(request.data);
   const db = getFirestore();
@@ -1156,7 +1156,7 @@ export const adminSavePayrollZoneOverride = onCall(async (request) => {
  * must not discard an Ops decision, so efficiency is re-derived through them.
  */
 export const adminRecomputePayrollZoneMetrics = onCall(async (request) => {
-  const staff = await requireStaff(request, "payroll.manage");
+  const staff = await requireStaffFresh(request, "payroll.manage");
   requirePayrollManager(staff);
   const data = argDict(request.data);
   const db = getFirestore();

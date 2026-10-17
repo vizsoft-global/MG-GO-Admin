@@ -3,11 +3,40 @@ import { FieldValue, type Firestore, type Transaction } from "firebase-admin/fir
 const EPOCH_COLLECTION = "auth_epochs";
 const EPOCH_DOC_ID = "current";
 
-export type EpochKind = "access" | "settings" | "menu";
+export type EpochKind = "access" | "settings" | "menu" | "config";
 
 export type EpochWrite = {
   tx: Transaction;
 };
+
+function incrementPatch(
+  kinds: readonly EpochKind[],
+): Record<string, ReturnType<typeof FieldValue.increment>> {
+  const patch: Record<string, ReturnType<typeof FieldValue.increment>> = {};
+  for (const kind of kinds) patch[kind] = FieldValue.increment(1);
+  return patch;
+}
+
+/**
+ * Standalone counter bump for a writer that is not a transaction.
+ *
+ * Delivery/incentive rule saves already run inside their own `WriteBatch`, and
+ * folding them into one `runTransaction` would change what a partially failed
+ * save leaves behind. The counter therefore moves in its own write right after
+ * the data lands: the config cache then drops the old fleet-wide copy on the
+ * next call instead of waiting for the TTL safety net.
+ */
+export async function bumpEpoch(
+  db: Firestore,
+  kinds: EpochKind | readonly EpochKind[],
+): Promise<void> {
+  const list = (Array.isArray(kinds) ? kinds : [kinds]) as readonly EpochKind[];
+  if (list.length === 0) return;
+  await db
+    .collection(EPOCH_COLLECTION)
+    .doc(EPOCH_DOC_ID)
+    .set(incrementPatch(list), { merge: true });
+}
 
 /**
  * One transaction: the caller's writes, then FieldValue.increment(1) on each
@@ -24,9 +53,7 @@ export async function writeWithEpoch<T>(
   return db.runTransaction(async (tx) => {
     const result = await mutate({ tx });
     if (list.length > 0) {
-      const patch: Record<string, ReturnType<typeof FieldValue.increment>> = {};
-      for (const kind of list) patch[kind] = FieldValue.increment(1);
-      tx.set(epochRef, patch, { merge: true });
+      tx.set(epochRef, incrementPatch(list), { merge: true });
     }
     return result;
   });

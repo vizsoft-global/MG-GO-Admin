@@ -1,5 +1,10 @@
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import { getR2ObjectBytes, headR2Object, putR2Object, r2ConfigFromEnv } from "../core/r2-esign";
+import {
+  esignStorageConfigured,
+  headEsignStoredObject,
+  putEsignStoredObject,
+  readEsignStoredObject,
+} from "../core/esign-object-store";
 import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff, type StaffContext } from "../core/staff";
@@ -9,6 +14,8 @@ import {
   MAX_SOURCE_BYTES,
   composeSignedPdf,
   esignObjectPath,
+  parseStampLayout,
+  placementFromLayout,
   sniff,
   validateImage,
 } from "./esign-compose-logic";
@@ -72,13 +79,17 @@ export const esignComposeSignedDocument = onCall(
       return { ok: false, error: code, request_id: requestId, ...extra };
     }
 
-    if (!r2ConfigFromEnv()) {
+    if (!esignStorageConfigured()) {
       return { ok: false, error: "server_misconfigured" };
     }
 
-    if (textOrNull(row.signed_document_storage_key) === outputKey) {
+    const data = (request.data ?? {}) as Dict;
+    const layoutNewer = stampMillis(row.stamp_layout_at) > stampMillis(row.signed_document_generated_at);
+    const force = data.force === true || data.p_force === true || layoutNewer;
+
+    if (!force && textOrNull(row.signed_document_storage_key) === outputKey) {
       try {
-        const existing = await headR2Object(esignObjectPath(outputKey));
+        const existing = await headEsignStoredObject(esignObjectPath(outputKey));
         if (existing.exists) {
           return {
             ok: true,
@@ -135,6 +146,21 @@ export const esignComposeSignedDocument = onCall(
       signedAt,
       textOrNull(row.request_code) ?? "",
     ];
+    const snapshot =
+      row.employee_snapshot && typeof row.employee_snapshot === "object"
+        ? (row.employee_snapshot as Dict)
+        : {};
+    const snapshotText = (key: string) => textOrNull(snapshot[key]) ?? "";
+    const placement = placementFromLayout(parseStampLayout(row.stamp_layout) ?? { pieces: [] }, {
+      name: captions[0] ?? "",
+      date: captions[1] ?? "",
+      code: captions[2] ?? "",
+      employeeId: snapshotText("employee_id") || (textOrNull(row.employee_id) ?? ""),
+      company: snapshotText("company_name"),
+      position: snapshotText("position"),
+      civilId: snapshotText("civil_id"),
+      zone: snapshotText("zone"),
+    });
 
     let pdfBytes: Uint8Array;
     let pageCount = 0;
@@ -147,6 +173,7 @@ export const esignComposeSignedDocument = onCall(
         captions,
         kind: row.document_kind,
         persistedSlots: row.signature_slots,
+        placement,
       });
       pdfBytes = composed.pdfBytes;
       pageCount = composed.pageCount;
@@ -161,7 +188,7 @@ export const esignComposeSignedDocument = onCall(
     }
 
     try {
-      await putR2Object(esignObjectPath(outputKey), Buffer.from(pdfBytes), "application/pdf");
+      await putEsignStoredObject(esignObjectPath(outputKey), Buffer.from(pdfBytes), "application/pdf");
     } catch (error) {
       console.error("esign compose upload", error);
       return fail("upload_failed", {
@@ -211,6 +238,22 @@ function staffMayCompose(staff: StaffContext): boolean {
   return slugs.has("requests.create") || slugs.has("requests.edit") || slugs.has("requests.delete");
 }
 
+function stampMillis(value: unknown): number {
+  if (
+    value &&
+    typeof value === "object" &&
+    "toMillis" in value &&
+    typeof (value as { toMillis: unknown }).toMillis === "function"
+  ) {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
 function formatSignedAt(value: string | null): string {
   if (!value) return "";
   const parsed = new Date(value);
@@ -220,9 +263,9 @@ function formatSignedAt(value: string | null): string {
 
 async function readObject(key: string): Promise<Buffer | null> {
   try {
-    return await getR2ObjectBytes(esignObjectPath(key));
+    return await readEsignStoredObject(esignObjectPath(key));
   } catch (error) {
-    console.error("esign compose download", error);
+    console.error("esign compose download", error instanceof Error ? error.name : "error");
     return null;
   }
 }

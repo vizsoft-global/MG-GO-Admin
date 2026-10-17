@@ -69,7 +69,9 @@ export function useRecentDeliveriesFeed(
     queryKey: queryKeys.performance.recentDeliveries(limit),
     queryFn: () => fetchRecentDeliveriesFeed(limit),
     enabled: options?.enabled ?? true,
-    refetchInterval: options?.refetchInterval ?? 30_000,
+    // Was 30s. The realtime invalidator already refetches this key on a
+    // delivery change, so the poll is a fallback rather than the feed.
+    refetchInterval: options?.refetchInterval ?? 60_000,
   });
 }
 

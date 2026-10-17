@@ -29,7 +29,7 @@ export function PerformanceLivePanel() {
 
   const { locations, isLoading: locLoading } = useDriverLocationsRealtime();
   const { data: feed, isLoading: feedLoading } = useRecentDeliveriesFeed(40, {
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
   const { data: snapshot, isLoading: snapLoading } = useDpdLiveSnapshot(today);
 

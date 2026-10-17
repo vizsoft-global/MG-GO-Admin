@@ -6,6 +6,7 @@ import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
+import { bumpEpochs } from "@/lib/auth/auth-epochs";
 import {
   ALLOWED_SPLASH_EXTENSIONS,
   MAX_SPLASH_BYTES,
@@ -36,6 +37,24 @@ async function requireSettingsManager() {
     return { error: "not_authorized" as const };
   }
   return { session };
+}
+
+/**
+ * Tell the rider Home dashboard that its cached banner snapshot is stale.
+ *
+ * The rider Cloud Functions hold `driver_home_banners` in per-isolate memory
+ * keyed on the `config` counter of `auth_epochs/current`, so a banner edit has
+ * to move that counter rather than wait for the 5 minute TTL. Best-effort: a
+ * saved banner must not fail because the counter write did.
+ */
+async function bumpRiderConfigEpoch(): Promise<void> {
+  try {
+    const db = await staffDb();
+    if (!db) return;
+    await bumpEpochs(db, "config");
+  } catch {
+    /* the cache TTL is the fallback */
+  }
 }
 
 function parseUuidList(raw: unknown): string[] {
@@ -256,6 +275,7 @@ export async function saveHomeBanner(
           errorDetail: formatError(error instanceof Error ? { message: error.message } : undefined),
         };
       }
+      await bumpRiderConfigEpoch();
       await logAdminMutation({
         action: "create",
         entityType: "driver_home_banners",
@@ -296,6 +316,7 @@ export async function saveHomeBanner(
     };
   }
 
+  await bumpRiderConfigEpoch();
   await logAdminMutation({
     action: "update",
     entityType: "driver_home_banners",
@@ -339,6 +360,7 @@ export async function deleteHomeBanner(
     }
   }
 
+  await bumpRiderConfigEpoch();
   await logAdminMutation({
     action: "delete",
     entityType: "driver_home_banners",

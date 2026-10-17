@@ -4,7 +4,7 @@
  * Reads `driver_attendance` (the day rollup duty writes), not `attendance_logs`.
  * present_days counts present + online_unvalidated up to Kuwait today.
  */
-import { onCall } from "firebase-functions/v2/https";
+import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, Timestamp } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
@@ -129,7 +129,7 @@ export function adherenceFromShift(args: {
   };
 }
 
-export const driverGetAttendance = onCall(async (request) => {
+export const driverGetAttendance = measureOnCall("driverGetAttendance", async (request) => {
   const ctx = await requireRider(request);
   const data = (request.data ?? {}) as Dict;
   const period = parseWorkPeriod(pick(data, "p_year", "year"), pick(data, "p_month", "month"));
@@ -141,26 +141,42 @@ export const driverGetAttendance = onCall(async (request) => {
   const nowMs = Date.now();
   const db = getFirestore();
 
-  const [attendanceSnap, shiftSnap, logSnap, sessionSnap] = await Promise.all([
-    db.collection(DRIVER_ATTENDANCE).where("driver_id", "==", ctx.uid).limit(SCAN).get(),
-    db.collection(COLLECTIONS.driverDailyShifts).where("driver_id", "==", ctx.uid).limit(SCAN).get(),
-    db.collection(COLLECTIONS.attendanceLogs).where("driver_id", "==", ctx.uid).limit(SCAN).get(),
-    db.collection(COLLECTIONS.driverSessions).where("driver_id", "==", ctx.uid).limit(SCAN).get(),
+  /**
+   * Every row this response can use belongs to the requested month, and all
+   * four `*_date` fields are `YYYY-MM-DD` strings — a Timestamp-valued row was
+   * already dropped by `asDay` below — so each query is bounded by the month
+   * instead of scanning the rider's whole history. If the composite index is
+   * not deployed the query throws and the un-ranged page runs instead.
+   */
+  const monthPage = async (collection: string, field: string) => {
+    const base = () => db.collection(collection).where("driver_id", "==", ctx.uid);
+    try {
+      return await base()
+        .where(field, ">=", start)
+        .where(field, "<=", end)
+        .limit(SCAN)
+        .get();
+    } catch {
+      return base().limit(SCAN).get();
+    }
+  };
+
+  const [attendanceSnap, shiftSnap, logSnap, openSessions] = await Promise.all([
+    monthPage(DRIVER_ATTENDANCE, "attendance_date"),
+    monthPage(COLLECTIONS.driverDailyShifts, "shift_date"),
+    monthPage(COLLECTIONS.attendanceLogs, "log_date"),
+    db
+      .collection(COLLECTIONS.driverSessions)
+      .where("driver_id", "==", ctx.uid)
+      .where("is_online", "==", true)
+      .limit(1)
+      .get(),
   ]);
 
-  let sessionOnline = false;
-  let latestAt = -1;
-  for (const doc of sessionSnap.docs) {
-    const raw = (doc.data() ?? {}) as Dict;
-    const at =
-      asDate(raw["updated_at"])?.getTime() ??
-      asDate(raw["created_at"])?.getTime() ??
-      0;
-    if (at >= latestAt) {
-      latestAt = at;
-      sessionOnline = raw["is_online"] === true;
-    }
-  }
+  // Only "is the rider online right now" is used from sessions, so the open
+  // session is the whole question. The old path read the rider's session
+  // history just to look at the newest row.
+  const sessionOnline = !openSessions.empty;
 
   const shiftByDay = new Map<string, Dict>();
   for (const doc of shiftSnap.docs) {

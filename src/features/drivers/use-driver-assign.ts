@@ -18,7 +18,9 @@ export function useRestaurantAssignDrivers(restaurantId: string | null, enabled:
     queryKey: queryKeys.drivers.assignRestaurant(restaurantId ?? ""),
     queryFn: () => fetchRestaurantAssignedDriversForAssign(restaurantId!),
     enabled: Boolean(restaurantId) && enabled,
-    refetchInterval: enabled ? 10_000 : false,
+    // Was 10s. Assign / unassign invalidates this key directly, so the poll only
+    // exists to catch an edit made in another tab.
+    refetchInterval: enabled ? 60_000 : false,
   });
 }
 

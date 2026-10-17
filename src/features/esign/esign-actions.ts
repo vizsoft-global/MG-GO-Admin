@@ -399,6 +399,18 @@ export async function fetchEsignStatusCounts(): Promise<EsignStatusCounts> {
   };
 }
 
+function textField(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text.length > 0 ? text : null;
+}
+
+function snapshotField(row: DocRow, key: string): string | null {
+  const snapshot = row.employee_snapshot;
+  if (!snapshot || typeof snapshot !== "object") return null;
+  return textField((snapshot as Record<string, unknown>)[key]);
+}
+
 export async function fetchEsignRequestDetail(
   id: string,
 ): Promise<{ request: EsignDetail | null; error?: string }> {
@@ -441,6 +453,14 @@ export async function fetchEsignRequestDetail(
         row.signature_storage_key != null ? String(row.signature_storage_key) : null,
       sent_by: row.sent_by != null ? String(row.sent_by) : null,
       updated_at: String(row.updated_at ?? ""),
+      document_kind: row.document_kind != null ? String(row.document_kind) : null,
+      signature_slots: row.signature_slots,
+      stamp_layout: row.stamp_layout,
+      employee_id: snapshotField(row, "employee_id") || textField(row.employee_id),
+      company_name: snapshotField(row, "company_name"),
+      position: snapshotField(row, "position"),
+      civil_id: snapshotField(row, "civil_id"),
+      zone_name: snapshotField(row, "zone"),
     },
   };
 }
