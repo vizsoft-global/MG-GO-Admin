@@ -1,6 +1,7 @@
 import { FieldValue, getFirestore, Timestamp } from "../core/fs";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { COLLECTIONS, FIELDS } from "../core/collections";
+import { EVENT_RETENTION_DAYS, retentionDays } from "../core/event-expiry";
 import { parseId } from "../core/query";
 import { requireStaff } from "../core/staff";
 
@@ -157,22 +158,21 @@ function retentionStreamConfig(stream: RetentionStream): StreamConfig {
         collection: COLLECTIONS.driverOperationEvents,
         atField: "occurred_at",
         settingsKey: "driver_ops_log_retention_days",
-        defaultDays: 30,
+        defaultDays: EVENT_RETENTION_DAYS.driver_operation_events,
       };
     case "driver_location_events":
-      // SQL column is `recorded_at`; the ported stream stores it as `at`.
       return {
         collection: COLLECTIONS.driverLocationEvents,
-        atField: FIELDS.driverLocations.at,
+        atField: FIELDS.driverLocations.recordedAt,
         settingsKey: "driver_location_events_retention_days",
-        defaultDays: 90,
+        defaultDays: EVENT_RETENTION_DAYS.driver_location_events,
       };
     case "driver_telemetry_events":
       return {
         collection: COLLECTIONS.driverTelemetryEvents,
         atField: "server_received_at",
         settingsKey: "driver_telemetry_retention_days",
-        defaultDays: 7,
+        defaultDays: EVENT_RETENTION_DAYS.driver_telemetry_events,
       };
     default: {
       const unhandled: never = stream;
@@ -223,7 +223,9 @@ async function runRetentionCleanup(
   data: Record<string, unknown>,
 ): Promise<number> {
   const config = retentionStreamConfig(stream);
-  const keepMs = await resolveKeepMs(data, config.settingsKey, config.defaultDays);
+  const resolvedMs = await resolveKeepMs(data, config.settingsKey, config.defaultDays);
+  const archivedCap = retentionDays(stream) < EVENT_RETENTION_DAYS[stream] ? retentionDays(stream) * DAY_MS : Infinity;
+  const keepMs = Math.min(resolvedMs, archivedCap);
   const batchSize = readBatchSize(data, DEFAULT_CLEANUP_BATCH);
   return deleteOlderThan(
     config.collection,
@@ -234,7 +236,7 @@ async function runRetentionCleanup(
 }
 
 /**
- * `cleanup_driver_location_events` — service-role only in the SQL (`REVOKE ALL`
+ * `cleanup_driver_location_events` â€” service-role only in the SQL (`REVOKE ALL`
  * from PUBLIC / anon / authenticated; only the cron can call it).
  */
 export const cleanupDriverLocationEvents = onCall(async (request) => {
@@ -242,13 +244,13 @@ export const cleanupDriverLocationEvents = onCall(async (request) => {
   return runRetentionCleanup("driver_location_events", asRecord(request.data));
 });
 
-/** `cleanup_driver_operation_events` — service-role only in the SQL. */
+/** `cleanup_driver_operation_events` â€” service-role only in the SQL. */
 export const cleanupDriverOperationEvents = onCall(async (request) => {
   await requireStaff(request);
   return runRetentionCleanup("driver_operation_events", asRecord(request.data));
 });
 
-/** `cleanup_driver_telemetry_events` — service-role only in the SQL. */
+/** `cleanup_driver_telemetry_events` â€” service-role only in the SQL. */
 export const cleanupDriverTelemetryEvents = onCall(async (request) => {
   await requireStaff(request);
   return runRetentionCleanup("driver_telemetry_events", asRecord(request.data));
@@ -259,7 +261,7 @@ export const cleanupDriverTelemetryEvents = onCall(async (request) => {
  *
  * The latest definition (`20260907180000_keep_offline_live_locations.sql`) deletes
  * a stale `driver_locations` row only when the driver is missing or archived, so
- * every live rider keeps their last-known pin past the live window — the earlier
+ * every live rider keeps their last-known pin past the live window â€” the earlier
  * on-duty-only version (`20260907150000`) was superseded.
  */
 export const cleanupStaleDriverLocations = onCall(async (request) => {
@@ -306,7 +308,7 @@ export const cleanupStaleDriverLocations = onCall(async (request) => {
 });
 
 /**
- * `claim_driver_import_chunk` — one transactional claim so two workers cannot
+ * `claim_driver_import_chunk` â€” one transactional claim so two workers cannot
  * take the same chunk. Returns the claimed rows, or `null` when the batch is
  * missing / not running (the SQL's `NOT FOUND` branch).
  */

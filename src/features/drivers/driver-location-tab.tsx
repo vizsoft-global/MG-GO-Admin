@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { ArchiveLoadPrompt } from "@/features/locations/archive-load-prompt";
 import { DriverLocationsMap } from "@/features/locations/driver-locations-map";
 import {
   locationEventStatusKey,
@@ -67,14 +68,17 @@ export function DriverLocationTab({
     [locations, profileDriverId],
   );
 
-  const { data: events = [], isLoading } = useQuery({
-    queryKey: ["driver-location-history", profileDriverId, date],
+  const [archiveDay, setArchiveDay] = useState<string | null>(null);
+  const loadArchive = archiveDay === date;
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["driver-location-history", profileDriverId, date, loadArchive],
     queryFn: () => {
       const { from, to } = dayBounds(date);
-      return fetchDriverLocationHistory(profileDriverId, from, to);
+      return fetchDriverLocationHistory(profileDriverId, from, to, { archive: loadArchive });
     },
     enabled: Boolean(profileDriverId),
   });
+  const events = useMemo(() => data?.events ?? [], [data]);
 
   const path = useMemo(
     () => events.map((e) => ({ lat: e.latitude, lng: e.longitude })),
@@ -146,6 +150,13 @@ export function DriverLocationTab({
           </div>
         </CardHeader>
         <CardContent className="space-y-4 py-4">
+          {data?.archiveRequired ? (
+            <ArchiveLoadPrompt
+              day={date}
+              loading={isFetching}
+              onConfirm={() => setArchiveDay(date)}
+            />
+          ) : null}
           {live ? (
             <p className="text-xs text-muted-foreground">
               {t("livePosition")}: {live.latitude.toFixed(5)}, {live.longitude.toFixed(5)} ·{" "}

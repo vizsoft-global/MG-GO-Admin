@@ -2,14 +2,17 @@
 
 import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
 
-import { logAdminRead } from "@/lib/audit/log-admin-activity";
+import { logAdminActivity, logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { callCronFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { fetchEdgeHistory, fetchEdgeHistoryDays, fetchEdgeLatest } from "@/lib/fleet/edge-read";
+import { gpsR2Since } from "@/lib/fleet/gps-cutover";
 import { vehicleTypeFromDriverJoin } from "@/features/vehicles/vehicle-type";
 
+import { eventFromArchivePoint } from "./archive-event";
 import { resolveLocationSubmitAction } from "./location-event-display";
 import {
   enrichLiveLocation,
@@ -167,51 +170,114 @@ function mapLiveRow(row: {
   });
 }
 
-export async function fetchLiveDriverLocations(): Promise<DriverLiveLocation[]> {
-  await requireDriversView();
-  const db = await requireDb();
-  const rows = await readQuery((withOrder) => {
+type LiveIdentity = {
+  driver: Loose | undefined;
+  profile: Loose | undefined;
+  vehicle: Loose | undefined;
+  restaurant: Loose | undefined;
+  cachedAt: number;
+};
+
+const IDENTITY_TTL_MS = 5 * 60_000;
+const identityCache = new Map<string, LiveIdentity>();
+
+/** Identity joins change on admin edits, not per GPS fix; re-reading them every resync was most of V1's reads. */
+async function loadLiveIdentities(db: Firestore, driverIds: string[]): Promise<Map<string, LiveIdentity>> {
+  const nowMs = Date.now();
+  const missing = [...new Set(driverIds)].filter((id) => {
+    const hit = identityCache.get(id);
+    return !hit || nowMs - hit.cachedAt > IDENTITY_TTL_MS;
+  });
+  if (missing.length > 0) {
+    const drivers = await loadByIds(db, COLLECTIONS.drivers, missing);
+    const profiles = await loadByIds(db, COLLECTIONS.profiles, missing);
+    const vehicleIds = [...drivers.values()]
+      .map((driver) => String(driver.vehicle_id ?? ""))
+      .filter(Boolean);
+    const vehicles = await loadByIds(db, COLLECTIONS.vehicles, vehicleIds);
+
+    const restaurantByDriver = new Map<string, string>();
+    for (let i = 0; i < missing.length; i += 30) {
+      const chunk = missing.slice(i, i + 30);
+      const snap = await db
+        .collection(COLLECTIONS.driverRestaurants)
+        .where("driver_id", "in", chunk)
+        .get();
+      for (const doc of snap.docs) {
+        const link = fromDoc(doc.id, doc.data());
+        const driverId = String(link.driver_id ?? "");
+        const restaurantId = String(link.restaurant_id ?? "");
+        if (driverId && restaurantId && !restaurantByDriver.has(driverId)) {
+          restaurantByDriver.set(driverId, restaurantId);
+        }
+      }
+    }
+    const restaurants = await loadByIds(db, COLLECTIONS.restaurants, [...restaurantByDriver.values()]);
+    for (const id of missing) {
+      const driver = drivers.get(id);
+      identityCache.set(id, {
+        driver,
+        profile: profiles.get(id),
+        vehicle: driver ? vehicles.get(String(driver.vehicle_id ?? "")) : undefined,
+        restaurant: restaurants.get(restaurantByDriver.get(id) ?? ""),
+        cachedAt: nowMs,
+      });
+    }
+  }
+  const out = new Map<string, LiveIdentity>();
+  for (const id of driverIds) {
+    const hit = identityCache.get(id);
+    if (hit) out.set(id, hit);
+  }
+  return out;
+}
+
+async function readLiveRows(db: Firestore): Promise<Loose[]> {
+  const edge = await fetchEdgeLatest();
+  if (edge) {
+    return edge.drivers.map((pin) => ({
+      driver_id: pin.driver_id,
+      latitude: pin.lat,
+      longitude: pin.lng,
+      speed_mps: pin.speed_mps,
+      distance_today_meters: pin.distance_today_m,
+      accuracy_meters: pin.accuracy_meters,
+      battery_pct: pin.battery_pct,
+      heading_deg: pin.heading_deg,
+      active_delivery_id: pin.active_delivery_id,
+      tracking_status: pin.tracking_status,
+      zone_status: pin.range_status,
+      last_seen_at: pin.recorded_at,
+      last_report_at: pin.recorded_at,
+      updated_at: pin.recorded_at,
+      edge_on_duty: pin.is_on_duty,
+    }));
+  }
+  return readQuery((withOrder) => {
     let query: Query = db.collection(COLLECTIONS.driverLocations);
     if (withOrder) query = query.orderBy("last_seen_at", "desc");
     return query;
   });
+}
+
+export async function fetchLiveDriverLocations(): Promise<DriverLiveLocation[]> {
+  await requireDriversView();
+  const db = await requireDb();
+  const rows = await readLiveRows(db);
   rows.sort((a, b) => String(b.last_seen_at ?? "").localeCompare(String(a.last_seen_at ?? "")));
 
   const driverIds = rows.map((row) => String(row.driver_id ?? "")).filter(Boolean);
-  const drivers = await loadByIds(db, COLLECTIONS.drivers, driverIds);
-  const profiles = await loadByIds(db, COLLECTIONS.profiles, driverIds);
-  const vehicleIds = [...drivers.values()]
-    .map((driver) => String(driver.vehicle_id ?? ""))
-    .filter(Boolean);
-  const vehicles = await loadByIds(db, COLLECTIONS.vehicles, vehicleIds);
-
-  const restaurantByDriver = new Map<string, string>();
-  for (let i = 0; i < driverIds.length; i += 30) {
-    const chunk = [...new Set(driverIds.slice(i, i + 30))];
-    if (chunk.length === 0) continue;
-    const snap = await db
-      .collection(COLLECTIONS.driverRestaurants)
-      .where("driver_id", "in", chunk)
-      .get();
-    for (const doc of snap.docs) {
-      const link = fromDoc(doc.id, doc.data());
-      const driverId = String(link.driver_id ?? "");
-      const restaurantId = String(link.restaurant_id ?? "");
-      if (driverId && restaurantId && !restaurantByDriver.has(driverId)) {
-        restaurantByDriver.set(driverId, restaurantId);
-      }
-    }
-  }
-  const restaurants = await loadByIds(db, COLLECTIONS.restaurants, [...restaurantByDriver.values()]);
+  const identities = await loadLiveIdentities(db, driverIds);
 
   void logAdminRead("driver_locations", "locations.fetchLive");
 
   return rows.map((row) => {
     const driverId = String(row.driver_id ?? "");
-    const driver = drivers.get(driverId);
-    const profile = profiles.get(driverId);
-    const vehicle = driver ? vehicles.get(String(driver.vehicle_id ?? "")) : undefined;
-    const restaurant = restaurants.get(restaurantByDriver.get(driverId) ?? "");
+    const identity = identities.get(driverId);
+    const driver = identity?.driver;
+    const profile = identity?.profile;
+    const vehicle = identity?.vehicle;
+    const restaurant = identity?.restaurant;
     return mapLiveRow({
       driver_id: driverId,
       latitude: Number(row.latitude),
@@ -232,7 +298,8 @@ export async function fetchLiveDriverLocations(): Promise<DriverLiveLocation[]> 
         ? {
             driver_code: String(driver.driver_code ?? ""),
             employee_id: (driver.employee_id as string | null) ?? null,
-            is_on_duty: driver.is_on_duty === true,
+            is_on_duty:
+              typeof row.edge_on_duty === "boolean" ? row.edge_on_duty : driver.is_on_duty === true,
             is_blocked: driver.is_blocked === true,
             vehicle_type_key: (driver.vehicle_type_key as string | null) ?? null,
             vehicles: vehicle
@@ -250,13 +317,76 @@ export async function fetchLiveDriverLocations(): Promise<DriverLiveLocation[]> 
   });
 }
 
+function kuwaitDaysBetween(fromIso: string, toIso: string): string[] {
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuwait" });
+  const days: string[] = [];
+  const end = fmt.format(new Date(toIso));
+  for (let ms = new Date(fromIso).getTime(); days.length < 7; ms += 86_400_000) {
+    const day = fmt.format(new Date(ms));
+    if (days[days.length - 1] !== day) days.push(day);
+    if (day >= end) break;
+  }
+  return days;
+}
+
+/**
+ * R2 archive for days on/after `location_gps_r2_since`. Null means "read Firestore":
+ * the day predates the cutover, the edge is down, or this rider is outside the sink rollout.
+ */
+async function edgeHistoryEvents(
+  db: Firestore,
+  driverId: string,
+  fromIso: string,
+  toIso: string,
+  archive: boolean,
+): Promise<DriverLocationEvent[] | "archive_required" | null> {
+  const since = await gpsR2Since(db);
+  if (!since) return null;
+  const days = kuwaitDaysBetween(fromIso, toIso);
+  if (days.length === 0 || days[0] < since) return null;
+  const fromMs = new Date(fromIso).getTime();
+  const toMs = new Date(toIso).getTime();
+  const events: DriverLocationEvent[] = [];
+  for (const day of days) {
+    const result = await fetchEdgeHistory(driverId, day, archive);
+    if (result.kind === "archive_required") return "archive_required";
+    if (result.kind === "unavailable") return null;
+    for (const point of result.history.points) {
+      if (point.t >= fromMs && point.t <= toMs) events.push(eventFromArchivePoint(driverId, point));
+    }
+  }
+  return events.length > 0 ? events : null;
+}
+
+export type DriverLocationHistoryResult = {
+  events: DriverLocationEvent[];
+  /** Day is older than the 7-day hot window; reading it costs an R2 Infrequent Access retrieval. */
+  archiveRequired: boolean;
+};
+
 export async function fetchDriverLocationHistory(
   driverId: string,
   fromIso: string,
   toIso: string,
-): Promise<DriverLocationEvent[]> {
+  options: { archive?: boolean } = {},
+): Promise<DriverLocationHistoryResult> {
   await requireDriversView();
   const db = await requireDb();
+  if (options.archive) {
+    await logAdminActivity({
+      action: "read",
+      entityType: "driver_location_archive",
+      entityId: driverId,
+      routeName: "locations.loadArchive",
+      context: { from: fromIso, to: toIso },
+    });
+  }
+  const edgeEvents = await edgeHistoryEvents(db, driverId, fromIso, toIso, options.archive === true);
+  if (Array.isArray(edgeEvents)) {
+    await logAdminRead("driver_location_events", "locations.fetchHistory", { driverId });
+    return { events: await attachSubmitActions(db, edgeEvents), archiveRequired: false };
+  }
+  const archiveRequired = edgeEvents === "archive_required";
   const rows = await readQuery((withOrder) => {
     let query: Query = db
       .collection(COLLECTIONS.driverLocationEvents)
@@ -285,6 +415,16 @@ export async function fetchDriverLocationHistory(
     submitAction: null,
   }));
 
+  return {
+    events: await attachSubmitActions(db, events),
+    archiveRequired: archiveRequired && events.length === 0,
+  };
+}
+
+async function attachSubmitActions(
+  db: Firestore,
+  events: DriverLocationEvent[],
+): Promise<DriverLocationEvent[]> {
   const deliveryIds = [
     ...new Set(
       events
@@ -338,19 +478,35 @@ export async function fetchDriverHistoryActiveDates(
   await requireDriversView();
   const db = await requireDb();
   const { from, to } = monthIsoBounds(yearMonth);
+  const dates = new Set<string>();
+  const monthStart = from.slice(0, 10);
+  const monthEnd = to.slice(0, 10);
+
+  // Days on/after the R2 cutover come from the room's day index; only the earlier
+  // part of the month still scans Firestore.
+  let firestoreTo = to;
+  const since = await gpsR2Since(db);
+  if (since && since <= monthEnd) {
+    const edgeDays = await fetchEdgeHistoryDays(driverId, since > monthStart ? since : monthStart, monthEnd);
+    if (edgeDays) {
+      for (const day of edgeDays) if (day.points > 0) dates.add(day.day);
+      if (since <= monthStart) return Array.from(dates).sort();
+      firestoreTo = `${since}T00:00:00+03:00`;
+    }
+  }
+
   const rows = await readQuery((withOrder) => {
     let query: Query = db
       .collection(COLLECTIONS.driverLocationEvents)
       .where("driver_id", "==", driverId)
       .where("recorded_at", ">=", new Date(from))
-      .where("recorded_at", "<=", new Date(to));
+      .where("recorded_at", firestoreTo === to ? "<=" : "<", new Date(firestoreTo));
     if (withOrder) query = query.orderBy("recorded_at", "asc");
     return query;
   });
 
   await logAdminRead("driver_location_events", "locations.fetchHistoryDates", { driverId });
 
-  const dates = new Set<string>();
   for (const row of rows) {
     const recorded = String(row.recorded_at ?? "");
     if (recorded) dates.add(kuwaitDateFromIso(recorded));

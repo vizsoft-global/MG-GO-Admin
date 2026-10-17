@@ -30,8 +30,21 @@
     "BROADCAST_MIRROR_MS": "1000",
     "TICK_MS": "2000",
     "FIREBASE_PROJECT_ID": "musallam-delivery-prod",
-    "FIREBASE_FUNCTIONS_BASE_URL": "https://me-central1-musallam-delivery-prod.cloudfunctions.net"
+    "FIREBASE_FUNCTIONS_BASE_URL": "https://me-central1-musallam-delivery-prod.cloudfunctions.net",
+    // GPS history sink. "r2" + a percent routes that share of riders' history into
+    // R2 (FleetRoom SQLite -> minute files -> hourly per-rider objects) instead of
+    // driver_location_events. "off" keeps every rider on Firestore.
+    "GPS_SINK": "off",
+    "GPS_SINK_PERCENT": "0",
+    // "1" for the 7-day compare window: archived riders keep Firestore history.
+    "GPS_DUAL_WRITE": "1"
   },
+  "r2_buckets": [
+    {
+      "binding": "GPS_ARCHIVE",
+      "bucket_name": "dpd-gps-prod"
+    }
+  ],
   "env": {
     "testing": {
       "name": "dpd-live-testing",

@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { headers } from "next/headers";
+import { sampleAdminCost } from "@/lib/audit/admin-cost-sample";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
@@ -151,6 +152,7 @@ export async function logAdminPageView(
   routeName: string,
   context?: Record<string, unknown>,
 ): Promise<void> {
+  sampleAdminCost("page", routeName);
   const key = `view:${routeName}:${pagePath}`;
   if (shouldThrottleRead(key)) return;
   await logAdminActivity({
@@ -177,6 +179,7 @@ export async function logAdminRead(
   routeName: string,
   context?: Record<string, unknown>,
 ): Promise<void> {
+  sampleAdminCost("read", `${routeName}:${entityType}`);
   const requestId = typeof context?.requestId === "string" ? context.requestId : "";
   const key = adminReadThrottleKey(routeName, entityType, context);
   if (shouldThrottleRead(key)) return;

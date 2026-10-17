@@ -1,6 +1,7 @@
 import { onCall } from "firebase-functions/v2/https";
 import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
+import { EXPIRE_AT_FIELD, expireAtFor } from "../core/event-expiry";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireRider, riderError } from "../core/rider";
 import { haversineMeters } from "../core/geo";
@@ -161,19 +162,10 @@ async function lastHistoryEvent(driverId: string): Promise<Dict | null> {
   const snap = await getFirestore()
     .collection(COLLECTIONS.driverLocationEvents)
     .where("driver_id", "==", driverId)
-    .limit(40)
+    .orderBy("recorded_at", "desc")
+    .limit(1)
     .get();
-  let best: Dict | null = null;
-  let bestAt = -1;
-  for (const doc of snap.docs) {
-    const data = (doc.data() ?? {}) as Dict;
-    const at = asDate(data["recorded_at"])?.getTime() ?? 0;
-    if (at >= bestAt) {
-      bestAt = at;
-      best = data;
-    }
-  }
-  return best;
+  return (snap.docs[0]?.data() as Dict | undefined) ?? null;
 }
 
 async function deliveryExists(id: string | null): Promise<string | null> {
@@ -462,6 +454,7 @@ export const driverReportLocation = onCall(async (request) => {
       delivery_id: deliveryId,
       recorded_at: stamp,
       [FIELDS.driverLocations.day]: nowDay,
+      [EXPIRE_AT_FIELD]: expireAtFor("driver_location_events"),
     });
   }
 

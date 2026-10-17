@@ -93,4 +93,11 @@ export async function bumpEpochs(
   const patch: Record<string, ReturnType<typeof FieldValue.increment>> = {};
   for (const kind of list) patch[kind] = FieldValue.increment(1);
   await db.collection(COLLECTIONS.authEpochs).doc(AUTH_EPOCHS_DOC_ID).set(patch, { merge: true });
+  if (list.includes("config")) {
+    await db
+      .collection(COLLECTIONS.appSettings)
+      .doc("1")
+      .set({ config_epoch: FieldValue.increment(1) }, { merge: true })
+      .catch(() => undefined);
+  }
 }

@@ -15,17 +15,21 @@ export function useLiveHistory(
   driverId: string | null,
   date: string,
   endDate?: string | null,
+  archive = false,
 ) {
   const rangeEnd = endDate && endDate !== date ? endDate : null;
 
   return useQuery({
-    queryKey: rangeEnd
-      ? queryKeys.liveTracking.historyRange(driverId ?? "", date, rangeEnd)
-      : queryKeys.liveTracking.history(driverId ?? "", date),
+    queryKey: [
+      ...(rangeEnd
+        ? queryKeys.liveTracking.historyRange(driverId ?? "", date, rangeEnd)
+        : queryKeys.liveTracking.history(driverId ?? "", date)),
+      archive,
+    ],
     queryFn: async () => {
-      if (!driverId) return [];
+      if (!driverId) return { events: [], archiveRequired: false };
       const { from, to } = dayBounds(date, rangeEnd);
-      return fetchDriverLocationHistory(driverId, from, to);
+      return fetchDriverLocationHistory(driverId, from, to, { archive });
     },
     enabled: Boolean(driverId && date),
   });

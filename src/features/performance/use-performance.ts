@@ -100,7 +100,7 @@ export function useDpdLiveSnapshot(
     queryKey: queryKeys.performance.liveSnapshot(date),
     queryFn: () => fetchDpdLiveSnapshot(date),
     enabled: options?.enabled ?? true,
-    refetchInterval: options?.refetchInterval ?? 30_000,
+    refetchInterval: options?.refetchInterval ?? 60_000,
   });
 }
 

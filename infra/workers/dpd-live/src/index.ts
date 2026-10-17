@@ -36,13 +36,31 @@ export default {
 
     const room = env.FLEET.get(env.FLEET.idFromName(env.FLEET_ROOM));
 
-    if (url.pathname === "/ws") {
+    if (url.pathname === "/ws" || url.pathname === "/ingest/ws") {
       // Upgrades cannot carry CORS headers or a body; the token is in the query
       // string because browsers cannot set headers on a WebSocket handshake.
       return room.fetch(request);
     }
 
     if (url.pathname === "/ingest" && request.method === "POST") {
+      return withCors(await room.fetch(request));
+    }
+
+    // Staff reads carry their own Bearer fleet token, verified inside the room.
+    if (
+      request.method === "GET" &&
+      (url.pathname === "/latest" ||
+        url.pathname === "/fleet-stats" ||
+        url.pathname === "/history" ||
+        url.pathname === "/history/days")
+    ) {
+      return withCors(await room.fetch(request));
+    }
+
+    if (
+      (url.pathname === "/archive/register" || url.pathname === "/archive/object") &&
+      request.method === "POST"
+    ) {
       return withCors(await room.fetch(request));
     }
 

@@ -1,0 +1,25 @@
+{
+  "rules": [
+    {
+      "id": "Default Multipart Abort Rule",
+      "enabled": true,
+      "conditions": { "prefix": "" },
+      "abortMultipartUploadsTransition": { "condition": { "type": "Age", "maxAge": 604800 } }
+    },
+    {
+      "id": "raw-minutes",
+      "enabled": true,
+      "conditions": { "prefix": "raw/" },
+      "deleteObjectsTransition": { "condition": { "type": "Age", "maxAge": 2592000 } }
+    },
+    {
+      "id": "rider-archive",
+      "enabled": true,
+      "conditions": { "prefix": "rider/" },
+      "deleteObjectsTransition": { "condition": { "type": "Age", "maxAge": 31536000 } },
+      "storageClassTransitions": [
+        { "condition": { "type": "Age", "maxAge": 604800 }, "storageClass": "InfrequentAccess" }
+      ]
+    }
+  ]
+}

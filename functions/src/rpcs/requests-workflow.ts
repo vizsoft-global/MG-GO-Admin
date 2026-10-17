@@ -8,6 +8,7 @@ import {
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { stampStoredRow } from "../core/search-text";
+import { bumpRiderSignal } from "../core/rider-signals";
 import { requireStaff, type StaffContext } from "../core/staff";
 import {
   pick,
@@ -188,9 +189,16 @@ async function nextRequestCode(tx: Transaction, requestType: string): Promise<st
 
 async function runOutcome(
   work: (tx: Transaction) => Promise<TxOutcome>,
+  requestId?: string,
 ): Promise<Dict> {
   const outcome = await getFirestore().runTransaction(work);
-  if (outcome.notify) await notifyDriverTransactional(outcome.notify);
+  if (outcome.notify) {
+    await notifyDriverTransactional(outcome.notify);
+  } else if (requestId && outcome.result.ok === true) {
+    const snap = await getFirestore().collection(COLLECTIONS.requests).doc(requestId).get();
+    const driverId = textOrNull(snap.get("driver_id"));
+    if (driverId) await bumpRiderSignal(driverId, ["requests"], "request:step");
+  }
   return outcome.result;
 }
 
@@ -554,7 +562,7 @@ export const adminDecideRequest = onCall(async (request) => {
         actionParams: { record_type: "request", record_id: requestId },
       },
     };
-  });
+  }, requestId);
 });
 
 export const adminForwardRequest = onCall(async (request) => {

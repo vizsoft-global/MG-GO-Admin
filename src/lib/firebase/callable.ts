@@ -1,5 +1,6 @@
 ﻿import "server-only";
 import { cookies } from "next/headers";
+import { sampleAdminCost } from "@/lib/audit/admin-cost-sample";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { getFirebaseAuth } from "./admin";
 import { isMutatingAdminRpc } from "./mutating-rpc";
@@ -116,6 +117,7 @@ function logCallableTiming(
 ): void {
   const safe = status.replace(/[\r\n]/g, " ").slice(0, 80);
   console.info(JSON.stringify({ perf: "callable", name, ms, status: safe, attempt, lane }));
+  sampleAdminCost("callable", name, ms);
 }
 
 async function postCallable<T>(

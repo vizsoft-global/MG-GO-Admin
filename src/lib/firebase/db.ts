@@ -40,6 +40,7 @@ export const COLLECTIONS = {
   assetAssignments: "asset_assignments",
   deliveryVerifications: "delivery_verifications",
   driverLocationEvents: "driver_location_events",
+  riderDayStats: "rider_day_stats",
   driverRestaurants: "driver_restaurants",
   /** Add Driver / intake mappings. Live linked riders use `driver_restaurants`. */
   driverIntakeRestaurants: "driver_intake_restaurants",
@@ -97,6 +98,7 @@ export const COLLECTIONS = {
   notificationEvents: "notification_events",
   notificationDispatchRuns: "notification_dispatch_runs",
   notificationDispatchItems: "notification_dispatch_items",
+  riderSignals: "rider_signals",
   notificationAutomations: "notification_automations",
   notificationAutomationEvents: "notification_automation_events",
   notificationAudienceSnapshots: "notification_audience_snapshots",
@@ -130,6 +132,7 @@ export const COLLECTIONS = {
   adminUserPermissions: "admin_user_permissions",
   adminAllowlist: "admin_allowlist",
   adminActivityLogs: "admin_activity_logs",
+  adminCostSamples: "admin_cost_samples",
   counters: "counters",
 } as const;
 

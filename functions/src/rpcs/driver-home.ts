@@ -12,6 +12,7 @@ import { kuwaitWeekStart } from "../core/money";
 import { loadAppSettings, loadHomeSnapshotFlags } from "../core/settings";
 import { requireRider, riderError } from "../core/rider";
 import { applyAttendanceRollup } from "../core/rollups";
+import { bumpRiderSignal } from "../core/rider-signals";
 import { computeIncentiveAmount, type IncentiveRule, type IncentiveTier } from "../core/incentive";
 import { driverRestaurantIds } from "./deliveries-shared";
 import { sendDriverHomeRefresh } from "./driver-refresh";
@@ -1331,8 +1332,9 @@ function composeHomePayload(args: {
   snapshotAgeMs: number | null;
 }): Dict {
   const v = args.values;
-  const todayOnlineSeconds =
-    v.elapsedBaseSeconds + liveOpenSeconds(v.openSince, v.today, args.now);
+  // Closed sessions only. Every app build adds the open interval itself, so a
+  // summed value here double counts the open session on Home.
+  const todayOnlineSeconds = v.elapsedBaseSeconds;
   return {
     driver: {
       full_name: asString(args.profile["full_name"]) ?? "Driver",
@@ -1346,7 +1348,7 @@ function composeHomePayload(args: {
       speed_mps: v.speedMps,
       distance_today_meters: v.distanceTodayMeters,
       // The two fields the client needs to keep the timer ticking without a
-      // call. `today_online_seconds` below is the same number already summed.
+      // call. `today_online_seconds` below carries the same base, not the sum.
       online_seconds_base: v.elapsedBaseSeconds,
       open_since: v.openSince,
     },
@@ -1802,11 +1804,18 @@ export async function invalidateDriverHomeDaily(
   }
 }
 
-/** Writer-safe wrapper. A failed invalidation is covered by the staleness window. */
+/**
+ * Writer-safe wrapper. A failed invalidation is covered by the staleness window.
+ *
+ * `signal: false` is for writes the rider's own phone made: it already refreshes
+ * after its call, so a `rider_signals` bump would make it fetch Home twice.
+ */
 export async function invalidateDriverHomeDailySafe(
   driverId: string,
   reason: string,
+  options: { signal?: boolean } = {},
 ): Promise<HomeSnapshotInvalidateResult> {
+  if (options.signal !== false) await bumpRiderSignal(driverId, ["home", "earnings"], reason);
   try {
     return await invalidateDriverHomeDaily(driverId, reason);
   } catch {
@@ -1913,7 +1922,9 @@ export async function applyRiderCheckout(args: {
   // Step 3 — the snapshot must not describe a rider who is still online. One
   // flag write; the next Home call recomputes the numbers it has to produce
   // anyway.
-  await invalidateDriverHomeDailySafe(args.driverId, `checkout:${args.reason}`);
+  await invalidateDriverHomeDailySafe(args.driverId, `checkout:${args.reason}`, {
+    signal: args.notify !== false,
+  });
 }
 
 /**
@@ -2146,7 +2157,7 @@ export const driverSetDutyState = measureOnCall("driverSetDutyState", async (req
   // invalidated before the response reads it. The response then recomputes and
   // rewrites the document, which is why the rider sees the new `is_online` and
   // online timer immediately — the one thing §2 says must never be cached.
-  await invalidateDriverHomeDailySafe(ctx.uid, "duty");
+  await invalidateDriverHomeDailySafe(ctx.uid, "duty", { signal: false });
 
   let opKey = "duty.offline";
   if (isOnDuty !== wasOnDuty) {

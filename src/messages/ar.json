@@ -1278,7 +1278,17 @@
         "idle": "خامل",
         "alert": "تنبيه"
       },
-      "distanceTodayLabel": "المسافة اليوم"
+      "distanceTodayLabel": "المسافة اليوم",
+      "archive": {
+        "title": "التحميل من الأرشيف",
+        "subtitle": "سجل GPS ليوم {day}",
+        "banner": "{day} أقدم من 7 أيام ومحفوظ في أرشيف GPS.",
+        "load": "التحميل من الأرشيف",
+        "body": "نقاط GPS ليوم {day} محفوظة في الأرشيف البارد. التحميل يقرأ الأرشيف مرة واحدة لهذا السائق واليوم.",
+        "feeNote": "قراءة الأرشيف لها رسوم استرجاع صغيرة وتُسجَّل في سجل النشاط.",
+        "cancel": "إلغاء",
+        "confirm": "تحميل"
+      }
     },
     "drivers": {
       "title": "الموظفون",
@@ -8085,21 +8095,52 @@
             "offDays": "أيام الراحة"
           },
           "columnOverrides": {
-            "drivers": { "todayDeliveries": "توصيلات اليوم" },
-            "vehicles": { "year": "سنة الصنع", "kind": "النوع" },
-            "deliveries": { "date": "تاريخ الإنشاء" },
-            "attendance": { "date": "تاريخ السجل" },
-            "earnings": { "date": "تاريخ الاستحقاق" },
-            "payouts": { "date": "بداية الفترة" },
-            "requests": { "date": "تاريخ الإنشاء" },
-            "visits": { "date": "تاريخ الزيارة" },
-            "notifications": { "date": "تاريخ الإنشاء" },
-            "esign": { "date": "تاريخ الإرسال" },
-            "fuel": { "date": "تاريخ التعبئة" },
-            "wrong_actions": { "date": "تاريخ الوقوع" },
-            "documents": { "date": "تاريخ الانتهاء" },
-            "order_recon": { "date": "تاريخ البداية" },
-            "verifications": { "date": "تاريخ الخدمة" }
+            "drivers": {
+              "todayDeliveries": "توصيلات اليوم"
+            },
+            "vehicles": {
+              "year": "سنة الصنع",
+              "kind": "النوع"
+            },
+            "deliveries": {
+              "date": "تاريخ الإنشاء"
+            },
+            "attendance": {
+              "date": "تاريخ السجل"
+            },
+            "earnings": {
+              "date": "تاريخ الاستحقاق"
+            },
+            "payouts": {
+              "date": "بداية الفترة"
+            },
+            "requests": {
+              "date": "تاريخ الإنشاء"
+            },
+            "visits": {
+              "date": "تاريخ الزيارة"
+            },
+            "notifications": {
+              "date": "تاريخ الإنشاء"
+            },
+            "esign": {
+              "date": "تاريخ الإرسال"
+            },
+            "fuel": {
+              "date": "تاريخ التعبئة"
+            },
+            "wrong_actions": {
+              "date": "تاريخ الوقوع"
+            },
+            "documents": {
+              "date": "تاريخ الانتهاء"
+            },
+            "order_recon": {
+              "date": "تاريخ البداية"
+            },
+            "verifications": {
+              "date": "تاريخ الخدمة"
+            }
           },
           "panelBannerTitle": "«مسح حسب الفلتر» حذف نهائي",
           "panelBannerBody": "اختر وحدة، ثم اختر قيماً من أعمدتها وراجع الصفوف المطابقة قبل الحذف. تُحذف فقط الصفوف المطابقة لكل الفلاتر، مع ملفاتها المخزّنة ومستخدمي Auth المرتبطين.",

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
 import { ToggleChip } from "@/components/app/toggle-chip";
+import { ArchiveLoadPrompt } from "@/features/locations/archive-load-prompt";
 import { DriverLocationsMap } from "@/features/locations/driver-locations-map";
 import { fetchDriverAssignedRestaurantPins } from "@/features/locations/locations-actions";
 import { fetchDriversForAdmin } from "@/features/drivers/drivers-actions";
@@ -112,7 +113,15 @@ export function LiveTrackingHistoryView({
 
   const driverSelectItems = useMemo(() => driverSearchOptions(linkedDrivers), [linkedDrivers]);
 
-  const { data: events = [], isLoading } = useLiveHistory(driverId || null, date, dateEnd);
+  const [archiveKey, setArchiveKey] = useState<string | null>(null);
+  const historyKey = `${driverId}|${date}|${dateEnd ?? ""}`;
+  const {
+    data: historyResult,
+    isLoading,
+    isFetching: historyFetching,
+  } = useLiveHistory(driverId || null, date, dateEnd, archiveKey === historyKey);
+  const events = useMemo(() => historyResult?.events ?? [], [historyResult]);
+  const archiveRequired = historyResult?.archiveRequired === true;
 
   const yearMonth = date.slice(0, 7);
   const [calendarMonth, setCalendarMonth] = useState(yearMonth);
@@ -376,6 +385,14 @@ export function LiveTrackingHistoryView({
             ) : isLoading ? (
               <div className="h-full w-full bg-muted/40 p-4">
                 <HistoryLoadingSkeleton />
+              </div>
+            ) : sortedEvents.length === 0 && archiveRequired ? (
+              <div className="flex h-full w-full items-center justify-center bg-muted/40 p-4">
+                <ArchiveLoadPrompt
+                  day={historyDateLabel}
+                  loading={historyFetching}
+                  onConfirm={() => setArchiveKey(historyKey)}
+                />
               </div>
             ) : sortedEvents.length === 0 ? (
               <NoDataForDateEmpty

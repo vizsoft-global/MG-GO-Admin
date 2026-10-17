@@ -1818,6 +1818,24 @@
       ]
     },
     {
+      "collectionGroup": "driver_location_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "driver_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "day",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "recorded_at",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "fleet_events",
       "queryScope": "COLLECTION",
       "fields": [
@@ -2458,6 +2476,20 @@
         {
           "fieldPath": "recorded_at",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "driver_location_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "driver_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "recorded_at",
+          "order": "DESCENDING"
         }
       ]
     },
@@ -3132,5 +3164,10 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    { "collectionGroup": "driver_location_events", "fieldPath": "expire_at", "ttl": true, "indexes": [] },
+    { "collectionGroup": "driver_operation_events", "fieldPath": "expire_at", "ttl": true, "indexes": [] },
+    { "collectionGroup": "driver_telemetry_events", "fieldPath": "expire_at", "ttl": true, "indexes": [] },
+    { "collectionGroup": "admin_cost_samples", "fieldPath": "expire_at", "ttl": true, "indexes": [] }
+  ]
 }

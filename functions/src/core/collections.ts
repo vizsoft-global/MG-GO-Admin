@@ -58,6 +58,13 @@ export const COLLECTIONS = {
    * `app_settings.home_snapshot_enabled`.
    */
   driverHomeDaily: "driver_home_daily",
+  /**
+   * One doc per rider (`{uid}`) holding change counters the rider app listens to
+   * instead of polling. Server-written only; the rider reads its own doc.
+   */
+  riderSignals: "rider_signals",
+  /** Per rider-day GPS totals written by the Worker flush (`{driverId}_{day}`). */
+  riderDayStats: "rider_day_stats",
   driverOffStructure: "driver_off_structure",
   /** Operations-uploaded Invalid / Rejected / Cancelled rows, keyed `{driverId}_{day}`. */
   riderComplianceDaily: "rider_compliance_daily",
@@ -231,6 +238,8 @@ export const FIELDS = {
     lat: "lat",
     lng: "lng",
     at: "at",
+    /** History rows (`driver_location_events`) carry the fix time here, not in `at`. */
+    recordedAt: "recorded_at",
     accuracyMeters: "accuracy_meters",
     speedMps: "speed_mps",
     /** Maintained odometer, the single "distance today" number. */

@@ -19,6 +19,7 @@ import {
   uploadNotificationMediaFile,
 } from "./notification-media-storage";
 import { sendPushBatch } from "@/lib/firebase/fcm-provider";
+import { bumpRiderSignals } from "@/lib/firebase/rider-signals";
 import { interpolateTemplate } from "./interpolate-template";
 import { pickLatestPushTokenByDriver } from "./push-token-select";
 import { resolveScreenshotRestricted } from "./screenshot-restriction";
@@ -1541,6 +1542,7 @@ async function executeNotificationDispatch(
   if (insertError) {
     return { error: "dispatch_failed" };
   }
+  await bumpRiderSignals(recipientIds, ["inbox"], `campaign:${campaignId}`);
   const dispatchIdByDriver = new Map<string, string>(
     (insertedItems ?? []).map((row: { id: string; driver_id: string }) => [
       row.driver_id,

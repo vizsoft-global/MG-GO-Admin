@@ -5,7 +5,10 @@ import type { DocumentData, Firestore } from "firebase-admin/firestore";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { fetchEdgeHistory } from "@/lib/fleet/edge-read";
+import { gpsR2Since } from "@/lib/fleet/gps-cutover";
 
+import { buildDayRouteTrack } from "./day-route-build";
 import { toFleetZone } from "./fleet-zones";
 import type { FleetSnapshotRow } from "./fleet-store";
 import type { FleetZone } from "./fleet-types";
@@ -38,11 +41,36 @@ function fromDoc(id: string, data: DocumentData | undefined): Loose {
   return out;
 }
 
+type DayRouteResponse = Loose & { distance_source?: string; distance_m?: number };
+
+async function edgeDayTrack(driverId: string, date: string) {
+  const db = await staffDb();
+  if (!db) return null;
+  const since = await gpsR2Since(db);
+  if (!since || date < since) return null;
+  const result = await fetchEdgeHistory(driverId, date, false);
+  if (result.kind !== "ok" || result.history.points.length === 0) return null;
+  return buildDayRouteTrack(result.history.points);
+}
+
 export async function fetchDriverDayRoute(driverId: string, date: string) {
-  return callAdminFunction("admin_get_driver_day_route", {
-    p_driver_id: driverId,
-    p_date: date,
+  const track = await edgeDayTrack(driverId, date).catch(() => null);
+  const response = await callAdminFunction<DayRouteResponse>("admin_get_driver_day_route", {
+    driverId,
+    date,
+    skipEvents: track != null,
   });
+  if (!track || response.error || !response.data) return response;
+  const odometer = response.data.distance_source === "odometer" ? response.data.distance_m : undefined;
+  return {
+    data: {
+      ...response.data,
+      ...track,
+      distance_m: typeof odometer === "number" ? odometer : track.sampled_distance_m,
+      distance_source: typeof odometer === "number" ? "odometer" : "sampled",
+    },
+    error: null,
+  };
 }
 
 export async function fetchLiveFleetSnapshot() {

@@ -9,6 +9,7 @@
 import { shouldCoalesceLocation } from "./driver-location";
 
 export const PIN_WRITE_MIN_MS = 1000;
+export const R2_PIN_HEARTBEAT_MS = 5 * 60 * 1000;
 const HISTORY_CLAMP_MS = 15 * 60 * 1000;
 const CLIENT_FUTURE_MS = 5 * 60 * 1000;
 const CLIENT_PAST_MS = 7 * 24 * 60 * 60 * 1000;
@@ -36,7 +37,23 @@ export type IngestPoint = {
   trackingStatus: "idle" | "moving" | "delivery_submit";
   clientTs: Date;
   replay: boolean;
+  /** FleetRoom already archived this fix to R2; Firestore keeps only the pin. */
+  historyInR2: boolean;
+  /** FleetRoom odometer for the rider's Kuwait day, authoritative when `historyInR2`. */
+  distanceTodayM: number | null;
   ord: number;
+};
+
+export type RiderDayStatsDraft = {
+  driverId: string;
+  day: string;
+  movingS: number;
+  idleS: number;
+  dwellS: number;
+  outOfZoneS: number;
+  mockedCount: number;
+  points: number;
+  distanceM: number;
 };
 
 export type FleetEventDraft = {
@@ -177,10 +194,67 @@ export function parseIngestBatch(raw: unknown, now: Date): IngestParse {
       trackingStatus: status as IngestPoint["trackingStatus"],
       clientTs,
       replay: row.replay === true || row.replay === "true",
+      historyInR2: row.history_in_r2 === true || row.history_in_r2 === "true",
+      distanceTodayM: num(row.distance_today_m),
       ord,
     });
   });
   return { ok: true, received: raw.length, points };
+}
+
+/**
+ * Pins for R2-archived riders are written on a state change or once per heartbeat,
+ * not every second: nothing reads the in-between pins once the DO serves live positions.
+ */
+export function r2PinWriteDue(args: {
+  prev: {
+    updatedAtMs: number | null;
+    zoneStatus: string | null;
+    trackingStatus: string | null;
+    activeDeliveryId: string | null;
+    isMocked: boolean | null;
+  } | null;
+  nowMs: number;
+  zoneStatus: string;
+  trackingStatus: string;
+  activeDeliveryId: string | null;
+  isMocked: boolean | null;
+}): boolean {
+  const prev = args.prev;
+  if (!prev || prev.updatedAtMs == null) return true;
+  if (prev.zoneStatus !== args.zoneStatus) return true;
+  if (prev.trackingStatus !== args.trackingStatus) return true;
+  if ((prev.activeDeliveryId ?? null) !== (args.activeDeliveryId ?? null)) return true;
+  if ((prev.isMocked ?? false) !== (args.isMocked ?? false)) return true;
+  return args.nowMs - prev.updatedAtMs >= R2_PIN_HEARTBEAT_MS;
+}
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_STATS_MAX = 5000;
+
+export function parseRiderDayStats(raw: unknown): RiderDayStatsDraft[] {
+  if (!Array.isArray(raw)) return [];
+  const out: RiderDayStatsDraft[] = [];
+  for (const item of raw.slice(0, DAY_STATS_MAX)) {
+    const row = asDict(item);
+    if (!row) continue;
+    const driverId = text(row.driver_id);
+    const day = text(row.day);
+    if (!driverId || driverId.includes("/") || !day || !DAY_RE.test(day)) continue;
+    const n = (v: unknown) => Math.max(0, Math.round(num(v) ?? 0));
+    out.push({
+      driverId,
+      day,
+      movingS: n(row.moving_s),
+      idleS: n(row.idle_s),
+      dwellS: n(row.dwell_s),
+      outOfZoneS: n(row.out_of_zone_s),
+      mockedCount: n(row.mocked_count),
+      points: n(row.points),
+      distanceM: n(row.distance_m),
+    });
+  }
+  return out;
 }
 
 export function parseFleetEventBatch(raw: unknown, now: Date): FleetEventParse {

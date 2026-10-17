@@ -83,21 +83,29 @@ export const adminGetDriverDayRoute = onCall(async (request) => {
   const requestedTolerance = asNumber(data.toleranceMeters) ?? 8;
   const tolerance = Math.max(requestedTolerance, 0);
 
+  // The panel builds the polyline from the R2 archive and only needs the
+  // deliveries and the odometer from here.
+  const skipEvents = data.skipEvents === true;
+
   const db = getFirestore();
-  const eventsSnap = await db
-    .collection(COLLECTIONS.driverLocationEvents)
-    .where(FIELDS.driverLocations.driverId, "==", driverId)
-    .where(FIELDS.driverLocations.day, "==", day)
-    .orderBy(FIELDS.driverLocations.at, "asc")
-    .limit(EVENT_SCAN_CAP)
-    .get();
+  const eventDocs = skipEvents
+    ? []
+    : (
+        await db
+          .collection(COLLECTIONS.driverLocationEvents)
+          .where(FIELDS.driverLocations.driverId, "==", driverId)
+          .where(FIELDS.driverLocations.day, "==", day)
+          .orderBy(FIELDS.driverLocations.recordedAt, "asc")
+          .limit(EVENT_SCAN_CAP)
+          .get()
+      ).docs;
 
   const rawPoints: Array<{ lat: number; lng: number; at: Timestamp; doc: Record<string, unknown> }> = [];
-  for (const doc of eventsSnap.docs) {
+  for (const doc of eventDocs) {
     const raw = doc.data();
     const lat = asNumber(raw["latitude"] ?? raw[FIELDS.driverLocations.lat]);
     const lng = asNumber(raw["longitude"] ?? raw[FIELDS.driverLocations.lng]);
-    const at = asTimestamp(raw[FIELDS.driverLocations.at]);
+    const at = asTimestamp(raw[FIELDS.driverLocations.recordedAt] ?? raw[FIELDS.driverLocations.at]);
     if (lat === null || lng === null || !at) continue;
 
     const accuracy = asNumber(raw[FIELDS.driverLocations.accuracyMeters]);
