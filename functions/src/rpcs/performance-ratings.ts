@@ -9,7 +9,7 @@ import {
 } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
-import { requireStaff, type StaffContext } from "../core/staff";
+import { requireStaff, requireStaffFresh, type StaffContext } from "../core/staff";
 import {
   isoTimestamp,
   loadDocMap,
@@ -125,7 +125,7 @@ function slugKey(value: string): string | null {
 // ---------------------------------------------------------------------------
 
 export const adminUpsertDriverPerformanceRating = onCall(async (request) => {
-  const staff = await requireStaff(request, "performance.rate");
+  const staff = await requireStaffFresh(request, "performance.rate");
   const db = getFirestore();
   const data = dataOf(request);
 
@@ -212,7 +212,7 @@ export const adminUpsertDriverPerformanceRating = onCall(async (request) => {
 });
 
 export const adminSetDriverPerformanceRatingNote = onCall(async (request) => {
-  const staff = await requireStaff(request, "performance.rate");
+  const staff = await requireStaffFresh(request, "performance.rate");
   const db = getFirestore();
   const data = dataOf(request);
 
@@ -456,7 +456,7 @@ export const adminListDriverPerformanceRatings = onCall(async (request) => {
 // ---------------------------------------------------------------------------
 
 export const adminSetPerformanceTeamMember = onCall(async (request) => {
-  const staff = await requireStaff(request, "performance.manage_teams");
+  const staff = await requireStaffFresh(request, "performance.manage_teams");
   const db = getFirestore();
   const data = dataOf(request);
 
@@ -509,7 +509,7 @@ export const adminSetPerformanceTeamMember = onCall(async (request) => {
 });
 
 export const adminUpsertPerformanceRatingCriterion = onCall(async (request) => {
-  await requireStaff(request, "performance.manage_teams");
+  await requireStaffFresh(request, "performance.manage_teams");
   const db = getFirestore();
   const data = dataOf(request);
 
@@ -584,7 +584,7 @@ export const adminUpsertPerformanceRatingCriterion = onCall(async (request) => {
 });
 
 export const adminDeletePerformanceRatingCriterion = onCall(async (request) => {
-  await requireStaff(request, "performance.manage_teams");
+  await requireStaffFresh(request, "performance.manage_teams");
   const db = getFirestore();
   const data = dataOf(request);
 

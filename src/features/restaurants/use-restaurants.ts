@@ -33,7 +33,9 @@ export function useRestaurantAssignedDrivers(id: string) {
     queryKey: queryKeys.restaurants.assignedDrivers(id),
     queryFn: () => fetchRestaurantAssignedDrivers(id),
     enabled: Boolean(id),
-    refetchInterval: 10_000,
+    // Was 10s. An assignment changes when an operator changes it, and the
+    // mutation already invalidates this key, so the poll is only a safety net.
+    refetchInterval: 60_000,
   });
 }
 

@@ -273,61 +273,161 @@ export function computeIncentiveAmount(args: {
 }
 
 /**
- * `_restaurant_daily_dpd_target`: the restaurant's own daily target, falling
- * back to the target of the zone that restaurant sits in, `ceil`-ed and picked
- * by the SQL's `priority DESC, created_at ASC`.
+ * A rule sends a rider a daily target only while it is `active`, daily and
+ * inside its own window. `dpd_period` is nullable on rows written before the
+ * column existed, and those read as daily.
+ */
+function isDailyDpdRule(rule: DeliveryRule, onDate: string): boolean {
+  return (
+    rule.status === "active" &&
+    (rule.dpd_target ?? 0) > 0 &&
+    (rule.dpd_period === null || rule.dpd_period === undefined || rule.dpd_period === "daily") &&
+    onDate >= rule.start_date &&
+    onDate <= rule.end_date
+  );
+}
+
+/**
+ * The SQL's `priority DESC, created_at ASC` pick, `ceil`-ed.
  *
- * Both halves read `delivery_rules`, and both accept the legacy single-FK
- * column *or* a scope row — the schema carried two places for one fact while the
+ * `ceil` keeps a fractional stored target from becoming an easier gate than the
+ * admin typed, and the tie-break on `created_at` keeps two rules on the same
+ * priority resolving to the older row, so re-saving a rule never silently
+ * outranks its sibling.
+ */
+function pickDailyDpdTarget(candidates: readonly DeliveryRule[]): number | null {
+  if (candidates.length === 0) return null;
+  const sorted = [...candidates].sort((a, b) => {
+    if (a.priority !== b.priority) return b.priority - a.priority;
+    return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0;
+  });
+  return Math.ceil(sorted[0].dpd_target as number);
+}
+
+/**
+ * The rules of one scope type that name one id, read from the legacy single-FK
+ * column *or* a scope row.
+ *
+ * Both halves matter: the schema carried two places for one fact while the
  * junction table was being introduced, and a port that read only the junction
  * would silently drop every rule written before the split.
+ */
+function scopedDailyRules(args: {
+  deliveryRules: readonly DeliveryRule[];
+  deliveryScopesByRule: ReadonlyMap<string, readonly RuleScope[]>;
+  onDate: string;
+  scopeType: RuleScopeType;
+  scopeId: string | null;
+  legacyIdOf: (rule: DeliveryRule) => string | null;
+  scopeIdOf: (scope: RuleScope) => string | null;
+}): DeliveryRule[] {
+  const { deliveryRules, deliveryScopesByRule, onDate, scopeType, scopeId } = args;
+  if (!scopeId) return [];
+  return deliveryRules.filter(
+    (rule) =>
+      isDailyDpdRule(rule, onDate) &&
+      rule.scope_type === scopeType &&
+      (args.legacyIdOf(rule) === scopeId ||
+        (deliveryScopesByRule.get(rule.id) ?? []).some((scope) => args.scopeIdOf(scope) === scopeId)),
+  );
+}
+
+/**
+ * `_restaurant_daily_dpd_target`: the restaurant's own daily target, falling
+ * back to the target of the zone that restaurant sits in and then to its
+ * partner's, `ceil`-ed and picked by the SQL's `priority DESC, created_at ASC`.
+ *
+ * The two fallbacks are what keep an admin's zone- or partner-scoped rule from
+ * reaching nobody: a store without its own rule still inherits the target set
+ * above it, which is exactly how the rider app's Daily DPD card resolves one.
  */
 export function restaurantDailyDpdTarget(args: {
   restaurantId: string;
   onDate: string;
   restaurantZoneId: string | null;
+  restaurantPartnerId?: string | null;
   deliveryRules: readonly DeliveryRule[];
   deliveryScopesByRule: ReadonlyMap<string, readonly RuleScope[]>;
 }): number | null {
-  const { restaurantId, onDate, restaurantZoneId, deliveryRules, deliveryScopesByRule } = args;
+  const {
+    restaurantId,
+    onDate,
+    restaurantZoneId,
+    restaurantPartnerId,
+    deliveryRules,
+    deliveryScopesByRule,
+  } = args;
+  const scoped = { deliveryRules, deliveryScopesByRule, onDate };
 
-  const isDaily = (rule: DeliveryRule) =>
-    rule.status === "active" &&
-    (rule.dpd_target ?? 0) > 0 &&
-    (rule.dpd_period === null || rule.dpd_period === undefined || rule.dpd_period === "daily") &&
-    onDate >= rule.start_date &&
-    onDate <= rule.end_date;
-
-  const scopesOf = (ruleId: string) => deliveryScopesByRule.get(ruleId) ?? [];
-
-  const pick = (candidates: DeliveryRule[]): number | null => {
-    if (!candidates.length) return null;
-    const sorted = [...candidates].sort((a, b) => {
-      if (a.priority !== b.priority) return b.priority - a.priority;
-      return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0;
-    });
-    return Math.ceil(sorted[0].dpd_target as number);
-  };
-
-  const restaurantRules = deliveryRules.filter(
-    (rule) =>
-      isDaily(rule) &&
-      rule.scope_type === "restaurant" &&
-      (rule.restaurant_id === restaurantId ||
-        scopesOf(rule.id).some((scope) => scope.restaurant_id === restaurantId)),
+  return (
+    pickDailyDpdTarget(
+      scopedDailyRules({
+        ...scoped,
+        scopeType: "restaurant",
+        scopeId: restaurantId,
+        legacyIdOf: (rule) => rule.restaurant_id,
+        scopeIdOf: (scope) => scope.restaurant_id,
+      }),
+    ) ??
+    pickDailyDpdTarget(
+      scopedDailyRules({
+        ...scoped,
+        scopeType: "zone",
+        scopeId: restaurantZoneId,
+        legacyIdOf: (rule) => rule.zone_id,
+        scopeIdOf: (scope) => scope.zone_id,
+      }),
+    ) ??
+    pickDailyDpdTarget(
+      scopedDailyRules({
+        ...scoped,
+        scopeType: "partner",
+        scopeId: restaurantPartnerId ?? null,
+        legacyIdOf: (rule) => rule.partner_id,
+        scopeIdOf: (scope) => scope.partner_id,
+      }),
+    )
   );
+}
 
-  const zoneRules = restaurantZoneId
-    ? deliveryRules.filter(
-        (rule) =>
-          isDaily(rule) &&
-          rule.scope_type === "zone" &&
-          (rule.zone_id === restaurantZoneId ||
-            scopesOf(rule.id).some((scope) => scope.zone_id === restaurantZoneId)),
-      )
-    : [];
+/** One zone-scoped rule's daily target for one zone, or null when none applies. */
+export function zoneDailyDpdTarget(args: {
+  zoneId: string | null;
+  onDate: string;
+  deliveryRules: readonly DeliveryRule[];
+  deliveryScopesByRule: ReadonlyMap<string, readonly RuleScope[]>;
+}): number | null {
+  return pickDailyDpdTarget(
+    scopedDailyRules({
+      deliveryRules: args.deliveryRules,
+      deliveryScopesByRule: args.deliveryScopesByRule,
+      onDate: args.onDate,
+      scopeType: "zone",
+      scopeId: args.zoneId,
+      legacyIdOf: (rule) => rule.zone_id,
+      scopeIdOf: (scope) => scope.zone_id,
+    }),
+  );
+}
 
-  return pick(restaurantRules) ?? pick(zoneRules);
+/** One partner-scoped rule's daily target for one partner, or null when none applies. */
+export function partnerDailyDpdTarget(args: {
+  partnerId: string | null;
+  onDate: string;
+  deliveryRules: readonly DeliveryRule[];
+  deliveryScopesByRule: ReadonlyMap<string, readonly RuleScope[]>;
+}): number | null {
+  return pickDailyDpdTarget(
+    scopedDailyRules({
+      deliveryRules: args.deliveryRules,
+      deliveryScopesByRule: args.deliveryScopesByRule,
+      onDate: args.onDate,
+      scopeType: "partner",
+      scopeId: args.partnerId,
+      legacyIdOf: (rule) => rule.partner_id,
+      scopeIdOf: (scope) => scope.partner_id,
+    }),
+  );
 }
 
 /**

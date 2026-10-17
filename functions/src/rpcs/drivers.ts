@@ -18,7 +18,7 @@ import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, Timestamp, type Firestore } from "../core/fs";
 import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { COLLECTIONS } from "../core/collections";
-import { requireStaff } from "../core/staff";
+import { requireStaff, requireStaffFresh } from "../core/staff";
 import { fullScanFallback, lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
 import {
   DRIVER_SEARCH_FIELD_MAP,
@@ -1133,7 +1133,7 @@ async function endDriverDutyKeepGps(driverId: string, reason: string): Promise<v
  * the shift, whatever the new status is.
  */
 export const setDriverAccountStatus = onCall(async (request) => {
-  await requireStaff(request, "drivers.manage");
+  await requireStaffFresh(request, "drivers.manage");
 
   const data = (request.data ?? {}) as Dict;
   const driverId = pickId(data, "driverId", "p_driver_id");
@@ -1168,7 +1168,7 @@ export const setDriverAccountStatus = onCall(async (request) => {
  * accruing work time. Unblocking only clears the flags.
  */
 export const setDriverBlocked = onCall(async (request) => {
-  await requireStaff(request, "drivers.manage");
+  await requireStaffFresh(request, "drivers.manage");
 
   const data = (request.data ?? {}) as Dict;
   const driverId = pickId(data, "driverId", "p_driver_id");
@@ -1290,7 +1290,7 @@ export const setDriverBlocked = onCall(async (request) => {
  * is re-evaluated here rather than trusted from the caller.
  */
 export const setDriverFrozen = onCall(async (request) => {
-  await requireStaff(request, "drivers.manage");
+  await requireStaffFresh(request, "drivers.manage");
 
   const data = (request.data ?? {}) as Dict;
   const driverId = pickId(data, "driverId", "p_driver_id");
@@ -1353,7 +1353,7 @@ export const setDriverFrozen = onCall(async (request) => {
 
 /** `set_driver_unfrozen`. */
 export const setDriverUnfrozen = onCall(async (request) => {
-  await requireStaff(request, "drivers.manage");
+  await requireStaffFresh(request, "drivers.manage");
 
   const data = (request.data ?? {}) as Dict;
   const driverId = pickId(data, "driverId", "p_driver_id");
@@ -1397,7 +1397,7 @@ export const setDriverUnfrozen = onCall(async (request) => {
  * sent".
  */
 export const adminSetDriverForceUpdate = onCall(async (request) => {
-  const staff = await requireStaff(request, "driver_devices.view");
+  const staff = await requireStaffFresh(request, "driver_devices.view");
 
   const data = (request.data ?? {}) as Dict;
   const driverIds = pickIdList(data, "driverIds", "p_driver_ids") ?? [];

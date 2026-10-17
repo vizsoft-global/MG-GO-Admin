@@ -3,7 +3,8 @@ import { FieldValue, Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import { parseId } from "../core/query";
-import { requireStaff } from "../core/staff";
+import { requireStaff, requireStaffFresh } from "../core/staff";
+import { bumpEpoch } from "../core/epoch-write";
 import { catalogPrefixQueries, stampStoredRow } from "../core/search-text";
 import { fullScanFallback, lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
 
@@ -251,7 +252,7 @@ function assertDates(start: string | null, end: string | null): { startDate: str
  * its single scope in one transaction. Priority is locked: restaurant 30, zone 10.
  */
 export const adminInsertDeliveryRuleWithScope = onCall(async (request) => {
-  await requireStaff(request, "earnings.manage");
+  await requireStaffFresh(request, "earnings.manage");
 
   const data = asRecord(request.data);
   const name = readString(data, "name");
@@ -302,13 +303,16 @@ export const adminInsertDeliveryRuleWithScope = onCall(async (request) => {
     restaurant_id: scopeType === "restaurant" ? scopeId : null,
   });
   await batch.commit();
+  // The rider Home dashboard reads delivery rules from an isolate cache, so the
+  // `config` counter has to move or the edit waits for the TTL safety net.
+  await bumpEpoch(db, "config");
 
   return ruleRef.id;
 });
 
 /** `admin_upsert_source_company` — keyed on the lowercased key. */
 export const adminUpsertSourceCompany = onCall(async (request) => {
-  await requireStaff(request, "companies.manage");
+  await requireStaffFresh(request, "companies.manage");
 
   const data = asRecord(request.data);
   const key = readString(data, "key").toLowerCase();
@@ -383,6 +387,7 @@ export const adminUpsertSourceCompany = onCall(async (request) => {
     payload.created_at = FieldValue.serverTimestamp();
   }
   await ref.set(payload, { merge: true });
+  await bumpEpoch(db, "config");
 
   const saved = docRecord(await ref.get());
   return {
@@ -418,7 +423,7 @@ function parseWindow(data: Record<string, unknown>): { startDate: string; endDat
  * form highlights the exact field instead of a generic `missing_fields`.
  */
 export const adminUpsertDeliveryRule = onCall(async (request) => {
-  await requireStaff(request, "earnings.manage");
+  await requireStaffFresh(request, "earnings.manage");
 
   const data = asRecord(request.data);
   const id = parseId(data.id);
@@ -474,11 +479,12 @@ export const adminUpsertDeliveryRule = onCall(async (request) => {
   }
 
   await replaceScopes(DELIVERY_RULE_SCOPES, "delivery_rule_id", ref.id, scope.scopeType, scope.ids);
+  await bumpEpoch(db, "config");
   return { success: true, id: ref.id };
 });
 
 export const adminDeleteDeliveryRule = onCall(async (request) => {
-  await requireStaff(request, "earnings.manage");
+  await requireStaffFresh(request, "earnings.manage");
 
   const id = parseId(asRecord(request.data).id);
   if (!id) throw new HttpsError("invalid-argument", "missing_fields");
@@ -489,6 +495,7 @@ export const adminDeleteDeliveryRule = onCall(async (request) => {
   batch.delete(db.collection(DELIVERY_RULES).doc(id));
   for (const doc of scopes.docs) batch.delete(doc.ref);
   await batch.commit();
+  await bumpEpoch(db, "config");
   return { success: true };
 });
 
@@ -553,7 +560,7 @@ export const adminListDeliveryRules = onCall(async (request) => {
  * when the sheet stated none.
  */
 export const adminBulkUpdateDeliveryRules = onCall(async (request) => {
-  await requireStaff(request, "earnings.manage");
+  await requireStaffFresh(request, "earnings.manage");
 
   const data = asRecord(request.data);
   const rows = Array.isArray(data.rows) ? data.rows.map(asRecord) : [];
@@ -656,6 +663,7 @@ export const adminBulkUpdateDeliveryRules = onCall(async (request) => {
     created += 1;
   }
 
+  await bumpEpoch(db, "config");
   return { updated, created, rejected };
 });
 
@@ -710,7 +718,7 @@ function parseTiers(value: unknown): TierInput[] {
 
 /** `admin_upsert_incentive_rule` / `saveIncentiveRule`. */
 export const adminUpsertIncentiveRule = onCall(async (request) => {
-  await requireStaff(request, "earnings.manage");
+  await requireStaffFresh(request, "earnings.manage");
 
   const data = asRecord(request.data);
   const id = parseId(data.id);
@@ -830,11 +838,12 @@ export const adminUpsertIncentiveRule = onCall(async (request) => {
   await batch.commit();
 
   await replaceScopes(INCENTIVE_RULE_SCOPES, "incentive_rule_id", ref.id, scope.scopeType, scope.ids);
+  await bumpEpoch(db, "config");
   return { success: true, id: ref.id };
 });
 
 export const adminDeleteIncentiveRule = onCall(async (request) => {
-  await requireStaff(request, "earnings.manage");
+  await requireStaffFresh(request, "earnings.manage");
 
   const id = parseId(asRecord(request.data).id);
   if (!id) throw new HttpsError("invalid-argument", "missing_fields");
@@ -849,6 +858,7 @@ export const adminDeleteIncentiveRule = onCall(async (request) => {
   for (const doc of scopes.docs) batch.delete(doc.ref);
   for (const doc of tiers.docs) batch.delete(doc.ref);
   await batch.commit();
+  await bumpEpoch(db, "config");
   return { success: true };
 });
 

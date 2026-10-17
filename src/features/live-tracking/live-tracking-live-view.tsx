@@ -338,7 +338,11 @@ export function LiveTrackingLiveView({
   const { data: selectedRecentOrders = [] } = useQuery({
     queryKey: ["live-tracking", "recent-deliveries", selectedId],
     enabled: Boolean(selectedId),
-    refetchInterval: 10_000,
+    // Was 10s. This is the selected rider's last three orders, a secondary
+    // panel on a screen whose primary feed is the fleet realtime channel, so it
+    // does not need a per-10s server read. `/live-tracking-v2` is a separate
+    // route with its own WebSocket, so there is no second feed to suppress here.
+    refetchInterval: 60_000,
     queryFn: async () => {
       if (!selectedId) return [];
       try {

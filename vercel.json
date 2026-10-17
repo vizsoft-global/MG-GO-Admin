@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "regions": ["dxb1"],
+  "regions": ["bom1"],
   "crons": [
     {
       "path": "/api/cron/storage-uploads-cleanup",

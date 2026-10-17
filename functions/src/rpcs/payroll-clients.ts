@@ -16,7 +16,7 @@ import { HttpsError, onCall, type CallableRequest } from "firebase-functions/v2/
 import { getFirestore, FieldValue, Timestamp, type Firestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString, monthKey, parseMonthKey } from "../core/kuwait";
-import { requireStaff, type StaffContext } from "../core/staff";
+import { requireStaff, requireStaffFresh, type StaffContext } from "../core/staff";
 
 const CLIENT_KEY_RE = /^[a-z0-9_]{1,24}$/;
 const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
@@ -538,7 +538,7 @@ export const adminPayrollRuleConfig = onCall(async (request) => {
  * Idempotent, so the Settings tab can call it on every open.
  */
 export const adminOpenPayrollRuleMonth = onCall(async (request) => {
-  const staff = await requireStaff(request, "payroll.manage");
+  const staff = await requireStaffFresh(request, "payroll.manage");
   requirePayrollManager(staff);
   const month = assertRuleMonth(pickText(argDict(request), "p_month", "month", "monthKey"));
   const periodMonth = monthDay(month);
@@ -600,7 +600,7 @@ export const adminOpenPayrollRuleMonth = onCall(async (request) => {
 
 /** `admin_save_payroll_client` — upsert one client row (hours, ticks, thresholds). */
 export const adminSavePayrollClient = onCall(async (request) => {
-  const staff = await requireStaff(request, "payroll.manage");
+  const staff = await requireStaffFresh(request, "payroll.manage");
   requirePayrollManager(staff);
   const data = argDict(request);
   const db = getFirestore();
@@ -674,7 +674,7 @@ export const adminSavePayrollClient = onCall(async (request) => {
  * carries the full before/after.
  */
 export const adminSavePayrollClientRules = onCall(async (request) => {
-  const staff = await requireStaff(request, "payroll.manage");
+  const staff = await requireStaffFresh(request, "payroll.manage");
   requirePayrollManager(staff);
   const data = argDict(request);
   const db = getFirestore();
@@ -769,7 +769,7 @@ function ruleShape(rows: RuleRow[]): string {
 
 /** `admin_reset_payroll_client_rules` — restore the SOP starting rules for the month. */
 export const adminResetPayrollClientRules = onCall(async (request) => {
-  const staff = await requireStaff(request, "payroll.manage");
+  const staff = await requireStaffFresh(request, "payroll.manage");
   requirePayrollManager(staff);
   const data = argDict(request);
   const db = getFirestore();
@@ -825,7 +825,7 @@ export const adminResetPayrollClientRules = onCall(async (request) => {
 
 /** `admin_add_payroll_client` — derive the key from the name, then optionally copy rules. */
 export const adminAddPayrollClient = onCall(async (request) => {
-  const staff = await requireStaff(request, "payroll.manage");
+  const staff = await requireStaffFresh(request, "payroll.manage");
   requirePayrollManager(staff);
   const data = argDict(request);
   const db = getFirestore();
@@ -923,7 +923,7 @@ export const adminAddPayrollClient = onCall(async (request) => {
 
 /** `admin_delete_payroll_client` — refuses a system client or one still holding riders. */
 export const adminDeletePayrollClient = onCall(async (request) => {
-  const staff = await requireStaff(request, "payroll.manage");
+  const staff = await requireStaffFresh(request, "payroll.manage");
   requirePayrollManager(staff);
   const data = argDict(request);
   const db = getFirestore();
@@ -986,7 +986,7 @@ export const adminListPayrollColumnConfig = onCall(async (request) => {
  * empty one (the SQL's `DELETE` after the upsert).
  */
 export const adminSetPayrollColumnConfig = onCall(async (request) => {
-  const staff = await requireStaff(request, "payroll.manage");
+  const staff = await requireStaffFresh(request, "payroll.manage");
   requirePayrollManager(staff);
   const data = argDict(request);
 

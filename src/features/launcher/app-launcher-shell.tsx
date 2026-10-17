@@ -113,30 +113,14 @@ export function AppLauncherShell() {
     <div
       className={`${launcherFontClassName} relative flex h-full min-h-svh flex-col overflow-hidden`}
       style={{
-        backgroundColor: LAUNCHER_BRAND.canvas,
+        backgroundColor: "#f3f1ec",
+        backgroundImage: "url(/launcher-canvas.png)",
+        backgroundPosition: "center bottom",
+        backgroundSize: "cover",
         color: LAUNCHER_BRAND.text,
         fontFamily: 'var(--font-launcher), "Noto Sans Arabic", "Segoe UI", sans-serif',
       }}
     >
-      <div className="pointer-events-none absolute inset-0" aria-hidden>
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 80% 55% at 50% 28%, rgba(255,255,255,0.62) 0%, rgba(249,241,235,0) 68%), radial-gradient(ellipse 46% 38% at 100% 100%, rgba(41,41,63,0.07) 0%, transparent 62%)",
-          }}
-        />
-        <svg
-          className="absolute -end-6 -bottom-[40px] w-[min(42vw,420px)] opacity-[0.11]"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <path
-            d="M28 168V42h46l26 78 26-78h46v126h-32V78l-28 80h-24L60 78v90H28z"
-            fill="#29293f"
-          />
-        </svg>
-      </div>
       <header
         className="relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-4 px-6 py-2.5 text-white"
         style={{ backgroundColor: LAUNCHER_BRAND.topBar }}

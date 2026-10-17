@@ -11,7 +11,7 @@
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { FieldValue, getFirestore } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
-import { requireStaff } from "../core/staff";
+import { requireStaffFresh } from "../core/staff";
 import { kuwaitDayString } from "../core/kuwait";
 import { type SourceCompanyConfig } from "../core/incentive";
 import { loadIncentiveContext, type IncentiveContext } from "../core/incentive-store";
@@ -48,7 +48,7 @@ function earnDateOf(raw: Record<string, unknown>): string | null {
 }
 
 export const adminBulkUpdateDeliveries = onCall(async (request) => {
-  await requireStaff(request, "deliveries.manage");
+  await requireStaffFresh(request, "deliveries.manage");
   const data = (request.data ?? {}) as Record<string, unknown>;
 
   const status = asString(data["status"] ?? data["p_status"]);

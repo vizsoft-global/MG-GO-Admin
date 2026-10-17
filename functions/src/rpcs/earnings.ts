@@ -1,7 +1,7 @@
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { FieldValue, getFirestore } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
-import { requireStaff } from "../core/staff";
+import { requireStaff, requireStaffFresh } from "../core/staff";
 import { kuwaitDayRange, kuwaitDayString } from "../core/kuwait";
 import { computeSourceCompanyIncentive, incentiveAccruesOnDate, roundKwd } from "../core/money";
 import {
@@ -672,7 +672,7 @@ export async function recalculateDriverEarningsCore(args: {
 
 /** `recalculate_driver_earnings(p_driver_id, p_earn_date, p_approved_by)`. */
 export const recalculateDriverEarnings = onCall(async (request) => {
-  await requireStaff(request, "earnings.manage");
+  await requireStaffFresh(request, "earnings.manage");
   const data = (request.data ?? {}) as Record<string, unknown>;
   const driverId = trimmedOrNull(data["driverId"] ?? data["p_driver_id"]);
   if (!driverId) throw new HttpsError("invalid-argument", "invalid_driver_id");
@@ -697,7 +697,7 @@ export const recalculateDriverEarnings = onCall(async (request) => {
  * a zero day on their record that payroll then has to explain.
  */
 export const recalculateEarningsForDate = onCall(async (request) => {
-  await requireStaff(request, "earnings.manage");
+  await requireStaffFresh(request, "earnings.manage");
   const data = (request.data ?? {}) as Record<string, unknown>;
   const earnDate = requireDay(data["earnDate"] ?? data["p_earn_date"], "earn_date");
 
@@ -724,7 +724,7 @@ export const recalculateEarningsForDate = onCall(async (request) => {
  * earnings detail page asks for when it recalculates.
  */
 export const recalculateEarningsForRange = onCall(async (request) => {
-  await requireStaff(request, "earnings.manage");
+  await requireStaffFresh(request, "earnings.manage");
   const data = (request.data ?? {}) as Record<string, unknown>;
   const startDate = requireDay(data["startDate"] ?? data["p_start_date"], "date_range");
   const endDate = requireDay(data["endDate"] ?? data["p_end_date"], "date_range");

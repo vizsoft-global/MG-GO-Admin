@@ -36,7 +36,7 @@ import { allLegacyNames, moduleForFunction } from "./legacy-modules";
 export const FUNCTIONS_REGION = "me-central1";
 
 /** Phase 5 sets this to 0. Until then the scan lane stays warm. */
-export const SCAN_MIN_INSTANCES = 1;
+export const SCAN_MIN_INSTANCES = 0;
 
 export const LANE_EXPORT_NAMES = ["adminApi", "adminApiScan", "adminApiHeavy"] as const;
 

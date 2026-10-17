@@ -31,4 +31,21 @@ describe("fs metrics", () => {
     assert.equal(metrics.docsRead, 6);
     assert.equal(metrics.sequentialAwaits, 0);
   });
+
+  it("adds a nested block's reads to the enclosing handler", async () => {
+    const outer = await measureBlock("outer", async () => {
+      await recordRead(Promise.resolve(1), 5);
+      await measureBlock("inner", async () => {
+        await recordRead(Promise.resolve(1), 7);
+      });
+    });
+    assert.equal(outer.metrics.reads, 2);
+    assert.equal(outer.metrics.docsRead, 12);
+
+    const inner = await measureBlock("inner-only", async () => {
+      await recordRead(Promise.resolve(1), 7);
+    });
+    // The inner block reports its own reads and does not inherit the outer's.
+    assert.equal(inner.metrics.docsRead, 7);
+  });
 });

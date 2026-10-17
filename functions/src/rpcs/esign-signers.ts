@@ -105,18 +105,37 @@ function assertWithinCap(size: number): void {
   if (size > SCAN_CAP) throw new HttpsError("out-of-range", "too_many_rows");
 }
 
-/** The caller's own pending staff row for a request, lowest `sort_order` first. */
-function firstPendingOwnRow(
-  docs: readonly QueryDocumentSnapshot[],
-  uid: string,
-): QueryDocumentSnapshot | null {
+type OwnSignerMatch =
+  | { kind: "pending"; doc: QueryDocumentSnapshot }
+  | { kind: "signed" | "declined" | "missing" };
+
+function matchOwnSigner(docs: readonly QueryDocumentSnapshot[], uid: string): OwnSignerMatch {
   const own = docs
-    .filter((doc) => {
-      const row = dataOf(doc);
-      return row.staff_user_id === uid && row.status === "pending";
-    })
+    .filter((doc) => dataOf(doc).staff_user_id === uid)
     .sort((a, b) => sortOrderOf(dataOf(a)) - sortOrderOf(dataOf(b)));
-  return own[0] ?? null;
+  const pending = own.find((doc) => dataOf(doc).status === "pending");
+  if (pending) return { kind: "pending", doc: pending };
+  if (own.some((doc) => dataOf(doc).status === "signed")) return { kind: "signed" };
+  if (own.some((doc) => dataOf(doc).status === "declined")) return { kind: "declined" };
+  return { kind: "missing" };
+}
+
+function decidedSignerError(kind: Exclude<OwnSignerMatch["kind"], "pending">): {
+  ok: false;
+  error: "already_signed" | "already_declined" | "not_assigned";
+} {
+  switch (kind) {
+    case "signed":
+      return { ok: false, error: "already_signed" };
+    case "declined":
+      return { ok: false, error: "already_declined" };
+    case "missing":
+      return { ok: false, error: "not_assigned" };
+    default: {
+      const unexpected: never = kind;
+      return unexpected;
+    }
+  }
 }
 
 function declinedReasonOf(row: Dict): string | null {
@@ -397,6 +416,7 @@ export const adminListMyEsignSignatures = onCall(async (request) => {
 
   const rows = signers
     .flatMap(({ id, row }) => {
+      if (row.status !== "pending") return [];
       const requestId = textOf(row.request_id);
       const esign = requestId ? requests.get(requestId) : undefined;
       if (!requestId || !esign) return [];
@@ -469,8 +489,9 @@ export const adminSubmitEsignSignature = onCall(async (request) => {
       tx.get(requestRef),
     ]);
     assertWithinCap(signerSnap.size);
-    const target = firstPendingOwnRow(signerSnap.docs, staff.uid);
-    if (!target) return { ok: false as const, error: "not_assigned" };
+    const match = matchOwnSigner(signerSnap.docs, staff.uid);
+    if (match.kind !== "pending") return decidedSignerError(match.kind);
+    const target = match.doc;
     if (!requestSnap.exists || dataOf(requestSnap).status !== "signed") {
       return { ok: false as const, error: "not_ready" };
     }
@@ -525,8 +546,9 @@ export const adminDeclineEsignSignature = onCall(async (request) => {
   const result = await db.runTransaction(async (tx) => {
     const signerSnap = await tx.get(signersForRequestQuery(requestId));
     assertWithinCap(signerSnap.size);
-    const target = firstPendingOwnRow(signerSnap.docs, staff.uid);
-    if (!target) return { ok: false as const, error: "not_assigned" };
+    const match = matchOwnSigner(signerSnap.docs, staff.uid);
+    if (match.kind !== "pending") return decidedSignerError(match.kind);
+    const target = match.doc;
 
     const current = dataOf(target);
     const existingMeta =

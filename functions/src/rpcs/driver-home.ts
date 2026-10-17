@@ -1,7 +1,13 @@
-import { onCall } from "firebase-functions/v2/https";
-import { getFirestore, Timestamp } from "../core/fs";
+import { AggregateField, getFirestore, Timestamp, type Firestore } from "../core/fs";
+import { measureBlock, measureOnCall } from "../core/fs-metrics";
+import { createConfigCache, readConfigEpochs } from "../core/config-cache";
 import { COLLECTIONS, FIELDS } from "../core/collections";
-import { kuwaitDayRange, kuwaitDayString } from "../core/kuwait";
+import {
+  kuwaitDayEnd,
+  kuwaitDayRange,
+  kuwaitDayStart,
+  kuwaitDayString,
+} from "../core/kuwait";
 import { kuwaitWeekStart } from "../core/money";
 import { loadAppSettings } from "../core/settings";
 import { requireRider, riderError } from "../core/rider";
@@ -38,7 +44,31 @@ const HOME_BANNERS = "home_banners";
 const DRIVER_HOME_BANNERS = "driver_home_banners";
 const DRIVER_GROUP_MEMBERS = "driver_group_members";
 const WEEK_PROGRESS_STATUSES = new Set(["in_transit", "pending", "under_review", "verified"]);
+
+/**
+ * Fleet-wide configuration scans. These still bound the cold fill of the
+ * `config-cache` entries, so they stay generous on purpose.
+ */
 const SCAN = 2_000;
+/**
+ * Per-rider history pages. These were a fleet-size guard copied onto a query
+ * that is already filtered to one `driver_id`, so 2000 meant "read the rider's
+ * whole session history on every Home call".
+ */
+const SESSION_SCAN = 200;
+/** An open session is the newest few rows, never the rider's history. */
+const OPEN_SESSION_SCAN = 5;
+/** Today's closed sessions: a handful of duty sessions, not the archive. */
+const DAY_SESSION_SCAN = 20;
+/** The rider's day rows, the fallback page for a non-string `attendance_date`. */
+const ATTENDANCE_DAY_SCAN = 80;
+/** A week is seven day rows; the ceiling only absorbs duplicates. */
+const WEEK_DAY_SCAN = 40;
+/** A week of one rider's deliveries. Any higher is a fleet number, not a weekly one. */
+const WEEK_SCAN = 1_000;
+/** `source_companies` is a small settings collection; that is what the cache holds. */
+const SOURCE_COMPANY_SCAN = 500;
+
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
@@ -68,6 +98,14 @@ function asCount(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
 }
 
+/**
+ * One measured step. The step emits its own `perf:"block"` Cloud Logging line
+ * with the read count, and the totals still roll up into the handler's line.
+ */
+async function step<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  return (await measureBlock(name, fn)).result;
+}
+
 async function assignedRestaurantIds(driverId: string, driver: Dict): Promise<string[]> {
   const ids = new Set(driverRestaurantIds(driver));
   const snap = await getFirestore()
@@ -82,8 +120,38 @@ async function assignedRestaurantIds(driverId: string, driver: Dict): Promise<st
   return [...ids];
 }
 
-async function loadSourceCompany(key: string | null): Promise<Dict | null> {
+/**
+ * The whole `source_companies` collection, cached. It is a settings collection
+ * that changes when a company is added, not per request, and the old code paid
+ * one or two reads per Home call for a rider who has a company.
+ */
+const sourceCompanyCache = createConfigCache<Map<string, Dict>>();
+
+async function loadSourceCompanyMap(): Promise<Map<string, Dict>> {
+  const snap = await getFirestore()
+    .collection(COLLECTIONS.sourceCompanies)
+    .limit(SOURCE_COMPANY_SCAN)
+    .get();
+  const map = new Map<string, Dict>();
+  for (const doc of snap.docs) {
+    const raw = (doc.data() ?? {}) as Dict;
+    map.set(doc.id, raw);
+    const key = asString(raw["key"]);
+    if (key) map.set(key, raw);
+  }
+  return map;
+}
+
+async function loadSourceCompany(key: string | null, configEpoch: number): Promise<Dict | null> {
   if (!key) return null;
+  const map = await sourceCompanyCache
+    .get(configEpoch, loadSourceCompanyMap)
+    .catch(() => null);
+  const cached = map?.get(key);
+  if (cached) return cached;
+
+  // The cached collection was capped or does not carry this key: one direct
+  // read, exactly as before the cache existed.
   const db = getFirestore();
   const byId = await db.collection(COLLECTIONS.sourceCompanies).doc(key).get();
   if (byId.exists) return (byId.data() ?? {}) as Dict;
@@ -100,10 +168,10 @@ async function loadSourceCompany(key: string | null): Promise<Dict | null> {
  * User-plan hide: enabled company scheme that is not system `mg`.
  * SQL `company_config_applies` additionally requires outsourced + effective_from.
  */
-async function companyHidesWeeklyIncentive(driver: Dict): Promise<boolean> {
+async function companyHidesWeeklyIncentive(driver: Dict, configEpoch: number): Promise<boolean> {
   const key = asString(driver["source_company"]);
   if (!key || key === "mg") return false;
-  const company = await loadSourceCompany(key);
+  const company = await loadSourceCompany(key, configEpoch);
   if (!company) return false;
   if (company["is_system"] === true) return false;
   return company["incentive_enabled"] === true;
@@ -131,11 +199,38 @@ function ruleMatchesDriver(args: {
   return false;
 }
 
+/**
+ * The rider's newest session row.
+ *
+ * The ordered query is one read. It only misses documents that have no
+ * `updated_at`, which is why the bounded scan stays as a fallback rather than
+ * being deleted — and why the ordered path is wrapped: a composite index that
+ * is not deployed yet throws instead of returning nothing.
+ */
 async function latestSession(driverId: string): Promise<Dict | null> {
+  const db = getFirestore();
+  try {
+    const ordered = await db
+      .collection(COLLECTIONS.driverSessions)
+      .where("driver_id", "==", driverId)
+      .orderBy("updated_at", "desc")
+      .limit(1)
+      .get();
+    if (!ordered.empty) {
+      const doc = ordered.docs[0];
+      return { id: doc.id, ...((doc.data() ?? {}) as Dict) };
+    }
+  } catch {
+    // Missing composite index (driver_id, updated_at desc) — use the scan.
+  }
+  return scanLatestSession(driverId);
+}
+
+async function scanLatestSession(driverId: string): Promise<Dict | null> {
   const snap = await getFirestore()
     .collection(COLLECTIONS.driverSessions)
     .where("driver_id", "==", driverId)
-    .limit(SCAN)
+    .limit(SESSION_SCAN)
     .get();
   let best: Dict | null = null;
   let bestAt = -1;
@@ -158,7 +253,9 @@ async function openOnlineSession(driverId: string): Promise<{ id: string; data: 
     .collection(COLLECTIONS.driverSessions)
     .where("driver_id", "==", driverId)
     .where("is_online", "==", true)
-    .limit(50)
+    // Two equality filters need no composite index; the newest open row is
+    // picked in memory so a duplicated open session still resolves correctly.
+    .limit(OPEN_SESSION_SCAN)
     .get();
   let best: { id: string; data: Dict } | null = null;
   let bestAt = -1;
@@ -184,24 +281,39 @@ async function attendanceLogOn(driverId: string, day: string): Promise<{ id: str
   return { id: snap.docs[0].id, data: (snap.docs[0].data() ?? {}) as Dict };
 }
 
+/**
+ * The rider's day row.
+ *
+ * The direct day query is the whole answer in the normal case: rows are written
+ * with a `YYYY-MM-DD` string. The rider page only runs when that query finds
+ * nothing — which is exactly the case it exists for, a row whose
+ * `attendance_date` was stored as a Timestamp. The equality filter cannot match
+ * such a row, but `pickAttendanceDayRow` still can.
+ */
 async function attendanceDayOn(driverId: string, day: string): Promise<{ id: string; data: Dict } | null> {
   const db = getFirestore();
-  const [byString, scanned] = await Promise.all([
-    db
-      .collection(DRIVER_ATTENDANCE)
-      .where("driver_id", "==", driverId)
-      .where("attendance_date", "==", day)
-      .limit(10)
-      .get(),
-    db.collection(DRIVER_ATTENDANCE).where("driver_id", "==", driverId).limit(80).get(),
-  ]);
-  const byId = new Map<string, { id: string; data: Dict }>();
-  for (const snap of [byString, scanned]) {
-    for (const doc of snap.docs) {
-      byId.set(doc.id, { id: doc.id, data: (doc.data() ?? {}) as Dict });
-    }
+  const byString = await db
+    .collection(DRIVER_ATTENDANCE)
+    .where("driver_id", "==", driverId)
+    .where("attendance_date", "==", day)
+    .limit(10)
+    .get();
+  const rows = new Map<string, { id: string; data: Dict }>();
+  for (const doc of byString.docs) {
+    rows.set(doc.id, { id: doc.id, data: (doc.data() ?? {}) as Dict });
   }
-  return pickAttendanceDayRow([...byId.values()], day);
+  const picked = pickAttendanceDayRow([...rows.values()], day);
+  if (picked) return picked;
+
+  const scanned = await db
+    .collection(DRIVER_ATTENDANCE)
+    .where("driver_id", "==", driverId)
+    .limit(ATTENDANCE_DAY_SCAN)
+    .get();
+  for (const doc of scanned.docs) {
+    rows.set(doc.id, { id: doc.id, data: (doc.data() ?? {}) as Dict });
+  }
+  return pickAttendanceDayRow([...rows.values()], day);
 }
 
 async function locationOf(driverId: string): Promise<Dict> {
@@ -216,16 +328,49 @@ async function locationOf(driverId: string): Promise<Dict> {
   return snap.empty ? {} : ((snap.docs[0].data() ?? {}) as Dict);
 }
 
+/**
+ * The week's approved earning credits.
+ *
+ * An aggregate bills as one read per 1000 matched index entries instead of one
+ * read per returned document, which is the difference between ~1 read and a
+ * rider's whole week of wallet entries. `Query.sum()` is not in this SDK
+ * version (`@google-cloud/firestore` 7.x), so the aggregate is spelled with
+ * `aggregate({ total: AggregateField.sum(...) })`. If the aggregate cannot be
+ * served (index not deployed) the bounded scan runs instead, so the number on
+ * screen is never wrong just because the index is late.
+ */
 async function weekEarnings(driverId: string, weekStart: string, today: string): Promise<number> {
-  const snap = await getFirestore()
+  const range = (col: ReturnType<Firestore["collection"]>) =>
+    col
+      .where("driver_id", "==", driverId)
+      .where("entry_type", "==", "earning_credit")
+      .where("status", "==", "approved")
+      .where("earn_date", ">=", weekStart)
+      .where("earn_date", "<=", today);
+
+  const col = getFirestore().collection(COLLECTIONS.driverWalletEntries);
+  try {
+    const snap = await range(col)
+      .aggregate({ total: AggregateField.sum("amount_kwd") })
+      .get();
+    const total = snap.data().total;
+    if (total === null) return 0;
+    if (typeof total === "number" && Number.isFinite(total)) {
+      return Math.round(total * 1000) / 1000;
+    }
+  } catch {
+    // Fall through to the scan.
+  }
+
+  const scanned = await getFirestore()
     .collection(COLLECTIONS.driverWalletEntries)
     .where("driver_id", "==", driverId)
     .where("earn_date", ">=", weekStart)
     .where("earn_date", "<=", today)
-    .limit(SCAN)
+    .limit(WEEK_SCAN)
     .get();
   let sum = 0;
-  for (const doc of snap.docs) {
+  for (const doc of scanned.docs) {
     const raw = (doc.data() ?? {}) as Dict;
     if (raw["status"] !== "approved") continue;
     if (raw["entry_type"] !== "earning_credit") continue;
@@ -241,7 +386,48 @@ function deliveryDay(raw: Dict): string | null {
   return at ? kuwaitDayString(at) : asDay(raw["delivered_day"]) ?? asDay(raw["created_day"]);
 }
 
+/**
+ * The week's in-progress + verified deliveries.
+ *
+ * One `count()` aggregate — billed as one read per 1000 index entries matched —
+ * replaces two range scans that pulled the rider's whole week twice and then
+ * deduped the second copy away.
+ *
+ * Measured on the live collection before making this change
+ * (`scripts/check-delivery-day-fields.mts`): all **266,908** deliveries carry
+ * `shift_date`, and `deliveryDay()` prefers `shift_date`, so the aggregate
+ * returns exactly the set the two scans used to build. It also explains why the
+ * second scan was pure cost: only 2,064 rows have `delivered_day` at all, and
+ * every one of them also has `shift_date`, so each was dropped as a duplicate.
+ *
+ * The two scans are kept as the fallback for the one case an aggregate cannot
+ * answer — a legacy or imported row with no `shift_date`. They run only when the
+ * aggregate returns zero, which is itself cheap (a query that matches nothing is
+ * not billed), so the normal call never pays for them.
+ */
 async function weekDeliveryCount(driverId: string, weekStart: string, today: string): Promise<number> {
+  try {
+    const snap = await getFirestore()
+      .collection(COLLECTIONS.deliveries)
+      .where("driver_id", "==", driverId)
+      .where("status", "in", [...WEEK_PROGRESS_STATUSES])
+      .where("shift_date", ">=", weekStart)
+      .where("shift_date", "<=", today)
+      .count()
+      .get();
+    const count = snap.data().count;
+    if (typeof count === "number" && Number.isFinite(count) && count > 0) return count;
+  } catch {
+    // Missing composite index (driver_id, status, shift_date) — use the scans.
+  }
+  return weekDeliveryCountByScan(driverId, weekStart, today);
+}
+
+async function weekDeliveryCountByScan(
+  driverId: string,
+  weekStart: string,
+  today: string,
+): Promise<number> {
   const db = getFirestore();
   const [byShift, byDelivered] = await Promise.all([
     db
@@ -249,14 +435,14 @@ async function weekDeliveryCount(driverId: string, weekStart: string, today: str
       .where("driver_id", "==", driverId)
       .where("shift_date", ">=", weekStart)
       .where("shift_date", "<=", today)
-      .limit(SCAN)
+      .limit(WEEK_SCAN)
       .get(),
     db
       .collection(COLLECTIONS.deliveries)
       .where("driver_id", "==", driverId)
       .where("delivered_day", ">=", weekStart)
       .where("delivered_day", "<=", today)
-      .limit(SCAN)
+      .limit(WEEK_SCAN)
       .get(),
   ]);
   const seen = new Set<string>();
@@ -311,19 +497,46 @@ async function weekCompliance(
   }
 }
 
+/**
+ * Online seconds for the Kuwait week.
+ *
+ * The week range is the whole answer in the normal case — rows are written with
+ * a `YYYY-MM-DD` string — which turns an 80-document rider page into about
+ * seven. The page still runs when the range finds nothing, because a
+ * `Timestamp`-valued `attendance_date` cannot match a string range and the
+ * in-memory day test can still read it.
+ */
 async function weekOnlineSeconds(
   driverId: string,
   weekStart: string,
   today: string,
   now: Date,
 ): Promise<number> {
-  const snap = await getFirestore()
-    .collection(DRIVER_ATTENDANCE)
-    .where("driver_id", "==", driverId)
-    .limit(80)
-    .get();
+  const db = getFirestore();
+  let rows: readonly { data(): unknown }[] = [];
+  try {
+    const ranged = await db
+      .collection(DRIVER_ATTENDANCE)
+      .where("driver_id", "==", driverId)
+      .where("attendance_date", ">=", weekStart)
+      .where("attendance_date", "<=", today)
+      .limit(WEEK_DAY_SCAN)
+      .get();
+    rows = ranged.docs;
+  } catch {
+    rows = [];
+  }
+  if (rows.length === 0) {
+    const scanned = await db
+      .collection(DRIVER_ATTENDANCE)
+      .where("driver_id", "==", driverId)
+      .limit(ATTENDANCE_DAY_SCAN)
+      .get();
+    rows = scanned.docs;
+  }
+
   let seconds = 0;
-  for (const doc of snap.docs) {
+  for (const doc of rows) {
     const raw = (doc.data() ?? {}) as Dict;
     const day = attendanceDateKey(raw["attendance_date"]);
     if (!day || day < weekStart || day > today) continue;
@@ -368,44 +581,58 @@ function deliveryRuleSummary(scopeType: string, name: string, restaurantName: st
   return name;
 }
 
-async function matchingDeliveryRules(args: {
-  today: string;
-  zoneId: string | null;
-  partnerId: string | null;
-  restaurantIds: readonly string[];
-}): Promise<Dict[]> {
+type RuleScope = {
+  zone_id: string | null;
+  partner_id: string | null;
+  restaurant_id: string | null;
+};
+
+type DeliveryRuleConfig = {
+  rules: Array<{ id: string; raw: Dict; priority: number; name: string }>;
+  scopesByRule: Map<string, RuleScope[]>;
+  restaurantNames: Map<string, string>;
+};
+
+const deliveryRuleCache = createConfigCache<DeliveryRuleConfig>();
+
+/**
+ * Every active delivery rule, every scope, and the name of each restaurant the
+ * scopes point at — one cached fleet-wide snapshot.
+ *
+ * This was the single most expensive read in the app: two unbounded collection
+ * scans plus a `getAll` of up to 300 restaurants on every rider's every Home
+ * call. The per-rider part (is today inside the rule window, does the scope
+ * match this rider) runs against the cached rows and costs no reads at all.
+ */
+async function loadDeliveryRuleConfig(): Promise<DeliveryRuleConfig> {
   const db = getFirestore();
   const rulesSnap = await db
     .collection(COLLECTIONS.deliveryRules)
     .where("status", "==", "active")
     .limit(SCAN)
     .get();
-  const matched: Array<{ id: string; raw: Dict; priority: number; name: string }> = [];
+  const rules: Array<{ id: string; raw: Dict; priority: number; name: string }> = [];
   for (const doc of rulesSnap.docs) {
     const raw = (doc.data() ?? {}) as Dict;
-    const start = asDay(raw["start_date"]) ?? "1970-01-01";
-    const end = asDay(raw["end_date"]) ?? "9999-12-31";
-    if (args.today < start || args.today > end) continue;
-    matched.push({
+    rules.push({
       id: doc.id,
       raw,
       priority: numberOrNull(raw["priority"]) ?? 0,
       name: asString(raw["name"]) ?? "",
     });
   }
-  if (matched.length === 0) return [];
+  if (rules.length === 0) {
+    return { rules, scopesByRule: new Map(), restaurantNames: new Map() };
+  }
 
   const scopesSnap = await db.collection(COLLECTIONS.deliveryRuleScopes).limit(SCAN).get();
-  const scopesByRule = new Map<
-    string,
-    Array<{ zone_id: string | null; partner_id: string | null; restaurant_id: string | null }>
-  >();
+  const scopesByRule = new Map<string, RuleScope[]>();
   const restaurantIds = new Set<string>();
   for (const doc of scopesSnap.docs) {
     const raw = (doc.data() ?? {}) as Dict;
     const ruleId = asString(raw["delivery_rule_id"]);
     if (!ruleId) continue;
-    const scope = {
+    const scope: RuleScope = {
       zone_id: asString(raw["zone_id"]),
       partner_id: asString(raw["partner_id"]),
       restaurant_id: asString(raw["restaurant_id"]),
@@ -414,15 +641,36 @@ async function matchingDeliveryRules(args: {
     scopesByRule.set(ruleId, [...(scopesByRule.get(ruleId) ?? []), scope]);
   }
 
-  const restaurantMap = new Map<string, string>();
+  const restaurantNames = new Map<string, string>();
   if (restaurantIds.size > 0) {
     const snaps = await db.getAll(
       ...[...restaurantIds].slice(0, 300).map((id) => db.collection(COLLECTIONS.restaurants).doc(id)),
     );
     for (const snap of snaps) {
-      if (snap.exists) restaurantMap.set(snap.id, asString((snap.data() ?? {})["name"]) ?? "");
+      if (snap.exists) restaurantNames.set(snap.id, asString((snap.data() ?? {})["name"]) ?? "");
     }
   }
+  return { rules, scopesByRule, restaurantNames };
+}
+
+function matchingDeliveryRules(
+  config: DeliveryRuleConfig,
+  args: {
+    today: string;
+    zoneId: string | null;
+    partnerId: string | null;
+    restaurantIds: readonly string[];
+  },
+): Dict[] {
+  const matched = config.rules.filter((rule) => {
+    const start = asDay(rule.raw["start_date"]) ?? "1970-01-01";
+    const end = asDay(rule.raw["end_date"]) ?? "9999-12-31";
+    return args.today >= start && args.today <= end;
+  });
+  if (matched.length === 0) return [];
+
+  const scopesByRule = config.scopesByRule;
+  const restaurantMap = config.restaurantNames;
 
   const rows: Array<Dict & { _priority: number; _name: string }> = [];
   for (const rule of matched) {
@@ -461,12 +709,29 @@ async function matchingDeliveryRules(args: {
   });
 }
 
-async function primaryWeeklyIncentive(args: {
-  today: string;
-  zoneId: string | null;
-  partnerId: string | null;
-  restaurantIds: readonly string[];
-}): Promise<Dict | null> {
+type IncentiveCandidate = {
+  id: string;
+  raw: Dict;
+  priority: number;
+  createdAt: number;
+  scopeType: string;
+};
+
+type IncentiveConfig = {
+  candidates: IncentiveCandidate[];
+  scopesByRule: Map<string, RuleScope[]>;
+  tiersByRule: Map<string, IncentiveTier[]>;
+};
+
+const incentiveRuleCache = createConfigCache<IncentiveConfig>();
+
+/**
+ * Active weekly incentive rules with every scope and every tier. All three
+ * collections are fleet-wide configuration, so they are read once per cache
+ * fill instead of on every Home call — the old path re-scanned the scope
+ * collection and then the tier collection for each requesting rider.
+ */
+async function loadIncentiveConfig(): Promise<IncentiveConfig> {
   const db = getFirestore();
   const rulesSnap = await db
     .collection(COLLECTIONS.incentiveRules)
@@ -474,18 +739,9 @@ async function primaryWeeklyIncentive(args: {
     .where("period", "==", "weekly")
     .limit(SCAN)
     .get();
-  const candidates: Array<{
-    id: string;
-    raw: Dict;
-    priority: number;
-    createdAt: number;
-    scopeType: string;
-  }> = [];
+  const candidates: IncentiveCandidate[] = [];
   for (const doc of rulesSnap.docs) {
     const raw = (doc.data() ?? {}) as Dict;
-    const start = asDay(raw["start_date"]) ?? "1970-01-01";
-    const end = asDay(raw["end_date"]) ?? "9999-12-31";
-    if (args.today < start || args.today > end) continue;
     candidates.push({
       id: doc.id,
       raw,
@@ -494,13 +750,16 @@ async function primaryWeeklyIncentive(args: {
       scopeType: asString(raw["scope_type"]) ?? "restaurant",
     });
   }
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) {
+    return { candidates, scopesByRule: new Map(), tiersByRule: new Map() };
+  }
 
-  const scopesSnap = await db.collection(COLLECTIONS.incentiveRuleScopes).limit(SCAN).get();
-  const scopesByRule = new Map<
-    string,
-    Array<{ zone_id: string | null; partner_id: string | null; restaurant_id: string | null }>
-  >();
+  const [scopesSnap, tiersSnap] = await Promise.all([
+    db.collection(COLLECTIONS.incentiveRuleScopes).limit(SCAN).get(),
+    db.collection(COLLECTIONS.incentiveRuleTiers).limit(SCAN).get(),
+  ]);
+
+  const scopesByRule = new Map<string, RuleScope[]>();
   for (const doc of scopesSnap.docs) {
     const raw = (doc.data() ?? {}) as Dict;
     const ruleId = asString(raw["incentive_rule_id"]);
@@ -515,6 +774,43 @@ async function primaryWeeklyIncentive(args: {
     ]);
   }
 
+  const tiersByRule = new Map<string, IncentiveTier[]>();
+  for (const doc of tiersSnap.docs) {
+    const raw = (doc.data() ?? {}) as Dict;
+    const ruleId = asString(raw["incentive_rule_id"]);
+    if (!ruleId) continue;
+    const tier: IncentiveTier = {
+      threshold_deliveries: numberOrNull(raw["threshold_deliveries"]) ?? 0,
+      reward_mode: (asString(raw["reward_mode"]) ?? "per_delivery") as IncentiveTier["reward_mode"],
+      reward_kwd: numberOrNull(raw["reward_kwd"]),
+      reward_per_delivery_kwd: numberOrNull(raw["reward_per_delivery_kwd"]),
+    };
+    tiersByRule.set(ruleId, [...(tiersByRule.get(ruleId) ?? []), tier]);
+  }
+  for (const tiers of tiersByRule.values()) {
+    tiers.sort((a, b) => a.threshold_deliveries - b.threshold_deliveries);
+  }
+  return { candidates, scopesByRule, tiersByRule };
+}
+
+function primaryWeeklyIncentive(
+  config: IncentiveConfig,
+  args: {
+    today: string;
+    zoneId: string | null;
+    partnerId: string | null;
+    restaurantIds: readonly string[];
+  },
+): Dict | null {
+  const candidates = config.candidates.filter((rule) => {
+    const start = asDay(rule.raw["start_date"]) ?? "1970-01-01";
+    const end = asDay(rule.raw["end_date"]) ?? "9999-12-31";
+    return args.today >= start && args.today <= end;
+  });
+  if (candidates.length === 0) return null;
+
+  const scopesByRule = config.scopesByRule;
+
   const matching = candidates.filter((rule) =>
     ruleMatchesDriver({
       scopeType: rule.scopeType,
@@ -528,22 +824,7 @@ async function primaryWeeklyIncentive(args: {
   const picked = matching[0];
   if (!picked) return null;
 
-  const tiersSnap = await db
-    .collection(COLLECTIONS.incentiveRuleTiers)
-    .where("incentive_rule_id", "==", picked.id)
-    .limit(200)
-    .get();
-  const tiers: IncentiveTier[] = tiersSnap.docs
-    .map((doc) => {
-      const raw = (doc.data() ?? {}) as Dict;
-      return {
-        threshold_deliveries: numberOrNull(raw["threshold_deliveries"]) ?? 0,
-        reward_mode: (asString(raw["reward_mode"]) ?? "per_delivery") as IncentiveTier["reward_mode"],
-        reward_kwd: numberOrNull(raw["reward_kwd"]),
-        reward_per_delivery_kwd: numberOrNull(raw["reward_per_delivery_kwd"]),
-      };
-    })
-    .sort((a, b) => a.threshold_deliveries - b.threshold_deliveries);
+  const tiers = config.tiersByRule.get(picked.id) ?? [];
 
   const targetMode = asString(picked.raw["target_mode"]) ?? "single";
   const target =
@@ -633,15 +914,38 @@ async function shiftOnDate(driverId: string, day: string): Promise<ShiftRow | nu
   };
 }
 
+/**
+ * Closed-session seconds credited to `day`.
+ *
+ * A session is attributed to the day it *started* (`kuwaitDayString(online)`),
+ * exactly as before, so the range prefilter plus the in-memory day test is the
+ * same answer with ~20 reads instead of the rider's whole history. The scan
+ * stays for the case where the range query cannot be served.
+ */
 async function closedSessionSeconds(driverId: string, day: string): Promise<number> {
-  const snap = await getFirestore()
-    .collection(COLLECTIONS.driverSessions)
-    .where("driver_id", "==", driverId)
-    .limit(SCAN)
-    .get();
+  const db = getFirestore();
+  let rows: readonly { data(): unknown }[] = [];
+  try {
+    const snap = await db
+      .collection(COLLECTIONS.driverSessions)
+      .where("driver_id", "==", driverId)
+      .where("went_online_at", ">=", Timestamp.fromDate(kuwaitDayStart(day)))
+      .where("went_online_at", "<", Timestamp.fromDate(kuwaitDayEnd(day)))
+      .limit(DAY_SESSION_SCAN)
+      .get();
+    rows = snap.docs;
+  } catch {
+    const snap = await db
+      .collection(COLLECTIONS.driverSessions)
+      .where("driver_id", "==", driverId)
+      .limit(SESSION_SCAN)
+      .get();
+    rows = snap.docs;
+  }
+
   let seconds = 0;
-  for (const doc of snap.docs) {
-    const raw = (doc.data() ?? {}) as Dict;
+  for (const doc of rows) {
+    const raw = ((doc.data() ?? {}) as Dict);
     const online = asDate(raw["went_online_at"]);
     const offline = asDate(raw["went_offline_at"]);
     if (!online || !offline) continue;
@@ -745,11 +1049,75 @@ function listIds(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
-async function loadBanner(driverId: string, zoneId: string | null, partnerId: string | null, now: Date): Promise<Dict | null> {
+type BannerRow = { id: string; raw: Dict };
+
+/**
+ * Both banner collections in one cached snapshot. The date window and the
+ * zone / partner / group targeting stay per call because they depend on the
+ * requesting rider and on `now`; only the two collection scans are shared.
+ */
+const bannerCache = createConfigCache<BannerRow[]>();
+
+async function loadBannerConfig(): Promise<BannerRow[]> {
   const db = getFirestore();
-  const [home, driverHome, groups] = await Promise.all([
+  const [home, driverHome] = await Promise.all([
     db.collection(HOME_BANNERS).limit(200).get().catch(() => null),
     db.collection(DRIVER_HOME_BANNERS).limit(200).get().catch(() => null),
+  ]);
+  const rows: BannerRow[] = [];
+  for (const snap of [home, driverHome]) {
+    if (!snap) continue;
+    for (const doc of snap.docs) rows.push({ id: doc.id, raw: (doc.data() ?? {}) as Dict });
+  }
+  return rows;
+}
+
+function pickBanner(
+  rows: readonly BannerRow[],
+  memberGroups: ReadonlySet<string>,
+  zoneId: string | null,
+  partnerId: string | null,
+  now: Date,
+): Dict | null {
+  const candidates: Array<{ id: string; raw: Dict; sort: number; created: number }> = [];
+  for (const row of rows) {
+    const raw = row.raw;
+    if (!bannerWindowOk(raw, now)) continue;
+    const zones = listIds(raw["zone_ids"]);
+    const partners = listIds(raw["partner_ids"]);
+    const groupIds = listIds(raw["driver_group_ids"]);
+    if (zones.length > 0 && (!zoneId || !zones.includes(zoneId))) continue;
+    if (partners.length > 0 && (!partnerId || !partners.includes(partnerId))) continue;
+    if (groupIds.length > 0 && !groupIds.some((id) => memberGroups.has(id))) continue;
+    candidates.push({
+      id: row.id,
+      raw,
+      sort: numberOrNull(raw["sort_order"]) ?? 0,
+      created: asDate(raw["created_at"])?.getTime() ?? 0,
+    });
+  }
+  candidates.sort((a, b) => a.sort - b.sort || b.created - a.created);
+  const first = candidates[0];
+  if (!first) return null;
+  return {
+    id: first.id,
+    image_url: asString(first.raw["image_url"]),
+    caption_en: asString(first.raw["caption_en"]),
+    caption_ar: asString(first.raw["caption_ar"]),
+    deep_link: asString(first.raw["deep_link"]),
+  };
+}
+
+async function loadBanner(
+  driverId: string,
+  zoneId: string | null,
+  partnerId: string | null,
+  now: Date,
+  configEpoch: number,
+): Promise<Dict | null> {
+  const db = getFirestore();
+  const [rows, groups] = await Promise.all([
+    bannerCache.get(configEpoch, loadBannerConfig).catch(() => [] as BannerRow[]),
     db
       .collection(DRIVER_GROUP_MEMBERS)
       .where("driver_id", "==", driverId)
@@ -764,37 +1132,7 @@ async function loadBanner(driverId: string, zoneId: string | null, partnerId: st
       if (groupId) memberGroups.add(groupId);
     }
   }
-
-  const candidates: Array<{ id: string; raw: Dict; sort: number; created: number }> = [];
-  for (const snap of [home, driverHome]) {
-    if (!snap) continue;
-    for (const doc of snap.docs) {
-      const raw = (doc.data() ?? {}) as Dict;
-      if (!bannerWindowOk(raw, now)) continue;
-      const zones = listIds(raw["zone_ids"]);
-      const partners = listIds(raw["partner_ids"]);
-      const groupIds = listIds(raw["driver_group_ids"]);
-      if (zones.length > 0 && (!zoneId || !zones.includes(zoneId))) continue;
-      if (partners.length > 0 && (!partnerId || !partners.includes(partnerId))) continue;
-      if (groupIds.length > 0 && !groupIds.some((id) => memberGroups.has(id))) continue;
-      candidates.push({
-        id: doc.id,
-        raw,
-        sort: numberOrNull(raw["sort_order"]) ?? 0,
-        created: asDate(raw["created_at"])?.getTime() ?? 0,
-      });
-    }
-  }
-  candidates.sort((a, b) => a.sort - b.sort || b.created - a.created);
-  const first = candidates[0];
-  if (!first) return null;
-  return {
-    id: first.id,
-    image_url: asString(first.raw["image_url"]),
-    caption_en: asString(first.raw["caption_en"]),
-    caption_ar: asString(first.raw["caption_ar"]),
-    deep_link: asString(first.raw["deep_link"]),
-  };
+  return pickBanner(rows, memberGroups, zoneId, partnerId, now);
 }
 
 export async function loadRiderHomeDashboard(args: {
@@ -812,8 +1150,19 @@ export async function loadRiderHomeDashboard(args: {
   const forceMin = numberOrNull(args.driver["force_app_update_min_code"]);
   const forceAppUpdate = forceAt != null && forceMin !== null;
 
-  const restaurantIds = await assignedRestaurantIds(args.uid, args.driver);
-  const hideWeekly = await companyHidesWeeklyIncentive(args.driver);
+  // One epoch read for every fleet-wide collection this response needs. Once
+  // the isolate is warm that single read is the *entire* cost of the delivery
+  // rules, their scopes, the incentive rules, their scopes and tiers, and the
+  // banners — the collections themselves come from the isolate memory cache.
+  const epochs = await step("home.epochs", () => readConfigEpochs());
+  const configEpoch = epochs.config;
+
+  const restaurantIds = await step("home.assignedRestaurants", () =>
+    assignedRestaurantIds(args.uid, args.driver),
+  );
+  const hideWeekly = await step("home.companyIncentive", () =>
+    companyHidesWeeklyIncentive(args.driver, configEpoch),
+  );
 
   const [
     partnerSnap,
@@ -827,31 +1176,38 @@ export async function loadRiderHomeDashboard(args: {
     compliance,
   ] = await Promise.all([
       partnerId
-        ? getFirestore().collection(COLLECTIONS.partners).doc(partnerId).get()
+        ? step("home.partner", () =>
+            getFirestore().collection(COLLECTIONS.partners).doc(partnerId).get(),
+          )
         : Promise.resolve(null),
-      latestSession(args.uid),
-      locationOf(args.uid),
-      weekEarnings(args.uid, weekStart, today),
-      weekDeliveryCount(args.uid, weekStart, today),
-      weekOnlineSeconds(args.uid, weekStart, today, now),
-      performanceCounts(args.uid),
-      shiftAdherence(args.uid, today),
-      weekCompliance(args.uid, weekStart, today),
+      step("home.latestSession", () => latestSession(args.uid)),
+      step("home.location", () => locationOf(args.uid)),
+      step("home.weekEarnings", () => weekEarnings(args.uid, weekStart, today)),
+      step("home.weekDeliveries", () => weekDeliveryCount(args.uid, weekStart, today)),
+      step("home.weekOnlineSeconds", () => weekOnlineSeconds(args.uid, weekStart, today, now)),
+      step("home.performanceCounts", () => performanceCounts(args.uid)),
+      step("home.shiftAdherence", () => shiftAdherence(args.uid, today)),
+      step("home.weekCompliance", () => weekCompliance(args.uid, weekStart, today)),
     ]);
 
   const partner = partnerSnap?.exists ? ((partnerSnap.data() ?? {}) as Dict) : {};
-  const [rules, incentive, banner] = await Promise.all([
-    matchingDeliveryRules({
-      today,
-      zoneId,
-      partnerId,
-      restaurantIds,
-    }),
+  const [ruleConfig, incentiveConfig, banner] = await Promise.all([
+    step("home.deliveryRules", () => deliveryRuleCache.get(configEpoch, loadDeliveryRuleConfig)),
     hideWeekly
       ? Promise.resolve(null)
-      : primaryWeeklyIncentive({ today, zoneId, partnerId, restaurantIds }),
-    loadBanner(args.uid, zoneId, partnerId, now),
+      : step("home.incentiveRules", () => incentiveRuleCache.get(configEpoch, loadIncentiveConfig)),
+    step("home.banner", () => loadBanner(args.uid, zoneId, partnerId, now, configEpoch)),
   ]);
+
+  const rules = matchingDeliveryRules(ruleConfig, {
+    today,
+    zoneId,
+    partnerId,
+    restaurantIds,
+  });
+  const incentive = incentiveConfig
+    ? primaryWeeklyIncentive(incentiveConfig, { today, zoneId, partnerId, restaurantIds })
+    : null;
 
   return {
     driver: {
@@ -979,16 +1335,19 @@ export async function applyRiderCheckout(args: {
   await batch.commit();
 }
 
-export const driverGetHomeDashboard = onCall(async (request) => {
-  const ctx = await requireRider(request);
-  return loadRiderHomeDashboard({
-    uid: ctx.uid,
-    driver: ctx.driver,
-    profile: ctx.profile,
-  });
-});
+export const driverGetHomeDashboard = measureOnCall(
+  "driverGetHomeDashboard",
+  async (request) => {
+    const ctx = await requireRider(request);
+    return loadRiderHomeDashboard({
+      uid: ctx.uid,
+      driver: ctx.driver,
+      profile: ctx.profile,
+    });
+  },
+);
 
-export const driverSetDutyState = onCall(async (request) => {
+export const driverSetDutyState = measureOnCall("driverSetDutyState", async (request) => {
   const ctx = await requireRider(request);
   const data = (request.data ?? {}) as Dict;
   const isOnDuty = pickTriBool(data, "is_on_duty", "p_is_on_duty") ?? pickBoolean(data, "is_on_duty", "p_is_on_duty");

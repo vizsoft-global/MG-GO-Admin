@@ -15,7 +15,7 @@ import { getFirestore, Timestamp, type DocumentSnapshot } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { loadAppSettings } from "../core/settings";
-import { requireStaff } from "../core/staff";
+import { requireStaff, requireStaffFresh } from "../core/staff";
 import {
   SCAN_CAP,
   chunk,
@@ -236,7 +236,7 @@ async function missingAttendanceDenorm(driverId: unknown, existing: Dict): Promi
 }
 
 export const adminCorrectAttendance = onCall(async (request) => {
-  const staff = await requireStaff(request, "attendance.manage");
+  const staff = await requireStaffFresh(request, "attendance.manage");
   const data = (request.data ?? {}) as Data;
   const db = getFirestore();
   const logs = db.collection(COLLECTIONS.attendanceLogs);
@@ -836,7 +836,7 @@ async function autoCheckoutMinutes(): Promise<number> {
 type AutoReason = "auto_shift_end" | "auto_offline" | "auto_out_of_zone";
 
 export const adminRunAttendanceAutoCheckout = onCall(async (request) => {
-  await requireStaff(request);
+  await requireStaffFresh(request);
   const db = getFirestore();
   const minutes = await autoCheckoutMinutes();
   const now = new Date();
@@ -913,7 +913,7 @@ export const adminRunAttendanceAutoCheckout = onCall(async (request) => {
 });
 
 export const adminRunFreezeStartCheckout = onCall(async (request) => {
-  await requireStaff(request);
+  await requireStaffFresh(request);
   const today = kuwaitDayString(new Date());
 
   const frozen = (await onDutyDrivers()).filter((driver) => {

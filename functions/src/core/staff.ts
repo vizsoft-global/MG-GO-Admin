@@ -1,6 +1,7 @@
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
 import { getFirestore } from "./fs";
 import { COLLECTIONS, FIELDS } from "./collections";
+import { AUTH_EPOCHS_DOC_ID, configEpochs, createKeyedEpochCache } from "./config-cache";
 
 /** Same list as `src/lib/auth/staff-access.ts` — a `.manage` module alias. */
 const RESOURCE_CRUD_MODULES = new Set<string>([
@@ -53,17 +54,54 @@ export async function requireStaff(
   request: CallableRequest<unknown>,
   requiredSlug?: string,
 ): Promise<StaffContext> {
+  return resolveStaff(request, requiredSlug, false);
+}
+
+/**
+ * Same as `requireStaff`, with the permission documents re-read from Firestore.
+ *
+ * Use this from a callable that changes money, permissions, or account state.
+ * The cached path is delayed by at most one `access` counter bump, which is
+ * fine for a read and not fine for a write that a revoked tick must not make.
+ */
+export async function requireStaffFresh(
+  request: CallableRequest<unknown>,
+  requiredSlug?: string,
+): Promise<StaffContext> {
+  return resolveStaff(request, requiredSlug, true);
+}
+
+/**
+ * Fresh profile, epoch-keyed permission documents.
+ *
+ * The profile stays a per-call read: approval, archive, and `admin_role_id`
+ * have to be current, and a callable token carries no `auth_time` comparable
+ * with `sessions_revoked_at`. (Callable tokens are minted per request, so
+ * `request.auth.token.auth_time` is not the session cookie's `auth_time` and
+ * must never be compared with it.)
+ *
+ * The permission documents are different. Their key is the `access` counter of
+ * `auth_epochs/current`, which every role, tick, and catalog writer already
+ * bumps, and the counter is read in the *same* `getAll` as the profile. A
+ * permission change therefore lands on the next call after the counter moves,
+ * and the TTL is only a safety net for console edits. This is what removes the
+ * extra read from the critical path of all ~250 staff callables.
+ */
+async function resolveStaff(
+  request: CallableRequest<unknown>,
+  requiredSlug: string | undefined,
+  fresh: boolean,
+): Promise<StaffContext> {
   const uid = request.auth?.uid;
   if (!uid) {
     throw new HttpsError("unauthenticated", "not_authorized");
   }
 
   const db = getFirestore();
-  // Fresh profile on every call. Do not add a TTL cache here: approval, archive,
-  // and admin_role_id have to be current. Callable tokens are minted per request,
-  // so request.auth.token.auth_time is not the session cookie's auth_time and
-  // must not be compared with sessions_revoked_at.
-  const profileSnap = await db.collection(COLLECTIONS.profiles).doc(uid).get();
+  const [profileSnap, epochSnap] = await db.getAll(
+    db.collection(COLLECTIONS.profiles).doc(uid),
+    db.collection(COLLECTIONS.authEpochs).doc(AUTH_EPOCHS_DOC_ID),
+  );
   if (!profileSnap.exists) {
     throw new HttpsError("permission-denied", "not_authorized");
   }
@@ -84,7 +122,10 @@ export async function requireStaff(
   const accessKind = (profile.access_kind as string | null) ?? null;
   const isManager = isSuperAdmin || accessKind === "manager";
 
-  const permissions = await resolvePermissionSlugs(uid, roleId, isManager);
+  // A missing counters document means "no invalidation signal", so the cache is
+  // skipped rather than pinned to a zero that would never move.
+  const epoch = !fresh && epochSnap.exists ? configEpochs(epochSnap.data()).access : null;
+  const permissions = await resolvePermissionSlugs(uid, roleId, isManager, epoch);
 
   if (requiredSlug && !permissionGranted(permissions, requiredSlug)) {
     throw new HttpsError("permission-denied", "not_authorized");
@@ -106,40 +147,95 @@ export async function requireStaffAny(
   throw new HttpsError("permission-denied", "not_authorized");
 }
 
+type PermissionDoc = { slugs: string[] };
+
+/**
+ * One entry per role id, per user id, and one for the manager catalog. Bounded
+ * so a large staff roster cannot grow the isolate heap without limit.
+ */
+const permissionCache = createKeyedEpochCache<PermissionDoc>({ maxKeys: 2_000 });
+
+/** Test seam. Drops every cached permission document for this isolate. */
+export function clearPermissionCache(): void {
+  permissionCache.clear();
+}
+
+function slugArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((slug): slug is string => typeof slug === "string")
+    : [];
+}
+
+async function catalogSlugs(epoch: number | null): Promise<string[]> {
+  const load = async (): Promise<PermissionDoc> => {
+    const snap = await getFirestore()
+      .collection(COLLECTIONS.adminPermissions)
+      .doc(ADMIN_PERMISSIONS_DOC_ID)
+      .get();
+    const data = snap.data() as { slugs?: unknown } | undefined;
+    return { slugs: slugArray(data?.slugs) };
+  };
+  if (epoch === null) return (await load()).slugs;
+  return (await permissionCache.get("catalog", epoch, load)).slugs;
+}
+
+async function roleSlugs(roleId: string, epoch: number | null): Promise<string[]> {
+  const load = async (): Promise<PermissionDoc> => {
+    const snap = await getFirestore()
+      .collection(COLLECTIONS.adminRolePermissions)
+      .doc(roleId)
+      .get();
+    return { slugs: slugArray((snap.data() as PermissionArrayDoc | undefined)?.permission_slugs) };
+  };
+  if (epoch === null) return (await load()).slugs;
+  return (await permissionCache.get(`role:${roleId}`, epoch, load)).slugs;
+}
+
+async function userSlugs(uid: string, epoch: number | null): Promise<string[]> {
+  const load = async (): Promise<PermissionDoc> => {
+    const snap = await getFirestore()
+      .collection(COLLECTIONS.adminUserPermissions)
+      .doc(uid)
+      .get();
+    if (!snap.exists) return { slugs: [] };
+    return { slugs: slugArray((snap.data() as PermissionArrayDoc | undefined)?.permission_slugs) };
+  };
+  if (epoch === null) return (await load()).slugs;
+  return (await permissionCache.get(`user:${uid}`, epoch, load)).slugs;
+}
+
 /**
  * A Manager holds the whole catalog, so slugs come from the catalog doc; a User
- * holds only their own ticks. Both are one array doc, which is what keeps a
- * session load to a fixed number of reads instead of one per permission.
+ * holds the union of their role's slugs and their own ticks. Both are one array
+ * doc, which is what keeps a session load to a fixed number of reads instead of
+ * one per permission.
  */
 async function resolvePermissionSlugs(
   uid: string,
   roleId: string | null,
   isManager: boolean,
+  epoch: number | null,
 ): Promise<Set<string>> {
-  const db = getFirestore();
-
   if (isManager) {
-    const catalogSnap = await db
-      .collection(COLLECTIONS.adminPermissions)
-      .doc(ADMIN_PERMISSIONS_DOC_ID)
-      .get();
-    const stored = (catalogSnap.data() as { slugs?: string[] } | undefined)?.slugs ?? [];
-    return new Set(stored);
+    return new Set(await catalogSlugs(epoch));
   }
 
-  const [roleSnap, userSnap] = await Promise.all([
-    roleId
-      ? db.collection(COLLECTIONS.adminRolePermissions).doc(roleId).get()
-      : Promise.resolve(null),
-    db.collection(COLLECTIONS.adminUserPermissions).doc(uid).get(),
+  const [role, user] = await Promise.all([
+    roleId ? roleSlugs(roleId, epoch) : Promise.resolve<string[]>([]),
+    userSlugs(uid, epoch),
   ]);
+  return grantDataCleanupIfBulkDelete(mergePermissionSlugs(role, user));
+}
 
+/** A role's slugs plus the caller's own ticks. Exported for the unit test. */
+export function mergePermissionSlugs(
+  roleSlugsAndTicks: readonly string[],
+  userTicks: readonly string[],
+): Set<string> {
   const slugs = new Set<string>();
-  const roleSlugs = (roleSnap?.data() as PermissionArrayDoc | undefined)?.permission_slugs ?? [];
-  for (const slug of roleSlugs) slugs.add(slug);
-  const userSlugs = (userSnap.data() as PermissionArrayDoc | undefined)?.permission_slugs ?? [];
-  for (const slug of userSlugs) slugs.add(slug);
-  return grantDataCleanupIfBulkDelete(slugs);
+  for (const slug of roleSlugsAndTicks) slugs.add(slug);
+  for (const slug of userTicks) slugs.add(slug);
+  return slugs;
 }
 
 /**

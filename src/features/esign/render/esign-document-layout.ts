@@ -125,6 +125,8 @@ export type BuildLayoutInput = {
   employee: EsignEmployeeSnapshot;
   company?: string;
   dateLabel?: string;
+  /** eSign request code (SIG-####). This is the Document ID on every sheet. */
+  requestCode?: string;
 };
 
 /**
@@ -270,20 +272,29 @@ function slot(
   return { id, role, page, xPt: x, yPt: fromTop(top, h), wPt: w, hPt: h };
 }
 
-/** Figma D1 `5931:4010` — employee underline, then HR / GM boxes. */
-export const PENALTY_SLOTS: SignSlot[] = slotsFromGeom(PENALTY_GEOM);
+/** Ruled lines on the client sheet dock. Keep identical to functions/src/rpcs/esign-signature-slots.ts. */
+export const PENALTY_SLOTS: SignSlot[] = [
+  { id: "employee", role: "employee", page: 1, xPt: 446, yPt: 191, wPt: 119, hPt: 23 },
+  { id: "hr", role: "hr", page: 1, xPt: 172, yPt: 69, wPt: 119, hPt: 23 },
+  { id: "gm", role: "gm", page: 1, xPt: 379, yPt: 69, wPt: 119, hPt: 23 },
+];
 
-/** Figma D2 `5931:4160` — employee underline, HR/CEO, acknowledgement boxes. */
-export const LOAN_SLOTS: SignSlot[] = slotsFromGeom(LOAN_GEOM);
+export const LOAN_SLOTS: SignSlot[] = [
+  { id: "employee", role: "employee", page: 1, xPt: 446, yPt: 307, wPt: 119, hPt: 23 },
+  { id: "hr", role: "hr", page: 1, xPt: 172, yPt: 184, wPt: 119, hPt: 23 },
+  { id: "ceo", role: "ceo", page: 1, xPt: 379, yPt: 184, wPt: 119, hPt: 23 },
+  { id: "ack_received", role: "ack_received", page: 1, xPt: 429, yPt: 117, wPt: 119, hPt: 23 },
+  { id: "ack_not_received", role: "ack_not_received", page: 1, xPt: 436, yPt: 59, wPt: 119, hPt: 23 },
+];
 
 export const PAYSLIP_SLOTS: SignSlot[] = [
-  slot("employee", "employee", 620, 48, 499, 22),
-  slot("hr", "hr", 670, 48, 140, 36),
+  { id: "employee", role: "employee", page: 1, xPt: 167, yPt: 69, wPt: 119, hPt: 23 },
+  { id: "hr", role: "hr", page: 1, xPt: 435, yPt: 69, wPt: 119, hPt: 23 },
 ];
 
 export const GENERAL_SLOTS: SignSlot[] = [
-  slot("employee", "employee", 620, 48, 499, 22),
-  slot("hr", "hr", 670, 48, 140, 36),
+  { id: "employee", role: "employee", page: 1, xPt: 446, yPt: 191, wPt: 119, hPt: 23 },
+  { id: "hr", role: "hr", page: 1, xPt: 172, yPt: 69, wPt: 119, hPt: 23 },
 ];
 
 const PAYSLIP_EM = "—";
@@ -1090,7 +1101,7 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
     title,
     masthead: {
       company: input.company || values.company_name || "MG GO",
-      ref: values.employee_id || "—",
+      ref: input.requestCode?.trim() || "—",
       date: input.dateLabel || "",
     },
     employeeRows,

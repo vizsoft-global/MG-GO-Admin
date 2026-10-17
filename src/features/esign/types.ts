@@ -497,6 +497,14 @@ export type EsignDetail = EsignListRow & {
   signature_storage_key: string | null;
   sent_by: string | null;
   updated_at: string;
+  document_kind?: string | null;
+  signature_slots?: unknown;
+  stamp_layout?: unknown;
+  employee_id?: string | null;
+  company_name?: string | null;
+  position?: string | null;
+  civil_id?: string | null;
+  zone_name?: string | null;
 };
 
 export type EsignCategoryRow = {
