@@ -9,7 +9,13 @@ import {
   workflowStats,
   type DayStatus,
 } from "./payroll-formulas";
-import { stitchPayrollRange, tilePasteOntoSelection } from "./payroll-snapshot";
+import { EMPTY_OPS_SLICERS } from "../performance/performance-ops-types";
+import {
+  assemblePayrollSnapshot,
+  stitchPayrollRange,
+  tilePasteOntoSelection,
+  type RawPayrollDriver,
+} from "./payroll-snapshot";
 import type { PayrollDayInfo, PayrollRiderRow, PayrollSnapshot } from "./payroll-types";
 
 function dayInfo(date: string, status: DayStatus, credited = 0): PayrollDayInfo {
@@ -205,5 +211,106 @@ describe("tilePasteOntoSelection", () => {
     assert.deepEqual(tilePasteOntoSelection([], 3, 3), []);
     assert.deepEqual(tilePasteOntoSelection([["12"]], 0, 2), []);
     assert.deepEqual(tilePasteOntoSelection([[]], 2, 2), []);
+  });
+});
+
+const MANUAL_DRIVER: RawPayrollDriver = {
+  id: "d1",
+  name: "Ravi Kumar",
+  employeeId: "MG-1",
+  driverCode: "10001",
+  zoneId: null,
+  zoneName: null,
+  projectKey: "keeta",
+  nationality: "IN",
+  sourceType: "in_house",
+  sourceCompany: "MG",
+  status: "active",
+  vehicleKey: "bike",
+  restaurantId: "r1",
+  restaurantName: "Keeta Mall",
+};
+
+function assemble(input: {
+  checkIns?: Array<{ driverId: string; date: string; hours?: number }>;
+  orders?: Array<{ mgId: string; employeeId?: string | null; date: string; orders: number }>;
+  adjustments?: Array<{
+    driverId: string;
+    date: string;
+    status: "12" | "3h" | "half" | "off" | "absent" | "custom";
+    hours: number | null;
+    reason: string | null;
+    adjustedAt?: string | null;
+  }>;
+}) {
+  return assemblePayrollSnapshot({
+    today: "2026-10-18",
+    monthKey: "2026-10",
+    slicers: EMPTY_OPS_SLICERS,
+    roster: [MANUAL_DRIVER],
+    checkIns: input.checkIns ?? [],
+    requests: [],
+    orders: input.orders ?? [],
+    adjustments: input.adjustments ?? [],
+  });
+}
+
+const MANUAL_CELL = {
+  driverId: "d1",
+  date: "2026-10-05",
+  status: "half" as const,
+  hours: 6,
+  reason: "Covered a split shift",
+  adjustedAt: "2026-10-06T08:00:00.000Z",
+};
+
+describe("assemblePayrollSnapshot manual PAYROLL cells", () => {
+  it("survives a new attendance and order sheet, which only refresh their own columns", () => {
+    const before = assemble({
+      checkIns: [{ driverId: "d1", date: "2026-10-05", hours: 9 }],
+      orders: [{ mgId: "MG-1", date: "2026-10-05", orders: 4 }],
+      adjustments: [MANUAL_CELL],
+    });
+    const dayBefore = before.riders[0]!.dayInfo.find((d) => d.date === "2026-10-05")!;
+    assert.equal(before.riders[0]!.days[4], "half");
+    assert.equal(dayBefore.creditedHours, 6);
+    assert.equal(dayBefore.loggedHours, 9);
+    assert.equal(dayBefore.orders, 4);
+    assert.equal(dayBefore.adjusted, true);
+
+    // A re-import writes attendance and recon rows only — the adjustment row is
+    // untouched, so the hand-entered cell must be byte-identical afterwards.
+    const after = assemble({
+      checkIns: [{ driverId: "d1", date: "2026-10-05", hours: 12 }],
+      orders: [{ mgId: "MG-1", date: "2026-10-05", orders: 17 }],
+      adjustments: [MANUAL_CELL],
+    });
+    const dayAfter = after.riders[0]!.dayInfo.find((d) => d.date === "2026-10-05")!;
+    assert.equal(after.riders[0]!.days[4], "half");
+    assert.equal(dayAfter.creditedHours, 6);
+    assert.equal(dayAfter.adjustmentStatus, "half");
+    assert.equal(dayAfter.adjustmentReason, "Covered a split shift");
+    assert.equal(dayAfter.loggedHours, 12);
+    assert.equal(dayAfter.orders, 17);
+    assert.deepEqual(after.riders[0]!.days, before.riders[0]!.days);
+  });
+
+  it("keeps the newest row when the append-only log holds several for one cell", () => {
+    const snapshotRows = assemble({
+      adjustments: [
+        { ...MANUAL_CELL, adjustedAt: "2026-10-07T09:00:00.000Z", status: "off", hours: null, reason: "Later" },
+        { ...MANUAL_CELL, adjustedAt: "2026-10-06T08:00:00.000Z", status: "half", hours: 6, reason: "Earlier" },
+      ],
+    });
+    const day = snapshotRows.riders[0]!.dayInfo.find((d) => d.date === "2026-10-05")!;
+    assert.equal(snapshotRows.riders[0]!.days[4], "off");
+    assert.equal(day.adjustmentReason, "Later");
+  });
+
+  it("does not leak a hand-entered cell onto a neighbouring day", () => {
+    const snapshotRows = assemble({ adjustments: [MANUAL_CELL] });
+    const day = snapshotRows.riders[0]!.dayInfo.find((d) => d.date === "2026-10-06")!;
+    assert.equal(day.adjusted, false);
+    assert.equal(day.adjustmentStatus, null);
   });
 });
