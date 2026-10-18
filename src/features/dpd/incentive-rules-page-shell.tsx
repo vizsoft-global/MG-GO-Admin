@@ -97,14 +97,14 @@ export function IncentiveRulesPageShell() {
       period: periodFilter,
     });
     return scoped.filter((row) =>
-      fieldSearchMatch(row, search, prefs.searchField, {
+      fieldSearchMatch(row, search, {
         name: (item) => displayIncentiveRuleName(item.name),
         status: (item) => item.status,
         scope_label: (item) => item.scope_label,
         period: (item) => item.period,
       }),
     );
-  }, [incentiveRules, periodFilter, prefs.searchField, search, statusFilter]);
+  }, [incentiveRules, periodFilter, search, statusFilter]);
   const grouped = useMemo(
     () =>
       groupRows(
@@ -220,10 +220,6 @@ export function IncentiveRulesPageShell() {
               onSearchChange={setSearch}
               searchPlaceholder={tPage("searchPlaceholder")}
               clearSearchLabel={labels.clearSearch}
-              searchFields={[labels.field.all, labels.field.name, labels.field.status]}
-              searchField={prefs.searchField}
-              onSearchFieldChange={(value) => update({ searchField: value })}
-              searchFieldLabel={labels.searchBy}
               groupByOptions={[labels.group.none, labels.group.status]}
               groupBy={prefs.groupBy}
               onGroupByChange={(value) => update({ groupBy: value })}

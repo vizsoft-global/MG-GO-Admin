@@ -104,13 +104,13 @@ export function OrderReconPageShell() {
   const filtered = useMemo(() => {
     const base = applyPageFilters(riders, { search: "", result, dayIndex, columns });
     return base.filter((row) =>
-      fieldSearchMatch(row, search, prefs.searchField, {
+      fieldSearchMatch(row, search, {
         name: (item) => item.name,
         employee_id: (item) => item.mgId,
         restaurant: (item) => item.restaurant,
       }),
     );
-  }, [columns, dayIndex, prefs.searchField, result, riders, search]);
+  }, [columns, dayIndex, result, riders, search]);
 
   const both = useMemo(() => ridersInBoth(filtered), [filtered]);
   const unused = useMemo(() => ridersNotUsingApp(filtered), [filtered]);
@@ -340,10 +340,6 @@ export function OrderReconPageShell() {
               onSearchChange={setSearch}
               searchPlaceholder={t("searchRiders")}
               clearSearchLabel={labels.clearSearch}
-              searchFields={[labels.field.all, labels.field.name, labels.field.employee_id]}
-              searchField={prefs.searchField}
-              onSearchFieldChange={(value) => update({ searchField: value })}
-              searchFieldLabel={labels.searchBy}
               filterSlot={
                 dayIndex != null ? (
                   <button

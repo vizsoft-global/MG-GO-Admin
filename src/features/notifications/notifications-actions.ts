@@ -1925,7 +1925,6 @@ export async function searchDriversForNotification(
       {
         tab: "all",
         search: term,
-        searchField: "all",
         groupBy: "none",
         filters: {},
         sort: DEFAULT_DRIVERS_SORT,

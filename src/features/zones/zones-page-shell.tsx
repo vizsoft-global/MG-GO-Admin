@@ -99,12 +99,12 @@ function ZonesPageContent() {
     () =>
       zones.filter((z) => {
         if (!zoneMatchesKindFilter(z, kindFilter)) return false;
-        return fieldSearchMatch(z, search, prefs.searchField, {
+        return fieldSearchMatch(z, search, {
           name: (row) => row.name,
           code: (row) => row.code,
         });
       }),
-    [kindFilter, prefs.searchField, search, zones],
+    [kindFilter, search, zones],
   );
 
   const kindChips: Array<{ id: "all" | GeofenceKind; label: string }> = [
@@ -140,10 +140,6 @@ function ZonesPageContent() {
               searchPlaceholder={t("placeholders.searchZones")}
               searchAriaLabel={t("placeholders.searchZones")}
               clearSearchLabel={labels.clearSearch}
-              searchFields={[labels.field.all, labels.field.name]}
-              searchField={prefs.searchField}
-              onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-              searchFieldLabel={labels.searchBy}
               filterSlot={
                 <>
                   <DropdownMenu>

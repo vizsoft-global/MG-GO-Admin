@@ -71,12 +71,12 @@ export function NotificationsPageShell() {
   const filteredCampaigns = useMemo(
     () =>
       campaigns.filter((row) =>
-        fieldSearchMatch(row, search, prefs.searchField, {
+        fieldSearchMatch(row, search, {
           name: (item) => item.title,
           status: (item) => item.status,
         }),
       ),
-    [campaigns, prefs.searchField, search],
+    [campaigns, search],
   );
   const groupedCampaigns = useMemo(
     () =>
@@ -172,10 +172,6 @@ export function NotificationsPageShell() {
             onSearchChange={setSearch}
             searchPlaceholder={tCommon("search")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[labels.field.all, labels.field.name, labels.field.status]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => update({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             groupByOptions={[labels.group.none, labels.group.status]}
             groupBy={prefs.groupBy}
             onGroupByChange={(value) => update({ groupBy: value })}

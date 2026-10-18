@@ -123,8 +123,8 @@ describe("full-scan fallback", () => {
     assert.match(searchQuery, /Full-scan fallback/);
     assert.match(searchQuery, /export function fullScanFallback/);
     assert.match(searchQuery, /export async function prefixMatchIds/);
-    assert.match(rpc("drivers.ts"), /fullScanFallback/);
     assert.match(rpc("drivers.ts"), /loadDriverRows/);
+    assert.doesNotMatch(rpc("drivers.ts"), /prefixMatchIds/);
     assert.match(rpc("requests-core.ts"), /fullScanFallback/);
     assert.match(rpc("requests-core.ts"), /scanRequests/);
     assert.match(rpc("rules.ts"), /fullScanFallback/);

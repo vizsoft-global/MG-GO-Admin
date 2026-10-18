@@ -926,14 +926,6 @@ async function loadDeliverySlice(
       ]);
       return { rows: page.rows, total, reasons, resolvedDriverIds: null, searchTruncated: false };
     }
-    case "prefix_too_short":
-      return {
-        rows: [],
-        total: 0,
-        reasons,
-        resolvedDriverIds: null,
-        searchTruncated: false,
-      };
     case "prefix": {
       const prefix = await pageByPrefix(db, params, route, offset, limit);
       const decision = prefixPageDecision({

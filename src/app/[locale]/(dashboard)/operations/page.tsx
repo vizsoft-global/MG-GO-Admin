@@ -1,6 +1,5 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import {
-  BarChart3,
   Building2,
   ClipboardCheck,
   ClipboardList,
@@ -11,7 +10,6 @@ import {
   Layers,
   ListTree,
   MapPin,
-  Scale,
   UtensilsCrossed,
   Wallet,
 } from "lucide-react";
@@ -42,13 +40,6 @@ const CARDS: ReadonlyArray<{
   icon: typeof Handshake;
   permission: Permission;
 }> = [
-  { key: "performance", href: "/performance", icon: BarChart3, permission: "performance.view" },
-  {
-    key: "orderReconciliation",
-    href: "/deliveries/reconciliation",
-    icon: Scale,
-    permission: "order_recon.view",
-  },
   { key: "partners", href: "/partners", icon: Handshake, permission: "partners.view" },
   { key: "restaurants", href: "/restaurants", icon: UtensilsCrossed, permission: "restaurants.view" },
   { key: "zones", href: "/zones", icon: MapPin, permission: "zones.view" },

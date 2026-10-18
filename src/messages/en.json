@@ -20,6 +20,7 @@
     "filter": "Filter",
     "columns": "Columns",
     "columnsTooltip": "Show or hide table columns",
+    "dragColumn": "Drag to reorder",
     "resetColumns": "Reset to role default",
     "tableScroll": "Scroll table horizontally",
     "columnSourceUser": "Customized",
@@ -7751,7 +7752,12 @@
           "fuelRequests": "Fuel requests",
           "fuelRefunds": "Fuel refunds",
           "analyze": "Analysis",
-          "rate": "Rate"
+          "rate": "Rate",
+          "payrollPayroll": "Payroll tab",
+          "payrollCombined": "Combined payroll tab",
+          "payrollAttendanceOrders": "Attendance & orders tab",
+          "payrollRequests": "Requests tab",
+          "payrollSettings": "Settings tab"
         },
         "errors": {
           "loadFailed": "Could not load staff access.",
@@ -10572,6 +10578,27 @@
       "emptyTitle": "No rejected requests",
       "emptyHint": "Rejected fuel, refund and asset rows appear here.",
       "colType": "Type"
+    },
+    "payrollHub": {
+      "hub": {
+        "title": "Payroll Hub",
+        "subtitle": "Performance, order reconciliation and payouts for the payroll month.",
+        "breadcrumb": "Payroll Hub",
+        "cards": {
+          "performance": {
+            "title": "Performance",
+            "body": "Rider scores, DPD efficiency and the live workforce."
+          },
+          "orderReconciliation": {
+            "title": "Order reconciliation",
+            "body": "AM upload versus MGGO order counts for the Kuwait day."
+          },
+          "payouts": {
+            "title": "Payouts",
+            "body": "Payroll periods, rider totals and the payout run."
+          }
+        }
+      }
     },
     "operationsHub": {
       "hub": {

@@ -175,7 +175,17 @@ export const APP_ACCESS_CATALOG: readonly AppAccessEntry[] = [
     appId: "payroll",
     crudModule: "payroll",
     extraViewer: ["payroll.export"],
-    subViews: [],
+    subViews: [
+      { id: "payrollPayroll", labelKey: "subViews.payrollPayroll", slugs: ["payroll.payroll"] },
+      { id: "payrollCombined", labelKey: "subViews.payrollCombined", slugs: ["payroll.combined"] },
+      {
+        id: "payrollAttendanceOrders",
+        labelKey: "subViews.payrollAttendanceOrders",
+        slugs: ["payroll.attendance_orders"],
+      },
+      { id: "payrollRequests", labelKey: "subViews.payrollRequests", slugs: ["payroll.requests"] },
+      { id: "payrollSettings", labelKey: "subViews.payrollSettings", slugs: ["payroll.settings"] },
+    ],
   },
   {
     appId: "performance",

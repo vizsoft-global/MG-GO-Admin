@@ -25,15 +25,6 @@ export function PayrollListToolbar({
       onSearchChange={onSearchChange}
       searchPlaceholder={t("searchPlaceholder")}
       clearSearchLabel={labels.clearSearch}
-      searchFields={[
-        labels.field.all,
-        labels.field.name,
-        labels.field.employee_id,
-        labels.field.zone,
-      ]}
-      searchField={prefs.searchField}
-      onSearchFieldChange={(value) => update({ searchField: value })}
-      searchFieldLabel={labels.searchBy}
       groupByOptions={[labels.group.none, labels.group.zone, labels.group.partner, labels.group.status]}
       groupBy={prefs.groupBy}
       onGroupByChange={(value) => update({ groupBy: value })}

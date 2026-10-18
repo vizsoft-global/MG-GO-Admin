@@ -19,6 +19,16 @@ import {
 import type { DriverListPageRow } from "./types";
 
 const TABS = new Set<DriversTab>(["all", "pending", "on_duty", "multi_device", "archived"]);
+
+const GROUP_BY_WIRE: Record<string, string> = {
+  employee_status: "employeeStatus",
+  nationality_category: "nationalityCategory",
+};
+
+function wireGroupBy(value: string | undefined): string | undefined {
+  if (!value || value === "none") return undefined;
+  return GROUP_BY_WIRE[value] ?? value;
+}
 const EXPORT_LIMIT = 5000;
 
 async function requireDriversView() {
@@ -34,7 +44,6 @@ async function requireDriversView() {
 export type DriversPageQuery = {
   tab: DriversTab;
   search: string;
-  searchField?: string;
   groupBy?: string;
   filters: DriversColumnFilters;
   sort: DriversSort;
@@ -52,8 +61,7 @@ function normalizeQuery(query: DriversPageQuery) {
   return {
     p_tab: TABS.has(query.tab) ? query.tab : "all",
     p_search: query.search.trim().slice(0, 200) || undefined,
-    p_search_field: query.searchField && query.searchField !== "all" ? query.searchField : undefined,
-    p_group_by: query.groupBy && query.groupBy !== "none" ? query.groupBy : undefined,
+    p_group_by: wireGroupBy(query.groupBy),
     p_filters: sanitizeDriversFilters(query.filters) as unknown as Json,
     p_sort_key: sortKey,
     p_sort_dir: query.sort.dir === "desc" ? "desc" : "asc",

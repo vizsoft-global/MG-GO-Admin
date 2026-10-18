@@ -1,6 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Children,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter, Link } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
@@ -97,6 +107,26 @@ import { riderCategoryMessageKey } from "./driver-rider-category";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { ClearFilteredModuleButton } from "@/features/settings/filtered-purge-dialog";
 import { type DriverAccountStatus, type DriverListPageRow } from "./types";
+
+function OrderedTableCells({
+  order,
+  children,
+}: {
+  order: readonly string[];
+  children: ReactNode;
+}) {
+  const rank = new Map(order.map((id, index) => [id, index]));
+  const items: ReactElement<{ columnId?: string }>[] = [];
+  Children.forEach(children, (child) => {
+    if (isValidElement(child)) items.push(child as ReactElement<{ columnId?: string }>);
+  });
+  items.sort((left, right) => {
+    const leftRank = rank.get(left.props.columnId ?? "") ?? 1_000;
+    const rightRank = rank.get(right.props.columnId ?? "") ?? 1_000;
+    return leftRank - rightRank;
+  });
+  return <>{items}</>;
+}
 
 function shouldIgnoreRowNavigation(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -211,18 +241,18 @@ function DriversPageContent() {
     () => ({
       tab: tabFilter,
       search: debouncedSearch,
-      searchField: prefs.searchField,
       groupBy: prefs.groupBy,
       filters: columnFilters,
       sort,
     }),
-    [tabFilter, debouncedSearch, prefs.searchField, prefs.groupBy, columnFilters, sort],
+    [tabFilter, debouncedSearch, prefs.groupBy, columnFilters, sort],
   );
   const pageQuery = useDriversPage(query);
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = pageQuery;
+  const listFailed = pageQuery.isError;
   const drivers = useMemo(
-    () => pageQuery.data?.pages.flatMap((p) => p.rows) ?? [],
-    [pageQuery.data],
+    () => (listFailed ? [] : pageQuery.data?.pages.flatMap((p) => p.rows) ?? []),
+    [pageQuery.data, listFailed],
   );
   const groupedDrivers = useMemo(() => {
     const statusRows = statusesQuery.data ?? [];
@@ -247,7 +277,7 @@ function DriversPageContent() {
   }, [drivers, prefs.groupBy, statusesQuery.data, locale, t]);
   const firstPage = pageQuery.data?.pages[0];
   const kpiCounts = firstPage?.kpis ?? EMPTY_KPIS;
-  const filteredTotal = firstPage?.filteredTotal ?? 0;
+  const filteredTotal = listFailed ? 0 : firstPage?.filteredTotal ?? 0;
   const tabTotal = firstPage?.tabTotal ?? 0;
   const isLoading = pageQuery.isLoading;
 
@@ -399,8 +429,10 @@ function DriversPageContent() {
     isVisible: isColumnVisible,
     toggle: toggleColumn,
     move: moveColumn,
+    reorder: reorderColumns,
     resetToRoleDefault: resetColumns,
     pickerOptions: columnPickerOptions,
+    orderedVisibleIds,
     hiddenToggleableCount,
     source: columnSource,
   } = useDriversListColumns(columnVisibilityOptions);
@@ -521,12 +553,15 @@ function DriversPageContent() {
       })),
       { id: "actions", label: t("colActions"), className: "w-[88px] text-end" },
     ];
-    // Cells render in this fixed order, so headers must too or a saved
-    // reorder paints one column's header (and filter) over another's data.
-    return defs.filter((c) => isColumnVisible(c.id));
+    const visible = defs.filter((c) => isColumnVisible(c.id));
+    const rank = new Map(orderedVisibleIds.map((id, index) => [id, index]));
+    return visible.sort(
+      (left, right) => (rank.get(left.id) ?? 1_000) - (rank.get(right.id) ?? 1_000),
+    );
   }, [
     allVisibleSelected,
     isColumnVisible,
+    orderedVisibleIds,
     t,
     toggleSelectAll,
     activeCustomDefs,
@@ -581,17 +616,7 @@ function DriversPageContent() {
             searchPlaceholder={t("searchPlaceholder")}
             searchAriaLabel={t("searchPlaceholder")}
             clearSearchLabel={t("clearSearch")}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-            searchFieldLabel={t("searchBy")}
-            searchFields={[
-              { value: "all", label: t("searchFieldAll") },
-              { value: "name", label: t("searchFieldName") },
-              { value: "employee_id", label: t("searchFieldEmployeeId") },
-              { value: "zone", label: t("searchFieldZone") },
-              { value: "passport", label: t("searchFieldPassport") },
-              { value: "civil_id", label: t("searchFieldCivilId") },
-            ]}
+            singleRow
             groupBy={prefs.groupBy}
             onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
             groupByLabel={t("groupBy")}
@@ -636,7 +661,7 @@ function DriversPageContent() {
                     onClick={() => setColumnFilters({})}
                   >
                     <FilterX className="h-3.5 w-3.5" aria-hidden />
-                    {t("clearAllFilters")}
+                    <span className="hidden 2xl:inline">{t("clearAllFilters")}</span>
                     <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white tabular-nums">
                       {activeFilterCount}
                     </span>
@@ -647,6 +672,7 @@ function DriversPageContent() {
                   isVisible={isColumnVisible}
                   onToggle={toggleColumn}
                   onMove={moveColumn}
+                  onReorder={reorderColumns}
                   onReset={resetColumns}
                   sourceLabel={columnSourceLabel}
                   hiddenCount={hiddenToggleableCount}
@@ -656,7 +682,7 @@ function DriversPageContent() {
             trailing={
             <div className="flex shrink-0 items-center gap-1.5">
               {!isLoading ? (
-                <p className="hidden text-xs tabular-nums text-muted-foreground lg:inline">
+                <p className="hidden text-xs tabular-nums text-muted-foreground 2xl:inline">
                   {t("showingCount", { visible: filteredTotal, total: tabTotal })}
                 </p>
               ) : null}
@@ -694,7 +720,7 @@ function DriversPageContent() {
                       aria-label={t("export")}
                     >
                       <Download className="h-4 w-4" />
-                      <span className="ms-1.5 hidden md:inline">{t("export")}</span>
+                      <span className="ms-1.5 hidden 2xl:inline">{t("export")}</span>
                     </Button>
                   }
                 />
@@ -713,15 +739,15 @@ function DriversPageContent() {
                         aria-label={t("bulkImport")}
                       >
                         <Upload className="h-4 w-4" />
-                        <span className="ms-1.5 hidden md:inline">{t("bulkImport")}</span>
+                        <span className="ms-1.5 hidden 2xl:inline">{t("bulkImport")}</span>
                       </Button>
                     }
                   />
                   <TooltipContent>{t("bulkImport")}</TooltipContent>
                 </Tooltip>
               ) : null}
-              <ClearAllModuleButton entity="drivers" />
-              <ClearFilteredModuleButton entity="drivers" />
+              <ClearAllModuleButton entity="drivers" compact />
+              <ClearFilteredModuleButton entity="drivers" compact />
               {canCreate ? (
                 <Button
                   type="button"
@@ -866,6 +892,7 @@ function DriversPageContent() {
                         tabIndex={0}
                         aria-label={t("viewDriver")}
                       >
+                        <OrderedTableCells order={orderedVisibleIds}>
                         <VisibleTableCell
                           columnId="select"
                           isVisible={isColumnVisible}
@@ -1148,6 +1175,7 @@ function DriversPageContent() {
                             ) : null}
                           </div>
                         </VisibleTableCell>
+                        </OrderedTableCells>
                       </AppDataTableRow>
                     )),
                   ])}

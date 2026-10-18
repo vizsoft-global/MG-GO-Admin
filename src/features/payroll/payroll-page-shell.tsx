@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { kuwaitToday } from "@/features/performance/performance-formulas";
 import { EMPTY_OPS_SLICERS } from "@/features/performance/performance-ops-types";
 import { queryKeys } from "@/lib/query/query-keys";
+import type { Permission } from "@/lib/auth/permissions";
 import {
   computePayrollKpis,
   filterRidersByStatus,
@@ -48,6 +49,14 @@ import type { PayrollHubTab, PayrollSlicers } from "./payroll-types";
 
 const TABS: PayrollHubTab[] = ["payroll", "combined", "attendance-orders", "requests", "settings"];
 
+const TAB_PERMISSION: Record<PayrollHubTab, Permission> = {
+  payroll: "payroll.payroll",
+  combined: "payroll.combined",
+  "attendance-orders": "payroll.attendance_orders",
+  requests: "payroll.requests",
+  settings: "payroll.settings",
+};
+
 export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: PayrollHubTab }) {
   const t = useTranslations("pages.payroll");
   const locale = useLocale();
@@ -57,7 +66,12 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
   const canManage = can("payroll.manage");
   const queryClient = useQueryClient();
   const today = kuwaitToday();
-  const [tab, setTab] = useState<PayrollHubTab>(initialTab);
+  const [requestedTab, setTab] = useState<PayrollHubTab>(initialTab);
+  const allowedTabs = useMemo<PayrollHubTab[]>(() => {
+    const permitted = TABS.filter((id) => canManage || can(TAB_PERMISSION[id]));
+    return permitted.length ? permitted : [TABS[0]];
+  }, [can, canManage]);
+  const tab = allowedTabs.includes(requestedTab) ? requestedTab : allowedTabs[0];
   const [preset, setPreset] = useState<PayrollRangePreset>("thisMonth");
   const [customRange, setCustomRange] = useState<PayrollRange | null>(null);
   const [slicers, setSlicers] = useState<PayrollSlicers>(EMPTY_OPS_SLICERS);
@@ -199,7 +213,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
         }
       />
       <TabBar
-        items={TABS.map((id) => ({
+        items={allowedTabs.map((id) => ({
           id,
           label: t(`tab${tabLabelKey(id)}`),
         }))}

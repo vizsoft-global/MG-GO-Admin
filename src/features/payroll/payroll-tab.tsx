@@ -30,8 +30,8 @@ export function PayrollTab({
   const [search, setSearch] = useState("");
   const { prefs } = usePayrollListPrefs("payroll-summary");
   const searched = useMemo(
-    () => riders.filter((r) => payrollRiderMatchesSearch(r, search, prefs.searchField)),
-    [prefs.searchField, riders, search],
+    () => riders.filter((r) => payrollRiderMatchesSearch(r, search)),
+    [riders, search],
   );
   const grouped = useMemo(
     () =>

@@ -88,13 +88,15 @@ describe("routeDeliveryList", () => {
     assert.equal(inside.kind, "prefix");
   });
 
-  it("refuses a prefix shorter than 4 without a bounds query", () => {
+  it("pages a three-character prefix instead of refusing it", () => {
     const route = routeDeliveryList({ ...open, search: "abc", searchShape: "prefix" });
-    assert.equal(route.kind, "prefix_too_short");
-    assert.equal("bounds" in route, false);
-    if (route.kind === "prefix_too_short") {
-      assert.deepEqual(route.reasons, ["prefix_too_short"]);
-    }
+    assert.equal(route.kind, "prefix");
+    if (route.kind === "prefix") assert.equal(route.bounds.start, "abc");
+  });
+
+  it("pages a one-character prefix", () => {
+    const route = routeDeliveryList({ ...open, search: "a", searchShape: "prefix" });
+    assert.equal(route.kind, "prefix");
   });
 
   it("uses a prefix page for a 4-character prefix when indexed", () => {

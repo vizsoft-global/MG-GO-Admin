@@ -254,9 +254,8 @@ export function VerificationsPageShell() {
     [data],
   );
   const rows = useMemo(() => {
-    if (prefs.searchField === "all") return loadedRows;
     return loadedRows.filter((row) =>
-      fieldSearchMatch(row, search, prefs.searchField, {
+      fieldSearchMatch(row, search, {
         name: (item) => item.driver_name,
         employee_id: (item) => item.employee_id ?? item.driver_code,
         status: (item) => item.status,
@@ -265,7 +264,7 @@ export function VerificationsPageShell() {
         driver_code: (item) => item.driver_code,
       }),
     );
-  }, [loadedRows, prefs.searchField, search]);
+  }, [loadedRows, search]);
   const grouped = useMemo(
     () =>
       groupRows(
@@ -606,10 +605,6 @@ export function VerificationsPageShell() {
               onSearchChange={setSearch}
               searchPlaceholder={t("searchPlaceholder")}
               clearSearchLabel={labels.clearSearch}
-              searchFields={[labels.field.all, labels.field.name, labels.field.employee_id, labels.field.status]}
-              searchField={prefs.searchField}
-              onSearchFieldChange={(value) => update({ searchField: value })}
-              searchFieldLabel={labels.searchBy}
               groupByOptions={[labels.group.none, labels.group.status, labels.group.partner, labels.group.date]}
               groupBy={prefs.groupBy}
               onGroupByChange={(value) => update({ groupBy: value })}

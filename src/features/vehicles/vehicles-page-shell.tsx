@@ -216,15 +216,13 @@ export function VehiclesPageShell({
           vehicleMatchesProject(row, projectFilter) &&
           vehicleMatchesAssignment(row, assignmentFilter) &&
           vehicleMatchesReplacement(row, replacementFilter) &&
-          vehicleMatchesSearch(row, search, prefs.searchField),
+          vehicleMatchesSearch(row, search, "all"),
       ),
     [
       activeTab,
       assignmentFilter,
       carTypeFilter,
-      kindFilter,
-      prefs.searchField,
-      projectFilter,
+      kindFilter, projectFilter,
       replacementFilter,
       search,
       statusFilter,
@@ -450,10 +448,6 @@ export function VehiclesPageShell({
             searchPlaceholder={t("searchPlaceholder")}
             searchAriaLabel={t("searchPlaceholder")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[labels.field.all, labels.field.plate, labels.field.name, labels.field.employee_id]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             groupByOptions={[labels.group.none, labels.group.status, labels.group.project]}
             groupBy={prefs.groupBy}
             onGroupByChange={(value) => updateListPrefs({ groupBy: value })}

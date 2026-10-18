@@ -83,6 +83,55 @@ export function rosterKpis(rows: readonly RosterKpiRow[]): RosterKpis {
   };
 }
 
+const SEARCH_FIELD_ALIASES: Record<string, string> = {
+  employee_id: "employeeId",
+  civil_id: "civilId",
+  driver_id: "driverId",
+};
+
+const SEARCH_FIELDS = new Set([
+  "all",
+  "name",
+  "employeeId",
+  "driverId",
+  "civilId",
+  "passport",
+  "zone",
+  "phone",
+]);
+
+const GROUP_BY_ALIASES: Record<string, string> = {
+  employee_status: "employeeStatus",
+  nationality_category: "nationalityCategory",
+  rider_category: "riderCategory",
+};
+
+const GROUP_BY = new Set([
+  "none",
+  "employeeStatus",
+  "zone",
+  "partner",
+  "project",
+  "company",
+  "section",
+  "nationalityCategory",
+  "riderCategory",
+]);
+
+/** Panel prefs store snake_case; the list RPC keys are camelCase. Unknown → all. */
+export function canonicalDriversSearchField(raw: string | null | undefined): string {
+  const trimmed = (raw ?? "all").trim();
+  const aliased = SEARCH_FIELD_ALIASES[trimmed] ?? trimmed;
+  return SEARCH_FIELDS.has(aliased) ? aliased : "all";
+}
+
+/** Unknown group keys used to throw `invalid_group_by` and leave the previous page on screen. */
+export function canonicalDriversGroupBy(raw: string | null | undefined): string {
+  const trimmed = (raw ?? "none").trim();
+  const aliased = GROUP_BY_ALIASES[trimmed] ?? trimmed;
+  return GROUP_BY.has(aliased) ? aliased : "none";
+}
+
 export function dedupeRestaurantEdges(
   edges: readonly RestaurantEdge[],
 ): Map<string, { id: string; name: string }[]> {

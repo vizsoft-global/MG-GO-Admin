@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { canDeferDriverJoin, dedupeRestaurantEdges, rosterKpis } from "./driver-list-plan";
+import {
+  canDeferDriverJoin,
+  canonicalDriversGroupBy,
+  canonicalDriversSearchField,
+  dedupeRestaurantEdges,
+  rosterKpis,
+} from "./driver-list-plan";
 
 describe("driver list plan", () => {
   it("defers the driver join only for the intake-sorted default page", () => {
@@ -18,6 +24,15 @@ describe("driver list plan", () => {
     assert.equal(canDeferDriverJoin({ ...open, sortKey: "todayDeliveries" }), false);
     assert.equal(canDeferDriverJoin({ ...open, sortKey: "mgId" }), false);
     assert.equal(canDeferDriverJoin({ ...open, sortKey: "cf:shirt" }), false);
+  });
+
+  it("maps the panel's snake_case search and group keys", () => {
+    assert.equal(canonicalDriversSearchField("employee_id"), "employeeId");
+    assert.equal(canonicalDriversSearchField("civil_id"), "civilId");
+    assert.equal(canonicalDriversSearchField("not-a-field"), "all");
+    assert.equal(canonicalDriversGroupBy("employee_status"), "employeeStatus");
+    assert.equal(canonicalDriversGroupBy("nationality_category"), "nationalityCategory");
+    assert.equal(canonicalDriversGroupBy("made-up"), "none");
   });
 
   it("counts each intake once, including overlapping pending flags", () => {

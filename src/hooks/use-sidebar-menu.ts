@@ -21,7 +21,7 @@ import {
   type SidebarMenuEpochs,
 } from "@/lib/menu/sidebar-menu-query";
 
-const MENU_CACHE_VERSION = "v32";
+const MENU_CACHE_VERSION = "v33";
 const cacheByRole = new Map<string, ResolvedMenuNode[]>();
 
 function menuStorageKey(role: string) {

@@ -268,7 +268,7 @@ function DeliveriesPageContent() {
   const visible = useMemo(
     () =>
       deliveries.filter((row) =>
-        fieldSearchMatch(row, search, prefs.searchField, {
+        fieldSearchMatch(row, search, {
           name: (item) => item.driver_name,
           employee_id: (item) => item.driver_employee_id || item.driver_code,
           zone: (item) => item.zone_name,
@@ -276,7 +276,7 @@ function DeliveriesPageContent() {
           status: (item) => item.status,
         }),
       ),
-    [deliveries, prefs.searchField, search],
+    [deliveries, search],
   );
   const groupedDeliveries = useMemo(
     () =>
@@ -295,8 +295,6 @@ function DeliveriesPageContent() {
   );
   const totalForFilter = data?.pages[0]?.total ?? 0;
   const searchIncomplete = data?.pages.some((page) => page.searchTruncated === true) ?? false;
-  const prefixTooShort =
-    data?.pages.some((page) => page.unindexedFilters?.includes("prefix_too_short")) ?? false;
   const verifiableVisible = useMemo(
     () => visible.filter((row) => isBulkVerifiableDeliveryStatus(row.status)),
     [visible],
@@ -615,7 +613,7 @@ function DeliveriesPageContent() {
     debouncedSearch.length > 0;
 
   const showEmptySearch =
-    !isLoading && !isError && visible.length === 0 && hasFiltersOrSearch && !prefixTooShort;
+    !isLoading && !isError && visible.length === 0 && hasFiltersOrSearch;
   const showEmptyAll = !isLoading && !isError && visible.length === 0 && !hasFiltersOrSearch;
 
   const columnVisibilityOptions = useMemo(
@@ -720,16 +718,6 @@ function DeliveriesPageContent() {
               searchPlaceholder={t("searchPlaceholder")}
               searchAriaLabel={t("searchPlaceholder")}
               clearSearchLabel={labels.clearSearch}
-              searchFields={[
-                labels.field.all,
-                labels.field.name,
-                labels.field.employee_id,
-                labels.field.zone,
-                labels.field.order_id,
-              ]}
-              searchField={prefs.searchField}
-              onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-              searchFieldLabel={labels.searchBy}
               groupByOptions={[labels.group.none, labels.group.status, labels.group.zone, labels.group.partner]}
               groupBy={prefs.groupBy}
               onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
@@ -859,7 +847,7 @@ function DeliveriesPageContent() {
                 </>
               }
             />
-            {(hasActiveFilters || search) && !searchIncomplete && !prefixTooShort && (
+            {(hasActiveFilters || search) && !searchIncomplete && (
               <p className="text-sm tabular-nums text-muted-foreground">
                 {t("totalDeliveries", { count: totalForFilter })}
                 {kpiCounts && totalForFilter !== kpiCounts.total
@@ -980,15 +968,6 @@ function DeliveriesPageContent() {
               >
                 <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                 <p>{t("searchIncomplete")}</p>
-              </div>
-            ) : null}
-            {prefixTooShort ? (
-              <div
-                role="alert"
-                className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
-              >
-                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                <p>{t("prefixTooShort")}</p>
               </div>
             ) : null}
             <AppDataTable

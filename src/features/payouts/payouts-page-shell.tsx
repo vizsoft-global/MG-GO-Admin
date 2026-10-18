@@ -54,13 +54,13 @@ export function PayoutsPageShell() {
   const filtered = useMemo(
     () =>
       runs.filter((row) =>
-        fieldSearchMatch(row, search, prefs.searchField, {
+        fieldSearchMatch(row, search, {
           name: (item) => item.period_start,
           status: (item) => item.status,
           employee_id: (item) => item.id,
         }),
       ),
-    [prefs.searchField, runs, search],
+    [runs, search],
   );
   const grouped = useMemo(
     () =>
@@ -132,10 +132,6 @@ export function PayoutsPageShell() {
             onSearchChange={setSearch}
             searchPlaceholder={t("searchPlaceholder")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[labels.field.all, labels.field.status]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => update({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             groupByOptions={[labels.group.none, labels.group.status]}
             groupBy={prefs.groupBy}
             onGroupByChange={(value) => update({ groupBy: value })}

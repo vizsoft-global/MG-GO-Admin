@@ -6,6 +6,7 @@ import {
   driverSearchStamp,
   prefixBounds,
   requestSearchStamp,
+  digitRunPrefixMatch,
   tokenPrefixMatch,
 } from "./search-text";
 
@@ -22,6 +23,14 @@ describe("prefix match", () => {
     assert.equal(tokenPrefixMatch("merchant m-100", "m-100"), true);
     assert.equal(tokenPrefixMatch("Hawally", "ally"), false);
     assert.equal(tokenPrefixMatch("KFC Hawally", "fc"), false);
+    assert.equal(tokenPrefixMatch("Bibek Kumar Moktan", "moktan"), true);
+  });
+
+  it("matches the digit run of a coded id", () => {
+    assert.equal(digitRunPrefixMatch("EMP13123", "13123"), true);
+    assert.equal(digitRunPrefixMatch("EMP13123", "131"), true);
+    assert.equal(digitRunPrefixMatch("EMP13123", "312"), false);
+    assert.equal(digitRunPrefixMatch("KFC", "kfc"), false);
   });
 
   it("stamps stored lowercase fields and skips a phone-only identity blob", () => {

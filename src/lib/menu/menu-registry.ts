@@ -512,6 +512,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Operations",
     defaultOrder: 5,
     permission: "verifications.view",
+    hidden: true,
   },
   {
     id: "attendance",
@@ -548,6 +549,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/payroll",
     defaultGroup: "Operations",
     defaultOrder: 8.25,
+    permission: "payroll.view",
+  },
+  {
+    id: "payroll-hub",
+    defaultLabel: "Payroll Hub",
+    defaultIcon: "LayoutGrid",
+    href: "/payroll-hub",
+    defaultGroup: "Operations",
+    defaultOrder: 8.3,
     permission: "payroll.view",
   },
   {
@@ -644,6 +654,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Operations",
     defaultOrder: 12,
     permission: "earnings.view",
+    hidden: true,
   },
   {
     id: "notifications",

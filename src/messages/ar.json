@@ -20,6 +20,7 @@
     "filter": "تصفية",
     "columns": "الأعمدة",
     "columnsTooltip": "إظهار أو إخفاء أعمدة الجدول",
+    "dragColumn": "اسحب لإعادة الترتيب",
     "resetColumns": "إعادة تعيين افتراضي الدور",
     "tableScroll": "تمرير الجدول أفقياً",
     "columnSourceUser": "مخصص",
@@ -7751,7 +7752,12 @@
           "fuelRequests": "طلبات الوقود",
           "fuelRefunds": "استرداد الوقود",
           "analyze": "التحليل",
-          "rate": "التقييم"
+          "rate": "التقييم",
+          "payrollPayroll": "تبويب الرواتب",
+          "payrollCombined": "تبويب الرواتب المجمّعة",
+          "payrollAttendanceOrders": "تبويب الحضور والطلبات",
+          "payrollRequests": "تبويب الطلبات",
+          "payrollSettings": "تبويب الإعدادات"
         },
         "errors": {
           "loadFailed": "تعذر تحميل صلاحيات الموظفين.",
@@ -10572,6 +10578,27 @@
       "emptyTitle": "لا طلبات مرفوضة",
       "emptyHint": "تظهر هنا صفوف الوقود والاسترداد والأصول المرفوضة.",
       "colType": "النوع"
+    },
+    "payrollHub": {
+      "hub": {
+        "title": "مركز الرواتب",
+        "subtitle": "الأداء ومطابقة الطلبات والمدفوعات لشهر الرواتب.",
+        "breadcrumb": "مركز الرواتب",
+        "cards": {
+          "performance": {
+            "title": "الأداء",
+            "body": "درجات السائقين وكفاءة الطلبات اليومية والقوى العاملة المباشرة."
+          },
+          "orderReconciliation": {
+            "title": "مطابقة الطلبات",
+            "body": "مقارنة تحميل AM بعدد طلبات MGGO ليوم الكويت."
+          },
+          "payouts": {
+            "title": "المدفوعات",
+            "body": "فترات الرواتب وإجماليات السائقين وتشغيل الدفع."
+          }
+        }
+      }
     },
     "operationsHub": {
       "hub": {

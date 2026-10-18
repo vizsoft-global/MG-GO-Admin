@@ -123,13 +123,13 @@ export function EarningsPageShell() {
   const visibleRows = useMemo(
     () =>
       rows.filter((row) =>
-        fieldSearchMatch(row, search, prefs.searchField, {
+        fieldSearchMatch(row, search, {
           name: (item) => item.driver_name,
           employee_id: (item) => item.driver_code,
           earn_date: (item) => item.earn_date,
         }),
       ),
-    [prefs.searchField, rows, search],
+    [rows, search],
   );
   const dailyGrouped = useMemo(
     () =>
@@ -146,13 +146,13 @@ export function EarningsPageShell() {
   const driverRows = useMemo(() => {
     const grouped = (driverGroupedQuery.data ?? []) as DriverGroupedRow[];
     return grouped.filter((row) =>
-      fieldSearchMatch(row, search, prefs.searchField, {
+      fieldSearchMatch(row, search, {
         name: (item) => item.group_name,
         employee_id: (item) => item.driver_code,
         group_id: (item) => item.group_id,
       }),
     );
-  }, [driverGroupedQuery.data, prefs.searchField, search]);
+  }, [driverGroupedQuery.data, search]);
   const driverGrouped = useMemo(
     () => groupRows(driverRows, "none", {}, {}, "—"),
     [driverRows],
@@ -294,10 +294,6 @@ export function EarningsPageShell() {
               onSearchChange={setSearch}
               searchPlaceholder={t("searchDriver")}
               clearSearchLabel={labels.clearSearch}
-              searchFields={[labels.field.all, labels.field.name, labels.field.employee_id]}
-              searchField={prefs.searchField}
-              onSearchFieldChange={(value) => update({ searchField: value })}
-              searchFieldLabel={labels.searchBy}
               groupByOptions={
                 tab === "daily"
                   ? [labels.group.none, labels.group.date]

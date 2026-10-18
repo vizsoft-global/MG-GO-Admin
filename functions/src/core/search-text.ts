@@ -10,6 +10,13 @@ export function digitsOnly(value: unknown): string {
   return value.replace(/\D/g, "");
 }
 
+/** `13123` matches `EMP13123` because the digit run starts with the typed digits. */
+export function digitRunPrefixMatch(haystack: string, needle: string): boolean {
+  const digits = digitsOnly(needle);
+  if (!digits) return false;
+  return digitsOnly(haystack).startsWith(digits);
+}
+
 export function prefixBounds(term: string): { start: string; end: string } | null {
   const start = lowerText(term);
   if (!start) return null;

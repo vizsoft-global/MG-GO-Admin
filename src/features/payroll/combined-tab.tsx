@@ -36,8 +36,8 @@ export function CombinedPayrollTab({
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
 
   const searched = useMemo(
-    () => riders.filter((r) => payrollRiderMatchesSearch(r, search, prefs.searchField)),
-    [prefs.searchField, riders, search],
+    () => riders.filter((r) => payrollRiderMatchesSearch(r, search)),
+    [riders, search],
   );
   const grouped = useMemo(
     () =>

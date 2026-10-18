@@ -10,7 +10,7 @@ export const GPS_IN_CHUNK = 30;
 export const DELIVERY_SEARCH_CAP = 20_000;
 
 /** Prefix range queries need at least this many trimmed characters. */
-export const DELIVERY_PREFIX_MIN_LENGTH = 4;
+export const DELIVERY_PREFIX_MIN_LENGTH = 1;
 
 /**
  * Prefix search is safe only after every delivery stores `order_id_lower`.
@@ -193,7 +193,6 @@ export type DeliveryListRoute =
       bounds: { start: string; end: string };
       reasons: string[];
     }
-  | { kind: "prefix_too_short"; reasons: string[] }
   | { kind: "scan"; reasons: string[] };
 
 export type DeliveryListRouteInput = {
@@ -219,10 +218,10 @@ function setAndNotAll(value: string | undefined): boolean {
  * Pick the deliveries list access path.
  *
  * A contains term (last digits, last name) stays on the scan at any length.
- * A prefix shorter than DELIVERY_PREFIX_MIN_LENGTH is `prefix_too_short`:
- * no range query and no scan, so the empty page is not a finished search.
- * A longer prefix pages in prefix-field order up to DELIVERY_SEARCH_CAP;
- * the caller sorts that set by created_at.
+ * A prefix pages in prefix-field order up to DELIVERY_SEARCH_CAP when the
+ * lowercase fields are indexed, and falls back to the scan when they are not.
+ * There is no minimum length: one short query that returns rows beats an empty
+ * page that looks like a finished search.
  */
 export function routeDeliveryList(input: DeliveryListRouteInput): DeliveryListRoute {
   const search = (input.search ?? "").trim();
@@ -246,9 +245,6 @@ export function routeDeliveryList(input: DeliveryListRouteInput): DeliveryListRo
       reasons.push("contains_search");
       return { kind: "scan", reasons };
     case "prefix":
-      if (search.length < DELIVERY_PREFIX_MIN_LENGTH) {
-        return { kind: "prefix_too_short", reasons: ["prefix_too_short"] };
-      }
       break;
     default: {
       const unexpected: never = shape;

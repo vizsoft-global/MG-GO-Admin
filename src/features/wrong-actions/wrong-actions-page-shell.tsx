@@ -106,7 +106,7 @@ export function WrongActionsPageShell({
       rows.filter(
         (row) =>
           wrongActionMatchesTab(row, activeTab, now) &&
-          fieldSearchMatch(row, search, prefs.searchField, {
+          fieldSearchMatch(row, search, {
             name: (item) => item.driver_name,
             employee_id: (item) => item.driver_code,
             zone: (item) => item.driver_zone_name,
@@ -116,7 +116,7 @@ export function WrongActionsPageShell({
             createdBy: (item) => item.created_by_name,
           }),
       ),
-    [activeTab, now, prefs.searchField, rows, search],
+    [activeTab, now, rows, search],
   );
   const grouped = useMemo(
     () =>
@@ -197,16 +197,6 @@ export function WrongActionsPageShell({
             onSearchChange={setSearch}
             searchPlaceholder={t("searchPlaceholder")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[
-              labels.field.all,
-              labels.field.name,
-              labels.field.employee_id,
-              labels.field.zone,
-              labels.field.status,
-            ]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             groupByOptions={[labels.group.none, labels.group.status, labels.group.zone]}
             groupBy={prefs.groupBy}
             onGroupByChange={(value) => updateListPrefs({ groupBy: value })}

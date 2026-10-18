@@ -76,14 +76,14 @@ export function FleetRjPageShell() {
   const filtered = useMemo(
     () =>
       rows.filter((row) =>
-        fieldSearchMatch(row, search, prefs.searchField, {
+        fieldSearchMatch(row, search, {
           name: (item) => item.driver_name,
           employee_id: (item) => item.employee_id,
           plate: (item) => item.plate,
           status: (item) => item.status,
         }),
       ),
-    [prefs.searchField, rows, search],
+    [rows, search],
   );
   const grouped = useMemo(
     () =>
@@ -118,10 +118,6 @@ export function FleetRjPageShell() {
             onSearchChange={setSearch}
             searchPlaceholder={tCommon("search")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[labels.field.all, labels.field.name, labels.field.employee_id, labels.field.plate]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => update({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             groupByOptions={[labels.group.none, labels.group.status]}
             groupBy={prefs.groupBy}
             onGroupByChange={(value) => update({ groupBy: value })}
