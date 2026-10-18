@@ -168,15 +168,64 @@ export function orderIdSpellings(orderId: string): string[] {
 }
 
 /**
- * Refuses an order id another delivery already holds.
+ * The Kuwait day a pickup row was logged on.
  *
- * Scoped to the whole collection rather than the rider's restaurant and day. The id
- * is the key the Bites order is matched by, so a second row under the same id — at
- * any store, on any day — lets one order collect two riders' milestones and two sets
- * of evidence. A cancelled row does not count, so re-attempting a delivery that fell
- * through still works.
+ * `pickup_day` is stamped at create. `created_day` covers a row written before
+ * that field, and `pickup_at` the row whose day fields were never written. A row
+ * with no readable day returns null, which never matches — an unreadable legacy
+ * row must not block today's pickup forever.
  */
-async function assertOrderIdUnused(orderId: string | null | undefined): Promise<void> {
+export function deliveryPickupDay(row: Dict): string | null {
+  for (const key of ["pickup_day", "created_day"]) {
+    const value = asString(row[key]);
+    if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  }
+  const at = row["pickup_at"];
+  if (at instanceof Timestamp) return kuwaitDayString(at.toDate());
+  if (at instanceof Date) return kuwaitDayString(at);
+  const shift = asString(row["shift_date"]);
+  return shift && /^\d{4}-\d{2}-\d{2}$/.test(shift) ? shift : null;
+}
+
+/**
+ * The one case the order-id rule refuses: the same store already holds this id
+ * on the same Kuwait day, and that row is not cancelled.
+ *
+ * A different store or a later day may reuse the number, because restaurants
+ * restart their order numbering. The id is compared normalized so a stored
+ * `ORDBTS` spelling is the same order as the digits form.
+ *
+ * When this pickup resolved no store, only a row that also has no store can
+ * collide — guessing a store would block an unrelated restaurant.
+ */
+export function isScopedDuplicate(
+  row: Dict,
+  args: { normalized: string; restaurantId: string | null; day: string },
+): boolean {
+  if (asString(row["status"]) === "cancelled") return false;
+  const stored = normalizeExternalOrderId(asString(row["external_order_id"]));
+  if (stored !== args.normalized) return false;
+  const rowRestaurant = asString(row["restaurant_id"]);
+  if (rowRestaurant !== args.restaurantId) return false;
+  return deliveryPickupDay(row) === args.day;
+}
+
+/**
+ * Refuses an order id this store already holds for the same Kuwait day.
+ *
+ * The scope is `restaurant_id` + pickup day, matching the rule ops confirmed:
+ * a printed docket number may repeat at another store or on a later day, so
+ * only a same-store same-day row (not cancelled) is a duplicate. A cancelled
+ * row does not count, so re-attempting a delivery that fell through still works.
+ *
+ * The query itself stays on `external_order_id` alone — the automatic
+ * single-field index answers it — and the store and day are compared here.
+ */
+async function assertOrderIdUnused(
+  orderId: string | null | undefined,
+  restaurantId: string | null,
+  day: string,
+): Promise<void> {
   const normalized = normalizeExternalOrderId(orderId);
   if (!normalized || !orderId) return;
   const db = getFirestore();
@@ -186,11 +235,9 @@ async function assertOrderIdUnused(orderId: string | null | undefined): Promise<
       .where("external_order_id", "==", spelling)
       .limit(SCAN)
       .get();
-    const taken = snap.docs.some((doc) => {
-      const row = (doc.data() ?? {}) as Dict;
-      if (row["status"] === "cancelled") return false;
-      return normalizeExternalOrderId(asString(row["external_order_id"])) === normalized;
-    });
+    const taken = snap.docs.some((doc) =>
+      isScopedDuplicate((doc.data() ?? {}) as Dict, { normalized, restaurantId, day }),
+    );
     if (taken) {
       throw riderError("already-exists", "duplicate_order_id");
     }
@@ -593,7 +640,7 @@ export const driverCreatePickup = onCall(async (request) => {
     lng,
     proximityMeters: settings.proximityMeters,
   });
-  await assertOrderIdUnused(orderId);
+  await assertOrderIdUnused(orderId, restaurantId, today);
 
   const [shiftDate, mocked] = await Promise.all([resolveShiftDate(ctx.uid, now), pinIsMocked(ctx.uid)]);
   const id = randomUUID();
