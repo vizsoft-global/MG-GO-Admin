@@ -1088,6 +1088,8 @@
       "yes": "Yes",
       "no": "No",
       "kpiPendingAccess": "Pending access",
+      "kpiPendingEmployees": "Employees to verify",
+      "kpiPendingEmployeesHint": "Awaiting approval",
       "kpiVerificationBacklog": "Verification backlog",
       "kpiDeliveryReview": "Delivery review",
       "kpiPayrollBlockers": "Payroll blockers",
@@ -1339,7 +1341,7 @@
           "restaurants": "Restaurants",
           "rider_category": "Category",
           "source_company": "Source company",
-          "client_id": "Platform ID",
+          "client_id": "Client ID",
           "client_name": "Platform",
           "account_status": "Status",
           "on_duty": "Attendance",
@@ -1530,7 +1532,7 @@
           "rider_category": "Rider category (in_house / outsourced)",
           "source_company": "Company Name",
           "active": "Active on import (yes / no)",
-          "client_id": "Platform ID",
+          "client_id": "Client ID",
           "client_name": "Platform",
           "off_days": "Number of OFFs (current Kuwait month)"
         },
@@ -1548,7 +1550,7 @@
         "colName": "Name",
         "colPhone": "Phone",
         "colEmployeeId": "Emp ID",
-        "colPlatformId": "Platform ID",
+        "colPlatformId": "Client ID",
         "colPlatform": "Platform",
         "colPartner": "Partner",
         "colZone": "Zone",
@@ -1590,7 +1592,7 @@
           "ambiguous_partner": "Partner name matches more than one",
           "ambiguous_zone": "Zone name matches more than one",
           "ambiguous_restaurant": "Restaurant name matches more than one",
-          "invalid_client_id": "Platform ID is too long (max 64)",
+          "invalid_client_id": "Client ID is too long (max 64)",
           "invalid_client_name": "Platform is too long (max 120)",
           "company_category_mismatch": "In-house riders belong to the system company; outsourced riders to a partner company"
         },
@@ -1665,9 +1667,9 @@
           "save_failed": "Could not save assignment. Please try again."
         }
       },
-      "colClientId": "Platform ID",
+      "colClientId": "Client ID",
       "colClientName": "Platform",
-      "colCompanyClientId": "Client ID",
+      "colCompanyClientId": "Company Client ID",
       "colCompanyName": "Company Name",
       "companyUnassigned": "Unassigned",
       "companyClientIdNotSet": "Not set",
@@ -1978,6 +1980,24 @@
       "documentsEmptyDescription": "Upload license, civil ID, work permit, or passport via Edit driver.",
       "documentsUploadViaEdit": "Upload in Edit driver",
       "documentsManage": "Manage documents",
+      "extraDocumentsTitle": "Additional documents",
+      "extraDocumentsDescription": "Any other files — contracts, letters, certificates. Name each one so it is easy to find.",
+      "extraDocumentsEmpty": "No additional documents yet.",
+      "extraDocumentAdd": "Add document",
+      "extraDocumentAddSubtitle": "Name the file, then choose it from your device.",
+      "extraDocumentNameLabel": "Document name",
+      "extraDocumentNamePlaceholder": "e.g. Signed contract",
+      "extraDocumentFileLabel": "File",
+      "extraDocumentChooseFile": "Choose a file",
+      "extraDocumentFileHint": "PDF, PNG, JPG, or WebP · max 16 MB",
+      "extraDocumentUpload": "Upload document",
+      "extraDocumentUploadedOn": "Uploaded {date}",
+      "extraDocumentAdded": "Document uploaded",
+      "extraDocumentDeleted": "Document deleted",
+      "extraDocumentDeleteTitle": "Delete document",
+      "extraDocumentDeleteBody": "This removes “{title}” and its file from this employee.",
+      "extra_document_title_required": "Give the document a name.",
+      "extra_document_file_required": "Choose a file to upload.",
       "notFoundTitle": "Employee not found",
       "notFoundDescription": "This employee may have been removed or the link is invalid.",
       "tabHistory": "History",
@@ -2013,7 +2033,7 @@
           "nationality": "Nationality",
           "rider_category": "Rider category",
           "source_company": "Company",
-          "client_id": "Platform ID",
+          "client_id": "Client ID",
           "client_name": "Platform",
           "workflow_status": "Workflow status",
           "account_status": "Account status",
@@ -2293,7 +2313,7 @@
           "save_failed": "Could not update freeze. Please try again."
         }
       },
-      "fieldClientId": "Platform ID",
+      "fieldClientId": "Client ID",
       "fieldClientName": "Platform"
     },
     "driverGroups": {
@@ -2416,7 +2436,7 @@
         "zone": "Zone",
         "vehicle": "Assign Vehicle",
         "vehicleType": "Vehicle type",
-        "clientId": "Platform ID (optional)",
+        "clientId": "Client ID (optional)",
         "clientName": "Platform (optional)",
         "accommodation": "Accommodation (optional)",
         "passportNumber": "Passport number",
@@ -7756,6 +7776,7 @@
           "payrollPayroll": "Payroll tab",
           "payrollCombined": "Combined payroll tab",
           "payrollAttendanceOrders": "Attendance & orders tab",
+          "payrollAppAttendance": "Application attendance tab",
           "payrollRequests": "Requests tab",
           "payrollSettings": "Settings tab"
         },
@@ -8661,6 +8682,10 @@
       "endDate": "To",
       "actionFilter": "Action",
       "allActions": "All actions",
+      "entityFilter": "Entity",
+      "allEntities": "All entities",
+      "adminFilter": "Admin",
+      "allAdmins": "All admins",
       "search": "Search",
       "searchPlaceholder": "Entity, route, page…",
       "colTime": "Time",
@@ -8813,6 +8838,7 @@
       "subtitle": "Monthly attendance, efficiency and the request approvals behind them",
       "tabPayroll": "Payroll",
       "tabCombined": "Combined Payroll",
+      "tabAppAttendance": "Application Attendance",
       "tabRequests": "Requests",
       "range": {
         "thisMonth": "This month",
@@ -8952,7 +8978,7 @@
         "status": "Status"
       },
       "riderCols": {
-        "amId": "AM ID",
+        "amId": "MG ID",
         "mgId": "Driver ID",
         "name": "Name",
         "restaurant": "Restaurant",
@@ -8985,7 +9011,19 @@
         "zoneOrders": "LM zone orders",
         "zoneDpd": "LM zone DPD",
         "zoneEff": "LM zone eff%",
-        "vehicleKind": "Vehicle"
+        "vehicleKind": "Vehicle",
+        "appTotalHours": "App hours",
+        "appActiveDays": "Active app days",
+        "appAvgHours": "Avg hours / active day"
+      },
+      "appAttendance": {
+        "bannerTitle": "Application attendance",
+        "bannerBody": "Hours the rider app was actually in use — clock-in to clock-out, or time elapsed so far on a shift still open. Nothing here feeds payroll; it is a usage record beside it.",
+        "activeRiders": "{count} rider(s) with app activity",
+        "daysHint": "Days with any app usage",
+        "avgHint": "Across days with usage",
+        "totalsRow": "All shown riders",
+        "footNote": "Days without a check-in or check-out show no hours, not zero hours."
       },
       "riderStatus": {
         "active": "Active",
@@ -10582,7 +10620,7 @@
     "payrollHub": {
       "hub": {
         "title": "Payroll Hub",
-        "subtitle": "Performance, order reconciliation and payouts for the payroll month.",
+        "subtitle": "Performance, order reconciliation and payroll for the payroll month.",
         "breadcrumb": "Payroll Hub",
         "cards": {
           "performance": {
@@ -10593,9 +10631,9 @@
             "title": "Order reconciliation",
             "body": "AM upload versus MGGO order counts for the Kuwait day."
           },
-          "payouts": {
-            "title": "Payouts",
-            "body": "Payroll periods, rider totals and the payout run."
+          "payroll": {
+            "title": "Payroll",
+            "body": "Payroll months, rider totals and the monthly pay plan."
           }
         }
       }

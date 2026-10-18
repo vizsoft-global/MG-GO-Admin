@@ -89,6 +89,7 @@ import { isDriverErrorKey } from "./driver-errors";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import { queryKeys } from "@/lib/query/query-keys";
 import { DriverDetailGroups } from "./driver-detail-groups";
+import { DRIVERS_TABS, driverDetailHref } from "./drivers-list-query";
 import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
 import { formatCustomFieldDisplay } from "@/lib/custom-fields/validate";
 
@@ -125,6 +126,10 @@ const DRIVER_BACK_TARGETS: Record<
   "live-tracking-v2": { href: "/live-tracking-v2", labelKey: "backToLiveTracking" },
   "live-tracking": { href: "/live-tracking", labelKey: "backToLiveTracking" },
   "driver-devices": { href: "/driver-devices", labelKey: "backToDriverDevices" },
+  pending: { href: "/drivers?tab=pending", labelKey: "backToList" },
+  on_duty: { href: "/drivers?tab=on_duty", labelKey: "backToList" },
+  multi_device: { href: "/drivers?tab=multi_device", labelKey: "backToList" },
+  archived: { href: "/drivers?tab=archived", labelKey: "backToList" },
 };
 
 const REQUEST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -344,7 +349,8 @@ function DriverDetailContent({ id }: { id: string }) {
       return;
     }
     if (!driver || !canManage || !driver.intake_id || driver.archived_at) return;
-    router.replace(`/drivers/${id}`);
+    // Keep `?from=` so closing the edit modal cannot drop the admin out of the queue they came from.
+    router.replace(driverDetailHref(id, searchParams.get("from")));
     if (Date.now() < suppressEditOpenUntilRef.current) return;
     if (editRouteConsumedRef.current) return;
     editRouteConsumedRef.current = true;
@@ -407,12 +413,13 @@ function DriverDetailContent({ id }: { id: string }) {
   const requestedDriverId = searchParams.get("driver") ?? "";
   const backDriverId =
     trackingTarget && DRIVER_ID_RE.test(requestedDriverId) ? requestedDriverId : null;
+  const carriesDriverId = backDriverId && trackingTarget?.href.startsWith("/live-tracking");
   const backTarget =
     from === "requests" && requestId && REQUEST_ID_RE.test(requestId)
       ? { href: `/requests/${requestId}`, labelKey: "backToRequest" as const }
       : trackingTarget
         ? {
-            href: backDriverId ? `${trackingTarget.href}?driver=${backDriverId}` : trackingTarget.href,
+            href: carriesDriverId ? `${trackingTarget.href}?driver=${backDriverId}` : trackingTarget.href,
             labelKey: trackingTarget.labelKey,
           }
         : {
@@ -420,13 +427,22 @@ function DriverDetailContent({ id }: { id: string }) {
             labelKey: "backToList" as const,
           };
 
+  /**
+   * A list tab was the entry point, so a completed action returns to that same tab instead of
+   * the unfiltered list — otherwise approving one rider drops the admin out of the pending
+   * queue and they have to reapply the filter for every remaining rider.
+   */
+  const returnsToFilteredList =
+    from != null && (DRIVERS_TABS as readonly string[]).includes(from);
+  const exitHref = returnsToFilteredList ? backTarget.href : "/drivers";
+
   const handleEditOpenChange = (open: boolean) => {
     if (!open) {
       suppressEditOpenUntilRef.current = Date.now() + 1500;
     }
     setEditOpen(open);
     if (!open && searchParams.get("edit") === "1") {
-      router.replace(`/drivers/${id}`);
+      router.replace(driverDetailHref(id, searchParams.get("from")));
     }
   };
 
@@ -867,7 +883,11 @@ function DriverDetailContent({ id }: { id: string }) {
                           description: result.passcode
                             ? t("approvePasscodeHint", { passcode: result.passcode })
                             : undefined,
+                          // The queue return is immediate, so the minted passcode has to outlive
+                          // the page it was generated on.
+                          duration: result.passcode ? 12000 : undefined,
                         });
+                        if (returnsToFilteredList) router.push(exitHref);
                       } catch (err) {
                         const key =
                           err instanceof Error && isDriverErrorKey(err.message)
@@ -926,7 +946,7 @@ function DriverDetailContent({ id }: { id: string }) {
                       });
                       setArchiveOpen(false);
                       toast.success(t("archived"));
-                      router.push("/drivers");
+                      router.push(exitHref);
                     } catch (err) {
                       const key =
                         err instanceof Error && isDriverErrorKey(err.message)

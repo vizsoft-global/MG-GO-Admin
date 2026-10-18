@@ -96,7 +96,10 @@ import {
   DRIVERS_FILTER_KINDS,
   countActiveFilters,
   customFilterColumn,
+  driverDetailHref,
+  driversListHref,
   nextSort,
+  parseDriversTab,
   withColumnFilter,
   type DriversColumnFilters,
   type DriversFixedColumn,
@@ -224,7 +227,9 @@ function DriversPageContent() {
   const [exportOpen, setExportOpen] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [tabFilter, setTabFilter] = useState<DriversTab>("all");
+  const [tabFilter, setTabFilter] = useState<DriversTab>(() =>
+    parseDriversTab(searchParams.get("tab")),
+  );
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const { prefs, update: updateListPrefs } = useListViewPrefs("drivers");
@@ -236,6 +241,13 @@ function DriversPageContent() {
     const id = window.setTimeout(() => setDebouncedSearch(search.trim()), LIST_SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
   }, [search]);
+
+  // The dashboard tile links straight to `?tab=pending`, and the detail page returns to the same
+  // address — so the queue survives whatever the router does with the mounted shell.
+  const tabParam = searchParams.get("tab");
+  useEffect(() => {
+    setTabFilter(parseDriversTab(tabParam));
+  }, [tabParam]);
 
   const query = useMemo(
     () => ({
@@ -303,12 +315,12 @@ function DriversPageContent() {
   useEffect(() => {
     if (searchParams.get("add") === "1") {
       setAddOpen(true);
-      router.replace("/drivers");
+      router.replace(driversListHref(parseDriversTab(searchParams.get("tab"))));
       return;
     }
     if (searchParams.get("import") === "1") {
       setBulkOpen(true);
-      router.replace("/drivers");
+      router.replace(driversListHref(parseDriversTab(searchParams.get("tab"))));
     }
   }, [searchParams, router]);
 
@@ -639,7 +651,10 @@ function DriversPageContent() {
                   items={tabSelectItems}
                   value={tabFilter}
                   onValueChange={(value) => {
-                    if (value) setTabFilter(value as DriversTab);
+                    if (!value) return;
+                    const next = value as DriversTab;
+                    setTabFilter(next);
+                    router.replace(driversListHref(next), { scroll: false });
                   }}
                 >
                   <SelectTrigger className="h-9 w-[108px] shrink-0 cursor-pointer rounded-lg text-xs">
@@ -795,7 +810,7 @@ function DriversPageContent() {
                     <button
                       key={driver.id}
                       type="button"
-                      onClick={() => router.push(`/drivers/${driver.id}`)}
+                      onClick={() => router.push(driverDetailHref(driver.id, tabFilter))}
                       className="cursor-pointer rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/30"
                     >
                       <p className="truncate text-sm font-semibold text-foreground">{driver.full_name}</p>
@@ -881,13 +896,13 @@ function DriversPageContent() {
                         )}
                         onClick={(event) => {
                           if (shouldIgnoreRowNavigation(event.target)) return;
-                          router.push(`/drivers/${driver.id}`);
+                          router.push(driverDetailHref(driver.id, tabFilter));
                         }}
                         onKeyDown={(event) => {
                           if (event.key !== "Enter" && event.key !== " ") return;
                           if (shouldIgnoreRowNavigation(event.target)) return;
                           event.preventDefault();
-                          router.push(`/drivers/${driver.id}`);
+                          router.push(driverDetailHref(driver.id, tabFilter));
                         }}
                         tabIndex={0}
                         aria-label={t("viewDriver")}
@@ -938,7 +953,7 @@ function DriversPageContent() {
                               {driver.full_name}
                             </span>
                             <Link
-                              href={`/drivers/${driver.id}`}
+                              href={driverDetailHref(driver.id, tabFilter)}
                               className="mt-0.5 block text-xs text-primary hover:underline"
                               onClick={(e) => e.stopPropagation()}
                             >
@@ -1060,7 +1075,7 @@ function DriversPageContent() {
                                     variant="ghost"
                                     size="icon-sm"
                                     className="h-8 w-8 cursor-pointer rounded-md text-muted-foreground hover:text-foreground"
-                                    onClick={() => router.push(`/drivers/${driver.id}`)}
+                                    onClick={() => router.push(driverDetailHref(driver.id, tabFilter))}
                                     aria-label={t("viewDriver")}
                                   >
                                     <Eye className="h-4 w-4" />

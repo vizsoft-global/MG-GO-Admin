@@ -1097,6 +1097,8 @@
       "riders": "سائقين",
       "understaffed": "نقص موظفين",
       "kpiPendingAccess": "طلبات وصول معلّقة",
+      "kpiPendingEmployees": "موظفون بانتظار الاعتماد",
+      "kpiPendingEmployeesHint": "بانتظار الموافقة",
       "kpiVerificationBacklog": "تراكم التحقق",
       "kpiDeliveryReview": "مراجعة التوصيل",
       "kpiPayrollBlockers": "عوائق الرواتب",
@@ -1338,7 +1340,7 @@
           "restaurants": "المطاعم",
           "rider_category": "التصنيف",
           "source_company": "شركة المصدر",
-          "client_id": "معرّف المنصة",
+          "client_id": "رقم العميل",
           "client_name": "المنصة",
           "account_status": "الحالة",
           "on_duty": "الحضور",
@@ -1509,7 +1511,7 @@
         "lookupFailed": "تعذر تصدير القائمة.",
         "requiredTitle": "مطلوب",
         "requiredList": "الاسم الكامل، رقم MG (حروف وأرقام حتى 100 حرف)، ومنطقة أو مطعم واحد على الأقل.",
-        "optionalList": "اختياري: الهاتف (8 أرقام أو ‎+965)، الرقم المدني (12 رقمًا)، الشريك، المنطقة أو المطعم الآخر، المركبة، الجنسية، فئة السائق (in_house / outsourced)، اسم الشركة، معرّف المنصة، المنصة، نشط (yes/no)، عدد أيام الإجازة (شهر الكويت الحالي؛ الفراغ يُبقي الافتراضي 2). يمكن ترك الهاتف والرقم المدني فارغين، لكن يجب أن يكونا فريدين عند إدخالهما. يُكتب عدد أيام الإجازة فقط للسائق المعتمد أو المرتبط مسبقاً.",
+        "optionalList": "اختياري: الهاتف (8 أرقام أو ‎+965)، الرقم المدني (12 رقمًا)، الشريك، المنطقة أو المطعم الآخر، المركبة، الجنسية، فئة السائق (in_house / outsourced)، اسم الشركة، رقم العميل، المنصة، نشط (yes/no)، عدد أيام الإجازة (شهر الكويت الحالي؛ الفراغ يُبقي الافتراضي 2). يمكن ترك الهاتف والرقم المدني فارغين، لكن يجب أن يكونا فريدين عند إدخالهما. يُكتب عدد أيام الإجازة فقط للسائق المعتمد أو المرتبط مسبقاً.",
         "mappingRequired": "اربط كل الحقول المطلوبة قبل المعاينة.",
         "assignmentMappingRequired": "اربط عمود المنطقة أو عمود المطاعم — يحتاج السائق أحدهما.",
         "sourceColumns": "أعمدة الملف",
@@ -1529,7 +1531,7 @@
           "rider_category": "فئة السائق (داخلي / خارجي)",
           "source_company": "اسم الشركة",
           "active": "التفعيل عند الاستيراد (نعم / لا)",
-          "client_id": "معرّف المنصة",
+          "client_id": "رقم العميل",
           "client_name": "المنصة",
           "off_days": "عدد أيام الإجازة (شهر الكويت الحالي)"
         },
@@ -1547,7 +1549,7 @@
         "colName": "الاسم",
         "colPhone": "الهاتف",
         "colEmployeeId": "رقم الموظف",
-        "colPlatformId": "معرّف المنصة",
+        "colPlatformId": "رقم العميل",
         "colPlatform": "المنصة",
         "colPartner": "الشريك",
         "colZone": "المنطقة",
@@ -1589,7 +1591,7 @@
           "ambiguous_partner": "اسم الشريك يطابق أكثر من سجل",
           "ambiguous_zone": "اسم المنطقة يطابق أكثر من سجل",
           "ambiguous_restaurant": "اسم المطعم يطابق أكثر من سجل",
-          "invalid_client_id": "معرّف المنصة طويل جدًا (الحد 64)",
+          "invalid_client_id": "رقم العميل طويل جدًا (الحد 64)",
           "invalid_client_name": "اسم المنصة طويل جدًا (الحد 120)",
           "company_category_mismatch": "السائقون الداخليون يتبعون شركة النظام، والخارجيون يتبعون شركة شريكة"
         },
@@ -1664,9 +1666,9 @@
           "save_failed": "تعذّر حفظ التعيين. حاول مرة أخرى."
         }
       },
-      "colClientId": "معرّف المنصة",
+      "colClientId": "رقم العميل",
       "colClientName": "المنصة",
-      "colCompanyClientId": "رقم العميل",
+      "colCompanyClientId": "رقم عميل الشركة",
       "colCompanyName": "اسم الشركة",
       "companyUnassigned": "غير معيّن",
       "companyClientIdNotSet": "غير محدد",
@@ -1979,6 +1981,24 @@
       "documentsEmptyDescription": "ارفع الرخصة أو البطاقة المدنية أو تصريح العمل أو جواز السفر من تعديل السائق.",
       "documentsUploadViaEdit": "الرفع من تعديل السائق",
       "documentsManage": "إدارة المستندات",
+      "extraDocumentsTitle": "مستندات إضافية",
+      "extraDocumentsDescription": "أي ملفات أخرى — عقود، خطابات، شهادات. سمِّ كل مستند ليكون سهل البحث.",
+      "extraDocumentsEmpty": "لا توجد مستندات إضافية بعد.",
+      "extraDocumentAdd": "إضافة مستند",
+      "extraDocumentAddSubtitle": "سمِّ الملف ثم اختره من جهازك.",
+      "extraDocumentNameLabel": "اسم المستند",
+      "extraDocumentNamePlaceholder": "مثال: عقد موقّع",
+      "extraDocumentFileLabel": "الملف",
+      "extraDocumentChooseFile": "اختر ملفاً",
+      "extraDocumentFileHint": "PDF أو PNG أو JPG أو WebP · حتى 16 ميجابايت",
+      "extraDocumentUpload": "رفع المستند",
+      "extraDocumentUploadedOn": "رُفع في {date}",
+      "extraDocumentAdded": "تم رفع المستند",
+      "extraDocumentDeleted": "تم حذف المستند",
+      "extraDocumentDeleteTitle": "حذف المستند",
+      "extraDocumentDeleteBody": "سيتم حذف «{title}» وملفه من هذا الموظف.",
+      "extra_document_title_required": "أعطِ المستند اسماً.",
+      "extra_document_file_required": "اختر ملفاً للرفع.",
       "notFoundTitle": "الموظف غير موجود",
       "notFoundDescription": "ربما تم حذف هذا الموظف أو أن الرابط غير صالح.",
       "tabHistory": "السجل",
@@ -2014,7 +2034,7 @@
           "nationality": "الجنسية",
           "rider_category": "فئة السائق",
           "source_company": "الشركة",
-          "client_id": "معرّف المنصة",
+          "client_id": "رقم العميل",
           "client_name": "المنصة",
           "workflow_status": "حالة سير العمل",
           "account_status": "حالة الحساب",
@@ -2293,7 +2313,7 @@
           "save_failed": "تعذر تحديث التجميد. حاول مرة أخرى."
         }
       },
-      "fieldClientId": "معرّف المنصة",
+      "fieldClientId": "رقم العميل",
       "fieldClientName": "المنصة"
     },
     "driverGroups": {
@@ -2416,7 +2436,7 @@
         "zone": "المنطقة",
         "vehicle": "تعيين مركبة",
         "vehicleType": "نوع المركبة",
-        "clientId": "معرّف المنصة (اختياري)",
+        "clientId": "رقم العميل (اختياري)",
         "clientName": "المنصة (اختياري)",
         "accommodation": "السكن (اختياري)",
         "passportNumber": "رقم الجواز",
@@ -7756,6 +7776,7 @@
           "payrollPayroll": "تبويب الرواتب",
           "payrollCombined": "تبويب الرواتب المجمّعة",
           "payrollAttendanceOrders": "تبويب الحضور والطلبات",
+          "payrollAppAttendance": "تبويب حضور التطبيق",
           "payrollRequests": "تبويب الطلبات",
           "payrollSettings": "تبويب الإعدادات"
         },
@@ -8661,6 +8682,10 @@
       "endDate": "إلى",
       "actionFilter": "الإجراء",
       "allActions": "جميع الإجراءات",
+      "entityFilter": "الكيان",
+      "allEntities": "جميع الكيانات",
+      "adminFilter": "المشرف",
+      "allAdmins": "جميع المشرفين",
       "search": "بحث",
       "searchPlaceholder": "الكيان، المسار، الصفحة…",
       "colTime": "الوقت",
@@ -8813,6 +8838,7 @@
       "subtitle": "الحضور الشهري والكفاءة وموافقات الطلبات المرتبطة بها",
       "tabPayroll": "الرواتب",
       "tabCombined": "الرواتب المجمّعة",
+      "tabAppAttendance": "حضور التطبيق",
       "tabRequests": "الطلبات",
       "range": {
         "thisMonth": "هذا الشهر",
@@ -8952,7 +8978,7 @@
         "status": "الحالة"
       },
       "riderCols": {
-        "amId": "رقم AM",
+        "amId": "معرّف MG",
         "mgId": "رقم السائق",
         "name": "الاسم",
         "restaurant": "المطعم",
@@ -8985,7 +9011,19 @@
         "zoneOrders": "طلبات المنطقة للشهر السابق",
         "zoneDpd": "DPD المنطقة للشهر السابق",
         "zoneEff": "كفاءة المنطقة للشهر السابق",
-        "vehicleKind": "المركبة"
+        "vehicleKind": "المركبة",
+        "appTotalHours": "ساعات التطبيق",
+        "appActiveDays": "أيام نشاط التطبيق",
+        "appAvgHours": "متوسط الساعات / يوم نشط"
+      },
+      "appAttendance": {
+        "bannerTitle": "حضور التطبيق",
+        "bannerBody": "الساعات التي كان تطبيق السائق مستخدمًا فيها فعليًا — من تسجيل الحضور إلى الانصراف، أو المدة المنقضية حتى الآن في وردية لا تزال مفتوحة. لا يؤثر هذا في الرواتب؛ إنه سجل استخدام إلى جانبها.",
+        "activeRiders": "{count} سائق لديه نشاط في التطبيق",
+        "daysHint": "أيام فيها استخدام للتطبيق",
+        "avgHint": "محسوب على أيام الاستخدام",
+        "totalsRow": "جميع السائقين المعروضين",
+        "footNote": "الأيام التي لا يوجد فيها تسجيل حضور أو انصراف تظهر بلا ساعات، وليس بصفر."
       },
       "riderStatus": {
         "active": "نشط",
@@ -10582,7 +10620,7 @@
     "payrollHub": {
       "hub": {
         "title": "مركز الرواتب",
-        "subtitle": "الأداء ومطابقة الطلبات والمدفوعات لشهر الرواتب.",
+        "subtitle": "الأداء ومطابقة الطلبات والرواتب لشهر الرواتب.",
         "breadcrumb": "مركز الرواتب",
         "cards": {
           "performance": {
@@ -10593,9 +10631,9 @@
             "title": "مطابقة الطلبات",
             "body": "مقارنة تحميل AM بعدد طلبات MGGO ليوم الكويت."
           },
-          "payouts": {
-            "title": "المدفوعات",
-            "body": "فترات الرواتب وإجماليات السائقين وتشغيل الدفع."
+          "payroll": {
+            "title": "الرواتب",
+            "body": "أشهر الرواتب وإجماليات السائقين وخطة الأجر الشهرية."
           }
         }
       }

@@ -139,6 +139,7 @@ function emptyKpis(): DashboardKpis {
     payrollBlockers: 0,
     driverExceptions: 0,
     absentToday: 0,
+    pendingEmployeeVerifications: 0,
   };
 }
 
@@ -779,6 +780,17 @@ export async function fetchDashboardSnapshot(locale = "en"): Promise<DashboardSn
 
   const absentToday = attendanceMonitor.reduce((sum, row) => sum + row.absent, 0);
 
+  // Mirrors `admin_drivers_tab_matches('pending')` so the KPI and the list cannot disagree.
+  const pendingEmployeeVerifications = perms.drivers
+    ? drivers.filter(
+        (d) =>
+          !d.archived_at &&
+          (!d.linked_profile_id ||
+            d.workflow_status === "pending" ||
+            d.account_status === "pending"),
+      ).length
+    : 0;
+
   const payrollBlockers = earningsRows.filter((r) => r.anomalies.length > 0).length;
 
   const kpis: DashboardKpis = {
@@ -788,6 +800,7 @@ export async function fetchDashboardSnapshot(locale = "en"): Promise<DashboardSn
     payrollBlockers,
     driverExceptions,
     absentToday,
+    pendingEmployeeVerifications,
   };
 
   const payrollReadiness = buildPayrollReadiness(earningsRows);
