@@ -60,14 +60,29 @@ function asDate(value: unknown): Date | null {
   return null;
 }
 
-function firstRestaurantId(raw: Record<string, unknown>): string | null {
-  const single = asString(raw["restaurant_id"]);
-  if (single) return single;
+function restaurantIdsOf(raw: Record<string, unknown>): string[] {
+  const single = trimmedOrNull(raw["restaurant_id"]);
   const list = Array.isArray(raw["restaurant_ids"])
     ? (raw["restaurant_ids"] as unknown[]).filter((id): id is string => typeof id === "string")
     : [];
-  if (!list.length) return null;
-  return [...list].sort((a, b) => a.localeCompare(b))[0];
+  const ids: string[] = [];
+  if (single) ids.push(single);
+  for (const id of [...list].sort((a, b) => a.localeCompare(b))) {
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+/**
+ * Every restaurant a rider could be assigned to, denormalised copy first and
+ * edge rows second. The grid used to take only the denormalised first id, so a
+ * rider whose copy pointed at a missing document printed "(Pool)" even when a
+ * live `driver_restaurants` edge named a real restaurant.
+ */
+function restaurantCandidates(raw: Record<string, unknown>, edgeIds: string[] = []): string[] {
+  const ids = restaurantIdsOf(raw);
+  for (const id of edgeIds) if (!ids.includes(id)) ids.push(id);
+  return ids;
 }
 
 function asStringList(value: unknown): string[] {
@@ -79,14 +94,20 @@ function asStringList(value: unknown): string[] {
 }
 
 /**
- * `drivers` holds `full_name`; older intake-shaped rows held `name`. The payroll
- * grid must never print a dash for a rider who has either.
+ * `drivers` holds `full_name`; older intake-shaped rows held `name`, and a
+ * rider approved from an intake can hold the name only on `profiles.full_name`.
+ * The payroll grid must never print a dash — or a bare employee id — for a
+ * rider who has a real name on any of them.
  */
-function driverDisplayName(raw: Record<string, unknown>): string | null {
+function driverDisplayName(
+  raw: Record<string, unknown>,
+  profileName?: string | null,
+): string | null {
   return (
     trimmedOrNull(raw["name"]) ??
     trimmedOrNull(raw["full_name"]) ??
     trimmedOrNull(raw["driver_name"]) ??
+    trimmedOrNull(profileName) ??
     trimmedOrNull(raw["employee_id"]) ??
     trimmedOrNull(raw["driver_code"])
   );
@@ -268,24 +289,28 @@ async function loadPayrollContext(input: {
       .get(),
   ]));
 
-  // Requests created by the rider app carry only `driver_id`, so the AO grid's
-  // rider column falls back to `profiles.full_name` instead of a dash.
-  const requestDriverIds = [
-    ...new Set(
-      requestsSnap.docs
+  // `drivers` does not always carry the rider's name — a rider approved from an
+  // intake can hold the name only on `profiles.full_name` — so the roster's
+  // name, and the AO grid's rider column for app-created requests, both read
+  // this map before falling back to the employee id.
+  const driverIds = driverSnap.docs.map((doc) => doc.id);
+  const profileIds = [
+    ...new Set([
+      ...driverIds,
+      ...requestsSnap.docs
         .map((doc) => asString(doc.get("driver_id")))
         .filter((id): id is string => Boolean(id)),
-    ),
+    ]),
   ];
-  const requestProfileNames = new Map<string, string>();
-  for (let index = 0; index < requestDriverIds.length; index += GET_ALL_CHUNK) {
-    const chunk = requestDriverIds.slice(index, index + GET_ALL_CHUNK);
+  const profileNames = new Map<string, string>();
+  for (let index = 0; index < profileIds.length; index += GET_ALL_CHUNK) {
+    const chunk = profileIds.slice(index, index + GET_ALL_CHUNK);
     const snaps = await db.getAll(
       ...chunk.map((id) => db.collection(COLLECTIONS.profiles).doc(id)),
     );
     for (const snap of snaps) {
       const name = trimmedOrNull((snap.data() ?? {})["full_name"]);
-      if (name) requestProfileNames.set(snap.id, name);
+      if (name) profileNames.set(snap.id, name);
     }
   }
 
@@ -303,7 +328,6 @@ async function loadPayrollContext(input: {
   // edges, not on `drivers` — the payroll grid read only the denormalised copy,
   // so every row whose assignment predates that copy printed "(Pool)".
   const driverRestaurantIds = new Map<string, string[]>();
-  const driverIds = driverSnap.docs.map((doc) => doc.id);
   const edgeQueries: Array<Promise<QuerySnapshot>> = [];
   for (let index = 0; index < driverIds.length; index += 30) {
     edgeQueries.push(
@@ -347,18 +371,22 @@ async function loadPayrollContext(input: {
   }
 
   // Newest adjustment per (driver, day), because the table is append-only and an
-  // 'auto' row is a revert rather than a delete.
+  // 'auto' row is a revert rather than a delete. Equal timestamps break on the
+  // document id, so two applies a millisecond apart cannot make the winning cell
+  // depend on the order Firestore happened to return them in.
   const adjustmentByDriverDay = new Map<string, Record<string, unknown>>();
+  const adjustmentStamp = new Map<string, { at: number; id: string }>();
   for (const doc of adjustmentsSnap.docs) {
     const raw = doc.data();
     const driverId = asString(raw["driver_id"]);
     const workDate = asString(raw["work_date"]);
     if (!driverId || !workDate) continue;
     const key = `${driverId}|${workDate}`;
-    const existing = adjustmentByDriverDay.get(key);
     const at = asDate(raw["adjusted_at"])?.getTime() ?? 0;
-    const existingAt = existing ? (asDate(existing["adjusted_at"])?.getTime() ?? 0) : -1;
-    if (at >= existingAt) adjustmentByDriverDay.set(key, raw);
+    const held = adjustmentStamp.get(key);
+    if (held && (held.at > at || (held.at === at && held.id > doc.id))) continue;
+    adjustmentStamp.set(key, { at, id: doc.id });
+    adjustmentByDriverDay.set(key, raw);
   }
 
   return {
@@ -382,7 +410,7 @@ async function loadPayrollContext(input: {
     offStructure,
     workedByDriverDay,
     adjustmentByDriverDay,
-    requestProfileNames,
+    profileNames,
   };
 }
 
@@ -673,8 +701,9 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
   const driverNameById = new Map<string, string>();
   const driverCodeById = new Map<string, string>();
   for (const doc of ctx.driverSnap.docs) {
-    const name = driverDisplayName(doc.data());
-    const code = trimmedOrNull(doc.get("driver_code"));
+    const raw = doc.data();
+    const name = driverDisplayName(raw, ctx.profileNames.get(doc.id)) ?? null;
+    const code = trimmedOrNull(raw["driver_code"]);
     if (name) driverNameById.set(doc.id, name);
     if (code) driverCodeById.set(doc.id, code);
   }
@@ -733,7 +762,7 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
       driverId,
       riderName:
         trimmedOrNull(raw["driver_name"]) ??
-        ctx.requestProfileNames.get(driverId) ??
+        ctx.profileNames.get(driverId) ??
         driverNameById.get(driverId) ??
         asString(raw["driver_code"]) ??
         driverCodeById.get(driverId) ??
@@ -763,7 +792,9 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
       const driverCode = trimmedOrNull(raw["driver_code"]);
       const projectKey = asString(raw["project_key"]);
       const client = projectKey ? clientByKey.get(projectKey) : undefined;
-      const restaurantId = firstRestaurantId(raw) ?? ctx.driverRestaurantIds.get(driverId)?.[0] ?? null;
+      const restaurantIds = restaurantCandidates(raw, ctx.driverRestaurantIds.get(driverId));
+      const restaurantId =
+        restaurantIds.find((id) => ctx.restaurantById.has(id)) ?? restaurantIds[0] ?? null;
       const restaurant = restaurantId ? ctx.restaurantById.get(restaurantId) : undefined;
       const driverZoneId = asString(raw["zone_id"]);
       // SOP: an Americana rider belongs to their restaurant's zone, falling back
@@ -800,7 +831,7 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
         driverId,
         amId: employeeId ?? "—",
         mgId: driverCode ?? "—",
-        name: driverDisplayName(raw) ?? "—",
+        name: driverDisplayName(raw, ctx.profileNames.get(driverId)) ?? "—",
         employeeId,
         restaurant:
           projectKey === "keeta"

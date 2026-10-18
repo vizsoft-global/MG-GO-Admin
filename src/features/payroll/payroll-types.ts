@@ -256,6 +256,7 @@ export type PayrollHubTab =
   | "payroll"
   | "combined"
   | "attendance-orders"
+  | "app-attendance"
   | "requests"
   | "settings";
 

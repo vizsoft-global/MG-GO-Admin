@@ -18,39 +18,76 @@ export const PAYROLL_SUMMARY_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "mgId", numeric: false, labelKey: "mgId" },
   { id: "name", numeric: false, labelKey: "name" },
   { id: "restaurant", numeric: false, labelKey: "restaurant" },
+  { id: "restaurantId", numeric: false, labelKey: "restaurantId" },
   { id: "zone", numeric: false, labelKey: "zone" },
   { id: "zoneCategory", numeric: false, labelKey: "zoneCategory" },
   { id: "zoneOrders", numeric: true, labelKey: "zoneOrders" },
   { id: "zoneDpd", numeric: true, labelKey: "zoneDpd" },
   { id: "zoneEff", numeric: true, labelKey: "zoneEff" },
   { id: "partner", numeric: false, labelKey: "partner" },
+  { id: "nationality", numeric: false, labelKey: "nationality" },
   { id: "vehicleKind", numeric: false, labelKey: "vehicleKind" },
   { id: "status", numeric: false, labelKey: "status" },
   { id: "totalDays", numeric: true, labelKey: "totalDays" },
+  { id: "totalHours", numeric: true, labelKey: "totalHours" },
   { id: "finalOrders", numeric: true, labelKey: "finalOrders" },
+  { id: "requiredHours", numeric: true, labelKey: "requiredHours" },
+  { id: "actualHours", numeric: true, labelKey: "actualHours" },
+  { id: "offStructure", numeric: true, labelKey: "offStructure" },
+  { id: "efficiency", numeric: true, labelKey: "efficiency" },
   { id: "reduced3", numeric: true, labelKey: "reduced3" },
   { id: "half", numeric: true, labelKey: "half" },
+  { id: "actual", numeric: true, labelKey: "actual" },
   { id: "off", numeric: true, labelKey: "off" },
   { id: "sick", numeric: true, labelKey: "sick" },
   { id: "accident", numeric: true, labelKey: "accident" },
   { id: "vehicle", numeric: true, labelKey: "vehicle" },
+  { id: "custom", numeric: true, labelKey: "custom" },
+  { id: "adjusted", numeric: true, labelKey: "adjusted" },
   { id: "absence", numeric: true, labelKey: "absence" },
   { id: "absLh", numeric: true, labelKey: "absLh" },
   { id: "absLo", numeric: true, labelKey: "absLo" },
-  { id: "offStructure", numeric: true, labelKey: "offStructure" },
-  { id: "requiredHours", numeric: true, labelKey: "requiredHours" },
-  { id: "actualHours", numeric: true, labelKey: "actualHours" },
-  { id: "efficiency", numeric: true, labelKey: "efficiency" },
 ] as const;
+
+/**
+ * Columns pinned to the start of the summary table. Their sticky offsets are
+ * hard-coded in `stickyClass`, so they cannot be hidden or reordered.
+ */
+export const PAYROLL_SUMMARY_LOCKED_COLUMNS = ["amId", "mgId", "name"] as const;
 
 export const COMBINED_IDENTITY_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "amId", numeric: false, labelKey: "amId" },
   { id: "mgId", numeric: false, labelKey: "mgId" },
   { id: "name", numeric: false, labelKey: "name" },
+  { id: "restaurant", numeric: false, labelKey: "restaurant" },
+  { id: "restaurantId", numeric: false, labelKey: "restaurantId" },
   { id: "zone", numeric: false, labelKey: "zone" },
   { id: "zoneCategory", numeric: false, labelKey: "zoneCategory" },
   { id: "partner", numeric: false, labelKey: "partner" },
   { id: "vehicleKind", numeric: false, labelKey: "vehicleKind" },
+  { id: "finalOrders", numeric: true, labelKey: "finalOrders" },
+  { id: "actualHours", numeric: true, labelKey: "actualHours" },
+] as const;
+
+/**
+ * Application Attendance leads: the same identity block the Attendance &
+ * Orders grid shows, then the three app-usage totals computed from the day
+ * grid. Kept separate from `COMBINED_IDENTITY_COLUMNS` so the Combined tab can
+ * grow without silently adding app columns to a payroll table.
+ */
+export const APP_ATTENDANCE_LEAD_COLUMNS: readonly PayrollRiderColumn[] = [
+  { id: "amId", numeric: false, labelKey: "amId" },
+  { id: "mgId", numeric: false, labelKey: "mgId" },
+  { id: "name", numeric: false, labelKey: "name" },
+  { id: "restaurant", numeric: false, labelKey: "restaurant" },
+  { id: "restaurantId", numeric: false, labelKey: "restaurantId" },
+  { id: "partner", numeric: false, labelKey: "partner" },
+  { id: "zone", numeric: false, labelKey: "zone" },
+  { id: "zoneCategory", numeric: false, labelKey: "zoneCategory" },
+  { id: "vehicleKind", numeric: false, labelKey: "vehicleKind" },
+  { id: "appTotalHours", numeric: true, labelKey: "appTotalHours" },
+  { id: "appActiveDays", numeric: true, labelKey: "appActiveDays" },
+  { id: "appAvgHours", numeric: true, labelKey: "appAvgHours" },
 ] as const;
 
 export const AO_LEAD_COLUMNS: readonly PayrollRiderColumn[] = [
@@ -73,7 +110,7 @@ export const RIDER_IDENTITY_COLUMNS = COMBINED_IDENTITY_COLUMNS;
 export const RIDER_TOTAL_COLUMNS = PAYROLL_SUMMARY_COLUMNS.filter((c) => c.numeric);
 
 const NUMERIC_IDS = new Set<string>(
-  [...PAYROLL_SUMMARY_COLUMNS, ...COMBINED_IDENTITY_COLUMNS, ...AO_LEAD_COLUMNS]
+  [...PAYROLL_SUMMARY_COLUMNS, ...COMBINED_IDENTITY_COLUMNS, ...AO_LEAD_COLUMNS, ...APP_ATTENDANCE_LEAD_COLUMNS]
     .filter((c) => c.numeric)
     .map((c) => c.id),
 );
@@ -85,6 +122,38 @@ export function isNumericRiderColumn(columnId: string): boolean {
 export function payrollVehicleKind(key: string | null): string {
   if (!key) return "—";
   return vehicleLabel(key);
+}
+
+/**
+ * Application hours for one day: the logged check-in → check-out length, or the
+ * elapsed length of a shift that is still open. Deliberately independent of the
+ * payroll engine's `creditedHours` — this tab answers "how long was the app in
+ * use", not "how many hours are payable".
+ */
+export function appHoursForDay(row: PayrollRiderRow, dayIndex: number): number {
+  const info = row.dayInfo[dayIndex];
+  if (!info) return 0;
+  return info.loggedHours || (info.elapsedHours ?? 0);
+}
+
+export function appAttendanceTotals(row: PayrollRiderRow): {
+  totalHours: number;
+  activeDays: number;
+  avgHours: number;
+} {
+  let totalHours = 0;
+  let activeDays = 0;
+  for (let index = 0; index < row.dayInfo.length; index += 1) {
+    const hours = appHoursForDay(row, index);
+    if (hours <= 0) continue;
+    totalHours += hours;
+    activeDays += 1;
+  }
+  return {
+    totalHours,
+    activeDays,
+    avgHours: activeDays > 0 ? totalHours / activeDays : 0,
+  };
 }
 
 export function riderColumnValue(
@@ -158,11 +227,21 @@ export function riderColumnValue(
       return row.finalOrders;
     case "efficiency":
       return row.efficiency;
+    case "appTotalHours":
+      return appAttendanceTotals(row).totalHours;
+    case "appActiveDays":
+      return appAttendanceTotals(row).activeDays;
+    case "appAvgHours":
+      return appAttendanceTotals(row).avgHours;
     default:
       if (/^d\d+$/.test(columnId)) {
         const index = Number(columnId.slice(1)) - 1;
         const particular = cellParticular(row, index);
         return particular || null;
+      }
+      if (/^a\d+$/.test(columnId)) {
+        const index = Number(columnId.slice(1)) - 1;
+        return row.dayInfo[index] ? appHoursForDay(row, index) : null;
       }
       if (/^o\d+$/.test(columnId)) {
         const index = Number(columnId.slice(1)) - 1;
@@ -183,6 +262,11 @@ export function dayColumnValue(status: DayStatus): string {
 
 export function dayColumnId(dayIndex: number): string {
   return `d${dayIndex + 1}`;
+}
+
+/** Column id for one day's application hours in the Application Attendance grid. */
+export function appDayColumnId(dayIndex: number): string {
+  return `a${dayIndex + 1}`;
 }
 
 export function dayAdjustmentInput(

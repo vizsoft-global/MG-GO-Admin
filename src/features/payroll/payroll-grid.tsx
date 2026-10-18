@@ -53,6 +53,7 @@ import {
   dayColumnId,
   isNumericRiderColumn,
   PAYROLL_SUMMARY_COLUMNS,
+  PAYROLL_SUMMARY_LOCKED_COLUMNS,
   riderColumnValue,
   type PayrollRiderColumn,
 } from "./payroll-rider-columns";
@@ -1102,17 +1103,31 @@ export function PayrollSummaryTable({
   exportLabel,
   onExport,
   rangeLabel,
+  visibleColumnIds,
 }: {
   rows: readonly PayrollRiderRow[];
   empty: string;
   exportLabel?: string;
   onExport?: (rows: readonly PayrollRiderRow[]) => void;
   rangeLabel?: string;
+  /** Ordered column ids from the picker. Locked identity columns always render first. */
+  visibleColumnIds?: readonly string[];
 }) {
   const t = useTranslations("pages.payroll");
   const [filters, setFilters] = useState<ColumnFilters>({});
   const [sort, setSort] = useState<ColumnSort>(null);
-  const columns = PAYROLL_SUMMARY_COLUMNS;
+  const columns = useMemo(() => {
+    const byId = new Map(PAYROLL_SUMMARY_COLUMNS.map((column) => [column.id, column]));
+    const locked = PAYROLL_SUMMARY_LOCKED_COLUMNS.map((id) => byId.get(id)).filter(
+      (column): column is PayrollRiderColumn => Boolean(column),
+    );
+    const requested = visibleColumnIds ?? PAYROLL_SUMMARY_COLUMNS.map((column) => column.id);
+    const chosen = requested
+      .filter((id) => !(PAYROLL_SUMMARY_LOCKED_COLUMNS as readonly string[]).includes(id))
+      .map((id) => byId.get(id))
+      .filter((column): column is PayrollRiderColumn => Boolean(column));
+    return [...locked, ...chosen];
+  }, [visibleColumnIds]);
 
   const visibleRows = useMemo(() => {
     const filtered = rows.filter((row) => {

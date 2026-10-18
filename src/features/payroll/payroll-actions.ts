@@ -21,9 +21,11 @@ import {
   assemblePayrollSnapshot,
   decoratePayrollSnapshot,
   kuwaitYmdFromIso,
+  parseAdjustmentStatus,
   parseClientConfig,
   snapshotFromRpc,
   type RawOffStructure,
+  type RawPayrollAdjustment,
   type RawPayrollDriver,
   type RawPayrollRequest,
   type RawPayrollRuleSnapshot,
@@ -235,7 +237,7 @@ async function assembleFromTables(
   const startMs = Date.parse(startUtc);
   const endMs = Date.parse(endUtc);
 
-  const [driverSnap, profileSnap, zoneSnap, vehicleSnap, mapSnap, restaurantSnap, logSnap, requestSnap, offSnap] =
+  const [driverSnap, profileSnap, zoneSnap, vehicleSnap, mapSnap, restaurantSnap, logSnap, requestSnap, offSnap, adjustmentSnap] =
     await Promise.all([
       db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get(),
       db.collection(COLLECTIONS.profiles).get(),
@@ -254,12 +256,25 @@ async function assembleFromTables(
         .where("period_month", "==", `${monthKey}-01`)
         .get()
         .catch(() => null),
+      // Manual PAYROLL cells are read here and nowhere else in this fallback, so
+      // a month rebuilt from live tables still shows the hand-entered values.
+      db
+        .collection(COLLECTIONS.payrollManualAdjustments)
+        .where("work_date", ">=", startIso)
+        .where("work_date", "<", endExclusiveIso)
+        .get()
+        .catch(() => null),
     ]);
 
   const driverRows = driverSnap.docs.map((doc) => {
     const row = doc.data();
+    const single = textOf(row.restaurant_id);
+    const many = Array.isArray(row.restaurant_ids)
+      ? (row.restaurant_ids as unknown[]).filter((id): id is string => typeof id === "string" && id.length > 0)
+      : [];
     return {
       id: doc.id,
+      name: textOf(row.name) ?? textOf(row.full_name) ?? textOf(row.driver_name),
       employee_id: textOf(row.employee_id),
       driver_code: textOf(row.driver_code),
       zone_id: textOf(row.zone_id),
@@ -269,6 +284,7 @@ async function assembleFromTables(
       source_company: textOf(row.source_company),
       status: textOf(row.status),
       vehicle_id: textOf(row.vehicle_id),
+      restaurant_ids: single ? [single, ...many.filter((id) => id !== single)] : many,
     };
   });
   const profileRows = profileSnap.docs.map((doc) => ({
@@ -330,23 +346,47 @@ async function assembleFromTables(
       source: String(row.source ?? "manual"),
     };
   });
+  const adjustmentRows: RawPayrollAdjustment[] = (adjustmentSnap?.docs ?? []).flatMap((doc) => {
+    const row = doc.data();
+    const driverId = String(row.driver_id ?? "");
+    const date = String(row.work_date ?? "");
+    const status = parseAdjustmentStatus(row.adjusted_status);
+    if (!driverId || !date || !status) return [];
+    const hours = Number(row.adjusted_hours);
+    return [
+      {
+        driverId,
+        date,
+        status,
+        hours: Number.isFinite(hours) ? hours : null,
+        reason: textOf(row.reason),
+        adjustedAt: isoOf(row.adjusted_at),
+      },
+    ];
+  });
 
   const names = new Map(profileRows.map((p) => [p.id, p.full_name]));
   const zones = new Map(zoneRows.map((z) => [z.id, z.name]));
   const vehicles = new Map(vehicleRows.map((v) => [v.id, v.vehicle_type_key]));
   const restaurants = new Map(restaurantRows.map((r) => [r.id, r.name]));
-  const storeByDriver = new Map<string, string>();
+  const storeIdsByDriver = new Map<string, string[]>();
   for (const row of mapRows) {
-    if (!storeByDriver.has(row.driver_id)) {
-      storeByDriver.set(row.driver_id, row.restaurant_id);
-    }
+    const list = storeIdsByDriver.get(row.driver_id) ?? [];
+    if (!list.includes(row.restaurant_id)) list.push(row.restaurant_id);
+    storeIdsByDriver.set(row.driver_id, list);
   }
 
   const roster: RawPayrollDriver[] = driverRows.map((d) => {
-    const restaurantId = storeByDriver.get(d.id) ?? null;
+    const candidates = [...(storeIdsByDriver.get(d.id) ?? []), ...d.restaurant_ids];
+    const restaurantId = candidates.find((id) => restaurants.has(id)) ?? candidates[0] ?? null;
     return {
       id: d.id,
-      name: names.get(d.id)?.trim() || "—",
+      name:
+        d.name?.trim() ||
+        names.get(d.id)?.trim() ||
+        d.driver_code ||
+        d.employee_id ||
+        "—",
       employeeId: d.employee_id,
       driverCode: d.driver_code,
       zoneId: d.zone_id,
@@ -445,6 +485,7 @@ async function assembleFromTables(
       ),
       requests,
       offStructures,
+      adjustments: adjustmentRows,
     }),
   );
 }

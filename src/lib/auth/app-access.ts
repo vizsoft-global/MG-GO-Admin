@@ -183,6 +183,11 @@ export const APP_ACCESS_CATALOG: readonly AppAccessEntry[] = [
         labelKey: "subViews.payrollAttendanceOrders",
         slugs: ["payroll.attendance_orders"],
       },
+      {
+        id: "payrollAppAttendance",
+        labelKey: "subViews.payrollAppAttendance",
+        slugs: ["payroll.app_attendance"],
+      },
       { id: "payrollRequests", labelKey: "subViews.payrollRequests", slugs: ["payroll.requests"] },
       { id: "payrollSettings", labelKey: "subViews.payrollSettings", slugs: ["payroll.settings"] },
     ],

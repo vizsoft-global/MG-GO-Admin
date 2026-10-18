@@ -18,6 +18,7 @@ import {
   Timestamp,
   type DocumentReference,
   type Firestore,
+  type QuerySnapshot,
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import {
@@ -217,19 +218,6 @@ async function logRuleChange(args: {
     after: args.after ?? null,
     created_at: FieldValue.serverTimestamp(),
   });
-}
-
-function firstRestaurantId(raw: Dict): string | null {
-  const ids = new Set<string>();
-  const single = asString(raw["restaurant_id"]);
-  if (single) ids.add(single);
-  if (Array.isArray(raw["restaurant_ids"])) {
-    for (const id of raw["restaurant_ids"] as unknown[]) {
-      if (typeof id === "string" && id.length) ids.add(id);
-    }
-  }
-  if (!ids.size) return null;
-  return [...ids].sort((a, b) => a.localeCompare(b))[0];
 }
 
 function sortedRestaurantIds(raw: Dict): string[] {
@@ -532,6 +520,34 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
   const restaurantNames = new Map<string, string | null>();
   for (const doc of restaurantsSnap.docs) restaurantNames.set(doc.id, asString(doc.get("name")));
 
+  // The name a rider was approved with can live only on `profiles.full_name`,
+  // and their restaurant assignment only on `driver_restaurants` edges — the
+  // roster read neither, so both columns printed their fallbacks.
+  const driverIds = driverSnap.docs.map((doc) => doc.id);
+  const profiles = await loadDocMap(COLLECTIONS.profiles, driverIds);
+  const edgeRestaurantIds = new Map<string, string[]>();
+  const edgeQueries: Array<Promise<QuerySnapshot>> = [];
+  for (let index = 0; index < driverIds.length; index += 30) {
+    edgeQueries.push(
+      db
+        .collection(COLLECTIONS.driverRestaurants)
+        .where("driver_id", "in", driverIds.slice(index, index + 30))
+        .get(),
+    );
+  }
+  if (edgeQueries.length) {
+    for (const snap of await Promise.all(edgeQueries)) {
+      for (const doc of snap.docs) {
+        const driverId = asString(doc.get("driver_id"));
+        const restaurantId = asString(doc.get("restaurant_id"));
+        if (!driverId || !restaurantId) continue;
+        const list = edgeRestaurantIds.get(driverId) ?? [];
+        if (!list.includes(restaurantId)) list.push(restaurantId);
+        edgeRestaurantIds.set(driverId, list);
+      }
+    }
+  }
+
   const vehicleIds = driverSnap.docs
     .map((doc) => asString(doc.get("vehicle_id")))
     .filter((id): id is string => Boolean(id));
@@ -558,12 +574,25 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
     const raw = (doc.data() ?? {}) as Dict;
     const zoneId = asString(raw["zone_id"]);
     const projectKey = asString(raw["project_key"]);
-    const restaurantId = firstRestaurantId(raw);
+    const restaurantIds = sortedRestaurantIds(raw);
+    for (const id of edgeRestaurantIds.get(doc.id) ?? []) {
+      if (!restaurantIds.includes(id)) restaurantIds.push(id);
+    }
+    const resolvedRestaurantId =
+      restaurantIds.find((id) => Boolean(restaurantNames.get(id))) ?? restaurantIds[0] ?? null;
+    const profile = profiles.get(doc.id);
     const vehicleId = asString(raw["vehicle_id"]);
     const vehicle = vehicleId ? vehicles.get(vehicleId) : undefined;
     return {
       id: doc.id,
-      name: trimmedOrNull(raw["name"]) ?? trimmedOrNull(raw["full_name"]) ?? "—",
+      name:
+        trimmedOrNull(raw["name"]) ??
+        trimmedOrNull(raw["full_name"]) ??
+        trimmedOrNull(profile?.["full_name"]) ??
+        trimmedOrNull(profile?.["name"]) ??
+        trimmedOrNull(raw["employee_id"]) ??
+        trimmedOrNull(raw["driver_code"]) ??
+        "—",
       employeeId: trimmedOrNull(raw["employee_id"]),
       driverCode: trimmedOrNull(raw["driver_code"]),
       zoneId,
@@ -574,9 +603,11 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
       sourceCompany: asString(raw["source_company"]),
       status: asString(raw["status"]),
       vehicleKey: vehicleId ? asString(vehicle?.["vehicle_type_key"]) : null,
-      restaurantId,
+      restaurantId: resolvedRestaurantId,
       restaurantName:
-        projectKey === "keeta" || !restaurantId ? null : (restaurantNames.get(restaurantId) ?? null),
+        projectKey === "keeta" || !resolvedRestaurantId
+          ? null
+          : (restaurantNames.get(resolvedRestaurantId) ?? null),
     };
   });
 

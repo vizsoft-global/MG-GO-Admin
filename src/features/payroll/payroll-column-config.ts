@@ -1,4 +1,4 @@
-export type PayrollHeadingView = "combined" | "ao";
+export type PayrollHeadingView = "combined" | "ao" | "app_attendance";
 
 export type PayrollColumnConfigRow = {
   columnKey: string;
@@ -18,6 +18,9 @@ export const PAYROLL_HEADING_KEYS = [
   "vehicleKind",
   "finalOrders",
   "actualHours",
+  "appTotalHours",
+  "appActiveDays",
+  "appAvgHours",
 ] as const;
 
 export type PayrollHeadingKey = (typeof PAYROLL_HEADING_KEYS)[number];
@@ -26,10 +29,14 @@ export const COMBINED_HEADING_KEYS = [
   "amId",
   "mgId",
   "name",
+  "restaurant",
+  "restaurantId",
   "zone",
   "zoneCategory",
   "partner",
   "vehicleKind",
+  "finalOrders",
+  "actualHours",
 ] as const;
 
 export const AO_HEADING_KEYS = [
@@ -46,8 +53,25 @@ export const AO_HEADING_KEYS = [
   "actualHours",
 ] as const;
 
+export const APP_ATTENDANCE_HEADING_KEYS = [
+  "amId",
+  "mgId",
+  "name",
+  "restaurant",
+  "restaurantId",
+  "partner",
+  "zone",
+  "zoneCategory",
+  "vehicleKind",
+  "appTotalHours",
+  "appActiveDays",
+  "appAvgHours",
+] as const;
+
 export function headingKeysFor(view: PayrollHeadingView): readonly string[] {
-  return view === "combined" ? COMBINED_HEADING_KEYS : AO_HEADING_KEYS;
+  if (view === "combined") return COMBINED_HEADING_KEYS;
+  if (view === "ao") return AO_HEADING_KEYS;
+  return APP_ATTENDANCE_HEADING_KEYS;
 }
 
 export function configByKey(

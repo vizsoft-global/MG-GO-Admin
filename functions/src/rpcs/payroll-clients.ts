@@ -32,14 +32,19 @@ const PAYROLL_COLUMN_KEYS = [
   "amId",
   "mgId",
   "name",
+  "restaurant",
+  "restaurantId",
   "zone",
   "zoneCategory",
   "partner",
   "vehicleKind",
   "finalOrders",
   "actualHours",
+  "appTotalHours",
+  "appActiveDays",
+  "appAvgHours",
 ];
-const HEADING_VIEWS = ["combined", "ao"];
+const HEADING_VIEWS = ["combined", "ao", "app_attendance"];
 
 type Dict = Record<string, unknown>;
 type RuleInput = { sortOrder: number; label: string; conditions: unknown[]; result: Dict };
