@@ -31,6 +31,8 @@ export const queryKeys = {
       ["drivers", "history", intakeId, source] as const,
     documents: (intakeId: string, profileId: string | null) =>
       ["drivers", "documents", intakeId, profileId] as const,
+    extraDocuments: (intakeId: string, profileId: string | null) =>
+      ["drivers", "extra-documents", intakeId, profileId] as const,
     importJobs: () => ["drivers", "import-jobs"] as const,
     importJob: (id: string) => ["drivers", "import-job", id] as const,
     loginVerifications: (

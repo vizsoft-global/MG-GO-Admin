@@ -12,6 +12,7 @@ import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { loadAppSettings, type AppSettings } from "../core/settings";
 import { requireStaff } from "../core/staff";
+import { identityMatchesSearch, identitySearchValues } from "../core/search-text";
 import {
   compareRulesForLoop,
   deliveryMatchesRules,
@@ -1234,12 +1235,7 @@ export const adminListDriverPerformance = onCall(async (request) => {
     const fullName = asString(profile["full_name"]);
     const driverCode = asString(raw["driver_code"]);
     const employeeId = asString(raw["employee_id"]);
-    if (
-      search &&
-      !(fullName ?? "").toLowerCase().includes(search) &&
-      !(driverCode ?? "").toLowerCase().includes(search) &&
-      !(employeeId ?? "").toLowerCase().includes(search)
-    ) {
+    if (search && !identityMatchesSearch(identitySearchValues(profile, raw), search)) {
       continue;
     }
     const partner = asString(raw["partner_id"]);

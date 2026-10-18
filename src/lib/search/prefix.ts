@@ -38,6 +38,18 @@ export function tokenPrefixMatch(haystack: string, needle: string): boolean {
   return text.split(TOKEN_SPLIT).some((token) => token.length > 0 && token.startsWith(term));
 }
 
+/**
+ * Every typed word must appear somewhere in the text, in any order.
+ * `doe jen` finds "Jenson Doe"; `ally` finds "Hawally".
+ */
+export function textContainsMatch(haystack: unknown, needle: string): boolean {
+  const term = lowerText(needle);
+  if (!term) return true;
+  const text = lowerText(haystack);
+  if (!text) return false;
+  return term.split(" ").filter(Boolean).every((word) => text.includes(word));
+}
+
 function put(out: Record<string, string>, key: string, value: string): void {
   if (value) out[key] = value;
 }

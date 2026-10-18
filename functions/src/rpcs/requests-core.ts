@@ -25,7 +25,14 @@ import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireStaff } from "../core/staff";
 import { fullScanFallback, lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
-import { anyTokenPrefix, requestPrefixQueries, stampStoredRow, tokenPrefixMatch } from "../core/search-text";
+import {
+  digitSubsequenceMatch,
+  identityMatchesSearch,
+  identitySearchValues,
+  requestPrefixQueries,
+  stampStoredRow,
+  textContainsMatch,
+} from "../core/search-text";
 import {
   IN_FILTER_LIMIT,
   chunk,
@@ -203,6 +210,13 @@ async function scanRequests(lower: Date | null, upper: Date | null): Promise<Req
 /**
  * Prefix on stored lowercase fields when a search term is present and any
  * request already has `request_code_lower`. Otherwise the date-window scan.
+ *
+ * A Firestore range query can only express a prefix on one field, so it cannot
+ * answer a multi-word query ("doe rcm") and it returns nothing for a mid-string
+ * fragment ("0074" of RCM-0074). Both go to the scan, which runs the same
+ * `matchesSearch` predicate the caller applies afterwards. An empty prefix
+ * result also falls back, because "no indexed row starts with this" is not the
+ * same answer as "no request matches".
  */
 async function loadRequests(
   lower: Date | null,
@@ -211,10 +225,12 @@ async function loadRequests(
 ): Promise<RequestRow[]> {
   const term = (search ?? "").trim();
   if (!term) return scanRequests(lower, upper);
+  if (term.split(/\s+/).filter(Boolean).length > 1) return scanRequests(lower, upper);
   const db = getFirestore();
   const indexed = await lowercaseFieldIndexed(db, COLLECTIONS.requests, "request_code_lower");
   if (fullScanFallback(indexed, term)) return scanRequests(lower, upper);
   const ids = await prefixMatchIds(db, COLLECTIONS.requests, requestPrefixQueries(term));
+  if (ids.length === 0) return scanRequests(lower, upper);
   const docs = await loadDocMap(COLLECTIONS.requests, ids);
   return [...docs.entries()].map(([id, data]) => ({
     id,
@@ -242,11 +258,6 @@ function senderName(senders: Senders, driverId: string | null): string | null {
     textOf(senders.profiles.get(driverId)?.full_name) ??
     textOf(senders.drivers.get(driverId)?.name)
   );
-}
-
-function senderCode(senders: Senders, driverId: string | null): string | null {
-  if (!driverId) return null;
-  return textOf(senders.drivers.get(driverId)?.driver_code);
 }
 
 /** `request_departments` labels for active rows, keyed by department key. */
@@ -363,18 +374,24 @@ function matchesSearch(
   maskConfidential: boolean,
 ): boolean {
   if (search === null || search.trim() === "") return true;
-  if (tokenPrefixMatch(textOf(row.data.request_code) ?? "", search)) return true;
+  if (textContainsMatch(row.data.request_code, search)) return true;
   if (maskConfidential && boolOf(row.data.is_confidential)) return false;
   const driverId = textOf(row.data.driver_id);
-  return anyTokenPrefix(
-    [
-      senderName(senders, driverId),
-      senderCode(senders, driverId),
-      textOf(row.data.driver_name),
-      textOf(row.data.driver_code),
-    ],
-    search,
-  );
+  // Every rider identifier, not just name + code: an operator pastes whatever
+  // the roster showed them, which may be the MG ID, civil ID, phone or client.
+  if (
+    identityMatchesSearch(
+      identitySearchValues(
+        driverId ? senders.drivers.get(driverId) : null,
+        driverId ? senders.profiles.get(driverId) : null,
+        row.data,
+      ),
+      search,
+    )
+  ) {
+    return true;
+  }
+  return digitSubsequenceMatch(row.data.request_code, search);
 }
 
 function statusOf(row: RequestRow): string {

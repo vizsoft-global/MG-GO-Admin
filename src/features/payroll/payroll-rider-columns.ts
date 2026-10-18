@@ -156,6 +156,15 @@ export function appAttendanceTotals(row: PayrollRiderRow): {
   };
 }
 
+/**
+ * What the Restaurant ID column/CSV prints. Operators quote the partner's own
+ * merchant id ("105913"), not the Firestore document id, so that is what this
+ * returns; the doc id stays on `restaurantId` because slicers match on it.
+ */
+export function restaurantDisplayId(row: PayrollRiderRow): string {
+  return row.restaurantClientId || row.restaurantId || "";
+}
+
 export function riderColumnValue(
   row: PayrollRiderRow,
   columnId: string,
@@ -170,7 +179,7 @@ export function riderColumnValue(
     case "restaurant":
       return row.restaurant;
     case "restaurantId":
-      return row.restaurantId;
+      return restaurantDisplayId(row);
     case "zone":
       return row.zone;
     case "zoneCategory":

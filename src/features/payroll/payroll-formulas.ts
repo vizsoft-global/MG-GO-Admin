@@ -1117,6 +1117,7 @@ export function payrollRiderMatchesSearch(
     zone: string;
     restaurant: string;
     restaurantId?: string | null;
+    restaurantClientId?: string | null;
     amId: string;
     mgId: string;
   },
@@ -1127,7 +1128,8 @@ export function payrollRiderMatchesSearch(
     employee_id: (item) => item.mgId,
     zone: (item) => item.zone,
     restaurant: (item) => item.restaurant,
-    restaurant_id: (item) => item.restaurantId ?? "",
+    restaurant_id: (item) =>
+      `${item.restaurantClientId ?? ""} ${item.restaurantId ?? ""}`.trim(),
     am_id: (item) => item.amId,
   });
 }

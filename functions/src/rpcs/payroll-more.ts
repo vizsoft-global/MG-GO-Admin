@@ -518,7 +518,14 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
     if (name) zoneNames.set(doc.id, name);
   }
   const restaurantNames = new Map<string, string | null>();
-  for (const doc of restaurantsSnap.docs) restaurantNames.set(doc.id, asString(doc.get("name")));
+  // The ID an operator recognises is the partner's own merchant id (the
+  // Restaurants list prints it as "External ID"); the Firestore doc id is an
+  // opaque string that no one quotes in a payroll conversation.
+  const restaurantClientIds = new Map<string, string | null>();
+  for (const doc of restaurantsSnap.docs) {
+    restaurantNames.set(doc.id, asString(doc.get("name")));
+    restaurantClientIds.set(doc.id, asString(doc.get("external_merchant_id")));
+  }
 
   // The name a rider was approved with can live only on `profiles.full_name`,
   // and their restaurant assignment only on `driver_restaurants` edges — the
@@ -568,6 +575,7 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
     vehicleKey: string | null;
     restaurantId: string | null;
     restaurantName: string | null;
+    restaurantClientId: string | null;
   };
 
   const rosterAll: RosterRow[] = driverSnap.docs.map((doc) => {
@@ -604,6 +612,9 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
       status: asString(raw["status"]),
       vehicleKey: vehicleId ? asString(vehicle?.["vehicle_type_key"]) : null,
       restaurantId: resolvedRestaurantId,
+      restaurantClientId: resolvedRestaurantId
+        ? (restaurantClientIds.get(resolvedRestaurantId) ?? null)
+        : null,
       restaurantName:
         projectKey === "keeta" || !resolvedRestaurantId
           ? null
@@ -822,6 +833,7 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
           ? "(Pool)"
           : (d.restaurantName as string),
       restaurantId: d.restaurantId,
+      restaurantClientId: d.restaurantClientId,
       zone: d.zoneName ?? "—",
       zoneId: d.zoneId,
       partner: partnerLabel(d.projectKey),

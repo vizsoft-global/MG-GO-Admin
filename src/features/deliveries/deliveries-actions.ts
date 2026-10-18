@@ -342,17 +342,67 @@ export type DeliveryExportRow = Pick<
   | "cancel_reason"
 >;
 
+const DRIVER_IDENTITY_SELECT = [
+  "full_name",
+  "name",
+  "driver_code",
+  "employee_id",
+  "civil_id",
+  "phone",
+  "client_id",
+  "client_name",
+  "name_lower",
+  "driver_code_lower",
+  "employee_id_lower",
+  "client_id_lower",
+  "client_name_lower",
+  "civil_id_lower",
+  "passport_lower",
+  "phone_digits",
+  "search_name",
+] as const;
+
+function digitsOnly(value: string): string {
+  return value.replace(/\D+/g, "");
+}
+
+function digitRunMatch(haystack: string, needle: string): boolean {
+  const digits = digitsOnly(needle);
+  if (digits.length < 2) return false;
+  const text = digitsOnly(haystack);
+  if (!text) return false;
+  if (text.includes(digits)) return true;
+  let cursor = 0;
+  for (const ch of text) {
+    if (ch === digits[cursor]) cursor += 1;
+    if (cursor === digits.length) return true;
+  }
+  return false;
+}
+
+function driverIdentityMatches(data: DocumentData, needle: string): boolean {
+  const values: string[] = [];
+  for (const key of DRIVER_IDENTITY_SELECT) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) values.push(value.toLowerCase());
+  }
+  const words = needle.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  if (words.every((word) => values.some((value) => value.includes(word)))) return true;
+  return values.some((value) => digitRunMatch(value, needle));
+}
+
 async function resolveSearchDriverIds(search: string): Promise<string[]> {
   const cleaned = search.replace(/[%,()]/g, " ").trim().toLowerCase();
   if (!cleaned) return [];
   const db = await openDb();
   const [drivers, profiles] = await Promise.all([
-    db.collection(COLLECTIONS.drivers).select("driver_code").get(),
+    db.collection(COLLECTIONS.drivers).select(...DRIVER_IDENTITY_SELECT).get(),
     db.collection(COLLECTIONS.profiles).select("full_name").get(),
   ]);
   const ids = new Set<string>();
   for (const doc of drivers.docs) {
-    if (str(doc.data().driver_code).toLowerCase().includes(cleaned)) ids.add(doc.id);
+    if (driverIdentityMatches(doc.data(), cleaned)) ids.add(doc.id);
   }
   for (const doc of profiles.docs) {
     if (str(doc.data().full_name).toLowerCase().includes(cleaned)) ids.add(doc.id);

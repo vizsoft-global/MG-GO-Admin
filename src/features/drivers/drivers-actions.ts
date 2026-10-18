@@ -55,7 +55,7 @@ import { pickDriverAvatarKey } from "@/lib/storage/driver-avatar-key";
 import { syncDriverAvatarKey } from "@/lib/storage/sync-driver-avatar";
 import { isR2Configured } from "@/lib/storage/r2-config";
 import { deleteObjects, putObject } from "@/lib/storage/r2-client";
-import { listExistingDriverDocuments } from "@/lib/storage/driver-documents";
+import { listExistingDriverDocuments, listExtraDriverDocuments } from "@/lib/storage/driver-documents";
 import {
   parseExpiryConfigFromForm,
   upsertDocumentTracking,
@@ -81,6 +81,7 @@ import {
   type DriverAccountStatus,
   type DriverDetailModel,
   type DriverDocumentType,
+  type DriverExtraDocument,
   type DriverListRow,
   type DriverRemoteDocument,
   type DriverRiderCategory,
@@ -1554,6 +1555,15 @@ export async function fetchDriverDocuments(
   await requireDriversView();
   if (!intakeId) return {};
   return listExistingDriverDocuments(intakeId, driverProfileId);
+}
+
+export async function fetchDriverExtraDocuments(
+  intakeId: string,
+  driverProfileId: string | null,
+): Promise<DriverExtraDocument[]> {
+  await requireDriversView();
+  if (!intakeId) return [];
+  return listExtraDriverDocuments(intakeId, driverProfileId);
 }
 
 const EMPTY_FREEZE = {

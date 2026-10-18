@@ -114,6 +114,18 @@ export type DriverRemoteDocument = {
   expiry?: DocumentExpiryConfig;
 };
 
+/** Admin-named attachment beyond the six fixed compliance slots. */
+export type DriverExtraDocument = {
+  id: string;
+  title: string;
+  objectKey: string;
+  signedUrl: string;
+  sizeBytes: number | null;
+  contentType: string | null;
+  source: "driver" | "intake";
+  uploadedAt: string | null;
+};
+
 export type DriverAssignMutationResult = {
   error?: string;
   success?: boolean;

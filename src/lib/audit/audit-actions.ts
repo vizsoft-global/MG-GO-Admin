@@ -121,7 +121,11 @@ function matchesFilters(row: AdminActivityLogRow, filters: AdminActivityLogFilte
     !includesFold(row.entity_type, needle) &&
     !includesFold(row.entity_id, needle) &&
     !includesFold(row.route_name, needle) &&
-    !includesFold(row.page_path, needle)
+    !includesFold(row.page_path, needle) &&
+    !includesFold(row.action, needle) &&
+    !includesFold(row.admin_role_slug, needle) &&
+    !includesFold(row.admin_user_id, needle) &&
+    !includesFold(row.admin_name, needle)
   ) {
     return false;
   }
@@ -179,7 +183,7 @@ export async function listAdminActivityLogs(
   const db = await staffDb();
   if (!db) return { error: "fetch_failed" };
 
-  const limit = Math.min(filters.limit ?? 50, 200);
+  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 5000);
   const offset = filters.offset ?? 0;
   const needle = filters.search?.trim().toLowerCase() ?? "";
 
@@ -193,9 +197,12 @@ export async function listAdminActivityLogs(
         .orderBy("created_at", "desc")
         .limit(2000)
         .get();
-      const matched = snap.docs
-        .map((doc) => rowFromDoc(doc.id, doc.data()))
-        .filter((row) => matchesFilters(row, filters, needle));
+      const candidates = snap.docs.map((doc) => rowFromDoc(doc.id, doc.data()));
+      await attachNames(db, candidates);
+      const matched = candidates.filter(
+        (row) =>
+          matchesFilters(row, filters, needle) && matchesFilters(row, filters, ""),
+      );
       total = matched.length;
       rows = matched.slice(offset, offset + limit);
     } else {
@@ -217,15 +224,60 @@ export async function listAdminActivityLogs(
         .orderBy("created_at", "desc")
         .limit(2000)
         .get();
-      const matched = snap.docs
-        .map((doc) => rowFromDoc(doc.id, doc.data()))
-        .filter((row) => matchesFilters(row, filters, needle));
+      const candidates = snap.docs.map((doc) => rowFromDoc(doc.id, doc.data()));
+      await attachNames(db, candidates);
+      const matched = candidates.filter(
+        (row) =>
+          matchesFilters(row, filters, needle) && matchesFilters(row, filters, ""),
+      );
       const rows = matched.slice(offset, offset + limit);
-      await attachNames(db, rows);
       return { rows, total: matched.length };
     } catch {
       return { error: "fetch_failed" };
     }
+  }
+}
+
+export type AdminActivityFacets = {
+  entityTypes: string[];
+  admins: { id: string; name: string | null }[];
+};
+
+/** Filter dropdown values, read from the most recent audit rows. */
+export async function listAdminActivityFacets(): Promise<
+  { facets: AdminActivityFacets } | { error: string }
+> {
+  const auth = await requireAuditView();
+  if ("error" in auth) return { error: "not_authorized" };
+
+  const db = await staffDb();
+  if (!db) return { error: "fetch_failed" };
+
+  try {
+    const snap = await db
+      .collection(COLLECTIONS.adminActivityLogs)
+      .orderBy("created_at", "desc")
+      .limit(1000)
+      .get();
+    const rows = snap.docs.map((doc) => rowFromDoc(doc.id, doc.data()));
+    const entityTypes = [
+      ...new Set(
+        rows.map((row) => row.entity_type).filter((value): value is string => Boolean(value)),
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+    const userIds = [
+      ...new Set(
+        rows.map((row) => row.admin_user_id).filter((value): value is string => Boolean(value)),
+      ),
+    ];
+    const stubRows = userIds.map((id) => ({ ...rowFromDoc(id, {}), admin_user_id: id }));
+    await attachNames(db, stubRows);
+    const admins = stubRows
+      .map((row) => ({ id: row.admin_user_id as string, name: row.admin_name }))
+      .sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
+    return { facets: { entityTypes, admins } };
+  } catch {
+    return { error: "fetch_failed" };
   }
 }
 

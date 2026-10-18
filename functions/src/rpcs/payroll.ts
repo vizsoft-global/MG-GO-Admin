@@ -838,6 +838,9 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
             ? "(Pool)"
             : asString(restaurant?.["name"]) ?? firstRestaurantName(raw) ?? "(Pool)",
         restaurantId,
+        // The rider's merchant-facing id (what staff know the store by). The
+        // doc id above stays the slicer key; this is display only.
+        restaurantClientId: asString(restaurant?.["external_merchant_id"]),
         zone: zoneName ?? "—",
         zoneId,
         zoneName,

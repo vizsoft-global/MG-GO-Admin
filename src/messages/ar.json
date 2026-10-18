@@ -2580,7 +2580,13 @@
         "save_failed": "تعذر حفظ السائق. حاول مرة أخرى.",
         "passport_exists": "رقم الجواز مسجّل لموظف آخر.",
         "invalid_passport": "الجواز أحرف وأرقام حتى 20 حرفاً.",
-        "invalid_bank": "تحقق من البنك والرقم المدني ورقم الحساب أو الآيبان."
+        "invalid_bank": "تحقق من البنك والرقم المدني ورقم الحساب أو الآيبان.",
+        "extra_document_title_required": "أدخل اسم المستند.",
+        "extra_document_file_required": "اختر ملفاً للتحميل.",
+        "missing_title": "أدخل اسم المستند.",
+        "missing_file": "اختر ملفاً للتحميل.",
+        "invalid_form": "تعذر قراءة التحميل. حاول مرة أخرى.",
+        "delete_failed": "تعذر حذف المستند. حاول مرة أخرى."
       }
     },
     "documentExpiry": {

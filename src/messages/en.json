@@ -2580,7 +2580,13 @@
         "save_failed": "Could not save the driver. Please try again.",
         "passport_exists": "This passport number is already registered to another employee.",
         "invalid_passport": "Passport must be letters and digits, up to 20 characters.",
-        "invalid_bank": "Check bank, civil ID, and account or IBAN."
+        "invalid_bank": "Check bank, civil ID, and account or IBAN.",
+        "extra_document_title_required": "Enter a document name.",
+        "extra_document_file_required": "Choose a file to upload.",
+        "missing_title": "Enter a document name.",
+        "missing_file": "Choose a file to upload.",
+        "invalid_form": "The upload could not be read. Try again.",
+        "delete_failed": "Could not delete the document. Try again."
       }
     },
     "documentExpiry": {

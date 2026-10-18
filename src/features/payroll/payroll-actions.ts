@@ -312,6 +312,7 @@ async function assembleFromTables(
   const restaurantRows = restaurantSnap.docs.map((doc) => ({
     id: doc.id,
     name: String(doc.data().name ?? ""),
+    externalMerchantId: textOf(doc.data().external_merchant_id),
   }));
   const logRows = logSnap.docs.map((doc) => {
     const row = doc.data();
@@ -369,6 +370,9 @@ async function assembleFromTables(
   const zones = new Map(zoneRows.map((z) => [z.id, z.name]));
   const vehicles = new Map(vehicleRows.map((v) => [v.id, v.vehicle_type_key]));
   const restaurants = new Map(restaurantRows.map((r) => [r.id, r.name]));
+  const restaurantClientIds = new Map(
+    restaurantRows.map((r) => [r.id, r.externalMerchantId] as const),
+  );
   const storeIdsByDriver = new Map<string, string[]>();
   for (const row of mapRows) {
     const list = storeIdsByDriver.get(row.driver_id) ?? [];
@@ -399,6 +403,7 @@ async function assembleFromTables(
       vehicleKey: d.vehicle_id ? vehicles.get(d.vehicle_id) ?? null : null,
       restaurantId,
       restaurantName: restaurantId ? restaurants.get(restaurantId) ?? null : null,
+      restaurantClientId: restaurantId ? restaurantClientIds.get(restaurantId) ?? null : null,
     };
   });
 

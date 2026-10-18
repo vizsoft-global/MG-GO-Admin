@@ -10,7 +10,7 @@ import { requireAnyPermission } from "@/lib/auth/require-permission";
 /**
  * PayrollHub — the three money surfaces that left OperationsHub.
  *
- * Performance, Order reconciliation and Payouts used to sit on `/operations`
+ * Performance, Order reconciliation and Payroll used to sit on `/operations`
  * beside the rule tables, which made the payroll conversation start one page
  * away from Payroll itself. They live here now, gated exactly as before, so a
  * card is still never an advertisement for a page that answers /unauthorized.
@@ -30,7 +30,7 @@ const CARDS: ReadonlyArray<{
     icon: Scale,
     permission: "order_recon.view",
   },
-  { key: "payouts", href: "/payouts", icon: Wallet, permission: "earnings.view" },
+  { key: "payroll", href: "/payroll", icon: Wallet, permission: "payroll.view" },
 ];
 
 export default async function PayrollHubPage({

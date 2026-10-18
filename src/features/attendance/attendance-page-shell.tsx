@@ -546,6 +546,7 @@ function AttendancePageContent() {
       fieldSearchMatch(row, search, {
         name: (item) => item.driver_name,
         employee_id: (item) => item.employee_id ?? item.driver_code,
+        phone: (item) => item.driver_phone,
         zone: (item) => item.zone_name,
         status: (item) => item.live_status,
       }),

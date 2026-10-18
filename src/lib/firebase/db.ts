@@ -37,6 +37,7 @@ export const COLLECTIONS = {
   driverWalletEntries: "driver_wallet_entries",
   notifications: "notifications",
   driverDocuments: "driver_documents",
+  driverExtraDocuments: "driver_extra_documents",
   assetAssignments: "asset_assignments",
   deliveryVerifications: "delivery_verifications",
   driverLocationEvents: "driver_location_events",

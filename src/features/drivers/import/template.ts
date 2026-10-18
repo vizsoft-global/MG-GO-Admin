@@ -125,7 +125,7 @@ const STANDARD_COLUMNS: Array<
   },
   {
     field: "client_id",
-    header: "Platform ID",
+    header: "Client ID",
     allowed: "Any text up to 64 characters. Riders on one platform contract may share it.",
     example: "CLI-204",
   },

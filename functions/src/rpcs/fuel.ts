@@ -4,6 +4,7 @@ import { COLLECTIONS } from "../core/collections";
 import { parseId } from "../core/query";
 import { requireStaff, requireStaffFresh } from "../core/staff";
 import { Timestamp } from "../core/fs";
+import { identityMatchesSearch, identitySearchValues } from "../core/search-text";
 import {
   asDate,
   loadAllDocs,
@@ -340,14 +341,9 @@ async function scanFiltered(
     }
     if (!needle) return true;
 
-    const haystack = [
-      profile?.full_name,
-      driver?.driver_code,
-      driver?.employee_id,
-      vehicle?.reg_number,
-    ];
-    return haystack.some(
-      (value) => typeof value === "string" && value.toLowerCase().includes(needle),
+    return identityMatchesSearch(
+      identitySearchValues(profile, driver, vehicle, fill),
+      filters.search ?? "",
     );
   });
 

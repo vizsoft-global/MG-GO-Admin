@@ -1,4 +1,4 @@
-import { tokenPrefixMatch } from "@/lib/search/prefix";
+import { textContainsMatch } from "@/lib/search/prefix";
 import {
   INCENTIVE_PERIODS,
   RULE_STATUSES,
@@ -51,6 +51,6 @@ export function filterIncentiveRules<T extends IncentiveRuleFilterable>(
     if (filter.status !== "all" && row.status !== filter.status) return false;
     if (filter.period !== "all" && row.period !== filter.period) return false;
     if (!query) return true;
-    return tokenPrefixMatch(row.name, query) || tokenPrefixMatch(row.scope_label, query);
+    return textContainsMatch(row.name, query) || textContainsMatch(row.scope_label, query);
   });
 }

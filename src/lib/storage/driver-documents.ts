@@ -9,6 +9,7 @@ import { listDocumentTracking } from "@/lib/storage/document-tracking";
 import {
   DOCUMENT_TYPES,
   type DriverDocumentType,
+  type DriverExtraDocument,
   type DriverRemoteDocument,
 } from "@/features/drivers/types";
 
@@ -156,5 +157,63 @@ export async function listExistingDriverDocuments(
     }
   }
 
+  return out;
+}
+
+function isoFromValue(value: unknown): string | null {
+  const millis = updatedMillis(value);
+  return millis > 0 ? new Date(millis).toISOString() : null;
+}
+
+/**
+ * Admin-named attachments. Unlike the six compliance slots these accumulate:
+ * every upload keeps its own title and key.
+ */
+export async function listExtraDriverDocuments(
+  intakeId: string,
+  driverProfileId: string | null,
+): Promise<DriverExtraDocument[]> {
+  const db = await staffDb();
+  if (!db) return [];
+
+  const collection = db.collection(COLLECTIONS.driverExtraDocuments);
+  const [byIntake, byDriver] = await Promise.all([
+    collection.where("intake_id", "==", intakeId).get(),
+    driverProfileId
+      ? collection.where("driver_id", "==", driverProfileId).get()
+      : Promise.resolve(null),
+  ]);
+
+  const deduped = new Map<string, (typeof byIntake.docs)[number]>();
+  for (const row of byIntake.docs) deduped.set(row.id, row);
+  for (const row of byDriver?.docs ?? []) {
+    if (!deduped.has(row.id)) deduped.set(row.id, row);
+  }
+
+  const sorted = [...deduped.values()].sort(
+    (a, b) => updatedMillis(b.get("created_at") ?? b.get("updated_at")) -
+      updatedMillis(a.get("created_at") ?? a.get("updated_at")),
+  );
+
+  const out: DriverExtraDocument[] = [];
+  for (const row of sorted) {
+    const objectKey = typeof row.get("file_url") === "string" ? row.get("file_url").trim() : "";
+    if (!objectKey) continue;
+    const head = await headObject(objectKey);
+    if (!head.exists) continue;
+    out.push({
+      id: row.id,
+      title:
+        (typeof row.get("title") === "string" && row.get("title").trim()) ||
+        objectKey.split("/").pop() ||
+        objectKey,
+      objectKey,
+      signedUrl: await getPresignedGetUrl(objectKey, SIGNED_URL_TTL),
+      sizeBytes: head.size ?? null,
+      contentType: head.contentType ?? null,
+      source: row.get("driver_id") ? "driver" : "intake",
+      uploadedAt: isoFromValue(row.get("created_at") ?? row.get("updated_at")),
+    });
+  }
   return out;
 }

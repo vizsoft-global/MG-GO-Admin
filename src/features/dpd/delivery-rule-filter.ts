@@ -1,4 +1,4 @@
-import { tokenPrefixMatch } from "@/lib/search/prefix";
+import { textContainsMatch } from "@/lib/search/prefix";
 import type { DeliveryRuleRow } from "./types";
 
 export type DeliveryRuleFilterable = Pick<
@@ -18,9 +18,9 @@ export function filterDeliveryRules<T extends DeliveryRuleFilterable>(
   if (!needle) return [...rows];
   return rows.filter((row) => {
     return (
-      tokenPrefixMatch(row.name, needle) ||
-      tokenPrefixMatch(row.scope_label, needle) ||
-      tokenPrefixMatch(row.scope_search, needle)
+      textContainsMatch(row.name, needle) ||
+      textContainsMatch(row.scope_label, needle) ||
+      textContainsMatch(row.scope_search, needle)
     );
   });
 }

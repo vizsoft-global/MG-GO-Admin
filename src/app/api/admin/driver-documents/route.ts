@@ -35,9 +35,16 @@ export async function DELETE(request: Request): Promise<Response> {
   const intakeId = String(payload.intakeId ?? "").trim();
   const driverProfileIdRaw = String(payload.driverProfileId ?? "").trim();
   const driverProfileId = driverProfileIdRaw || null;
-  const docType = String(payload.docType ?? "").trim() as DriverDocumentType;
+  const docTypeRaw = String(payload.docType ?? "").trim();
+  const documentId = String(payload.documentId ?? "").trim();
+  const isExtra = docTypeRaw === "extra";
+  const docType = docTypeRaw as DriverDocumentType;
 
-  if (!intakeId || !DOCUMENT_TYPES.includes(docType)) {
+  if (!intakeId || (!isExtra && !DOCUMENT_TYPES.includes(docType))) {
+    return NextResponse.json({ error: "missing_fields" }, { status: 400 });
+  }
+
+  if (isExtra && !documentId) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
 
@@ -57,6 +64,40 @@ export async function DELETE(request: Request): Promise<Response> {
   }
 
   const targetDriverId = driverProfileId ?? linkedId;
+
+  if (isExtra) {
+    const extraRef = db.collection(COLLECTIONS.driverExtraDocuments).doc(documentId);
+    const extra = await extraRef.get();
+    const extraIntake = extra.get("intake_id");
+    const extraDriver = extra.get("driver_id") ?? null;
+    const ownsRow =
+      extra.exists &&
+      (extraIntake === intakeId ||
+        (extraDriver != null && extraDriver === targetDriverId));
+    if (!ownsRow) {
+      return NextResponse.json({ error: "save_failed" }, { status: 404 });
+    }
+
+    const objectKey =
+      typeof extra.get("file_url") === "string" ? extra.get("file_url").trim() : "";
+    try {
+      if (objectKey) await deleteObjects([objectKey]);
+      await extraRef.delete();
+    } catch {
+      return NextResponse.json({ error: "delete_failed" }, { status: 500 });
+    }
+
+    void logDriverChange({
+      intakeId,
+      driverId: targetDriverId,
+      source: "document",
+      before: { "document.extra": String(extra.get("title") ?? "uploaded") },
+      after: { "document.extra": "absent" },
+      context: { doc_type: "extra", title: String(extra.get("title") ?? "") },
+    });
+
+    return NextResponse.json({ ok: true });
+  }
 
   try {
     await deleteObjects(

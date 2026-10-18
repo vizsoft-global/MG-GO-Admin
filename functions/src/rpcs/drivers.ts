@@ -19,7 +19,7 @@ import { getFirestore, Timestamp, type Firestore } from "../core/fs";
 import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff, requireStaffFresh } from "../core/staff";
-import { digitRunPrefixMatch, tokenPrefixMatch } from "../core/search-text";
+import { digitSubsequenceMatch, textContainsMatch } from "../core/search-text";
 import {
   logDriverOperation,
   pickBoolean,
@@ -320,9 +320,9 @@ function searchMatches(row: Dict, search: string | null, searchField: string | n
   if (field) {
     const value = searchFieldValue(row, field);
     const text = typeof value === "string" ? value : "";
-    if (field === "phone" || field === "civilId") return digitRunPrefixMatch(text, needle);
-    if (tokenPrefixMatch(text, needle)) return true;
-    return field === "employeeId" || field === "driverId" ? digitRunPrefixMatch(text, needle) : false;
+    if (field === "phone" || field === "civilId") return digitSubsequenceMatch(text, needle);
+    if (textContainsMatch(text, needle)) return true;
+    return field === "employeeId" || field === "driverId" ? digitSubsequenceMatch(text, needle) : false;
   }
   const fields = [
     row["full_name"],
@@ -336,11 +336,13 @@ function searchMatches(row: Dict, search: string | null, searchField: string | n
     row["company_client_code"],
     row["civil_id"],
     row["passport_number"],
+    row["email"],
+    row["phone_digits"],
   ];
-  if (fields.some((part) => tokenPrefixMatch(typeof part === "string" ? part : "", needle))) return true;
-  if (asStrList(row["restaurant_names"]).some((name) => tokenPrefixMatch(name, needle))) return true;
+  if (fields.some((part) => textContainsMatch(part, needle))) return true;
+  if (asStrList(row["restaurant_names"]).some((name) => textContainsMatch(name, needle))) return true;
   return [row["mg_id"], row["driver_code"], row["civil_id"], row["passport_number"], row["phone_digits"]].some(
-    (part) => digitRunPrefixMatch(typeof part === "string" ? part : "", needle),
+    (part) => digitSubsequenceMatch(part, needle),
   );
 }
 

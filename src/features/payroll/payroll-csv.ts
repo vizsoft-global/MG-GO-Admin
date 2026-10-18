@@ -8,7 +8,12 @@ import {
 } from "./payroll-formulas";
 import { aoShownOrders } from "./payroll-orders-display";
 import { cellParticular } from "./payroll-particulars";
-import { payrollVehicleKind, appAttendanceTotals, appHoursForDay } from "./payroll-rider-columns";
+import {
+  payrollVehicleKind,
+  appAttendanceTotals,
+  appHoursForDay,
+  restaurantDisplayId,
+} from "./payroll-rider-columns";
 import type { PayrollHubTab, PayrollRequestRow, PayrollRiderRow } from "./payroll-types";
 
 export const PAYROLL_VIEW_HEADERS = [
@@ -206,7 +211,7 @@ function combinedIdentityCells(row: PayrollRiderRow): Array<string | number> {
     row.mgId,
     row.name,
     row.restaurant,
-    row.restaurantId ?? "",
+    restaurantDisplayId(row),
     row.zone,
     row.zoneCategory,
     row.partner,
@@ -223,7 +228,7 @@ function appAttendanceLeadCells(row: PayrollRiderRow): Array<string | number> {
     row.mgId,
     row.name,
     row.restaurant,
-    row.restaurantId ?? "",
+    restaurantDisplayId(row),
     row.partner,
     row.zone,
     row.zoneCategory,
@@ -297,7 +302,7 @@ function aoLeadCells(row: PayrollRiderRow): Array<string | number> {
     row.mgId,
     row.name,
     row.restaurant,
-    row.restaurantId ?? "",
+    restaurantDisplayId(row),
     row.partner,
     row.zone,
     row.zoneCategory,

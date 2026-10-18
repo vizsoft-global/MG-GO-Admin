@@ -5,6 +5,7 @@ import { parseId } from "../core/query";
 import { loadAppSettings } from "../core/settings";
 import { requireStaff } from "../core/staff";
 import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
+import { identityMatchesSearch, identitySearchValues } from "../core/search-text";
 import {
   loadAttendanceRows,
   rethrowAttendanceWindow,
@@ -76,8 +77,10 @@ function matchesStatus(row: AttendanceRow, status: string | null): boolean {
 
 function matchesSearch(row: AttendanceRow, needle: string): boolean {
   if (!needle) return true;
-  const haystack = [row.driver_name, row.driver_code ?? "", row.employee_id ?? ""];
-  return haystack.some((value) => value.toLowerCase().includes(needle));
+  return identityMatchesSearch(
+    identitySearchValues(row, { phone_digits: row.driver_phone }),
+    needle,
+  );
 }
 
 function compareText(a: string | null, b: string | null): number {

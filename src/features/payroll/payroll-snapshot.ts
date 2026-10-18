@@ -73,6 +73,8 @@ export type RawPayrollDriver = {
   vehicleKey: string | null;
   restaurantId: string | null;
   restaurantName: string | null;
+  /** The restaurant's external merchant id, printed as the Client/Restaurant ID. */
+  restaurantClientId?: string | null;
 };
 
 export type RawPayrollCheckIn = {
@@ -221,6 +223,7 @@ export type RawRpcRider = {
   employeeId: string | null;
   restaurant: string;
   restaurantId: string | null;
+  restaurantClientId?: string | null;
   zone: string;
   zoneId: string | null;
   zoneName: string | null;
@@ -745,6 +748,7 @@ function riderRow(input: {
       storeName: r.restaurantName,
     }),
     restaurantId: r.restaurantId,
+    restaurantClientId: r.restaurantClientId ?? null,
     zone: input.zoneName ?? "—",
     zoneId: input.zoneId,
     zoneCategory: input.zoneCategory,
@@ -1064,6 +1068,7 @@ export function snapshotFromRpc(
         status: row.status === "Active" ? "active" : "inactive",
         vehicleKey: row.vehicleKey,
         restaurantId: row.restaurantId,
+        restaurantClientId: row.restaurantClientId ?? null,
         restaurantName: row.restaurant,
       },
       zoneId: row.zoneId,
