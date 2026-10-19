@@ -3722,7 +3722,7 @@
       "subtitle": "Fleet vehicles, ownership, and assignments",
       "companies": {
         "title": "Vehicle companies",
-        "subtitle": "Makes and brands filed on the vehicle record. Deactivating a company never deletes its vehicles.",
+        "subtitle": "Companies a vehicle is filed under. Deactivating a company never deletes its vehicles.",
         "add": "Add company",
         "edit": "Edit",
         "colLabelEn": "English",
@@ -3807,12 +3807,12 @@
       "colChip": "Chip No.",
       "colFuelType": "Fuel Type",
       "colFuelCompany": "Fuel Company",
-      "colCarsCompany": "Vehicle Company",
+      "colCarsCompany": "Partner",
       "colProject": "Project",
       "colTypeOfUse": "Type of Use",
-      "colVehicleCompany": "Company (make)",
-      "vehicleCompanyPlaceholder": "Select company",
-      "vehicleCompanySearch": "Search company",
+      "colVehicleCompany": "Vehicle Company",
+      "vehicleCompanyPlaceholder": "Select vehicle company",
+      "vehicleCompanySearch": "Search vehicle company",
       "colLocation": "Location",
       "colDriver": "Driver",
       "colEmpCompany": "Employee Company",
@@ -3855,7 +3855,7 @@
       "filterKindAll": "All kinds",
       "kindBike": "Bike",
       "kindCar": "Car",
-      "carsCompanyPlaceholder": "Select cars company",
+      "carsCompanyPlaceholder": "Select partner",
       "carsCompanySearch": "Search partner",
       "replacesPlaceholder": "Select original plate",
       "replacesSearch": "Search plate or vehicle ID",
@@ -10739,7 +10739,7 @@
           },
           "vehicleCompanies": {
             "title": "Vehicle companies",
-            "body": "The make catalog a vehicle is filed under."
+            "body": "The company catalog a vehicle is filed under."
           }
         }
       }

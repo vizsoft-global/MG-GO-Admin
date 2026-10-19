@@ -34,7 +34,7 @@ export type VehicleListRow = {
   car_type: VehicleCarType | null;
   type_of_use: string | null;
   type_of_use_label: string | null;
-  /** `vehicle_companies.key`; null on rows created before the catalog. */
+  /** `vehicle_companies.key` (operating company); null on rows before the catalog. */
   company_id: string | null;
   company_name: string | null;
   fuel_type: VehicleFuelType | null;

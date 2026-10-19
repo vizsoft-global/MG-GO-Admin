@@ -3722,7 +3722,7 @@
       "subtitle": "مركبات الأسطول والملكية والتعيينات",
       "companies": {
         "title": "شركات المركبات",
-        "subtitle": "الشركات المصنّعة والماركات المسجلة على سجل المركبة. تعطيل الشركة لا يحذف مركباتها.",
+        "subtitle": "الشركات المسجلة على سجل المركبة. تعطيل الشركة لا يحذف مركباتها.",
         "add": "إضافة شركة",
         "edit": "تعديل",
         "colLabelEn": "الإنجليزية",
@@ -3807,12 +3807,12 @@
       "colChip": "رقم الشريحة",
       "colFuelType": "نوع الوقود",
       "colFuelCompany": "شركة الوقود",
-      "colCarsCompany": "شركة المركبة",
+      "colCarsCompany": "الشريك",
       "colProject": "المشروع",
       "colTypeOfUse": "نوع الاستخدام",
-      "colVehicleCompany": "الشركة (الصانع)",
-      "vehicleCompanyPlaceholder": "اختر الشركة",
-      "vehicleCompanySearch": "ابحث عن شركة",
+      "colVehicleCompany": "شركة المركبة",
+      "vehicleCompanyPlaceholder": "اختر شركة المركبة",
+      "vehicleCompanySearch": "ابحث عن شركة المركبة",
       "colLocation": "الموقع",
       "colDriver": "السائق",
       "colEmpCompany": "شركة الموظف",
@@ -3855,7 +3855,7 @@
       "filterKindAll": "كل الأنواع",
       "kindBike": "دراجة",
       "kindCar": "سيارة",
-      "carsCompanyPlaceholder": "اختر شركة السيارات",
+      "carsCompanyPlaceholder": "اختر الشريك",
       "carsCompanySearch": "ابحث عن شريك",
       "replacesPlaceholder": "اختر اللوحة الأصلية",
       "replacesSearch": "ابحث باللوحة أو رقم المركبة",
@@ -10739,7 +10739,7 @@
           },
           "vehicleCompanies": {
             "title": "شركات المركبات",
-            "body": "دليل الشركات المصنّعة الذي تُسجّل تحته المركبة."
+            "body": "دليل الشركات الذي تُسجّل تحته المركبة."
           }
         }
       }
