@@ -7490,6 +7490,8 @@
       "importRowCount": "{count} rows in file",
       "importPreviewAs": "Preview as",
       "importPreviewFailed": "Could not build import preview",
+      "importParseFailed": "Could not read the file. Save it as .csv or .xlsx and upload again.",
+      "importEmptyFile": "The file has no header row or no data rows",
       "importPreviewTruncated": "Showing first 50 rows",
       "importHint": "Upload a CSV or Excel with Employee ID and/or Driver Code. Rows may mix both. Extra columns become named placeholders in the message.",
       "importExportErrors": "Export errors",

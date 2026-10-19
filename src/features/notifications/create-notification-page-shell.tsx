@@ -286,61 +286,75 @@ export function CreateNotificationPageShell() {
       return;
     }
     startTransition(async () => {
-      const result = await saveNotificationCampaign(buildInput());
-      if ("error" in result) {
-        toast.error(resolveErrorMessage(result.error));
-        return;
+      try {
+        const result = await saveNotificationCampaign(buildInput());
+        if ("error" in result) {
+          toast.error(resolveErrorMessage(result.error));
+          return;
+        }
+        await invalidateNotificationCaches(queryClient, { campaignId: result.id });
+        toast.success(t("savedDraft"));
+        router.push(`/${locale}/notifications/${result.id}`);
+      } catch (error) {
+        // A rejected server action (timeout, network, thrown RPC) must surface
+        // as a toast, never as the Next.js error boundary.
+        console.error("[notifications] save draft failed:", error);
+        toast.error(t("errors.saveFailed"));
       }
-      await invalidateNotificationCaches(queryClient, { campaignId: result.id });
-      toast.success(t("savedDraft"));
-      router.push(`/${locale}/notifications/${result.id}`);
     });
   }
 
   function handleSubmit() {
     if (!canSubmit) return;
     startTransition(async () => {
-      const input = buildInput();
-      const saved = await saveNotificationCampaign(input);
-      if ("error" in saved) {
-        toast.error(resolveErrorMessage(saved.error));
-        return;
-      }
-      await invalidateNotificationCaches(queryClient, { campaignId: saved.id });
-      if (scheduleMode === "now") {
-        if (needsApproval && !auth.can("notifications.approve")) {
-          const submitted = await submitNotificationForApproval(saved.id);
-          if ("error" in submitted) {
+      try {
+        const input = buildInput();
+        const saved = await saveNotificationCampaign(input);
+        if ("error" in saved) {
+          toast.error(resolveErrorMessage(saved.error));
+          return;
+        }
+        await invalidateNotificationCaches(queryClient, { campaignId: saved.id });
+        if (scheduleMode === "now") {
+          if (needsApproval && !auth.can("notifications.approve")) {
+            const submitted = await submitNotificationForApproval(saved.id);
+            if ("error" in submitted) {
+              toast.error(t("errors.saveFailed"));
+              router.push(`/${locale}/notifications/${saved.id}`);
+              return;
+            }
+            toast.success(t("submittedForApproval"));
+            router.push(`/${locale}/notifications/${saved.id}`);
+            return;
+          }
+          const sent = await dispatchNotificationCampaign(saved.id);
+          if ("error" in sent) {
+            toast.error(resolveErrorMessage(sent.error));
+            router.push(`/${locale}/notifications/${saved.id}`);
+            return;
+          }
+          await invalidateNotificationCaches(queryClient, { campaignId: saved.id });
+          const copy = dispatchToastCopy(sent);
+          toast[copy.kind](
+            t(copy.key, { sent: sent.sent, failed: sent.failed, skipped: sent.skipped }),
+          );
+        } else {
+          const scheduled = await scheduleNotificationCampaign(saved.id);
+          if ("error" in scheduled) {
             toast.error(t("errors.saveFailed"));
             router.push(`/${locale}/notifications/${saved.id}`);
             return;
           }
-          toast.success(t("submittedForApproval"));
-          router.push(`/${locale}/notifications/${saved.id}`);
-          return;
+          await invalidateNotificationCaches(queryClient, { campaignId: saved.id });
+          toast.success(t("scheduledSuccess"));
         }
-        const sent = await dispatchNotificationCampaign(saved.id);
-        if ("error" in sent) {
-          toast.error(resolveErrorMessage(sent.error));
-          router.push(`/${locale}/notifications/${saved.id}`);
-          return;
-        }
-        await invalidateNotificationCaches(queryClient, { campaignId: saved.id });
-        const copy = dispatchToastCopy(sent);
-        toast[copy.kind](
-          t(copy.key, { sent: sent.sent, failed: sent.failed, skipped: sent.skipped }),
-        );
-      } else {
-        const scheduled = await scheduleNotificationCampaign(saved.id);
-        if ("error" in scheduled) {
-          toast.error(t("errors.saveFailed"));
-          router.push(`/${locale}/notifications/${saved.id}`);
-          return;
-        }
-        await invalidateNotificationCaches(queryClient, { campaignId: saved.id });
-        toast.success(t("scheduledSuccess"));
+        router.push(`/${locale}/notifications/${saved.id}`);
+      } catch (error) {
+        // Same reason as handleSaveDraft: an unhandled rejection here killed the
+        // whole page while the campaign itself may already have been saved.
+        console.error("[notifications] submit failed:", error);
+        toast.error(t("errors.saveFailed"));
       }
-      router.push(`/${locale}/notifications/${saved.id}`);
     });
   }
 

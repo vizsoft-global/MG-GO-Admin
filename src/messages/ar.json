@@ -7490,6 +7490,8 @@
       "importRowCount": "{count} صف في الملف",
       "importPreviewAs": "معاينة كـ",
       "importPreviewFailed": "تعذر بناء معاينة الاستيراد",
+      "importParseFailed": "تعذر قراءة الملف. احفظه بصيغة .csv أو .xlsx ثم ارفعه مرة أخرى.",
+      "importEmptyFile": "لا يحتوي الملف على صف عناوين أو صفوف بيانات",
       "importPreviewTruncated": "عرض أول 50 صف",
       "importHint": "ارفع CSV أو Excel برقم الموظف و/أو رمز السائق. يمكن خلط الصفوف. الأعمدة الإضافية تصبح عناصر نائبة مسماة في الرسالة.",
       "importExportErrors": "تصدير الأخطاء",

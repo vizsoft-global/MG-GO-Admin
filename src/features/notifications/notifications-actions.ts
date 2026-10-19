@@ -1591,6 +1591,7 @@ async function executeNotificationDispatch(
 
   // FCM error codes that mean the token is permanently dead — deactivate so
   // future campaigns skip it cleanly instead of re-erroring on every retry.
+  const DISPATCH_ITEM_UPDATE_CONCURRENCY = 25;
   const DEAD_TOKEN_CODES = new Set([
     "messaging/registration-token-not-registered",
     "messaging/invalid-registration-token",
@@ -1600,25 +1601,39 @@ async function executeNotificationDispatch(
   ]);
 
   const nowIso = new Date().toISOString();
+  const messageIdByToken = new Map(
+    batchResult.messageIds.map((m) => [m.token, m.messageId] as const),
+  );
+  const errorByToken = new Map(batchResult.errors.map((e) => [e.token, e] as const));
   const deadTokenIds: string[] = [];
-  for (const message of messages) {
-    const messageId = batchResult.messageIds.find(
-      (m) => m.token === message.token,
-    )?.messageId;
-    const err = batchResult.errors.find((e) => e.token === message.token);
+  const itemUpdates = messages.map((message) => {
+    const messageId = messageIdByToken.get(message.token);
+    const err = errorByToken.get(message.token);
     if (err && DEAD_TOKEN_CODES.has(err.code)) {
       deadTokenIds.push(message.pushTokenId);
     }
-    await service
-      .from("notification_dispatch_items")
-      .update({
+    return {
+      id: message.dispatchItemId,
+      patch: {
         status: messageId ? "sent" : "failed",
         provider_message_id: messageId ?? null,
         error_code: err?.code ?? null,
         error_message: err?.message ?? null,
         sent_at: messageId ? nowIso : null,
-      })
-      .eq("id", message.dispatchItemId);
+      },
+    };
+  });
+
+  // A fleet campaign is 600+ rows; awaiting them one at a time pushed the
+  // server action toward its timeout. Bounded parallel slices keep it in range.
+  for (let i = 0; i < itemUpdates.length; i += DISPATCH_ITEM_UPDATE_CONCURRENCY) {
+    await Promise.all(
+      itemUpdates
+        .slice(i, i + DISPATCH_ITEM_UPDATE_CONCURRENCY)
+        .map((item) =>
+          service.from("notification_dispatch_items").update(item.patch).eq("id", item.id),
+        ),
+    );
   }
 
   if (deadTokenIds.length > 0) {
