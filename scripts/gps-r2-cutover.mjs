@@ -5,9 +5,11 @@
  *   node scripts/gps-r2-cutover.mjs --day 2026-10-24            # dry run
  *   CONFIRM_GPS_CUTOVER=yes node scripts/gps-r2-cutover.mjs --day 2026-10-24 --apply
  *
- * Run it only after the 7-day dual-write compare is clean and the Worker is
- * redeployed with GPS_DUAL_WRITE=0 and GPS_SINK_PERCENT=100: from that day on,
- * history readers go to the FleetRoom archive first.
+ * Run it only after the cutover-day export is complete and
+ * `scripts/gps-dual-write-compare.mjs` is clean for all riders. Stamp this
+ * before setting GPS_DUAL_WRITE=0 so readers switch while the Worker still has
+ * the Firestore copy; from that day on, history readers go to the FleetRoom
+ * archive first.
  */
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";

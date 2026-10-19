@@ -36,10 +36,10 @@
     // driver_location_events. "off" keeps every rider on Firestore.
     "GPS_SINK": "r2",
     "GPS_SINK_PERCENT": "100",
-    // Keep the Firestore copy during the 24-hour compare window. After
-    // scripts/gps-dual-write-compare.mjs is clean, flip this to "0", redeploy, and
-    // stamp location_gps_r2_since with scripts/gps-r2-cutover.mjs.
-    "GPS_DUAL_WRITE": "1"
+    // Cut over 2026-10-19 after the full-day R2 export and all-rider compare.
+    // Keep "1" only for a future rollback window; Firestore history is now read
+    // through app_settings.location_gps_r2_since.
+    "GPS_DUAL_WRITE": "0"
   },
   "r2_buckets": [
     {
