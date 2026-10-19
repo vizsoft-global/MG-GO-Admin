@@ -41,11 +41,11 @@ export function DriverGroupsPageShell() {
   const visible = useMemo(
     () =>
       groups.filter((group) =>
-        fieldSearchMatch(group, search, prefs.searchField, {
+        fieldSearchMatch(group, search, {
           name: (item) => item.name,
         }),
       ),
-    [groups, prefs.searchField, search],
+    [groups, search],
   );
   const grouped = useMemo(
     () => groupRows(visible, "none", {}, {}, "—"),
@@ -76,10 +76,6 @@ export function DriverGroupsPageShell() {
             onSearchChange={setSearch}
             searchPlaceholder={t("listSearchPlaceholder")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[labels.field.all, labels.field.name]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             viewMode={prefs.viewMode}
             onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
             tableViewLabel={labels.viewTable}

@@ -65,6 +65,34 @@ const PENALTY_SHEET = [
   ["remarks", "Remarks", "ملاحظات", "textarea"],
 ];
 
+/** The four kinds the single Accident template serves. Labels live in i18n. */
+const ACCIDENT_REQUEST_KINDS = ["accident", "sick_leave", "medical_report", "declaration"];
+
+const LOAN_PAYMENT_METHODS = ["Cash", "Transaction", "Other"];
+const LOAN_INSTALLMENTS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
+const LOAN_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+const LOAN_SHEET = [
+  ["payment_method", "Payment method", "طريقة الدفع", "select", LOAN_PAYMENT_METHODS],
+  ["amount", "Requested amount", "المبلغ المطلوب", "number"],
+  ["installments", "Installments", "الأقساط", "select", LOAN_INSTALLMENTS],
+  ["loan_month", "Month", "الشهر", "select", LOAN_MONTHS],
+  ["reason", "Reason", "السبب", "textarea"],
+];
+
 function systemFields(extra = []) {
   return [...SYSTEM, ...extra].map(([field_key, label_en, label_ar], index) =>
     field({
@@ -133,6 +161,7 @@ const TEMPLATES = [
     aliases: [{ name_en: "Loan Request" }],
     fields: [
       ...systemFields(),
+      ...sheetFields(LOAN_SHEET, 20),
       EMPLOYEE_SIGNATURE,
       signature("hr_signature", "HR", "الموارد البشرية", 70),
       signature("ceo_signature", "CEO", "الرئيس التنفيذي", 80),
@@ -210,8 +239,18 @@ const TEMPLATES = [
     name_ar: "حادث",
     category_key: "accident",
     document_kind: "general",
+    header_en: "Accident",
+    header_ar: "حادث",
     body_en: "Accident report",
     body_ar: "تقرير حادث",
+    fields: [
+      ...systemFields(),
+      ...sheetFields(
+        [["request_kind", "Request kind", "نوع الطلب", "select", ACCIDENT_REQUEST_KINDS]],
+        20,
+      ),
+      EMPLOYEE_SIGNATURE,
+    ],
   }),
   createSpec({
     figma_key: "general_document",

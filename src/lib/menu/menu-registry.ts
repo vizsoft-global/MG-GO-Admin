@@ -512,6 +512,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Operations",
     defaultOrder: 5,
     permission: "verifications.view",
+    hidden: true,
   },
   {
     id: "attendance",
@@ -551,6 +552,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     permission: "payroll.view",
   },
   {
+    id: "payroll-hub",
+    defaultLabel: "Payroll Hub",
+    defaultIcon: "LayoutGrid",
+    href: "/payroll-hub",
+    defaultGroup: "Operations",
+    defaultOrder: 8.3,
+    permission: "payroll.view",
+  },
+  {
     id: "pay-plan",
     defaultLabel: "Driver pay plan",
     defaultIcon: "Calculator",
@@ -587,6 +597,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Operations",
     defaultOrder: 7,
     permission: "wrong_actions.view",
+  },
+  {
+    id: "order-exceptions",
+    defaultLabel: "Order exceptions",
+    defaultIcon: "ClipboardList",
+    href: "/order-exceptions",
+    defaultGroup: "Operations",
+    defaultOrder: 7.2,
+    permission: "deliveries.view",
   },
   {
     id: "compliance",
@@ -644,6 +663,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultGroup: "Operations",
     defaultOrder: 12,
     permission: "earnings.view",
+    hidden: true,
   },
   {
     id: "notifications",
@@ -928,6 +948,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   requests: "requests",
   "visit-bookings": "visitSlots",
   "wrong-actions": "wrongActions",
+  "order-exceptions": "orderExceptions",
   compliance: "compliance",
   "pay-plan": "payPlan",
   earnings: "earnings",

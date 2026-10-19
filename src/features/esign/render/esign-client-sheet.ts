@@ -201,7 +201,7 @@ function captionFor(layout: EsignDocumentLayout, role: SignSlotRole): BilingualT
 }
 
 function nameLine(value: string): string {
-  return `<div class="ln"><span>Name · ${ar("الاسم")}</span><i>${escapeHtml(value)}</i></div>`;
+  return `<div class="ln name-box"><span>Name · ${ar("الاسم")}</span><i>${escapeHtml(value)}</i></div>`;
 }
 
 function signLine(role: SignSlotRole, label: BilingualText): string {
@@ -236,7 +236,7 @@ function signatures(layout: EsignDocumentLayout, staffLabel?: string): string {
   const parts: string[] = [];
   if (roles.has("employee")) {
     parts.push(
-      `<div class="box ack" data-signature-band="1"><div class="text"><b>Employee acknowledgement.</b> I confirm I have received and read this document.<div class="ar ar-start" dir="rtl">أقر باستلام هذا المستند والاطلاع عليه.</div></div><div class="sign"><div class="sig"><div class="b"><div class="lines">${signLine("employee", employeeCaption)}${dateLine()}</div></div></div></div></div>`,
+      `<div class="box ack" data-signature-band="1"><div class="text"><b>Employee acknowledgement.</b> I confirm I have received and read this document.<div class="ar ar-start" dir="rtl">أقر باستلام هذا المستند والاطلاع عليه.</div></div><div class="sign"><div class="sig"><div class="b"><div class="lines">${nameLine(findRow(layout, ["employee_name"]))}${signLine("employee", employeeCaption)}${dateLine()}</div></div></div></div></div>`,
     );
   }
   const management: string[] = [];

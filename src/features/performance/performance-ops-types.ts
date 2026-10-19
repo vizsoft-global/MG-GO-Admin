@@ -71,6 +71,7 @@ export type OpsTrendPoint = {
 
 export type OpsDimRow = {
   key: string;
+  label: string;
   id?: string | null;
   orders: number;
   working_days: number;

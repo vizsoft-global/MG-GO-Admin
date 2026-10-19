@@ -69,3 +69,9 @@ qa-esign-*.png
 
 # Local Miniflare / wrangler state (never commit)
 .wrangler/
+
+# local deploy/debug artifacts
+.tmp-*
+firebase-debug.log
+
+# function signer key (local).fn-signer.json

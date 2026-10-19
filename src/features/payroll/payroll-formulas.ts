@@ -1,3 +1,4 @@
+import { fieldSearchMatch } from "@/components/app/app-list-controls/search-match";
 import { storesVisibleForPartners } from "@/features/performance/performance-ops-formulas";
 
 export const MONTH_ABBR = [
@@ -1116,28 +1117,21 @@ export function payrollRiderMatchesSearch(
     zone: string;
     restaurant: string;
     restaurantId?: string | null;
+    restaurantClientId?: string | null;
     amId: string;
     mgId: string;
   },
   query: string,
-  field = "all",
 ): boolean {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return true;
-  const accessors: Record<string, string> = {
-    name: row.name,
-    employee_id: row.mgId,
-    zone: row.zone,
-    restaurant: row.restaurant,
-    restaurant_id: row.restaurantId ?? "",
-    am_id: row.amId,
-  };
-  if (field === "all" || field === "") {
-    return Object.values(accessors).some((value) => value.toLowerCase().includes(needle));
-  }
-  const value = accessors[field];
-  if (value == null) return true;
-  return value.toLowerCase().includes(needle);
+  return fieldSearchMatch(row, query, {
+    name: (item) => item.name,
+    employee_id: (item) => item.mgId,
+    zone: (item) => item.zone,
+    restaurant: (item) => item.restaurant,
+    restaurant_id: (item) =>
+      `${item.restaurantClientId ?? ""} ${item.restaurantId ?? ""}`.trim(),
+    am_id: (item) => item.amId,
+  });
 }
 
 export function keepSelectedPayrollOptions<

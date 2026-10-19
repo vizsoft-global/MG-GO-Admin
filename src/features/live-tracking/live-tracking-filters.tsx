@@ -148,7 +148,15 @@ export function matchesLiveTrackingFilters(
     vehicleType?: "bike" | "car";
   },
   filters: LiveTrackingFilterState,
-  meta?: { zoneId: string | null; partnerId: string | null; zoneName: string | null },
+  meta?: {
+    zoneId: string | null;
+    partnerId: string | null;
+    zoneName: string | null;
+    fullName?: string | null;
+    driverCode?: string | null;
+    partnerName?: string | null;
+    phone?: string | null;
+  },
   zoneShapes: LiveTrackingZoneShape[] = [],
   now?: number,
 ): boolean {
@@ -211,9 +219,22 @@ export function matchesLiveTrackingFilters(
 
   const q = filters.search.trim().toLowerCase();
   if (!q) return true;
-  return (
-    loc.driverName.toLowerCase().includes(q) ||
-    loc.driverCode.toLowerCase().includes(q) ||
-    (meta?.zoneName ?? "").toLowerCase().includes(q)
-  );
+  const identities = [
+    loc.driverName,
+    loc.driverCode,
+    meta?.fullName ?? "",
+    meta?.driverCode ?? "",
+    meta?.zoneName ?? "",
+    meta?.partnerName ?? "",
+    meta?.phone ?? "",
+  ]
+    .filter(Boolean)
+    .map((value) => value.toLowerCase());
+  const words = q.split(/\s+/).filter(Boolean);
+  if (words.length > 0 && words.every((word) => identities.some((value) => value.includes(word)))) {
+    return true;
+  }
+  const digits = filters.search.replace(/\D+/g, "");
+  if (digits.length < 2) return false;
+  return identities.some((value) => value.replace(/\D+/g, "").includes(digits));
 }

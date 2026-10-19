@@ -163,6 +163,25 @@ export function useDriversListColumns(options: TableColumnVisibilityOption[]) {
     [orderedOptions, applyNext, visibleSet, effective.sort],
   );
 
+  const reorder = useCallback(
+    (activeId: string, overId: string) => {
+      const ids = orderedOptions.map((option) => option.id);
+      const from = ids.indexOf(activeId);
+      const to = ids.indexOf(overId);
+      if (from < 0 || to < 0 || from === to) return;
+      const next = [...ids];
+      const [moved] = next.splice(from, 1);
+      if (!moved) return;
+      next.splice(to, 0, moved);
+      applyNext({
+        order: next,
+        visible: Array.from(visibleSet),
+        sort: effective.sort,
+      });
+    },
+    [orderedOptions, applyNext, visibleSet, effective.sort],
+  );
+
   const resetToRoleDefault = useCallback(() => {
     clearOverride.mutate();
   }, [clearOverride]);
@@ -181,6 +200,7 @@ export function useDriversListColumns(options: TableColumnVisibilityOption[]) {
     isVisible,
     toggle,
     move,
+    reorder,
     resetToRoleDefault,
     pickerOptions,
     orderedVisibleIds: orderedOptions

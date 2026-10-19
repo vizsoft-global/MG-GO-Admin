@@ -18,10 +18,14 @@ const rows: Row[] = [
 ];
 
 describe("AppListControls helpers", () => {
-  it("search-by one field does not match other columns", () => {
-    assert.equal(fieldSearchMatch(rows[0]!, "108899", "id", accessors), true);
-    assert.equal(fieldSearchMatch(rows[0]!, "108899", "name", accessors), false);
-    assert.equal(fieldSearchMatch(rows[0]!, "ali", "all", accessors), true);
+  it("searches every field at once, token by token", () => {
+    assert.equal(fieldSearchMatch(rows[0]!, "108899", accessors), true);
+    assert.equal(fieldSearchMatch(rows[0]!, "ali", accessors), true);
+    assert.equal(fieldSearchMatch(rows[0]!, "ali hawally", accessors), true);
+    assert.equal(fieldSearchMatch(rows[0]!, "haw", accessors), true);
+    assert.equal(fieldSearchMatch(rows[0]!, "Ali Hawally", accessors), true);
+    assert.equal(fieldSearchMatch(rows[0]!, "jenson", accessors), false);
+    assert.equal(fieldSearchMatch(rows[0]!, "1", accessors), true);
   });
 
   it("groups rows and counts unassigned last", () => {

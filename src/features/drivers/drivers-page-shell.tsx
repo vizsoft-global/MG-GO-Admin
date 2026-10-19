@@ -1,6 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Children,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter, Link } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
@@ -27,6 +37,12 @@ import {
 } from "@/components/app/app-list-controls";
 import { EmployeeStatusBadge } from "@/features/employees/employee-status-badge";
 import { catalogLabel } from "@/features/employees/employee-catalogs";
+import { DriverLevelBadge } from "@/features/drivers/driver-level-badge";
+import {
+  matchesLevelFilter,
+  useDriverLevelIndex,
+  type DriverLevelFilter,
+} from "@/features/drivers/use-driver-levels";
 import { useEmployeeStatuses } from "@/features/employees/use-employee-catalogs";
 import {
   AppDataTable,
@@ -72,6 +88,7 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import {
   AccountStatusPill,
   AttendancePill,
+  DriverVehicleCell,
   formatDriverCodeDisplay,
   formatPhoneInternational,
   PasscodeCell,
@@ -86,7 +103,10 @@ import {
   DRIVERS_FILTER_KINDS,
   countActiveFilters,
   customFilterColumn,
+  driverDetailHref,
+  driversListHref,
   nextSort,
+  parseDriversTab,
   withColumnFilter,
   type DriversColumnFilters,
   type DriversFixedColumn,
@@ -97,6 +117,26 @@ import { riderCategoryMessageKey } from "./driver-rider-category";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { ClearFilteredModuleButton } from "@/features/settings/filtered-purge-dialog";
 import { type DriverAccountStatus, type DriverListPageRow } from "./types";
+
+function OrderedTableCells({
+  order,
+  children,
+}: {
+  order: readonly string[];
+  children: ReactNode;
+}) {
+  const rank = new Map(order.map((id, index) => [id, index]));
+  const items: ReactElement<{ columnId?: string }>[] = [];
+  Children.forEach(children, (child) => {
+    if (isValidElement(child)) items.push(child as ReactElement<{ columnId?: string }>);
+  });
+  items.sort((left, right) => {
+    const leftRank = rank.get(left.props.columnId ?? "") ?? 1_000;
+    const rightRank = rank.get(right.props.columnId ?? "") ?? 1_000;
+    return leftRank - rightRank;
+  });
+  return <>{items}</>;
+}
 
 function shouldIgnoreRowNavigation(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -194,36 +234,52 @@ function DriversPageContent() {
   const [exportOpen, setExportOpen] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [tabFilter, setTabFilter] = useState<DriversTab>("all");
+  const [tabFilter, setTabFilter] = useState<DriversTab>(() =>
+    parseDriversTab(searchParams.get("tab")),
+  );
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const { prefs, update: updateListPrefs } = useListViewPrefs("drivers");
   const statusesQuery = useEmployeeStatuses();
   const [columnFilters, setColumnFilters] = useState<DriversColumnFilters>({});
   const [sort, setSort] = useState<DriversSort>(DEFAULT_DRIVERS_SORT);
+  const [levelFilter, setLevelFilter] = useState<DriverLevelFilter>("all");
+  const levelIndex = useDriverLevelIndex();
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(search.trim()), LIST_SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
   }, [search]);
 
+  // The dashboard tile links straight to `?tab=pending`, and the detail page returns to the same
+  // address — so the queue survives whatever the router does with the mounted shell.
+  const tabParam = searchParams.get("tab");
+  useEffect(() => {
+    setTabFilter(parseDriversTab(tabParam));
+  }, [tabParam]);
+
   const query = useMemo(
     () => ({
       tab: tabFilter,
       search: debouncedSearch,
-      searchField: prefs.searchField,
       groupBy: prefs.groupBy,
       filters: columnFilters,
       sort,
     }),
-    [tabFilter, debouncedSearch, prefs.searchField, prefs.groupBy, columnFilters, sort],
+    [tabFilter, debouncedSearch, prefs.groupBy, columnFilters, sort],
   );
   const pageQuery = useDriversPage(query);
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = pageQuery;
+  const listFailed = pageQuery.isError;
   const drivers = useMemo(
-    () => pageQuery.data?.pages.flatMap((p) => p.rows) ?? [],
-    [pageQuery.data],
+    () => (listFailed ? [] : pageQuery.data?.pages.flatMap((p) => p.rows) ?? []),
+    [pageQuery.data, listFailed],
   );
+  const shownDrivers = useMemo(() => {
+    if (levelFilter === "all") return drivers;
+    if (!levelIndex.data) return [];
+    return drivers.filter((driver) => matchesLevelFilter(levelIndex.data?.get(driver.id), levelFilter));
+  }, [drivers, levelFilter, levelIndex.data]);
   const groupedDrivers = useMemo(() => {
     const statusRows = statusesQuery.data ?? [];
     const labels: Record<string, string> = {};
@@ -231,7 +287,7 @@ function DriversPageContent() {
       labels[row.key] = catalogLabel(row.key, statusRows, locale);
     }
     return groupRows(
-      drivers,
+      shownDrivers,
       prefs.groupBy,
       {
         zone: (row) => row.zone_name,
@@ -244,10 +300,10 @@ function DriversPageContent() {
       labels,
       t("companyUnassigned"),
     );
-  }, [drivers, prefs.groupBy, statusesQuery.data, locale, t]);
+  }, [shownDrivers, prefs.groupBy, statusesQuery.data, locale, t]);
   const firstPage = pageQuery.data?.pages[0];
   const kpiCounts = firstPage?.kpis ?? EMPTY_KPIS;
-  const filteredTotal = firstPage?.filteredTotal ?? 0;
+  const filteredTotal = listFailed ? 0 : firstPage?.filteredTotal ?? 0;
   const tabTotal = firstPage?.tabTotal ?? 0;
   const isLoading = pageQuery.isLoading;
 
@@ -273,12 +329,12 @@ function DriversPageContent() {
   useEffect(() => {
     if (searchParams.get("add") === "1") {
       setAddOpen(true);
-      router.replace("/drivers");
+      router.replace(driversListHref(parseDriversTab(searchParams.get("tab"))));
       return;
     }
     if (searchParams.get("import") === "1") {
       setBulkOpen(true);
-      router.replace("/drivers");
+      router.replace(driversListHref(parseDriversTab(searchParams.get("tab"))));
     }
   }, [searchParams, router]);
 
@@ -346,15 +402,15 @@ function DriversPageContent() {
   const showEmptyAll = !isLoading && drivers.length === 0 && !showEmptySearch;
 
   const allVisibleSelected =
-    drivers.length > 0 && drivers.every((d) => selectedIds.has(d.id));
+    shownDrivers.length > 0 && shownDrivers.every((d) => selectedIds.has(d.id));
 
   const toggleSelectAll = useCallback(() => {
     setSelectedIds((prev) =>
-      drivers.length > 0 && drivers.every((d) => prev.has(d.id))
+      shownDrivers.length > 0 && shownDrivers.every((d) => prev.has(d.id))
         ? new Set()
-        : new Set(drivers.map((d) => d.id)),
+        : new Set(shownDrivers.map((d) => d.id)),
     );
-  }, [drivers]);
+  }, [shownDrivers]);
 
   const toggleRow = (id: string) => {
     setSelectedIds((prev) => {
@@ -377,6 +433,7 @@ function DriversPageContent() {
       { id: "phone", label: t("colPhone") },
       { id: "restaurants", label: t("colRestaurants") },
       { id: "zone", label: t("colZone") },
+      { id: "vehicle", label: t("colVehicle") },
       // Off by default: most operations never reference a platform, and the
       // list already runs to the edge of a 14" viewport.
       { id: "clientId", label: t("colClientId"), defaultVisible: false as const },
@@ -399,8 +456,10 @@ function DriversPageContent() {
     isVisible: isColumnVisible,
     toggle: toggleColumn,
     move: moveColumn,
+    reorder: reorderColumns,
     resetToRoleDefault: resetColumns,
     pickerOptions: columnPickerOptions,
+    orderedVisibleIds,
     hiddenToggleableCount,
     source: columnSource,
   } = useDriversListColumns(columnVisibilityOptions);
@@ -509,6 +568,7 @@ function DriversPageContent() {
       fixed("phone", t("colPhone")),
       fixed("restaurants", t("colRestaurants")),
       fixed("zone", t("colZone")),
+      { id: "vehicle", label: t("colVehicle") },
       fixed("clientId", t("colClientId")),
       fixed("clientName", t("colClientName")),
       fixed("todayDeliveries", t("colTodayDeliveries")),
@@ -521,12 +581,15 @@ function DriversPageContent() {
       })),
       { id: "actions", label: t("colActions"), className: "w-[88px] text-end" },
     ];
-    // Cells render in this fixed order, so headers must too or a saved
-    // reorder paints one column's header (and filter) over another's data.
-    return defs.filter((c) => isColumnVisible(c.id));
+    const visible = defs.filter((c) => isColumnVisible(c.id));
+    const rank = new Map(orderedVisibleIds.map((id, index) => [id, index]));
+    return visible.sort(
+      (left, right) => (rank.get(left.id) ?? 1_000) - (rank.get(right.id) ?? 1_000),
+    );
   }, [
     allVisibleSelected,
     isColumnVisible,
+    orderedVisibleIds,
     t,
     toggleSelectAll,
     activeCustomDefs,
@@ -581,17 +644,7 @@ function DriversPageContent() {
             searchPlaceholder={t("searchPlaceholder")}
             searchAriaLabel={t("searchPlaceholder")}
             clearSearchLabel={t("clearSearch")}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-            searchFieldLabel={t("searchBy")}
-            searchFields={[
-              { value: "all", label: t("searchFieldAll") },
-              { value: "name", label: t("searchFieldName") },
-              { value: "employee_id", label: t("searchFieldEmployeeId") },
-              { value: "zone", label: t("searchFieldZone") },
-              { value: "passport", label: t("searchFieldPassport") },
-              { value: "civil_id", label: t("searchFieldCivilId") },
-            ]}
+            singleRow
             groupBy={prefs.groupBy}
             onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
             groupByLabel={t("groupBy")}
@@ -614,7 +667,10 @@ function DriversPageContent() {
                   items={tabSelectItems}
                   value={tabFilter}
                   onValueChange={(value) => {
-                    if (value) setTabFilter(value as DriversTab);
+                    if (!value) return;
+                    const next = value as DriversTab;
+                    setTabFilter(next);
+                    router.replace(driversListHref(next), { scroll: false });
                   }}
                 >
                   <SelectTrigger className="h-9 w-[108px] shrink-0 cursor-pointer rounded-lg text-xs">
@@ -628,6 +684,37 @@ function DriversPageContent() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Select
+                  items={[
+                    { value: "all", label: t("levelFilterAll") },
+                    { value: "D", label: t("levelFilterD") },
+                    { value: "standard", label: t("levelFilterStandard") },
+                    { value: "override", label: t("levelFilterOverride") },
+                  ]}
+                  value={levelFilter}
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    setLevelFilter(value as DriverLevelFilter);
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-[120px] shrink-0 cursor-pointer rounded-lg text-xs" aria-label={t("levelFilterAll")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(
+                      [
+                        ["all", t("levelFilterAll")],
+                        ["D", t("levelFilterD")],
+                        ["standard", t("levelFilterStandard")],
+                        ["override", t("levelFilterOverride")],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <SelectItem key={value} value={value} className="cursor-pointer">
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {activeFilterCount > 0 ? (
                   <Button
                     type="button"
@@ -636,7 +723,7 @@ function DriversPageContent() {
                     onClick={() => setColumnFilters({})}
                   >
                     <FilterX className="h-3.5 w-3.5" aria-hidden />
-                    {t("clearAllFilters")}
+                    <span className="hidden 2xl:inline">{t("clearAllFilters")}</span>
                     <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white tabular-nums">
                       {activeFilterCount}
                     </span>
@@ -647,6 +734,7 @@ function DriversPageContent() {
                   isVisible={isColumnVisible}
                   onToggle={toggleColumn}
                   onMove={moveColumn}
+                  onReorder={reorderColumns}
                   onReset={resetColumns}
                   sourceLabel={columnSourceLabel}
                   hiddenCount={hiddenToggleableCount}
@@ -656,7 +744,7 @@ function DriversPageContent() {
             trailing={
             <div className="flex shrink-0 items-center gap-1.5">
               {!isLoading ? (
-                <p className="hidden text-xs tabular-nums text-muted-foreground lg:inline">
+                <p className="hidden text-xs tabular-nums text-muted-foreground 2xl:inline">
                   {t("showingCount", { visible: filteredTotal, total: tabTotal })}
                 </p>
               ) : null}
@@ -694,7 +782,7 @@ function DriversPageContent() {
                       aria-label={t("export")}
                     >
                       <Download className="h-4 w-4" />
-                      <span className="ms-1.5 hidden md:inline">{t("export")}</span>
+                      <span className="ms-1.5 hidden 2xl:inline">{t("export")}</span>
                     </Button>
                   }
                 />
@@ -713,15 +801,15 @@ function DriversPageContent() {
                         aria-label={t("bulkImport")}
                       >
                         <Upload className="h-4 w-4" />
-                        <span className="ms-1.5 hidden md:inline">{t("bulkImport")}</span>
+                        <span className="ms-1.5 hidden 2xl:inline">{t("bulkImport")}</span>
                       </Button>
                     }
                   />
                   <TooltipContent>{t("bulkImport")}</TooltipContent>
                 </Tooltip>
               ) : null}
-              <ClearAllModuleButton entity="drivers" />
-              <ClearFilteredModuleButton entity="drivers" />
+              <ClearAllModuleButton entity="drivers" compact />
+              <ClearFilteredModuleButton entity="drivers" compact />
               {canCreate ? (
                 <Button
                   type="button"
@@ -769,10 +857,13 @@ function DriversPageContent() {
                     <button
                       key={driver.id}
                       type="button"
-                      onClick={() => router.push(`/drivers/${driver.id}`)}
+                      onClick={() => router.push(driverDetailHref(driver.id, tabFilter))}
                       className="cursor-pointer rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/30"
                     >
-                      <p className="truncate text-sm font-semibold text-foreground">{driver.full_name}</p>
+                      <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
+                        <span className="truncate">{driver.full_name}</span>
+                        <DriverLevelBadge level={levelIndex.data?.get(driver.id)?.level} />
+                      </p>
                       <p className="mt-0.5 font-mono text-xs text-muted-foreground">
                         {driver.employee_id ?? formatDriverCodeDisplay(driver.driver_code)}
                       </p>
@@ -855,17 +946,18 @@ function DriversPageContent() {
                         )}
                         onClick={(event) => {
                           if (shouldIgnoreRowNavigation(event.target)) return;
-                          router.push(`/drivers/${driver.id}`);
+                          router.push(driverDetailHref(driver.id, tabFilter));
                         }}
                         onKeyDown={(event) => {
                           if (event.key !== "Enter" && event.key !== " ") return;
                           if (shouldIgnoreRowNavigation(event.target)) return;
                           event.preventDefault();
-                          router.push(`/drivers/${driver.id}`);
+                          router.push(driverDetailHref(driver.id, tabFilter));
                         }}
                         tabIndex={0}
                         aria-label={t("viewDriver")}
                       >
+                        <OrderedTableCells order={orderedVisibleIds}>
                         <VisibleTableCell
                           columnId="select"
                           isVisible={isColumnVisible}
@@ -907,11 +999,14 @@ function DriversPageContent() {
                         </VisibleTableCell>
                         <VisibleTableCell columnId="name" isVisible={isColumnVisible}>
                           <div className="min-w-0">
-                            <span className="truncate font-medium text-foreground">
-                              {driver.full_name}
+                            <span className="inline-flex min-w-0 items-center gap-1.5">
+                              <span className="truncate font-medium text-foreground">
+                                {driver.full_name}
+                              </span>
+                              <DriverLevelBadge level={levelIndex.data?.get(driver.id)?.level} />
                             </span>
                             <Link
-                              href={`/drivers/${driver.id}`}
+                              href={driverDetailHref(driver.id, tabFilter)}
                               className="mt-0.5 block text-xs text-primary hover:underline"
                               onClick={(e) => e.stopPropagation()}
                             >
@@ -935,6 +1030,15 @@ function DriversPageContent() {
                           className="text-sm text-muted-foreground"
                         >
                           {driver.zone_name}
+                        </VisibleTableCell>
+                        <VisibleTableCell columnId="vehicle" isVisible={isColumnVisible}>
+                          <DriverVehicleCell
+                            vehicleTypeKey={driver.vehicle_type_key}
+                            vehicleLabel={driver.vehicle_label}
+                            bikeLabel={t("vehicleBike")}
+                            carLabel={t("vehicleCar")}
+                            emptyLabel={t("vehicleNone")}
+                          />
                         </VisibleTableCell>
                         <VisibleTableCell
                           columnId="clientId"
@@ -1033,7 +1137,7 @@ function DriversPageContent() {
                                     variant="ghost"
                                     size="icon-sm"
                                     className="h-8 w-8 cursor-pointer rounded-md text-muted-foreground hover:text-foreground"
-                                    onClick={() => router.push(`/drivers/${driver.id}`)}
+                                    onClick={() => router.push(driverDetailHref(driver.id, tabFilter))}
                                     aria-label={t("viewDriver")}
                                   >
                                     <Eye className="h-4 w-4" />
@@ -1148,6 +1252,7 @@ function DriversPageContent() {
                             ) : null}
                           </div>
                         </VisibleTableCell>
+                        </OrderedTableCells>
                       </AppDataTableRow>
                     )),
                   ])}

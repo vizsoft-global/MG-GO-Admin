@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Building2, ChevronLeft, FileClock, FileText, Loader2, PencilLine, Trash2 } from "lucide-react";
+import { Building2, ChevronLeft, FileClock, FileText, Loader2, Paperclip, PencilLine, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { ToggleChip } from "@/components/app/toggle-chip";
@@ -52,6 +52,13 @@ import {
   withAbsenceDateFields,
 } from "./esign-absence-fields";
 import {
+  ACCIDENT_REQUEST_KINDS,
+  REQUEST_KIND_KEY,
+  normalizeAccidentKind,
+  withAccidentFields,
+  type AccidentRequestKind,
+} from "./esign-accident-fields";
+import {
   isPenaltyHubQuery,
   isSendableHubTemplate,
   pickSendableHubTemplate,
@@ -59,6 +66,7 @@ import {
   templatesForHubCategory,
 } from "./outgoing-hub-categories";
 import { deleteEsignDraft, fetchEsignSnapshot, saveEsignDraft } from "./esign-sender-actions";
+import { addEsignAttachment, uploadEsignAttachmentFile } from "./esign-actions";
 import {
   useCreateEsignFromTemplate,
   useEsignDriverOptions,
@@ -194,6 +202,7 @@ export function EsignSendShell({
   initialResentFromId?: string;
 }) {
   const t = useTranslations("pages.requests.esign.send");
+  const tAccident = useTranslations("pages.esign.accident");
   const tHub = useTranslations("pages.requests.esign.hub");
   const tRcm = useTranslations("pages.rcmV2");
   const tBuilder = useTranslations("pages.employeedesk.esign.templateBuilder");
@@ -255,6 +264,11 @@ export function EsignSendShell({
   const [savingDraft, setSavingDraft] = useState(false);
   const [staffSigners, setStaffSigners] = useState<EsignDraftStaffSigner[]>([]);
   const [pickedStaffName, setPickedStaffName] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<
+    Array<{ key: string; name: string; contentType: string; size: number }>
+  >([]);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const draftQuery = useEsignDraft(initialDraftId ?? "");
   /**
    * One-shot. A draft payload is the *starting* state, so it may only be
@@ -266,6 +280,19 @@ export function EsignSendShell({
 
   const isPayslip = template?.document_kind === "payslip";
   const isPenalty = template?.document_kind === "penalty";
+  const isAccident = template?.category_key === "accident";
+  const [accidentKind, setAccidentKind] = useState<AccidentRequestKind>("accident");
+  const requestKindValue = values[REQUEST_KIND_KEY] ?? "";
+  useEffect(() => {
+    if (!isAccident) return;
+    const next = normalizeAccidentKind(requestKindValue);
+    setAccidentKind(next);
+    // Seed the stored value once, so a saved draft and the sent request carry
+    // the kind even when the operator never touches the select.
+    if (!requestKindValue) {
+      setValues((prev) => ({ ...prev, [REQUEST_KIND_KEY]: next }));
+    }
+  }, [isAccident, requestKindValue]);
   const payslipGroups = useMemo(
     () => (template ? partitionPayslipFields(template.fields) : null),
     [template],
@@ -299,14 +326,21 @@ export function EsignSendShell({
     const source = payslipGroups
       ? [...payslipGroups.period, ...payslipGroups.money, ...payslipGroups.rest]
       : template.fields;
-    const ordered = isPenalty ? withAbsenceDateFields(source, template.id) : source;
+    const ordered = isAccident
+      ? withAccidentFields(source, template.id, accidentKind)
+      : isPenalty
+        ? withAbsenceDateFields(source, template.id)
+        : source;
     return ordered.filter(
       (field) =>
         isSheetInput(field) &&
         !hiddenKeys.includes(field.field_key) &&
+        // The kind has its own translated select above; the template copy would
+        // render a second, untranslated one.
+        field.field_key !== REQUEST_KIND_KEY &&
         !isPenaltyActionFieldKey(field.field_key),
     );
-  }, [isPenalty, payslipGroups, template, hiddenKeys]);
+  }, [accidentKind, isAccident, isPenalty, payslipGroups, template, hiddenKeys]);
   const resolvedTitle = title.trim() || template?.name_en || "";
 
   const hubHref = isV2 ? "/employeedesk" : "/requests/esign";
@@ -408,6 +442,39 @@ export function EsignSendShell({
     });
   }, [driverId, t, template?.fields]);
 
+  async function addDocuments(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    const remaining = Math.max(0, 5 - pendingAttachments.length);
+    if (remaining === 0) {
+      toast.error(t("attachmentLimit"));
+      return;
+    }
+    setUploadingAttachments(true);
+    try {
+      for (const file of Array.from(files).slice(0, remaining)) {
+        const form = new FormData();
+        form.append("file", file);
+        const uploaded = await uploadEsignAttachmentFile(form);
+        if (!uploaded.ok || !uploaded.key) {
+          toast.error(t("attachmentUploadFailed"));
+          continue;
+        }
+        setPendingAttachments((prev) => [
+          ...prev,
+          {
+            key: uploaded.key!,
+            name: uploaded.name ?? file.name,
+            contentType: uploaded.contentType ?? file.type,
+            size: uploaded.size ?? file.size,
+          },
+        ]);
+      }
+    } finally {
+      setUploadingAttachments(false);
+      if (attachmentInputRef.current) attachmentInputRef.current.value = "";
+    }
+  }
+
   async function submit() {
     if (!driverId || !templateId || !resolvedTitle) {
       toast.error(t("errors.missingFields"));
@@ -441,6 +508,16 @@ export function EsignSendShell({
           display_name: signer.display_name,
         });
         if (!added.ok) toast.error(added.error ?? t("errors.createFailed"));
+      }
+      for (const attachment of pendingAttachments) {
+        const added = await addEsignAttachment({
+          requestId: result.id,
+          storageKey: attachment.key,
+          name: attachment.name,
+          contentType: attachment.contentType,
+          size: attachment.size,
+        });
+        if (!added.ok) toast.error(added.error ?? t("attachmentUploadFailed"));
       }
     }
     if (draftId) {
@@ -674,11 +751,15 @@ export function EsignSendShell({
       bodyAr={template.body_ar}
       declaration={template.declaration_en}
       declarationAr={template.declaration_ar}
-      fields={(isPenalty ? withAbsenceDateFields(template.fields, template.id) : template.fields).map(
-        (field) =>
-          isPenaltyActionFieldKey(field.field_key)
-            ? { ...field, options: defaultPenaltyActionOptions(field) }
-            : field,
+      fields={(isAccident
+        ? withAccidentFields(template.fields, template.id, accidentKind)
+        : isPenalty
+          ? withAbsenceDateFields(template.fields, template.id)
+          : template.fields
+      ).map((field) =>
+        isPenaltyActionFieldKey(field.field_key)
+          ? { ...field, options: defaultPenaltyActionOptions(field) }
+          : field,
       )}
       values={previewValues}
       fill={fill}
@@ -902,6 +983,36 @@ export function EsignSendShell({
             </div>
           )}
 
+          {isAccident ? (
+            <div className="space-y-2">
+              {isV2 ? null : (
+                <p className="text-xs font-semibold">{tAccident("requestDetails")}</p>
+              )}
+              <div className="space-y-1">
+                <Label>{tAccident("requestKind")}</Label>
+                <Select
+                  value={accidentKind}
+                  onValueChange={(next) => {
+                    const kind = normalizeAccidentKind(next);
+                    setAccidentKind(kind);
+                    setValues((prev) => ({ ...prev, [REQUEST_KIND_KEY]: kind }));
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACCIDENT_REQUEST_KINDS.map((kind) => (
+                      <SelectItem key={kind.value} value={kind.value}>
+                        {tAccident(`kind.${kind.value}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : null}
+
           {sheetFields.length > 0 || isPenalty ? (
             <div className="space-y-2">
               {isV2 ? null : <p className="text-xs font-semibold">{t("sheetInputs")}</p>}
@@ -1003,6 +1114,62 @@ export function EsignSendShell({
               onSelectedDisplayNameChange={setPickedStaffName}
             />
           )}
+
+          <div className="space-y-2 rounded-lg border border-dashed border-border px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold">{t("addDocuments")}</p>
+                <p className="text-[10px] text-muted-foreground">{t("documentsHint")}</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0"
+                disabled={uploadingAttachments || pendingAttachments.length >= 5}
+                onClick={() => attachmentInputRef.current?.click()}
+              >
+                {uploadingAttachments ? (
+                  <Loader2 className="me-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Paperclip className="me-1 h-3.5 w-3.5" />
+                )}
+                {t("addDocuments")}
+              </Button>
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                multiple
+                accept="application/pdf,image/png,image/jpeg"
+                className="hidden"
+                onChange={(event) => void addDocuments(event.target.files)}
+              />
+            </div>
+            {pendingAttachments.length > 0 ? (
+              <ul className="space-y-1">
+                {pendingAttachments.map((attachment) => (
+                  <li
+                    key={attachment.key}
+                    className="flex items-center justify-between gap-2 text-xs"
+                  >
+                    <span className="min-w-0 truncate">{attachment.name}</span>
+                    <button
+                      type="button"
+                      className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
+                      aria-label={t("removeDocument")}
+                      onClick={() =>
+                        setPendingAttachments((prev) =>
+                          prev.filter((entry) => entry.key !== attachment.key),
+                        )
+                      }
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
 
           <div className="flex flex-col gap-2">
             <Button

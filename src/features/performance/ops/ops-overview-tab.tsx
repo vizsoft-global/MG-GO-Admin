@@ -141,7 +141,7 @@ export function OpsOverviewTab({
               "ops-zone",
               toCsv(
                 ["zone", metric],
-                data.by_zone.filter((r) => isChartableDimKey(r.key)).map((r) => [r.key, dimMetricValue(r, metric)]),
+                data.by_zone.filter((r) => isChartableDimKey(r.key)).map((r) => [r.label || r.key, dimMetricValue(r, metric)]),
               ),
             )
           }
@@ -149,7 +149,7 @@ export function OpsOverviewTab({
           emptyTitle={t("emptyChart")}
         >
           <OpsBarChart
-            data={dimRows(data.by_zone, (r) => r.key, metric)}
+            data={dimRows(data.by_zone, (r) => r.label || r.key, metric)}
             xKey="key"
             series={series}
             layout="horizontal"
@@ -165,7 +165,7 @@ export function OpsOverviewTab({
               toCsv(
                 ["partner", metric],
                 data.by_partner.map((r) => [
-                  partnerLabel(r.key) === "—" ? r.key : partnerLabel(r.key),
+                  r.label || (partnerLabel(r.key) === "—" ? r.key : partnerLabel(r.key)),
                   dimMetricValue(r, metric),
                 ]),
               ),
@@ -177,7 +177,7 @@ export function OpsOverviewTab({
           <OpsBarChart
             data={dimRows(
               data.by_partner,
-              (r) => (partnerLabel(r.key) === "—" ? r.key : partnerLabel(r.key)),
+              (r) => r.label || (partnerLabel(r.key) === "—" ? r.key : partnerLabel(r.key)),
               metric,
             )}
             xKey="key"

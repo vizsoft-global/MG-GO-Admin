@@ -15,6 +15,7 @@ export type DashboardKpis = {
   payrollBlockers: number;
   driverExceptions: number;
   absentToday: number;
+  pendingEmployeeVerifications: number;
 };
 
 export type AccessRequestRow = {

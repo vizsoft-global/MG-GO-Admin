@@ -56,7 +56,7 @@ export function DashboardPageShell({
       ) : null}
 
       <section className="space-y-3">
-        <AdminKpiBar kpis={snapshot.kpis} />
+        <AdminKpiBar kpis={snapshot.kpis} canViewDrivers={perms.drivers} />
         {perms.attendance ? <FleetOpsWidget /> : null}
       </section>
 

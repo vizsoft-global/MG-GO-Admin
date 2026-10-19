@@ -85,7 +85,7 @@ export function FleetRequestPageShell({
     () =>
       rows.filter((row) => {
         if (
-          !fieldSearchMatch(row, search, prefs.searchField, {
+          !fieldSearchMatch(row, search, {
             name: (item) => item.driver_name,
             employee_id: (item) => item.employee_id,
             plate: (item) => item.plate,
@@ -104,7 +104,7 @@ export function FleetRequestPageShell({
         }
         return true;
       }),
-    [prefs.searchField, projectKey, rows, search],
+    [projectKey, rows, search],
   );
   const grouped = useMemo(
     () =>
@@ -133,17 +133,6 @@ export function FleetRequestPageShell({
             onSearchChange={setSearch}
             searchPlaceholder={t("searchPlaceholder")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[
-              labels.field.all,
-              labels.field.name,
-              labels.field.employee_id,
-              labels.field.plate,
-              labels.field.zone,
-              labels.field.status,
-            ]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             groupByOptions={[
               labels.group.none,
               labels.group.status,

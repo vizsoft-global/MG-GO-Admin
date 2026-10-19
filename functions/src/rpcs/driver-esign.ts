@@ -31,10 +31,17 @@ import {
   type Dict,
 } from "./_shared";
 import { notifyDriverTransactional } from "./visits-shared";
+import { presignR2Get } from "../core/r2-esign";
+import {
+  canAddEsignAttachment,
+  esignAttachmentPath,
+  isOwnRiderAttachmentKey,
+} from "./esign-attachments";
 
 export { riderError };
 
 const APPOINTMENTS = "appointments";
+const ATTACHMENT_URL_TTL_SECONDS = 900;
 
 export type CounterSignatureState = "none" | "declined" | "pending" | "signed";
 export type AppointmentAction = "accept" | "reject" | "propose";
@@ -81,6 +88,54 @@ function serializeValue(value: unknown): unknown {
 export function declarationAccepted(meta: Dict | null): boolean {
   if (!meta) return false;
   return meta.declaration_accepted === true || meta.declaration_accepted === "true";
+}
+
+/** Supporting documents, with a short-lived download URL for each. */
+async function loadAttachments(requestId: string) {
+  const snap = await getFirestore()
+    .collection(COLLECTIONS.esignRequestAttachments)
+    .where("request_id", "==", requestId)
+    .get();
+  return Promise.all(
+    snap.docs.map(async (doc) => {
+      const row = dataOf(doc);
+      const key = textOrNull(row.storage_key);
+      let url: string | null = null;
+      if (key) {
+        try {
+          url = await presignR2Get(esignAttachmentPath(key), ATTACHMENT_URL_TTL_SECONDS);
+        } catch {
+          url = null;
+        }
+      }
+      return {
+        id: doc.id,
+        name: textOrNull(row.name) ?? "Attachment",
+        content_type: textOrNull(row.content_type),
+        size: numberOrNull(row.size) ?? 0,
+        source: textOrNull(row.source),
+        created_at: isoTimestamp(row.created_at),
+        url,
+      };
+    }),
+  );
+}
+
+/** Batched count for the list; the full URLs stay on the detail call. */
+async function loadAttachmentCounts(ids: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return out;
+  const col = getFirestore().collection(COLLECTIONS.esignRequestAttachments);
+  for (let i = 0; i < unique.length; i += 30) {
+    const group = unique.slice(i, i + 30);
+    const snap = await col.where("request_id", "in", group).get();
+    for (const doc of snap.docs) {
+      const requestId = String(dataOf(doc).request_id ?? "");
+      out.set(requestId, (out.get(requestId) ?? 0) + 1);
+    }
+  }
+  return out;
 }
 
 export function esignListStatus(status: string, dueAt: string | null, today: string): string {
@@ -167,6 +222,7 @@ export const driverListEsignRequests = onCall(async (request) => {
   const today = kuwaitDayString(new Date());
   const docs = snap.docs.map((doc) => ({ id: doc.id, data: dataOf(doc) }));
   const signerMap = await loadStaffSignerStatuses(docs.map((row) => row.id));
+  const attachmentCounts = await loadAttachmentCounts(docs.map((row) => row.id));
 
   const rows = docs
     .map((row) => {
@@ -214,6 +270,8 @@ export const driverListEsignRequests = onCall(async (request) => {
         category_key: categoryKey,
         category_label: category ? textOrNull(category.label_en) : null,
         awaiting_counter_signature: awaitingCounterSignature(item.status, staff),
+        attachment_count: attachmentCounts.get(item.row.id) ?? 0,
+        review_status: textOrNull(item.row.data.review_status),
         created_at: isoTimestamp(item.row.data.created_at),
       };
     }),
@@ -231,7 +289,7 @@ export const driverGetEsignRequest = onCall(async (request) => {
 
   const categoryKey = textOrNull(data.category_key);
   const templateId = textOrNull(data.template_id);
-  const [category, template, fieldsSnap, staffMap] = await Promise.all([
+  const [category, template, fieldsSnap, staffMap, attachments] = await Promise.all([
     loadCategoryByKey(categoryKey),
     templateId
       ? getFirestore().collection(COLLECTIONS.esignTemplates).doc(templateId).get()
@@ -240,6 +298,7 @@ export const driverGetEsignRequest = onCall(async (request) => {
       ? getFirestore().collection(COLLECTIONS.esignTemplateFields).where("template_id", "==", templateId).get()
       : Promise.resolve(null),
     loadStaffSignerStatuses([id]),
+    loadAttachments(id),
   ]);
 
   const staff = staffMap.get(id) ?? [];
@@ -272,11 +331,77 @@ export const driverGetEsignRequest = onCall(async (request) => {
   raw.signed_document_pending = status === "signed" && signedKey === null && data.signed_document_error == null;
   raw.awaiting_counter_signature = awaitingCounterSignature(status, staff);
   raw.counter_signature_state = counterSignatureState(staff);
+  raw.attachments = attachments;
+  raw.attachment_count = attachments.length;
+  raw.review_status = textOrNull(data.review_status);
+  raw.review_note = textOrNull(data.review_note);
+  raw.reviewed_at = isoTimestamp(data.reviewed_at);
   raw.template_name = template?.exists ? textOrNull(template.get("name_en")) : null;
   raw.template_name_ar = template?.exists ? textOrNull(template.get("name_ar")) : null;
   raw.field_values_labeled = fields;
 
   return { ok: true, request: raw };
+});
+
+/**
+ * Registers a rider-uploaded supporting document. The bytes are PUT to R2 with
+ * the presigned URL from `driverGetUploadUrl`; this call only records the key
+ * after checking the request is still pending and belongs to the caller.
+ */
+export const driverAddEsignAttachment = onCall(async (request) => {
+  const ctx = await requireRider(request);
+  const data = asData(request);
+  const requestId = pickId(data, "id", "request_id", "p_request_id");
+  const storageKey = pickText(data, "storageKey", "storage_key", "p_storage_key");
+  if (!requestId || !storageKey) return fail("invalid_request");
+  if (!isOwnRiderAttachmentKey(ctx.uid, storageKey)) return fail("not_authorized");
+  const name = pickText(data, "name", "p_name") ?? "Attachment";
+  const contentType =
+    pickText(data, "contentType", "content_type", "p_content_type") ?? "application/octet-stream";
+  const size = Math.max(0, numberOrNull(data.size) ?? numberOrNull(data.p_size) ?? 0);
+
+  const db = getFirestore();
+  const snap = await db.collection(COLLECTIONS.esignRequests).doc(requestId).get();
+  const row = dataOf(snap);
+  if (!snap.exists || row.driver_id !== ctx.uid) return fail("not_found");
+  if (String(row.status ?? "") !== "pending") return fail("not_pending");
+
+  const existing = await db
+    .collection(COLLECTIONS.esignRequestAttachments)
+    .where("request_id", "==", requestId)
+    .get();
+  if (!canAddEsignAttachment(existing.size)) return fail("attachment_limit");
+
+  const ref = db.collection(COLLECTIONS.esignRequestAttachments).doc();
+  const created = Timestamp.now();
+  await ref.set({
+    request_id: requestId,
+    name,
+    storage_key: storageKey,
+    content_type: contentType,
+    size,
+    uploaded_by: ctx.uid,
+    source: "driver",
+    created_at: created,
+  });
+  let url: string | null = null;
+  try {
+    url = await presignR2Get(esignAttachmentPath(storageKey), ATTACHMENT_URL_TTL_SECONDS);
+  } catch {
+    url = null;
+  }
+  return {
+    ok: true,
+    attachment: {
+      id: ref.id,
+      name,
+      content_type: contentType,
+      size,
+      source: "driver",
+      created_at: created.toDate().toISOString(),
+      url,
+    },
+  };
 });
 
 export const driverSubmitEsignature = onCall(async (request) => {

@@ -369,6 +369,7 @@ async function approveInTransaction(
     zone_id: intake["zone_id"] ?? null,
     zone_name: intake["zone_name"] ?? null,
     vehicle_id: intake["vehicle_id"] ?? null,
+    vehicle_type_key: intake["vehicle_type_key"] ?? null,
     civil_id: civilId,
     employee_id: employeeId,
     nationality: intake["nationality"] ?? null,

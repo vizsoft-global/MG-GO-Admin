@@ -25,14 +25,86 @@ export function normalizeClientCode(raw: string | null | undefined): string | nu
   return v || null;
 }
 
-/** Derives a key from a new company's name: "Al Sadeeq Co." → "al_sadeeq_co". */
+/**
+ * Arabic letters that carry no Latin form under NFKD. Transliterating them
+ * keeps a readable key ("شركة توصيل" → "shrkh_tsyl") instead of an opaque hash.
+ */
+const ARABIC_KEY_LETTERS: Record<string, string> = {
+  ا: "a",
+  أ: "a",
+  إ: "a",
+  آ: "a",
+  ب: "b",
+  ت: "t",
+  ث: "th",
+  ج: "j",
+  ح: "h",
+  خ: "kh",
+  د: "d",
+  ذ: "dh",
+  ر: "r",
+  ز: "z",
+  س: "s",
+  ش: "sh",
+  ص: "s",
+  ض: "d",
+  ط: "t",
+  ظ: "z",
+  ع: "a",
+  غ: "gh",
+  ف: "f",
+  ق: "q",
+  ك: "k",
+  ل: "l",
+  م: "m",
+  ن: "n",
+  ه: "h",
+  و: "w",
+  ي: "y",
+  ى: "a",
+  ة: "h",
+  ء: "",
+  ئ: "y",
+  ؤ: "w",
+};
+
+function transliterateArabic(value: string): string {
+  let out = "";
+  for (const char of value) out += ARABIC_KEY_LETTERS[char] ?? char;
+  return out;
+}
+
+/** Stable FNV-1a hash, base36. Only used when a name has no usable letters at all. */
+function hashKeySource(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+/**
+ * Derives a key from a new company's name: "Al Sadeeq Co." → "al_sadeeq_co".
+ * Non-Latin names are transliterated, and a name with no usable characters
+ * falls back to a stable `co_<hash>` so a new company is never rejected just
+ * because its script is not A–Z.
+ */
 export function companyKeyFromName(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
+  const raw = name.trim();
+  const ascii = raw
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase();
+  const slug = transliterateArabic(ascii)
     .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 24);
+    .replace(/^_+|_+$/g, "");
+  if (!slug) return `co_${hashKeySource(raw || "company")}`.slice(0, 24);
+  if (slug.length <= 24) return slug;
+  // Two long names that share the first 24 characters would otherwise derive the
+  // same key, and the second one would be refused as "already exists".
+  const stem = slug.slice(0, 19).replace(/_+$/g, "");
+  return `${stem}_${hashKeySource(raw).slice(0, 4)}`;
 }
 
 /**

@@ -16,6 +16,7 @@ import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { loadAppSettings } from "../core/settings";
 import { requireStaff, requireStaffFresh } from "../core/staff";
+import { identityMatchesSearch, identitySearchValues } from "../core/search-text";
 import {
   SCAN_CAP,
   chunk,
@@ -701,9 +702,9 @@ export const adminListAttendanceExceptions = onCall(async (request) => {
   const filtered = composed.filter((item) => {
     if (unresolvedOnly && item.resolution_status === "resolved") return false;
     if (!needle) return true;
-    return (
-      item.driver_name.toLowerCase().includes(needle) ||
-      (item.driver_code ?? "").toLowerCase().includes(needle)
+    return identityMatchesSearch(
+      identitySearchValues(item as unknown as Record<string, unknown>),
+      needle,
     );
   });
 

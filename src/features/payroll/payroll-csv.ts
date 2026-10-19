@@ -8,11 +8,16 @@ import {
 } from "./payroll-formulas";
 import { aoShownOrders } from "./payroll-orders-display";
 import { cellParticular } from "./payroll-particulars";
-import { payrollVehicleKind } from "./payroll-rider-columns";
+import {
+  payrollVehicleKind,
+  appAttendanceTotals,
+  appHoursForDay,
+  restaurantDisplayId,
+} from "./payroll-rider-columns";
 import type { PayrollHubTab, PayrollRequestRow, PayrollRiderRow } from "./payroll-types";
 
 export const PAYROLL_VIEW_HEADERS = [
-  "AM ID",
+  "MG ID",
   "Driver ID",
   "Name",
   "Restaurant",
@@ -42,27 +47,65 @@ export const PAYROLL_VIEW_HEADERS = [
 ] as const;
 
 export const COMBINED_IDENTITY_HEADERS = [
-  "AM ID",
+  "MG ID",
   "Driver ID",
   "Name",
+  "Restaurant",
+  "Restaurant ID",
   "Zone",
   "Zone category",
   "Partner",
   "Vehicle",
+  "Final orders",
+  "Actual hours",
 ] as const;
 
 export const COMBINED_IDENTITY_KEYS = [
   "amId",
   "mgId",
   "name",
+  "restaurant",
+  "restaurantId",
   "zone",
   "zoneCategory",
   "partner",
   "vehicleKind",
+  "finalOrders",
+  "actualHours",
+] as const;
+
+export const APP_ATTENDANCE_HEADERS = [
+  "MG ID",
+  "Driver ID",
+  "Name",
+  "Restaurant",
+  "Restaurant ID",
+  "Partner",
+  "Zone",
+  "Zone category",
+  "Vehicle",
+  "Total app hours",
+  "Active app days",
+  "Avg hours / active day",
+] as const;
+
+export const APP_ATTENDANCE_KEYS = [
+  "amId",
+  "mgId",
+  "name",
+  "restaurant",
+  "restaurantId",
+  "partner",
+  "zone",
+  "zoneCategory",
+  "vehicleKind",
+  "appTotalHours",
+  "appActiveDays",
+  "appAvgHours",
 ] as const;
 
 export const AO_LEAD_HEADERS = [
-  "AM ID",
+  "MG ID",
   "Driver ID",
   "Name",
   "Restaurant",
@@ -167,10 +210,32 @@ function combinedIdentityCells(row: PayrollRiderRow): Array<string | number> {
     row.amId,
     row.mgId,
     row.name,
+    row.restaurant,
+    restaurantDisplayId(row),
     row.zone,
     row.zoneCategory,
     row.partner,
     payrollVehicleKind(row.vehicleKey),
+    row.finalOrders,
+    Number(row.actualHours.toFixed(2)),
+  ];
+}
+
+function appAttendanceLeadCells(row: PayrollRiderRow): Array<string | number> {
+  const totals = appAttendanceTotals(row);
+  return [
+    row.amId,
+    row.mgId,
+    row.name,
+    row.restaurant,
+    restaurantDisplayId(row),
+    row.partner,
+    row.zone,
+    row.zoneCategory,
+    payrollVehicleKind(row.vehicleKey),
+    Number(totals.totalHours.toFixed(2)),
+    totals.activeDays,
+    Number(totals.avgHours.toFixed(2)),
   ];
 }
 
@@ -237,7 +302,7 @@ function aoLeadCells(row: PayrollRiderRow): Array<string | number> {
     row.mgId,
     row.name,
     row.restaurant,
-    row.restaurantId ?? "",
+    restaurantDisplayId(row),
     row.partner,
     row.zone,
     row.zoneCategory,
@@ -247,9 +312,33 @@ function aoLeadCells(row: PayrollRiderRow): Array<string | number> {
   ];
 }
 
+export function exportPayrollApplicationAttendanceCsv(
+  fileKey: string,
+  dates: readonly string[],
+  rows: readonly PayrollRiderRow[],
+  options?: PayrollExportOptions,
+) {
+  const identity = visibleIdentity(
+    APP_ATTENDANCE_HEADERS,
+    APP_ATTENDANCE_KEYS,
+    options,
+    appAttendanceLeadCells,
+  );
+  downloadCsv(
+    `MGGO-payroll-app-attendance-${fileKey}`,
+    toCsv(
+      [...identity.headers, ...dates.map(isoDayLabel)],
+      rows.map((row) => [
+        ...identity.cells(row),
+        ...dates.map((_, i) => Number(appHoursForDay(row, i).toFixed(2))),
+      ]),
+    ),
+  );
+}
+
 export function payrollHubExportKind(
   tab: PayrollHubTab,
-): "payroll" | "combined" | "ao" | "requests" | null {
+): "payroll" | "combined" | "ao" | "app_attendance" | "requests" | null {
   switch (tab) {
     case "payroll":
       return "payroll";
@@ -257,6 +346,8 @@ export function payrollHubExportKind(
       return "combined";
     case "attendance-orders":
       return "ao";
+    case "app-attendance":
+      return "app_attendance";
     case "requests":
       return "requests";
     case "settings":
@@ -291,6 +382,10 @@ export function exportPayrollHubCsv(input: {
     exportPayrollAttendanceOrdersCsv(input.fileKey, input.dates, input.riders, input.options);
     return true;
   }
+  if (kind === "app_attendance") {
+    exportPayrollApplicationAttendanceCsv(input.fileKey, input.dates, input.riders, input.options);
+    return true;
+  }
   if (kind === "requests") {
     if (!input.requests || !input.tileLabel || !input.statusLabel) return false;
     exportRequestsCsv(input.fileKey, input.requests, input.tileLabel, input.statusLabel);
@@ -305,7 +400,7 @@ export function exportPayrollDistributionCsv(
 ) {
   const headers = [
     "Bucket",
-    "AM ID",
+    "MG ID",
     "Driver ID",
     "Name",
     "Restaurant",

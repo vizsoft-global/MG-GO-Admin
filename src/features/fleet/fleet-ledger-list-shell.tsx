@@ -86,7 +86,7 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
   const filtered = useMemo(
     () =>
       rows.filter((row) =>
-        fieldSearchMatch<FleetLedgerRow>(row, search, prefs.searchField, {
+        fieldSearchMatch<FleetLedgerRow>(row, search, {
           plate: (item) => item.plate,
           name: (item) => {
             if ("from_name" in item) return item.from_name;
@@ -97,7 +97,7 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
           status: (item) => ("severity" in item ? item.severity : "kind" in item ? item.kind : null),
         }),
       ),
-    [prefs.searchField, rows, search],
+    [rows, search],
   );
   const grouped = useMemo(
     () =>
@@ -160,10 +160,6 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
             onSearchChange={setSearch}
             searchPlaceholder={tCommon("search")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[labels.field.all, labels.field.plate, labels.field.name]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => update({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             groupByOptions={[labels.group.none, labels.group.date, labels.group.status]}
             groupBy={prefs.groupBy}
             onGroupByChange={(value) => update({ groupBy: value })}

@@ -12,11 +12,15 @@ import { useAuth } from "@/contexts/auth-context";
 import { kuwaitToday } from "@/features/performance/performance-formulas";
 import { EMPTY_OPS_SLICERS } from "@/features/performance/performance-ops-types";
 import { queryKeys } from "@/lib/query/query-keys";
+import type { Permission } from "@/lib/auth/permissions";
 import {
   computePayrollKpis,
+  computeRequestKpis,
   filterRidersByStatus,
   keepSelectedPayrollOptions,
   payrollPeriodForPreset,
+  riderMatchesSlicers,
+  workflowStats,
   type PayrollRange,
   type PayrollRangePreset,
   type PayrollStatusFilter,
@@ -34,6 +38,7 @@ import { PayrollLegend } from "./payroll-grid";
 import { PayrollTab } from "./payroll-tab";
 import { CombinedPayrollTab } from "./combined-tab";
 import { PayrollAttendanceOrdersTab } from "./payroll-attendance-orders-tab";
+import { ApplicationAttendanceTab } from "./application-attendance-tab";
 import { PayrollSettingsTab } from "./payroll-settings-tab";
 import { RequestsTab } from "./requests-tab";
 import { OffStructureDialog } from "./off-structure-dialog";
@@ -46,7 +51,23 @@ import { exportPayrollHubCsv } from "./payroll-csv";
 import { usePayrollColumnConfig, usePayrollRangeSnapshot } from "./use-payroll";
 import type { PayrollHubTab, PayrollSlicers } from "./payroll-types";
 
-const TABS: PayrollHubTab[] = ["payroll", "combined", "attendance-orders", "requests", "settings"];
+const TABS: PayrollHubTab[] = [
+  "payroll",
+  "combined",
+  "attendance-orders",
+  "app-attendance",
+  "requests",
+  "settings",
+];
+
+const TAB_PERMISSION: Record<PayrollHubTab, Permission> = {
+  payroll: "payroll.payroll",
+  combined: "payroll.combined",
+  "attendance-orders": "payroll.attendance_orders",
+  "app-attendance": "payroll.app_attendance",
+  requests: "payroll.requests",
+  settings: "payroll.settings",
+};
 
 export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: PayrollHubTab }) {
   const t = useTranslations("pages.payroll");
@@ -57,7 +78,12 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
   const canManage = can("payroll.manage");
   const queryClient = useQueryClient();
   const today = kuwaitToday();
-  const [tab, setTab] = useState<PayrollHubTab>(initialTab);
+  const [requestedTab, setTab] = useState<PayrollHubTab>(initialTab);
+  const allowedTabs = useMemo<PayrollHubTab[]>(() => {
+    const permitted = TABS.filter((id) => canManage || can(TAB_PERMISSION[id]));
+    return permitted.length ? permitted : [TABS[0]];
+  }, [can, canManage]);
+  const tab = allowedTabs.includes(requestedTab) ? requestedTab : allowedTabs[0];
   const [preset, setPreset] = useState<PayrollRangePreset>("thisMonth");
   const [customRange, setCustomRange] = useState<PayrollRange | null>(null);
   const [slicers, setSlicers] = useState<PayrollSlicers>(EMPTY_OPS_SLICERS);
@@ -70,22 +96,69 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
     [preset, today, customRange, locale],
   );
 
-  const query = usePayrollRangeSnapshot(period, slicers);
+  // The snapshot is fetched whole. Every filter below runs on the client, so a
+  // slicer click repaints the table on the same tick instead of waiting for the
+  // RPC (whose placeholder data used to keep the previous view on screen).
+  const query = usePayrollRangeSnapshot(period, EMPTY_OPS_SLICERS);
   const headings = usePayrollColumnConfig();
   const data = query.data;
   const month = data?.month ?? period;
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
   const fallbackLabel = useCallback((key: string) => t(`riderCols.${key}`), [t]);
 
+  const slicedRiders = useMemo(() => {
+    const all = data?.riders ?? [];
+    if (!hasSlicers(slicers)) return all;
+    return all.filter((rider) =>
+      riderMatchesSlicers(
+        {
+          zoneId: rider.zoneId,
+          projectKey: rider.projectKey,
+          vehicleKey: rider.vehicleKey,
+          // `nationality` on the row is the display label; the slicer stores codes.
+          nationality: rider.nationalityCode,
+          sourceType: rider.sourceType,
+          sourceCompany: rider.sourceCompany,
+          restaurantId: rider.restaurantId,
+        },
+        slicers,
+      ),
+    );
+  }, [data?.riders, slicers]);
+
   const filteredRiders = useMemo(() => {
-    const byStatus = filterRidersByStatus(data?.riders ?? [], statusFilter);
+    const byStatus = filterRidersByStatus(slicedRiders, statusFilter);
     return zoneCategory ? byStatus.filter((r) => r.zoneCategory === zoneCategory) : byStatus;
-  }, [data?.riders, statusFilter, zoneCategory]);
+  }, [slicedRiders, statusFilter, zoneCategory]);
+
+  const slicedRiderIds = useMemo(() => {
+    if (!hasSlicers(slicers)) return null;
+    return new Set(slicedRiders.map((rider) => rider.driverId));
+  }, [slicedRiders, slicers]);
+
+  const requests = useMemo(() => {
+    const all = data?.requests ?? [];
+    if (!slicedRiderIds) return all;
+    return all.filter((request) => slicedRiderIds.has(request.driverId));
+  }, [data?.requests, slicedRiderIds]);
+
+  const requestKpis = useMemo(
+    () => (slicedRiderIds ? computeRequestKpis(requests) : (data?.requestKpis ?? computeRequestKpis(requests))),
+    [data?.requestKpis, requests, slicedRiderIds],
+  );
+
+  const workflow = useMemo(
+    () =>
+      slicedRiderIds
+        ? workflowStats(requests, slicedRiders.length)
+        : (data?.workflow ?? workflowStats(requests, slicedRiders.length)),
+    [data?.workflow, requests, slicedRiderIds, slicedRiders.length],
+  );
 
   const payrollKpis = useMemo(() => {
     const next = computePayrollKpis(filteredRiders);
-    return { ...next, riders: data?.riders.length ?? 0 };
-  }, [filteredRiders, data?.riders.length]);
+    return { ...next, riders: slicedRiders.length };
+  }, [filteredRiders, slicedRiders.length]);
 
   const selectedClients = useMemo(() => {
     const all = data?.clients ?? [];
@@ -140,13 +213,20 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
 
   function exportHeader() {
     if (!canExport || !data) return;
-    const view = tab === "combined" ? "combined" : tab === "attendance-orders" ? "ao" : null;
+    const view =
+      tab === "combined"
+        ? "combined"
+        : tab === "attendance-orders"
+          ? "ao"
+          : tab === "app-attendance"
+            ? "app_attendance"
+            : null;
     exportPayrollHubCsv({
       tab,
       fileKey: month.key,
       dates: month.dates,
       riders: filteredRiders,
-      requests: data.requests,
+      requests,
       options: view
         ? {
             labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
@@ -199,7 +279,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
         }
       />
       <TabBar
-        items={TABS.map((id) => ({
+        items={allowedTabs.map((id) => ({
           id,
           label: t(`tab${tabLabelKey(id)}`),
         }))}
@@ -282,12 +362,19 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           canExport={canExport}
           canManage={canManage}
         />
+      ) : tab === "app-attendance" ? (
+        <ApplicationAttendanceTab
+          month={month}
+          riders={filteredRiders}
+          canExport={canExport}
+          canManage={canManage}
+        />
       ) : tab === "requests" ? (
         <RequestsTab
           month={month}
-          kpis={data.requestKpis}
-          requests={data.requests}
-          workflow={data.workflow}
+          kpis={requestKpis}
+          requests={requests}
+          workflow={workflow}
           canExport={canExport}
         />
       ) : (
@@ -321,6 +408,8 @@ function tabLabelKey(id: PayrollHubTab): string {
       return "Combined";
     case "attendance-orders":
       return "AttendanceOrders";
+    case "app-attendance":
+      return "AppAttendance";
     case "requests":
       return "Requests";
     case "settings":
@@ -330,4 +419,16 @@ function tabLabelKey(id: PayrollHubTab): string {
       return never;
     }
   }
+}
+
+function hasSlicers(slicers: PayrollSlicers): boolean {
+  return (
+    slicers.zoneIds.length > 0 ||
+    slicers.projectKeys.length > 0 ||
+    slicers.vehicleKeys.length > 0 ||
+    slicers.nationalities.length > 0 ||
+    slicers.sourceTypes.length > 0 ||
+    slicers.sourceCompanies.length > 0 ||
+    slicers.restaurantIds.length > 0
+  );
 }

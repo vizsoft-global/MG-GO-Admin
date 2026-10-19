@@ -17,6 +17,7 @@ import {
 export type SourceCompanyError =
   | "not_authorized"
   | "invalid_company_key"
+  | "company_key_taken"
   | "invalid_company_name"
   | "invalid_client_code"
   | "client_code_taken"
@@ -30,6 +31,7 @@ export type SourceCompanyError =
 const KNOWN_ERRORS = new Set<string>([
   "not_authorized",
   "invalid_company_key",
+  "company_key_taken",
   "invalid_company_name",
   "invalid_client_code",
   "client_code_taken",
@@ -120,18 +122,21 @@ export async function upsertSourceCompany(input: {
     )
     .eq("key", key)
     .maybeSingle();
-  if (input.isNew && before) return { error: "invalid_company_key" };
+  if (input.isNew && before) return { error: "company_key_taken" };
 
+  // `adminUpsertSourceCompany` (functions/src/rpcs/rules.ts) reads the camelCase
+  // names, not the `p_*` SQL spelling — sending `p_key` left `key` empty and
+  // every save failed as `invalid_company_key`.
   const { error } = await db.rpc("admin_upsert_source_company", {
-    p_key: key,
-    p_name: name,
-    p_client_code: clientCode ?? "",
-    p_is_active: input.isActive,
-    p_dpd_target: input.dpdTarget ?? undefined,
-    p_incentive_enabled: input.incentiveEnabled,
-    p_incentive_above_kwd: input.incentiveAboveKwd ?? undefined,
-    p_incentive_below_kwd: input.incentiveBelowKwd ?? undefined,
-    p_effective_from: input.effectiveFrom ?? undefined,
+    key,
+    name,
+    clientCode: clientCode ?? "",
+    isActive: input.isActive,
+    dpdTarget: input.dpdTarget ?? undefined,
+    incentiveEnabled: input.incentiveEnabled,
+    incentiveAboveKwd: input.incentiveAboveKwd ?? undefined,
+    incentiveBelowKwd: input.incentiveBelowKwd ?? undefined,
+    effectiveFrom: input.effectiveFrom ?? undefined,
   });
   if (error) {
     const code = KNOWN_ERRORS.has(error.message) ? error.message : "save_failed";

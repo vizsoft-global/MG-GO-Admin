@@ -20,10 +20,12 @@ import {
 } from "@/lib/storage/document-tracking";
 import {
   buildDriverDocumentKey,
+  buildDriverExtraDocumentKey,
   buildIntakeDocumentKey,
+  buildIntakeExtraDocumentKey,
   extensionFromMime,
 } from "@/lib/storage/r2-keys";
-import { deleteObjects, putObject } from "@/lib/storage/r2-client";
+import { deleteObjects, getPresignedGetUrl, putObject } from "@/lib/storage/r2-client";
 
 function linkedProfileId(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
@@ -51,11 +53,18 @@ export async function POST(request: Request): Promise<Response> {
   const intakeId = String(formData.get("intakeId") ?? "").trim();
   const driverProfileIdRaw = String(formData.get("driverProfileId") ?? "").trim();
   const driverProfileId = driverProfileIdRaw || null;
-  const docType = String(formData.get("docType") ?? "").trim() as DriverDocumentType;
+  const docTypeRaw = String(formData.get("docType") ?? "").trim();
+  const isExtra = docTypeRaw === "extra";
+  const docType = docTypeRaw as DriverDocumentType;
   const file = formData.get("file");
+  const extraTitle = String(formData.get("title") ?? "").trim().slice(0, 120);
 
-  if (!intakeId || !DOCUMENT_TYPES.includes(docType)) {
+  if (!intakeId || (!isExtra && !DOCUMENT_TYPES.includes(docType))) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
+  }
+
+  if (isExtra && !extraTitle) {
+    return NextResponse.json({ error: "missing_title" }, { status: 400 });
   }
 
   if (!(file instanceof File) || file.size === 0) {
@@ -91,6 +100,65 @@ export async function POST(request: Request): Promise<Response> {
 
   const source: "driver" | "intake" =
     useDriverPath && targetDriverId ? "driver" : "intake";
+
+  if (isExtra) {
+    const extraKey = targetDriverId
+      ? buildDriverExtraDocumentKey(targetDriverId, ext)
+      : buildIntakeExtraDocumentKey(intakeId, ext);
+
+    try {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      await putObject(extraKey, buffer, file.type, {
+        uploadedBy: auth.session.id,
+        entityType: source === "driver" ? "driver" : "driver_intake",
+        entityId: targetDriverId ?? intakeId,
+        uploadedVia: "admin",
+      });
+    } catch {
+      return NextResponse.json({ error: "upload_failed" }, { status: 500 });
+    }
+
+    const ref = db.collection(COLLECTIONS.driverExtraDocuments).doc();
+    const now = new Date();
+    try {
+      await ref.set({
+        id: ref.id,
+        intake_id: intakeId,
+        driver_id: targetDriverId,
+        doc_type: "extra",
+        title: extraTitle,
+        file_url: extraKey,
+        size_bytes: file.size,
+        content_type: file.type || null,
+        created_by: auth.session.id,
+        created_at: now,
+        updated_at: now,
+      });
+    } catch {
+      await deleteObjects([extraKey]).catch(() => undefined);
+      return NextResponse.json({ error: "save_failed" }, { status: 500 });
+    }
+
+    void logDriverChange({
+      intakeId,
+      driverId: targetDriverId,
+      source: "document",
+      before: { "document.extra": "absent" },
+      after: { "document.extra": extraTitle },
+      context: { doc_type: "extra", title: extraTitle },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      id: ref.id,
+      title: extraTitle,
+      objectKey: extraKey,
+      signedUrl: await getPresignedGetUrl(extraKey, 900),
+      sizeBytes: file.size,
+      contentType: file.type || null,
+      source,
+    });
+  }
 
   const existingDocs = await listExistingDriverDocuments(intakeId, targetDriverId);
   const hadDoc = Boolean(existingDocs[docType]);

@@ -200,7 +200,7 @@ export function OpsDpdTab({
                 ["zone", metric],
                 data.by_zone
                   .filter((r) => isChartableDimKey(r.key))
-                  .map((r) => [r.key, dimMetricValue(r, metric)]),
+                  .map((r) => [r.label || r.key, dimMetricValue(r, metric)]),
               ),
             )
           }
@@ -210,7 +210,7 @@ export function OpsDpdTab({
           <OpsBarChart
             data={data.by_zone
               .filter((r) => isChartableDimKey(r.key))
-              .map((r) => ({ key: r.key, value: dimMetricValue(r, metric) }))}
+              .map((r) => ({ key: r.label || r.key, value: dimMetricValue(r, metric) }))}
             xKey="key"
             series={series}
             layout="horizontal"

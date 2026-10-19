@@ -11,11 +11,14 @@ import {
   figmaTailBand,
   fitImageInSlot,
   isBottomRightFallback,
+  isUsableSlot,
   LOAN_GEOM,
+  LOAN_SLOTS,
   maskBankNumber,
   MISSING_EMPLOYEE_SLOT,
   parseSignatureSlots,
   PAYSLIP_SLOTS,
+  payslipConsumedKeys,
   PENALTY_GEOM,
   PENALTY_SLOTS,
   requireEmployeeSlot,
@@ -278,5 +281,102 @@ describe("fitImageInSlot", () => {
       isTitleEcho({ en: "Please read this notice.", ar: "" }, { en: "Penalty Notice", ar: "إشعار جزاء" }),
       false,
     );
+  });
+});
+
+describe("esign accident and template geometry", () => {
+  it("keeps loan stamp boxes fixed and off the bottom-right fallback", () => {
+    const layout = buildEsignDocumentLayout({ kind: "loan", employee: sampleEmployee() });
+    assert.deepEqual(layout.slots, LOAN_SLOTS);
+    for (const slot of slotsForKind("loan")) {
+      assert.equal(isUsableSlot(slot), true);
+      assert.equal(isBottomRightFallback(slot), false);
+    }
+  });
+
+  it("orders accident employee rows and prints the selected kind as the section header", () => {
+    const layout = buildEsignDocumentLayout({
+      kind: "general",
+      employee: sampleEmployee(),
+      fields: [
+        {
+          key: "request_kind",
+          labelEn: "Request kind",
+          labelAr: "نوع الطلب",
+          value: "accident",
+        },
+        {
+          key: "accident_date",
+          labelEn: "Accident date",
+          labelAr: "تاريخ الحادث",
+          value: "2026-10-01",
+        },
+        {
+          key: "report_date",
+          labelEn: "Report date",
+          labelAr: "تاريخ التقرير",
+          value: "2026-10-02",
+        },
+      ],
+    });
+
+    assert.equal(layout.title.en, "Accident");
+    assert.deepEqual(
+      layout.employeeRows.map((row) => row.key),
+      ["employee_id", "employee_name", "civil_id", "position", "sponsor"],
+    );
+    const details = layout.sections.find((section) => section.key === "request_details");
+    assert.equal(details?.title.en, "Accident");
+    assert.deepEqual(
+      details?.rows.map((row) => row.key),
+      ["accident_date", "report_date"],
+    );
+    const appendix = layout.sections.find((section) => section.key === "appendix");
+    assert.equal(appendix?.rows.some((row) => row.key === "request_kind") ?? false, false);
+    assert.deepEqual(layout.slots, slotsForKind("general"));
+  });
+
+  it("switches the accident date pair to From/To for sick leave", () => {
+    const layout = buildEsignDocumentLayout({
+      kind: "general",
+      employee: sampleEmployee(),
+      fields: [
+        {
+          key: "request_kind",
+          labelEn: "Request kind",
+          labelAr: "نوع الطلب",
+          value: "sick_leave",
+        },
+        { key: "absence_from", labelEn: "From", labelAr: "من", value: "2026-10-01" },
+        { key: "absence_to", labelEn: "To", labelAr: "إلى", value: "2026-10-03" },
+      ],
+    });
+
+    const details = layout.sections.find((section) => section.key === "request_details");
+    assert.equal(details?.title.en, "Sick leave");
+    assert.deepEqual(
+      details?.rows.map((row) => row.key),
+      ["absence_from", "absence_to"],
+    );
+    assert.equal(details?.rows.some((row) => row.key === "accident_date") ?? false, false);
+  });
+
+  it("drops the duplicate payslip identity rows and keeps their keys consumed", () => {
+    const sheet = buildPayslipSheet(
+      { employee_id: "10042", company_name: "Musallam Delivery" },
+      [
+        { key: "basic_salary", labelEn: "Basic salary", labelAr: "", value: "500" },
+        { key: "fixed_days", labelEn: "Fixed days", labelAr: "", value: "26" },
+      ],
+    );
+
+    assert.deepEqual(
+      sheet.identity.map((row) => row.key),
+      ["company", "employee_position", "civil_sponsor", "pay_bank", "period", "computed_employee"],
+    );
+    const consumed = payslipConsumedKeys();
+    assert.equal(consumed.has("basic_salary"), true);
+    assert.equal(consumed.has("fixed_days"), true);
+    assert.equal(consumed.has("fixed_working_days"), true);
   });
 });

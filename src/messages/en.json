@@ -20,6 +20,7 @@
     "filter": "Filter",
     "columns": "Columns",
     "columnsTooltip": "Show or hide table columns",
+    "dragColumn": "Drag to reorder",
     "resetColumns": "Reset to role default",
     "tableScroll": "Scroll table horizontally",
     "columnSourceUser": "Customized",
@@ -152,7 +153,8 @@
     "fleetService": "Service",
     "fleetHandover": "Handover",
     "fleetAccident": "Accident",
-    "fleetRj": "RJ"
+    "fleetRj": "RJ",
+    "orderExceptions": "Order exceptions"
   },
   "appNavGroups": {
     "overview": "Overview",
@@ -246,6 +248,19 @@
     }
   },
   "pages": {
+    "esign": {
+      "accident": {
+        "requestKind": "Request kind",
+        "requestDetails": "Request details",
+        "kind": {
+          "accident": "Accident",
+          "sick_leave": "Sick leave",
+          "medical_report": "Medical report",
+          "declaration": "Declaration"
+        }
+      }
+    },
+
     "assistant": {
       "title": "Staff Assistant",
       "subtitle": "Read-only answers over authorized dashboard data. Chat history is this tab only.",
@@ -1087,6 +1102,8 @@
       "yes": "Yes",
       "no": "No",
       "kpiPendingAccess": "Pending access",
+      "kpiPendingEmployees": "Employees to verify",
+      "kpiPendingEmployeesHint": "Awaiting approval",
       "kpiVerificationBacklog": "Verification backlog",
       "kpiDeliveryReview": "Delivery review",
       "kpiPayrollBlockers": "Payroll blockers",
@@ -1338,7 +1355,7 @@
           "restaurants": "Restaurants",
           "rider_category": "Category",
           "source_company": "Source company",
-          "client_id": "Platform ID",
+          "client_id": "Client ID",
           "client_name": "Platform",
           "account_status": "Status",
           "on_duty": "Attendance",
@@ -1431,6 +1448,10 @@
       "colStatus": "Status",
       "colAttendance": "Attendance",
       "colPasscode": "App Passcode",
+      "colVehicle": "Vehicle",
+      "vehicleBike": "Bike",
+      "vehicleCar": "Car",
+      "vehicleNone": "No vehicle",
       "colActions": "Actions",
       "sortBy": "Sort by",
       "sortNameAsc": "Name A → Z",
@@ -1529,7 +1550,7 @@
           "rider_category": "Rider category (in_house / outsourced)",
           "source_company": "Company Name",
           "active": "Active on import (yes / no)",
-          "client_id": "Platform ID",
+          "client_id": "Client ID",
           "client_name": "Platform",
           "off_days": "Number of OFFs (current Kuwait month)"
         },
@@ -1547,11 +1568,15 @@
         "colName": "Name",
         "colPhone": "Phone",
         "colEmployeeId": "Emp ID",
-        "colPlatformId": "Platform ID",
+        "colPlatformId": "Client ID",
         "colPlatform": "Platform",
         "colPartner": "Partner",
         "colZone": "Zone",
         "colRestaurants": "Restaurants",
+        "colVehicle": "Vehicle",
+        "colVehicleType": "Vehicle type",
+        "typeBike": "Bike",
+        "typeCar": "Car",
         "colActive": "Active",
         "importLog": "Import log",
         "importWaiting": "waiting…",
@@ -1589,7 +1614,7 @@
           "ambiguous_partner": "Partner name matches more than one",
           "ambiguous_zone": "Zone name matches more than one",
           "ambiguous_restaurant": "Restaurant name matches more than one",
-          "invalid_client_id": "Platform ID is too long (max 64)",
+          "invalid_client_id": "Client ID is too long (max 64)",
           "invalid_client_name": "Platform is too long (max 120)",
           "company_category_mismatch": "In-house riders belong to the system company; outsourced riders to a partner company"
         },
@@ -1664,9 +1689,9 @@
           "save_failed": "Could not save assignment. Please try again."
         }
       },
-      "colClientId": "Platform ID",
+      "colClientId": "Client ID",
       "colClientName": "Platform",
-      "colCompanyClientId": "Client ID",
+      "colCompanyClientId": "Company Client ID",
       "colCompanyName": "Company Name",
       "companyUnassigned": "Unassigned",
       "companyClientIdNotSet": "Not set",
@@ -1683,7 +1708,28 @@
         "blank": "(Blank)",
         "sortBy": "Sort by {label}",
         "filterBy": "Filter {label}"
-      }
+      },
+      "levelFilterAll": "All levels",
+      "levelFilterD": "Level D",
+      "levelFilterStandard": "Standard",
+      "levelFilterOverride": "Override",
+      "levelBadgeD": "D",
+      "levelOverrideTitle": "Level override",
+      "levelOverrideSubtitle": "Set this rider's level for the month, or clear the override.",
+      "levelOverrideReason": "Reason",
+      "levelOverrideClear": "Clear override",
+      "levelOverrideSaved": "Level saved",
+      "levelOverrideFailed": "Could not update the level",
+      "levelOverrideCancel": "Cancel",
+      "levelRequired": "Required {count}",
+      "levelVerified": "Verified {count}",
+      "levelGap": "Gap {count}",
+      "levelAuto": "Automatic",
+      "levelSet": "Override set",
+      "levelSetD": "Mark Level D",
+      "levelSetStandard": "Mark standard",
+      "levelEvaluate": "Evaluate and notify",
+      "levelEvaluateDone": "Evaluation finished"
     },
     "partners": {
       "title": "Partners",
@@ -1977,6 +2023,24 @@
       "documentsEmptyDescription": "Upload license, civil ID, work permit, or passport via Edit driver.",
       "documentsUploadViaEdit": "Upload in Edit driver",
       "documentsManage": "Manage documents",
+      "extraDocumentsTitle": "Additional documents",
+      "extraDocumentsDescription": "Any other files — contracts, letters, certificates. Name each one so it is easy to find.",
+      "extraDocumentsEmpty": "No additional documents yet.",
+      "extraDocumentAdd": "Add document",
+      "extraDocumentAddSubtitle": "Name the file, then choose it from your device.",
+      "extraDocumentNameLabel": "Document name",
+      "extraDocumentNamePlaceholder": "e.g. Signed contract",
+      "extraDocumentFileLabel": "File",
+      "extraDocumentChooseFile": "Choose a file",
+      "extraDocumentFileHint": "PDF, PNG, JPG, or WebP · max 16 MB",
+      "extraDocumentUpload": "Upload document",
+      "extraDocumentUploadedOn": "Uploaded {date}",
+      "extraDocumentAdded": "Document uploaded",
+      "extraDocumentDeleted": "Document deleted",
+      "extraDocumentDeleteTitle": "Delete document",
+      "extraDocumentDeleteBody": "This removes “{title}” and its file from this employee.",
+      "extra_document_title_required": "Give the document a name.",
+      "extra_document_file_required": "Choose a file to upload.",
       "notFoundTitle": "Employee not found",
       "notFoundDescription": "This employee may have been removed or the link is invalid.",
       "tabHistory": "History",
@@ -2012,7 +2076,7 @@
           "nationality": "Nationality",
           "rider_category": "Rider category",
           "source_company": "Company",
-          "client_id": "Platform ID",
+          "client_id": "Client ID",
           "client_name": "Platform",
           "workflow_status": "Workflow status",
           "account_status": "Account status",
@@ -2292,7 +2356,7 @@
           "save_failed": "Could not update freeze. Please try again."
         }
       },
-      "fieldClientId": "Platform ID",
+      "fieldClientId": "Client ID",
       "fieldClientName": "Platform"
     },
     "driverGroups": {
@@ -2415,7 +2479,7 @@
         "zone": "Zone",
         "vehicle": "Assign Vehicle",
         "vehicleType": "Vehicle type",
-        "clientId": "Platform ID (optional)",
+        "clientId": "Client ID (optional)",
         "clientName": "Platform (optional)",
         "accommodation": "Accommodation (optional)",
         "passportNumber": "Passport number",
@@ -2559,7 +2623,13 @@
         "save_failed": "Could not save the driver. Please try again.",
         "passport_exists": "This passport number is already registered to another employee.",
         "invalid_passport": "Passport must be letters and digits, up to 20 characters.",
-        "invalid_bank": "Check bank, civil ID, and account or IBAN."
+        "invalid_bank": "Check bank, civil ID, and account or IBAN.",
+        "extra_document_title_required": "Enter a document name.",
+        "extra_document_file_required": "Choose a file to upload.",
+        "missing_title": "Enter a document name.",
+        "missing_file": "Choose a file to upload.",
+        "invalid_form": "The upload could not be read. Try again.",
+        "delete_failed": "Could not delete the document. Try again."
       }
     },
     "documentExpiry": {
@@ -5366,6 +5436,12 @@
           "sheetInputs": "Sheet inputs",
           "fieldEmployeeId": "Employee ID",
           "sendForSignature": "Send for e-signature",
+          "addDocuments": "Add documents",
+          "documentsHint": "Up to 5 supporting documents",
+          "removeDocument": "Remove document",
+          "attachmentUploadFailed": "A document could not be uploaded",
+          "attachmentLimit": "Up to 5 documents per request",
+
           "hideField": "Hide this field for this send",
           "penaltyOptions": "Penalty",
           "hideOption": "Hide this option for this send",
@@ -5923,6 +5999,25 @@
           "signerMeta": "Device metadata",
           "noSignerMeta": "No signer metadata yet",
           "statusSection": "Status",
+          "attachmentsSection": "Attachments",
+          "addAttachment": "Add document",
+          "removeAttachment": "Remove attachment",
+          "noAttachments": "No supporting documents",
+          "attachmentLimit": "Up to 5 documents per request",
+          "attachmentUploadFailed": "The document could not be uploaded",
+          "attachmentsSaved": "Attachments saved",
+          "attachmentRemoved": "Attachment removed",
+          "reviewSection": "Management decision",
+          "approve": "Approve",
+          "acknowledge": "Acknowledge",
+          "reject": "Reject",
+          "reviewApproved": "Approved",
+          "reviewAcknowledged": "Acknowledged",
+          "reviewRejected": "Rejected",
+          "reviewFailed": "The decision could not be saved",
+          "rejectReason": "Reason for rejection",
+          "rejectReasonPlaceholder": "Explain why this document is rejected",
+
           "detailsSection": "Details",
           "proofSection": "Signature proof record",
           "recipient": "Recipient",
@@ -7751,7 +7846,13 @@
           "fuelRequests": "Fuel requests",
           "fuelRefunds": "Fuel refunds",
           "analyze": "Analysis",
-          "rate": "Rate"
+          "rate": "Rate",
+          "payrollPayroll": "Payroll tab",
+          "payrollCombined": "Combined payroll tab",
+          "payrollAttendanceOrders": "Attendance & orders tab",
+          "payrollAppAttendance": "Application attendance tab",
+          "payrollRequests": "Requests tab",
+          "payrollSettings": "Settings tab"
         },
         "errors": {
           "loadFailed": "Could not load staff access.",
@@ -8612,7 +8713,8 @@
         "saved": "Company saved",
         "errors": {
           "not_authorized": "You do not have permission to manage companies.",
-          "invalid_company_key": "A company with this name already exists, or the name has no letters or digits.",
+          "invalid_company_key": "Enter a company name that produces a valid key (letters and digits).",
+          "company_key_taken": "A company with this name already exists. Edit it instead, or choose a different name.",
           "invalid_company_name": "Enter a company name (up to 120 characters).",
           "invalid_client_code": "Client ID may only contain letters, digits and dashes (up to 32).",
           "client_code_taken": "Another company already uses this Client ID.",
@@ -8655,6 +8757,10 @@
       "endDate": "To",
       "actionFilter": "Action",
       "allActions": "All actions",
+      "entityFilter": "Entity",
+      "allEntities": "All entities",
+      "adminFilter": "Admin",
+      "allAdmins": "All admins",
       "search": "Search",
       "searchPlaceholder": "Entity, route, page…",
       "colTime": "Time",
@@ -8807,6 +8913,7 @@
       "subtitle": "Monthly attendance, efficiency and the request approvals behind them",
       "tabPayroll": "Payroll",
       "tabCombined": "Combined Payroll",
+      "tabAppAttendance": "Application Attendance",
       "tabRequests": "Requests",
       "range": {
         "thisMonth": "This month",
@@ -8946,7 +9053,7 @@
         "status": "Status"
       },
       "riderCols": {
-        "amId": "AM ID",
+        "amId": "MG ID",
         "mgId": "Driver ID",
         "name": "Name",
         "restaurant": "Restaurant",
@@ -8979,7 +9086,19 @@
         "zoneOrders": "LM zone orders",
         "zoneDpd": "LM zone DPD",
         "zoneEff": "LM zone eff%",
-        "vehicleKind": "Vehicle"
+        "vehicleKind": "Vehicle",
+        "appTotalHours": "App hours",
+        "appActiveDays": "Active app days",
+        "appAvgHours": "Avg hours / active day"
+      },
+      "appAttendance": {
+        "bannerTitle": "Application attendance",
+        "bannerBody": "Hours the rider app was actually in use — clock-in to clock-out, or time elapsed so far on a shift still open. Nothing here feeds payroll; it is a usage record beside it.",
+        "activeRiders": "{count} rider(s) with app activity",
+        "daysHint": "Days with any app usage",
+        "avgHint": "Across days with usage",
+        "totalsRow": "All shown riders",
+        "footNote": "Days without a check-in or check-out show no hours, not zero hours."
       },
       "riderStatus": {
         "active": "Active",
@@ -10573,6 +10692,27 @@
       "emptyHint": "Rejected fuel, refund and asset rows appear here.",
       "colType": "Type"
     },
+    "payrollHub": {
+      "hub": {
+        "title": "Payroll Hub",
+        "subtitle": "Performance, order reconciliation and payroll for the payroll month.",
+        "breadcrumb": "Payroll Hub",
+        "cards": {
+          "performance": {
+            "title": "Performance",
+            "body": "Rider scores, DPD efficiency and the live workforce."
+          },
+          "orderReconciliation": {
+            "title": "Order reconciliation",
+            "body": "AM upload versus MGGO order counts for the Kuwait day."
+          },
+          "payroll": {
+            "title": "Payroll",
+            "body": "Payroll months, rider totals and the monthly pay plan."
+          }
+        }
+      }
+    },
     "operationsHub": {
       "hub": {
         "title": "OperationsHub",
@@ -10645,6 +10785,68 @@
           }
         }
       }
+    },
+    "orderExceptions": {
+      "title": "Order exceptions",
+      "subtitle": "Riders submit proof for rejected or cancelled orders. Review each one here.",
+      "kpiPending": "Pending",
+      "kpiApproved": "Approved",
+      "kpiRejected": "Rejected",
+      "kpiTotal": "Total",
+      "kpiRejectedOrders": "Rejected orders",
+      "kpiCancelledOrders": "Cancelled orders",
+      "tabAll": "All",
+      "tabPending": "Pending",
+      "tabApproved": "Approved",
+      "tabRejected": "Rejected",
+      "searchPlaceholder": "Search rider or order",
+      "filterKind": "Kind",
+      "filterSource": "Source",
+      "filterFrom": "From",
+      "filterTo": "To",
+      "kindAll": "All kinds",
+      "kindRejected": "Rejected",
+      "kindCancelled": "Cancelled",
+      "sourceAll": "All sources",
+      "sourceDriver": "Driver declined",
+      "sourceStore": "Store or customer",
+      "colRider": "Rider",
+      "colOrder": "Order",
+      "colKind": "Kind",
+      "colSource": "Source",
+      "colReason": "Reason",
+      "colProof": "Proof",
+      "colDay": "Day",
+      "colStatus": "Status",
+      "colReviewed": "Reviewed by",
+      "proofCount": "{count} photos",
+      "proofNone": "No photos",
+      "statusPending": "Pending",
+      "statusApproved": "Approved",
+      "statusRejected": "Rejected",
+      "viewDetails": "View details",
+      "reviewTitle": "Review exception",
+      "reviewApprove": "Approve",
+      "reviewReject": "Reject",
+      "reviewNote": "Review note",
+      "reviewNotePlaceholder": "Add a note for this review",
+      "reviewNoteRequired": "A note is required to reject",
+      "approveHint": "Approve accepts the rider's proof.",
+      "rejectHint": "Reject keeps the order as an exception.",
+      "approved": "Exception approved",
+      "declined": "Exception rejected",
+      "emptyTitle": "No order exceptions",
+      "emptyHint": "Rejected and cancelled orders with rider proof show up here.",
+      "emptyFilters": "No exceptions match these filters",
+      "loading": "Loading",
+      "cancel": "Cancel",
+      "saving": "Saving",
+      "reasonBy": "Reason by {name}",
+      "riderSnapshot": "{code} · order {name}",
+      "errorNotAuthorized": "You do not have permission to view order exceptions.",
+      "errorGeneric": "Order exceptions could not be loaded.",
+      "pagePrev": "Previous",
+      "pageNext": "Next"
     }
   }
 }

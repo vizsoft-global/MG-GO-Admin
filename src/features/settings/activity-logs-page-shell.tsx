@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,7 +31,9 @@ import {
 } from "@/components/ui/sheet";
 import {
   exportAdminActivityLogsCsv,
+  listAdminActivityFacets,
   listAdminActivityLogs,
+  type AdminActivityFacets,
   type AdminActivityLogRow,
 } from "@/lib/audit/audit-actions";
 import type { AdminActivityAction } from "@/lib/audit/log-admin-activity";
@@ -53,6 +55,9 @@ export function ActivityLogsPageShell() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [action, setAction] = useState<string>("all");
+  const [entityType, setEntityType] = useState<string>("all");
+  const [adminUserId, setAdminUserId] = useState<string>("all");
+  const [facets, setFacets] = useState<AdminActivityFacets>({ entityTypes: [], admins: [] });
   const [search, setSearch] = useState("");
   const [rows, setRows] = useState<AdminActivityLogRow[]>([]);
   const [selected, setSelected] = useState<AdminActivityLogRow | null>(null);
@@ -68,12 +73,35 @@ export function ActivityLogsPageShell() {
     [t],
   );
 
+  const entityFilterItems = useMemo(
+    () =>
+      selectOptions([
+        { value: "all", label: t("allEntities") },
+        ...facets.entityTypes.map((value) => ({ value, label: value })),
+      ]),
+    [facets.entityTypes, t],
+  );
+
+  const adminFilterItems = useMemo(
+    () =>
+      selectOptions([
+        { value: "all", label: t("allAdmins") },
+        ...facets.admins.map((admin) => ({
+          value: admin.id,
+          label: admin.name ?? admin.id.slice(0, 8),
+        })),
+      ]),
+    [facets.admins, t],
+  );
+
   const loadLogs = useCallback(() => {
     startTransition(async () => {
       const result = await listAdminActivityLogs({
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         action: action === "all" ? undefined : (action as AdminActivityAction),
+        entityType: entityType === "all" ? undefined : entityType,
+        adminUserId: adminUserId === "all" ? undefined : adminUserId,
         search: search.trim() || undefined,
         limit: 100,
       });
@@ -83,7 +111,24 @@ export function ActivityLogsPageShell() {
       }
       setRows(result.rows);
     });
-  }, [startDate, endDate, action, search, t]);
+  }, [startDate, endDate, action, entityType, adminUserId, search, t]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const result = await listAdminActivityFacets();
+      if (!cancelled && "facets" in result) setFacets(result.facets);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    loadLogs();
+    // Load the newest page once on mount; later refreshes use the Load button.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleExport = () => {
     startTransition(async () => {
@@ -91,6 +136,8 @@ export function ActivityLogsPageShell() {
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         action: action === "all" ? undefined : (action as AdminActivityAction),
+        entityType: entityType === "all" ? undefined : entityType,
+        adminUserId: adminUserId === "all" ? undefined : adminUserId,
         search: search.trim() || undefined,
       });
       if ("error" in result) {
@@ -169,6 +216,54 @@ export function ActivityLogsPageShell() {
                   {ACTION_OPTIONS.map((a) => (
                     <SelectItem key={a} value={a} label={a}>
                       {a}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("entityFilter")}</Label>
+              <Select
+                items={entityFilterItems}
+                value={entityType}
+                onValueChange={(v) => setEntityType(v ?? "all")}
+              >
+                <SelectTrigger className="w-44 cursor-pointer rounded-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" label={t("allEntities")}>
+                    {t("allEntities")}
+                  </SelectItem>
+                  {facets.entityTypes.map((value) => (
+                    <SelectItem key={value} value={value} label={value}>
+                      {value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("adminFilter")}</Label>
+              <Select
+                items={adminFilterItems}
+                value={adminUserId}
+                onValueChange={(v) => setAdminUserId(v ?? "all")}
+              >
+                <SelectTrigger className="w-44 cursor-pointer rounded-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" label={t("allAdmins")}>
+                    {t("allAdmins")}
+                  </SelectItem>
+                  {facets.admins.map((admin) => (
+                    <SelectItem
+                      key={admin.id}
+                      value={admin.id}
+                      label={admin.name ?? admin.id.slice(0, 8)}
+                    >
+                      {admin.name ?? admin.id.slice(0, 8)}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { SegmentOption } from "@/components/app/toggle-chip";
 import { cn } from "@/lib/utils";
-import type { ListGroupByOption, ListSearchFieldOption, ListViewMode } from "./types";
+import type { ListGroupByOption, ListViewMode } from "./types";
 import { searchClearVisible } from "./search-match";
 
 export function AppListControls({
@@ -21,10 +21,6 @@ export function AppListControls({
   searchPlaceholder,
   searchAriaLabel,
   clearSearchLabel,
-  searchFields,
-  searchField,
-  onSearchFieldChange,
-  searchFieldLabel,
   groupByOptions,
   groupBy,
   onGroupByChange,
@@ -35,6 +31,7 @@ export function AppListControls({
   cardsViewLabel,
   filterSlot,
   trailing,
+  singleRow,
   className,
 }: {
   searchValue?: string;
@@ -42,10 +39,6 @@ export function AppListControls({
   searchPlaceholder?: string;
   searchAriaLabel?: string;
   clearSearchLabel?: string;
-  searchFields?: readonly ListSearchFieldOption[];
-  searchField?: string;
-  onSearchFieldChange?: (value: string) => void;
-  searchFieldLabel?: string;
   groupByOptions?: readonly ListGroupByOption[];
   groupBy?: string;
   onGroupByChange?: (value: string) => void;
@@ -56,41 +49,28 @@ export function AppListControls({
   cardsViewLabel?: string;
   filterSlot?: ReactNode;
   trailing?: ReactNode;
+  /** Keep search, filters, group and view on one line. */
+  singleRow?: boolean;
   className?: string;
 }) {
   const showSearch = onSearchChange !== undefined;
-  const fields = searchFields ?? [];
   const groups = groupByOptions ?? [];
 
   return (
-    <div className={cn("flex flex-col gap-2 sm:flex-row sm:items-center", className)}>
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-        {fields.length > 0 && onSearchFieldChange ? (
-          <Select
-            items={fields.map((item) => ({ value: item.value, label: item.label }))}
-            value={searchField ?? "all"}
-            onValueChange={(value) => {
-              if (value) onSearchFieldChange(value);
-            }}
-          >
-            <SelectTrigger
-              className="h-9 w-[148px] shrink-0 cursor-pointer rounded-lg text-xs"
-              aria-label={searchFieldLabel}
-            >
-              <SelectValue placeholder={searchFieldLabel} />
-            </SelectTrigger>
-            <SelectContent>
-              {fields.map((item) => (
-                <SelectItem key={item.value} value={item.value} className="cursor-pointer">
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
-
+    <div
+      className={cn(
+        singleRow ? "flex flex-nowrap items-center gap-2" : "flex flex-col gap-2 sm:flex-row sm:items-center",
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          "flex items-center gap-2",
+          singleRow ? "shrink-0 flex-nowrap" : "min-w-0 flex-1 flex-wrap",
+        )}
+      >
         {showSearch ? (
-          <div className="relative min-w-0 flex-1 sm:max-w-xs">
+          <div className={cn("relative", singleRow ? "w-[200px] shrink-0" : "min-w-0 flex-1 sm:max-w-xs")}>
             <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchValue ?? ""}
@@ -124,7 +104,10 @@ export function AppListControls({
             }}
           >
             <SelectTrigger
-              className="h-9 w-[148px] shrink-0 cursor-pointer rounded-lg text-xs"
+              className={cn(
+                "h-9 shrink-0 cursor-pointer rounded-lg text-xs",
+                singleRow ? "w-[132px]" : "w-[148px]",
+              )}
               aria-label={groupByLabel}
             >
               <SelectValue placeholder={groupByLabel} />
@@ -158,7 +141,16 @@ export function AppListControls({
           </div>
         ) : null}
       </div>
-      {trailing ? <div className="flex shrink-0 flex-wrap items-center gap-2">{trailing}</div> : null}
+      {trailing ? (
+        <div
+          className={cn(
+            "flex shrink-0 items-center gap-2",
+            singleRow ? "ms-auto flex-nowrap" : "flex-wrap",
+          )}
+        >
+          {trailing}
+        </div>
+      ) : null}
     </div>
   );
 }

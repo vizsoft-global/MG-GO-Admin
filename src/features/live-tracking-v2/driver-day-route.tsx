@@ -26,7 +26,7 @@ import { fetchDriverDayRoute } from "./fleet-server-actions";
 import { fleetEventTone } from "./fleet-status";
 import { FLEET_TONE_DOT } from "./fleet-tone";
 import { splitRouteGeometry, type FleetRouteGeometry } from "./fleet-route";
-import { useFleetSnapshot } from "./use-fleet";
+import { useFleetDriver, useFleetSnapshot } from "./use-fleet";
 import type { FleetRouteStop } from "./fleet-map";
 
 /** Playback speeds offered by the scrubber. */
@@ -127,6 +127,18 @@ export function DriverDayRoute({
   const t = useTranslations("pages.liveTrackingV2");
   const snapshot = useFleetSnapshot();
   const date = useMemo(() => kuwaitToday(), []);
+  const driver = useFleetDriver(driverId);
+  /**
+   * A night shift can end on the next Kuwait day. The route reads both archive
+   * day objects and merges them inside the shift window; without a shift it stays
+   * the calendar day.
+   */
+  const shiftWindow = useMemo(() => {
+    const from = driver?.meta.shiftStartAt;
+    const to = driver?.meta.shiftEndAt;
+    if (!from || !to) return undefined;
+    return { from, to };
+  }, [driver?.meta.shiftStartAt, driver?.meta.shiftEndAt]);
 
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(4);
@@ -134,9 +146,13 @@ export function DriverDayRoute({
   const rafRef = useRef<number>(0);
 
   const { data, isLoading } = useQuery({
-    queryKey: queryKeys.liveTrackingV2.dayRoute(driverId, date),
+    queryKey: queryKeys.liveTrackingV2.dayRoute(
+      driverId,
+      date,
+      driver?.meta.shiftEndAt ?? null,
+    ),
     queryFn: async (): Promise<DayRoute> => {
-      const { data: result, error } = await fetchDriverDayRoute(driverId, date);
+      const { data: result, error } = await fetchDriverDayRoute(driverId, date, shiftWindow);
       if (error) throw new Error(error.message);
       return result as unknown as DayRoute;
     },

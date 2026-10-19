@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { DOCUMENT_TYPES, type DriverRemoteDocument } from "./types";
 import { daysUntilExpiry } from "@/features/document-expiry/document-expiry-utils";
 import { useDriverDocuments } from "./use-drivers";
+import { DriverExtraDocuments } from "./driver-extra-documents";
 
 function formatFileSize(bytes: number | null): string {
   if (bytes == null) return "—";
@@ -188,8 +189,8 @@ export function DriverDocumentsTab({
 
   const uploadedCount = DOCUMENT_TYPES.filter((docType) => documents[docType]).length;
 
-  if (uploadedCount === 0) {
-    return (
+  const compliance =
+    uploadedCount === 0 ? (
       <Card className="rounded-xl border-border shadow-sm">
         <CardContent className="py-12">
           <AppEmptyState
@@ -211,57 +212,65 @@ export function DriverDocumentsTab({
           ) : null}
         </CardContent>
       </Card>
+    ) : (
+      <Card className="rounded-xl border-border shadow-sm">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b border-border py-4">
+          <div>
+            <CardTitle className="text-base font-semibold">
+              {t("documentsTabTitle")}
+            </CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("documentsTabSummary", { count: uploadedCount })}
+            </p>
+          </div>
+          {canManage && onEdit && intakeId ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="cursor-pointer rounded-lg"
+              onClick={onEdit}
+            >
+              {t("documentsManage")}
+            </Button>
+          ) : null}
+        </CardHeader>
+        <CardContent className="py-4">
+          <div
+            className={cn(
+              "grid gap-3",
+              "sm:grid-cols-2",
+              uploadedCount >= 3 && "lg:grid-cols-2",
+            )}
+          >
+            {DOCUMENT_TYPES.map((docType) => (
+              <DocumentCard
+                key={docType}
+                doc={documents[docType]}
+                label={tNew(`documents.${docType}`)}
+                viewLabel={t("viewDocument")}
+                previewLabel={t("previewDocument")}
+                notUploadedLabel={t("documentsNotUploaded")}
+                expiryLabel={(days) =>
+                  days < 0
+                    ? tExpiry("expired", { days: Math.abs(days) })
+                    : tExpiry("daysLeft", { days })
+                }
+              />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     );
-  }
 
   return (
-    <Card className="rounded-xl border-border shadow-sm">
-      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b border-border py-4">
-        <div>
-          <CardTitle className="text-base font-semibold">
-            {t("documentsTabTitle")}
-          </CardTitle>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {t("documentsTabSummary", { count: uploadedCount })}
-          </p>
-        </div>
-        {canManage && onEdit && intakeId ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="cursor-pointer rounded-lg"
-            onClick={onEdit}
-          >
-            {t("documentsManage")}
-          </Button>
-        ) : null}
-      </CardHeader>
-      <CardContent className="py-4">
-        <div
-          className={cn(
-            "grid gap-3",
-            "sm:grid-cols-2",
-            uploadedCount >= 3 && "lg:grid-cols-2",
-          )}
-        >
-          {DOCUMENT_TYPES.map((docType) => (
-            <DocumentCard
-              key={docType}
-              doc={documents[docType]}
-              label={tNew(`documents.${docType}`)}
-              viewLabel={t("viewDocument")}
-              previewLabel={t("previewDocument")}
-              notUploadedLabel={t("documentsNotUploaded")}
-              expiryLabel={(days) =>
-                days < 0
-                  ? tExpiry("expired", { days: Math.abs(days) })
-                  : tExpiry("daysLeft", { days })
-              }
-            />
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <div className="space-y-3">
+      {compliance}
+      <DriverExtraDocuments
+        intakeId={intakeId}
+        profileId={profileId}
+        canManage={canManage}
+      />
+    </div>
   );
 }

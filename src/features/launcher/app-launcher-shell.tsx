@@ -111,16 +111,20 @@ export function AppLauncherShell() {
 
   return (
     <div
-      className={`${launcherFontClassName} relative flex h-full min-h-svh flex-col overflow-hidden`}
+      className={`${launcherFontClassName} relative flex h-full min-h-svh flex-col overflow-hidden font-medium`}
       style={{
-        backgroundColor: "#f3f1ec",
-        backgroundImage: "url(/launcher-canvas.png)",
-        backgroundPosition: "center bottom",
-        backgroundSize: "cover",
+        backgroundColor: LAUNCHER_BRAND.canvas,
         color: LAUNCHER_BRAND.text,
         fontFamily: 'var(--font-launcher), "Noto Sans Arabic", "Segoe UI", sans-serif',
       }}
     >
+      <img
+        src="/launcher-mg-watermark.png"
+        alt=""
+        aria-hidden
+        className="pointer-events-none absolute -bottom-[150px] -end-10 w-[520px] opacity-60"
+      />
+
       <header
         className="relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-4 px-6 py-2.5 text-white"
         style={{ backgroundColor: LAUNCHER_BRAND.topBar }}
@@ -135,7 +139,7 @@ export function AppLauncherShell() {
             <span className="truncate text-[13px] font-bold tracking-[0.04em]">
               {branding.appName}
             </span>
-            <span className="truncate text-[11px]" style={{ color: LAUNCHER_BRAND.muted }}>
+            <span className="truncate text-[11px] font-medium" style={{ color: LAUNCHER_BRAND.muted }}>
               {branding.appSubtitle}
             </span>
           </span>
@@ -165,7 +169,7 @@ export function AppLauncherShell() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("searchPlaceholder")}
-            className="h-auto w-full flex-1 border-0 bg-transparent p-0 text-[13px] text-white shadow-none focus-visible:border-0 focus-visible:ring-0"
+            className="h-auto w-full flex-1 border-0 bg-transparent p-0 text-[13px] font-medium text-white shadow-none focus-visible:border-0 focus-visible:ring-0"
           />
           <kbd
             className="hidden shrink-0 rounded px-[5px] py-px text-[11px] sm:inline"
@@ -239,12 +243,12 @@ export function AppLauncherShell() {
             style={{ backgroundColor: LAUNCHER_BRAND.accent }}
           />
           <h1
-            className="m-0 text-[18px] font-normal tracking-[0.01em]"
+            className="m-0 text-[18px] font-bold tracking-[0.01em]"
             style={{ color: LAUNCHER_BRAND.text }}
           >
-            {t(`greeting.${greeting}`)}, <span className="font-semibold">{displayName}</span>
+            {t(`greeting.${greeting}`)}, <span className="font-bold">{displayName}</span>
           </h1>
-          <p className="m-0 text-[12.5px]" style={{ color: LAUNCHER_BRAND.subText }}>
+          <p className="m-0 text-[12.5px] font-medium" style={{ color: LAUNCHER_BRAND.subText }}>
             {t("subtitle")}
           </p>
         </div>
@@ -286,7 +290,7 @@ export function AppLauncherShell() {
                     ) : null}
                   </span>
                   <span
-                    className="text-[12px] font-medium leading-[1.3]"
+                    className="text-[12px] font-bold leading-[1.3]"
                     style={{ color: LAUNCHER_BRAND.tileLabel }}
                   >
                     {labels.get(item.id) ?? item.defaultLabel}
@@ -314,10 +318,10 @@ export function AppLauncherShell() {
       </main>
 
       <footer
-        className="relative z-10 shrink-0 px-4 pt-[18px] pb-[22px] text-center text-[12px]"
+        className="relative z-10 shrink-0 px-4 pt-[18px] pb-[22px] text-center text-[12px] font-medium"
         style={{ color: LAUNCHER_BRAND.footer }}
       >
-        <span className="font-semibold" style={{ color: LAUNCHER_BRAND.text }}>
+        <span className="font-bold" style={{ color: LAUNCHER_BRAND.text }}>
           {t("company")}
         </span>
       </footer>

@@ -4,15 +4,24 @@ import {
   AlertTriangle,
   ClipboardX,
   ShieldAlert,
+  UserCheck,
   UserMinus,
   UserPlus,
   Wallet,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import { MetricTile, type Tone } from "@/components/ui/metric-tile";
+import { cn } from "@/lib/utils";
 import type { DashboardKpis } from "../types";
 
-export function AdminKpiBar({ kpis }: { kpis: DashboardKpis }) {
+export function AdminKpiBar({
+  kpis,
+  canViewDrivers = false,
+}: {
+  kpis: DashboardKpis;
+  canViewDrivers?: boolean;
+}) {
   const t = useTranslations("pages.dashboard");
 
   const items: Array<{
@@ -20,6 +29,8 @@ export function AdminKpiBar({ kpis }: { kpis: DashboardKpis }) {
     value: number;
     icon: typeof UserPlus;
     tone: Tone;
+    href?: string;
+    hint?: string;
   }> = [
     {
       label: t("kpiPendingAccess"),
@@ -27,6 +38,20 @@ export function AdminKpiBar({ kpis }: { kpis: DashboardKpis }) {
       icon: UserPlus,
       tone: kpis.pendingAccessRequests > 0 ? "warning" : "neutral",
     },
+  ];
+
+  if (canViewDrivers) {
+    items.push({
+      label: t("kpiPendingEmployees"),
+      value: kpis.pendingEmployeeVerifications,
+      icon: UserCheck,
+      tone: kpis.pendingEmployeeVerifications > 0 ? "warning" : "success",
+      href: "/drivers?tab=pending",
+      hint: kpis.pendingEmployeeVerifications > 0 ? t("kpiPendingEmployeesHint") : undefined,
+    });
+  }
+
+  items.push(
     {
       label: t("kpiVerificationBacklog"),
       value: kpis.verificationBacklog,
@@ -57,19 +82,41 @@ export function AdminKpiBar({ kpis }: { kpis: DashboardKpis }) {
       icon: UserMinus,
       tone: kpis.absentToday > 0 ? "danger" : "success",
     },
-  ];
+  );
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-      {items.map((item) => (
-        <MetricTile
-          key={item.label}
-          label={item.label}
-          value={item.value}
-          icon={item.icon}
-          tone={item.tone}
-        />
-      ))}
+    <div
+      className={cn(
+        "grid grid-cols-2 gap-2 sm:grid-cols-3",
+        items.length > 6 ? "xl:grid-cols-7" : "xl:grid-cols-6",
+      )}
+    >
+      {items.map((item) =>
+        item.href ? (
+          <Link
+            key={item.label}
+            href={item.href}
+            className="group block cursor-pointer rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <MetricTile
+              label={item.label}
+              value={item.value}
+              icon={item.icon}
+              tone={item.tone}
+              hint={item.hint}
+              className="h-full transition-colors duration-150 group-hover:border-primary/40"
+            />
+          </Link>
+        ) : (
+          <MetricTile
+            key={item.label}
+            label={item.label}
+            value={item.value}
+            icon={item.icon}
+            tone={item.tone}
+          />
+        ),
+      )}
     </div>
   );
 }

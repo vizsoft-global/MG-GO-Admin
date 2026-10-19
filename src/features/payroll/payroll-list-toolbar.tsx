@@ -6,15 +6,18 @@ import {
   useListViewPrefs,
 } from "@/components/app/app-list-controls";
 import { useTranslations } from "next-intl";
+import type { ReactNode } from "react";
 
 export function PayrollListToolbar({
   prefKey,
   search,
   onSearchChange,
+  trailing,
 }: {
   prefKey: string;
   search: string;
   onSearchChange: (value: string) => void;
+  trailing?: ReactNode;
 }) {
   const t = useTranslations("pages.payroll");
   const labels = useListControlLabels();
@@ -25,15 +28,6 @@ export function PayrollListToolbar({
       onSearchChange={onSearchChange}
       searchPlaceholder={t("searchPlaceholder")}
       clearSearchLabel={labels.clearSearch}
-      searchFields={[
-        labels.field.all,
-        labels.field.name,
-        labels.field.employee_id,
-        labels.field.zone,
-      ]}
-      searchField={prefs.searchField}
-      onSearchFieldChange={(value) => update({ searchField: value })}
-      searchFieldLabel={labels.searchBy}
       groupByOptions={[labels.group.none, labels.group.zone, labels.group.partner, labels.group.status]}
       groupBy={prefs.groupBy}
       onGroupByChange={(value) => update({ groupBy: value })}
@@ -42,6 +36,7 @@ export function PayrollListToolbar({
       onViewModeChange={(value) => update({ viewMode: value })}
       tableViewLabel={labels.viewTable}
       cardsViewLabel={labels.viewCards}
+      trailing={trailing}
     />
   );
 }

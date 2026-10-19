@@ -69,14 +69,14 @@ export function DocumentExpiryPageShell() {
     const all = data?.rows ?? [];
     return all.filter((row) => {
       if (row.bucket !== bucket) return false;
-      return fieldSearchMatch(row, search, prefs.searchField, {
+      return fieldSearchMatch(row, search, {
         name: (item) => item.driverName,
         employee_id: (item) => item.driverCode,
         status: (item) => item.bucket,
         docType: (item) => tDocs(item.docType),
       });
     });
-  }, [bucket, data?.rows, prefs.searchField, search, tDocs]);
+  }, [bucket, data?.rows, search, tDocs]);
   const grouped = useMemo(
     () =>
       groupRows(
@@ -162,10 +162,6 @@ export function DocumentExpiryPageShell() {
             onSearchChange={setSearch}
             searchPlaceholder={t("searchPlaceholder")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[labels.field.all, labels.field.name, labels.field.employee_id, labels.field.status]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => update({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             groupByOptions={[labels.group.none, labels.group.status]}
             groupBy={prefs.groupBy}
             onGroupByChange={(value) => update({ groupBy: value })}

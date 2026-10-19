@@ -76,6 +76,20 @@ export function buildDriverDocumentKey(
   return `drivers/${driverId}/${docType}.${ext}`;
 }
 
+export function buildIntakeExtraDocumentKey(
+  intakeId: string,
+  ext: string,
+): string {
+  return `drivers/intakes/${intakeId}/extras/${crypto.randomUUID()}.${ext}`;
+}
+
+export function buildDriverExtraDocumentKey(
+  driverId: string,
+  ext: string,
+): string {
+  return `drivers/${driverId}/extras/${crypto.randomUUID()}.${ext}`;
+}
+
 export function buildIntakeAvatarKey(intakeId: string, ext: string): string {
   return `drivers/intakes/${intakeId}/avatar.${ext}`;
 }

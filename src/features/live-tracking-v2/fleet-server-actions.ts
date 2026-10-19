@@ -5,10 +5,10 @@ import type { DocumentData, Firestore } from "firebase-admin/firestore";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
-import { fetchEdgeHistory } from "@/lib/fleet/edge-read";
+import { fetchEdgeHistory, type EdgeArchivePoint } from "@/lib/fleet/edge-read";
 import { gpsR2Since } from "@/lib/fleet/gps-cutover";
 
-import { buildDayRouteTrack } from "./day-route-build";
+import { buildDayRouteTrack, mergeArchivePoints } from "./day-route-build";
 import { toFleetZone } from "./fleet-zones";
 import type { FleetSnapshotRow } from "./fleet-store";
 import type { FleetZone } from "./fleet-types";
@@ -43,21 +43,68 @@ function fromDoc(id: string, data: DocumentData | undefined): Loose {
 
 type DayRouteResponse = Loose & { distance_source?: string; distance_m?: number };
 
-async function edgeDayTrack(driverId: string, date: string) {
+/** The rider's shift, when the panel knows it. A night shift can end on the next Kuwait day. */
+export type DayRouteWindow = { from: string; to: string };
+
+function kuwaitDayOf(ms: number): string {
+  return new Date(ms + 3 * 3600_000).toISOString().slice(0, 10);
+}
+
+/** Kuwait calendar days touched by a window. A shift is at most two days wide. */
+function windowDays(fromIso: string, toIso: string): string[] {
+  const fromMs = Date.parse(fromIso);
+  const toMs = Date.parse(toIso);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs < fromMs) return [];
+  const days: string[] = [];
+  for (let ms = fromMs; ms <= toMs && days.length < 2; ms += 86_400_000) {
+    const day = kuwaitDayOf(ms);
+    if (!days.includes(day)) days.push(day);
+  }
+  const last = kuwaitDayOf(toMs);
+  if (!days.includes(last) && days.length < 2) days.push(last);
+  return days;
+}
+
+/**
+ * Archive points for the route. A shift that crosses Kuwait midnight is stored in
+ * two day objects, so both are read and merged inside `[from, to]`; without a
+ * window the route stays one calendar day (00:00–24:00 Kuwait).
+ */
+async function edgeDayTrack(driverId: string, date: string, window?: DayRouteWindow) {
   const db = await staffDb();
   if (!db) return null;
   const since = await gpsR2Since(db);
-  if (!since || date < since) return null;
-  const result = await fetchEdgeHistory(driverId, date, false);
-  if (result.kind !== "ok" || result.history.points.length === 0) return null;
-  return buildDayRouteTrack(result.history.points);
+  if (!since) return null;
+
+  const fromMs = window ? Date.parse(window.from) : Date.parse(`${date}T00:00:00+03:00`);
+  const toMs = window ? Date.parse(window.to) : Date.parse(`${date}T23:59:59.999+03:00`);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs < fromMs) return null;
+
+  const days = (window ? windowDays(window.from, window.to) : [date]).filter(
+    (day) => day >= since,
+  );
+  if (days.length === 0) return null;
+
+  const histories = await Promise.all(days.map((day) => fetchEdgeHistory(driverId, day, false)));
+  const pointsByDay: EdgeArchivePoint[][] = [];
+  for (const history of histories) {
+    // A day outside the hot window needs an explicit archive read; the day route
+    // does not pay that fee, so it falls back to the stored day route instead.
+    if (history.kind !== "ok") return null;
+    pointsByDay.push(history.history.points);
+  }
+
+  const points = mergeArchivePoints(pointsByDay, fromMs, toMs);
+  if (points.length === 0) return null;
+  return buildDayRouteTrack(points);
 }
 
-export async function fetchDriverDayRoute(driverId: string, date: string) {
-  const track = await edgeDayTrack(driverId, date).catch(() => null);
+export async function fetchDriverDayRoute(driverId: string, date: string, window?: DayRouteWindow) {
+  const track = await edgeDayTrack(driverId, date, window).catch(() => null);
   const response = await callAdminFunction<DayRouteResponse>("admin_get_driver_day_route", {
     driverId,
     date,
+    ...(window ? { from: window.from, to: window.to } : {}),
     skipEvents: track != null,
   });
   if (!track || response.error || !response.data) return response;

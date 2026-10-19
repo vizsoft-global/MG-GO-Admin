@@ -35,7 +35,9 @@ export function syntheticAbsenceField(
 export function withAbsenceDateFields(
   fields: EsignTemplateFieldRow[],
   templateId: string,
+  enabled = true,
 ): EsignTemplateFieldRow[] {
+  if (!enabled) return fields;
   const next = [...fields];
   if (!hasAbsenceKey(fields, ABSENCE_FROM_KEYS)) {
     next.push(syntheticAbsenceField("absence_from", templateId));

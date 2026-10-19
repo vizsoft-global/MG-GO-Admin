@@ -421,12 +421,13 @@ export async function fetchEsignRequestDetail(
 
   const row = loaded.row;
   const driverId = row.driver_id != null ? String(row.driver_id) : "";
-  const [driver, profile, categories] = await Promise.all([
+  const [driver, profile, categories, attachments] = await Promise.all([
     driverId ? getDoc(COLLECTIONS.drivers, driverId) : Promise.resolve({ row: null, error: null }),
     driverId ? getDoc(COLLECTIONS.profiles, driverId) : Promise.resolve({ row: null, error: null }),
     row.category_key != null
       ? queryDocs(COLLECTIONS.esignCategories, [["key", String(row.category_key)]])
       : Promise.resolve({ rows: [] as DocRow[], error: null }),
+    queryDocs(COLLECTIONS.esignRequestAttachments, [["request_id", id]]),
   ]);
   const drivers: DocRow = driver.row ?? { id: "" };
   const profiles: DocRow = profile.row ?? { id: "" };
@@ -461,6 +462,21 @@ export async function fetchEsignRequestDetail(
       position: snapshotField(row, "position"),
       civil_id: snapshotField(row, "civil_id"),
       zone_name: snapshotField(row, "zone"),
+      review_status: row.review_status != null ? String(row.review_status) : null,
+      review_note: row.review_note != null ? String(row.review_note) : null,
+      reviewed_at: row.reviewed_at != null ? String(row.reviewed_at) : null,
+      attachments: attachments.rows
+        .map((attachment) => ({
+          id: String(attachment.id),
+          name: String(attachment.name ?? "Attachment"),
+          content_type:
+            attachment.content_type != null ? String(attachment.content_type) : null,
+          size: Number(attachment.size ?? 0),
+          source: attachment.source != null ? String(attachment.source) : "admin",
+          created_at: attachment.created_at != null ? String(attachment.created_at) : null,
+          downloadUrl: esignDocumentHref(String(attachment.id), "attachment", "attachment"),
+        }))
+        .sort((a, b) => String(a.created_at ?? "").localeCompare(String(b.created_at ?? ""))),
     },
   };
 }
@@ -798,4 +814,96 @@ export async function fetchEsignDriverOptions(): Promise<{
       };
     }),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Attachments + management decision
+// ---------------------------------------------------------------------------
+
+const ATTACHMENT_MIME_EXT: Record<string, string> = {
+  "application/pdf": "pdf",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+};
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+/** Uploads one supporting file and returns its R2 key; the caller registers it. */
+export async function uploadEsignAttachmentFile(
+  formData: FormData,
+): Promise<{ ok: boolean; key?: string; name?: string; contentType?: string; size?: number; error?: string }> {
+  await requireRequestsManage();
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "missing_file" };
+  const ext = ATTACHMENT_MIME_EXT[file.type];
+  if (!ext) return { ok: false, error: "unsupported_attachment_type" };
+  if (file.size > MAX_ATTACHMENT_BYTES) return { ok: false, error: "file_too_large" };
+
+  const key = `admin/${crypto.randomUUID()}.${ext}`;
+  const uploaded = await putEsignObject(key, Buffer.from(await file.arrayBuffer()), file.type);
+  if (!uploaded.ok) return { ok: false, error: uploaded.error };
+  return {
+    ok: true,
+    key,
+    name: file.name || `attachment.${ext}`,
+    contentType: file.type,
+    size: file.size,
+  };
+}
+
+export async function addEsignAttachment(input: {
+  requestId: string;
+  storageKey: string;
+  name: string;
+  contentType: string;
+  size: number;
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  await requireRequestsManage();
+  const { data, error } = await callAdminFunction<{
+    ok?: boolean;
+    error?: string;
+    attachment?: { id?: string };
+  }>("adminAddEsignAttachment", {
+    requestId: input.requestId,
+    storageKey: input.storageKey,
+    name: input.name,
+    contentType: input.contentType,
+    size: input.size,
+  });
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error ?? "add_failed" };
+  return { ok: true, id: data.attachment?.id };
+}
+
+export async function removeEsignAttachment(
+  attachmentId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireRequestsManage();
+  const { data, error } = await callAdminFunction<{ ok?: boolean; error?: string }>(
+    "adminRemoveEsignAttachment",
+    { attachmentId },
+  );
+  if (error) return { ok: false, error: error.message };
+  return data?.ok ? { ok: true } : { ok: false, error: data?.error ?? "remove_failed" };
+}
+
+export type EsignReviewDecision = "approve" | "acknowledge" | "reject";
+
+export async function decideEsignRequest(input: {
+  requestId: string;
+  decision: EsignReviewDecision;
+  note?: string | null;
+}): Promise<{ ok: boolean; reviewStatus?: string; error?: string }> {
+  await requireRequestsManage();
+  const { data, error } = await callAdminFunction<{
+    ok?: boolean;
+    error?: string;
+    review_status?: string;
+  }>("adminDecideEsignRequest", {
+    requestId: input.requestId,
+    decision: input.decision,
+    note: input.note ?? null,
+  });
+  if (error) return { ok: false, error: error.message };
+  if (!data?.ok) return { ok: false, error: data?.error ?? "decision_failed" };
+  return { ok: true, reviewStatus: data.review_status };
 }

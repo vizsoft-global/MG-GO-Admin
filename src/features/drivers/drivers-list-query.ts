@@ -41,6 +41,31 @@ export type DriversTab = "all" | "pending" | "on_duty" | "multi_device" | "archi
 export type DriversSortDir = "asc" | "desc";
 export type DriversSort = { key: string; dir: DriversSortDir };
 
+export const DRIVERS_TABS: readonly DriversTab[] = [
+  "all",
+  "pending",
+  "on_duty",
+  "multi_device",
+  "archived",
+];
+
+/** Unknown or missing `?tab=` falls back to the default list, never to a blank filter. */
+export function parseDriversTab(value: string | null | undefined): DriversTab {
+  return DRIVERS_TABS.find((tab) => tab === value) ?? "all";
+}
+
+/** The list address for a tab; `all` stays bare so the default page keeps one URL. */
+export function driversListHref(tab: DriversTab): string {
+  return tab === "all" ? "/drivers" : `/drivers?tab=${tab}`;
+}
+
+/** Detail link carrying the tab it was opened from, so Back returns to that queue. */
+export function driverDetailHref(driverId: string, from?: string | null): string {
+  return from && from !== "all"
+    ? `/drivers/${driverId}?from=${encodeURIComponent(from)}`
+    : `/drivers/${driverId}`;
+}
+
 export const DEFAULT_DRIVERS_SORT: DriversSort = { key: "name", dir: "asc" };
 
 const CUSTOM_COLUMN_RE = /^cf:[A-Za-z0-9_]{1,64}$/;
@@ -186,5 +211,8 @@ export function mapDriversPageRow(raw: RawPageRow): DriverListPageRow {
     project_key: str(raw.project_key),
     civil_id: str(raw.civil_id),
     passport_number: str(raw.passport_number),
+    vehicle_id: str(raw.vehicle_id),
+    vehicle_label: str(raw.vehicle_label),
+    vehicle_type_key: str(raw.vehicle_type_key),
   };
 }

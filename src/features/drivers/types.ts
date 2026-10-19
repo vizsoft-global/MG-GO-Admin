@@ -114,6 +114,18 @@ export type DriverRemoteDocument = {
   expiry?: DocumentExpiryConfig;
 };
 
+/** Admin-named attachment beyond the six fixed compliance slots. */
+export type DriverExtraDocument = {
+  id: string;
+  title: string;
+  objectKey: string;
+  signedUrl: string;
+  sizeBytes: number | null;
+  contentType: string | null;
+  source: "driver" | "intake";
+  uploadedAt: string | null;
+};
+
 export type DriverAssignMutationResult = {
   error?: string;
   success?: boolean;
@@ -184,6 +196,11 @@ export type DriverListRow = {
   project_key: string | null;
   civil_id: string | null;
   passport_number: string | null;
+  /** Assigned vehicle plate, when one is linked. */
+  vehicle_id: string | null;
+  vehicle_label: string | null;
+  /** `bike` / `car` — the roster badge, independent of whether a plate is linked. */
+  vehicle_type_key: string | null;
 };
 
 /** mg = in-house (system company), partner = outsourced with a company, unassigned = outsourced with none. */
@@ -275,6 +292,7 @@ export const DRIVER_IMPORT_FIELDS = [
   "partner_id",
   "zone_id",
   "vehicle_label",
+  "vehicle_type",
   "nationality",
   "rider_category",
   "source_company",
@@ -341,6 +359,8 @@ export type DriverImportMappedRow = {
   /** Optional zone UUID, code, or unique name from the spreadsheet. */
   zone_id: string | null;
   vehicle_label: string | null;
+  /** `bike` / `car`, or any label the sheet uses. Blank defaults to bike. */
+  vehicle_type: string | null;
   /** Comma-separated restaurant name, restaurant_code, and/or UUID. */
   restaurant_ids: string | null;
   nationality: string | null;
@@ -362,6 +382,7 @@ export type DriverImportPreviewRow = Omit<
   partner_id: string | null;
   zone_id: string | null;
   vehicle_id: string | null;
+  vehicle_type_key: string | null;
   restaurant_ids: string[];
   restaurant_names: string[];
   partner_name: string | null;

@@ -55,7 +55,7 @@ import { pickDriverAvatarKey } from "@/lib/storage/driver-avatar-key";
 import { syncDriverAvatarKey } from "@/lib/storage/sync-driver-avatar";
 import { isR2Configured } from "@/lib/storage/r2-config";
 import { deleteObjects, putObject } from "@/lib/storage/r2-client";
-import { listExistingDriverDocuments } from "@/lib/storage/driver-documents";
+import { listExistingDriverDocuments, listExtraDriverDocuments } from "@/lib/storage/driver-documents";
 import {
   parseExpiryConfigFromForm,
   upsertDocumentTracking,
@@ -81,6 +81,7 @@ import {
   type DriverAccountStatus,
   type DriverDetailModel,
   type DriverDocumentType,
+  type DriverExtraDocument,
   type DriverListRow,
   type DriverRemoteDocument,
   type DriverRiderCategory,
@@ -685,6 +686,8 @@ type IntakeListRow = {
   project_key: string | null;
   civil_id: string | null;
   passport_number: string | null;
+  vehicle_id: string | null;
+  vehicle_type_key: string | null;
   partners:
     | { name: string; logo_url: string | null }
     | { name: string; logo_url: string | null }[]
@@ -808,6 +811,8 @@ export async function fetchDriversForAdmin(options?: {
       project_key,
       civil_id,
       passport_number,
+      vehicle_id,
+      vehicle_type_key,
       partners (name, logo_url),
       zones (name)
     `,
@@ -848,6 +853,8 @@ export async function fetchDriversForAdmin(options?: {
       project_key: string | null;
       civil_id: string | null;
       passport_number: string | null;
+      vehicle_id: string | null;
+      vehicle_type_key: string | null;
     }
   >();
   const deliveryCountByDriverId = new Map<string, number>();
@@ -908,7 +915,7 @@ export async function fetchDriversForAdmin(options?: {
       fetchAllIn(linkedIds, (chunk) =>
         db
           .from("drivers")
-          .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id, avatar_object_key, zone_id, employee_status_key, section_keys, nationality_category_keys, project_key, civil_id, passport_number")
+          .select("id, status, is_on_duty, is_blocked, blocked_reason, app_passcode, employee_id, avatar_object_key, zone_id, employee_status_key, section_keys, nationality_category_keys, project_key, civil_id, passport_number, vehicle_id, vehicle_type_key")
           .in("id", chunk),
       ),
       fetchAllIn(linkedIds, (chunk) =>
@@ -937,6 +944,8 @@ export async function fetchDriversForAdmin(options?: {
         project_key: driver.project_key ?? null,
         civil_id: driver.civil_id ?? null,
         passport_number: driver.passport_number ?? null,
+        vehicle_id: driver.vehicle_id ?? null,
+        vehicle_type_key: driver.vehicle_type_key ?? null,
       });
     }
 
@@ -950,6 +959,34 @@ export async function fetchDriversForAdmin(options?: {
 
   const partnerLogoCache = new Map<string, string | null>();
   const avatarCache = new Map<string, string | null>();
+
+  const vehicleIds = [
+    ...new Set(
+      [
+        ...rows.map((row) => row.vehicle_id),
+        ...[...driverByProfileId.values()].map((driver) => driver.vehicle_id),
+      ].filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const vehicleById = new Map<string, { label: string | null; typeKey: string | null }>();
+  if (vehicleIds.length > 0) {
+    const vehicleRows = await fetchAllIn(vehicleIds, (chunk) =>
+      db.from("vehicles").select("id, bike_id, reg_number, vehicle_type_key").in("id", chunk),
+    );
+    for (const vehicle of (vehicleRows ?? []) as Array<{
+      id: string;
+      bike_id: string;
+      reg_number: string | null;
+      vehicle_type_key: string | null;
+    }>) {
+      vehicleById.set(vehicle.id, {
+        // The plate is the Vehicle ID the roster and the fleet list both show;
+        // `bike_id` is only a slug alias for rows that predate plates.
+        label: vehicle.reg_number ?? vehicle.bike_id ?? null,
+        typeKey: vehicle.vehicle_type_key ?? null,
+      });
+    }
+  }
 
   return Promise.all(
     rows.map(async (row) => {
@@ -991,6 +1028,9 @@ export async function fetchDriversForAdmin(options?: {
           avatarCache.set(avatarKey, avatar_display_url);
         }
       }
+
+      const vehicleId = linkedDriver?.vehicle_id ?? row.vehicle_id ?? null;
+      const vehicleInfo = vehicleId ? vehicleById.get(vehicleId) : undefined;
 
       return {
         id: row.id,
@@ -1041,6 +1081,10 @@ export async function fetchDriversForAdmin(options?: {
         project_key: row.project_key ?? linkedDriver?.project_key ?? null,
         civil_id: row.civil_id ?? linkedDriver?.civil_id ?? null,
         passport_number: row.passport_number ?? linkedDriver?.passport_number ?? null,
+        vehicle_id: linkedDriver?.vehicle_id ?? row.vehicle_id ?? null,
+        vehicle_label: vehicleInfo?.label ?? null,
+        vehicle_type_key:
+          linkedDriver?.vehicle_type_key ?? vehicleInfo?.typeKey ?? row.vehicle_type_key ?? null,
       };
     }),
   );
@@ -1554,6 +1598,15 @@ export async function fetchDriverDocuments(
   await requireDriversView();
   if (!intakeId) return {};
   return listExistingDriverDocuments(intakeId, driverProfileId);
+}
+
+export async function fetchDriverExtraDocuments(
+  intakeId: string,
+  driverProfileId: string | null,
+): Promise<DriverExtraDocument[]> {
+  await requireDriversView();
+  if (!intakeId) return [];
+  return listExtraDriverDocuments(intakeId, driverProfileId);
 }
 
 const EMPTY_FREEZE = {

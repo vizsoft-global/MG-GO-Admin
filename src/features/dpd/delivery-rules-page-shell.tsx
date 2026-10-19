@@ -65,14 +65,14 @@ export function DeliveryRulesPageShell() {
   const filteredRules = useMemo(
     () =>
       (deliveryRules ?? []).filter((row) =>
-        fieldSearchMatch(row, search, prefs.searchField, {
+        fieldSearchMatch(row, search, {
           name: (item) => item.name,
           status: (item) => item.status,
           scope_label: (item) => item.scope_label,
           scope_search: (item) => item.scope_search,
         }),
       ),
-    [deliveryRules, prefs.searchField, search],
+    [deliveryRules, search],
   );
   const grouped = useMemo(
     () =>
@@ -145,10 +145,6 @@ export function DeliveryRulesPageShell() {
               onSearchChange={setSearch}
               searchPlaceholder={tPage("searchPlaceholder")}
               clearSearchLabel={labels.clearSearch}
-              searchFields={[labels.field.all, labels.field.name, labels.field.status]}
-              searchField={prefs.searchField}
-              onSearchFieldChange={(value) => update({ searchField: value })}
-              searchFieldLabel={labels.searchBy}
               groupByOptions={[labels.group.none, labels.group.status]}
               groupBy={prefs.groupBy}
               onGroupByChange={(value) => update({ groupBy: value })}

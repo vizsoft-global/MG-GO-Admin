@@ -138,9 +138,7 @@ function trendCaption(
   );
 }
 
-const TYPE_FILTERS = [
-  "all",
-  "leave",
+const TYPE_FILTERS = ["leave",
   "sick_leave",
   "loan",
   "asset",
@@ -380,12 +378,10 @@ export function RequestsPageShell({
 
   const visibleRows = useMemo(
     () =>
-      prefs.searchField === "all"
-        ? rows
-        : rows.filter((row) =>
-            fieldSearchMatch(row, search, prefs.searchField, REQUEST_SEARCH_ACCESSORS),
-          ),
-    [prefs.searchField, rows, search],
+      rows.filter((row) =>
+        fieldSearchMatch(row, search, REQUEST_SEARCH_ACCESSORS),
+      ),
+    [rows, search],
   );
   const grouped = useMemo(
     () =>
@@ -618,16 +614,6 @@ export function RequestsPageShell({
             searchPlaceholder={t("searchPlaceholder")}
             searchAriaLabel={t("searchPlaceholder")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[
-              labels.field.all,
-              labels.field.name,
-              labels.field.employee_id,
-              labels.field.zone,
-              labels.field.status,
-            ]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             groupByOptions={[labels.group.none, labels.group.status, labels.group.zone]}
             groupBy={prefs.groupBy}
             onGroupByChange={(value) => updateListPrefs({ groupBy: value })}

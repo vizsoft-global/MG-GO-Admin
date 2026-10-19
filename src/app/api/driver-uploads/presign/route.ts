@@ -58,10 +58,11 @@ async function handler(request: Request): Promise<Response> {
     return NextResponse.json({ error: "invalid_entity_id" }, { status: 400 });
   }
 
-  const putKey =
-    validation.entityType === "esign_signature" ? esignObjectPath(objectKey) : objectKey;
+  const isEsignUpload =
+    validation.entityType === "esign_signature" || validation.entityType === "esign_attachment";
+  const putKey = isEsignUpload ? esignObjectPath(objectKey) : objectKey;
 
-  if (validation.entityType === "esign_signature") {
+  if (isEsignUpload) {
     if (!entityId) {
       return NextResponse.json({ error: "invalid_entity_id" }, { status: 400 });
     }
@@ -78,7 +79,7 @@ async function handler(request: Request): Promise<Response> {
   ).toISOString();
 
   let uploadId = "";
-  if (validation.entityType !== "esign_signature") {
+  if (!isEsignUpload) {
     const pending = await createPendingUpload({
       objectKey,
       contentType,
@@ -94,7 +95,7 @@ async function handler(request: Request): Promise<Response> {
     uploadId = pending.id;
   }
 
-  if (validation.entityType === "esign_signature" && !(await isR2Configured())) {
+  if (isEsignUpload && !(await isR2Configured())) {
     if (!esignR2WorkerConfig()) {
       return NextResponse.json({ error: "not_configured" }, { status: 503 });
     }

@@ -19,13 +19,7 @@ import { getFirestore, Timestamp, type Firestore } from "../core/fs";
 import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff, requireStaffFresh } from "../core/staff";
-import { fullScanFallback, lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
-import {
-  DRIVER_SEARCH_FIELD_MAP,
-  driverPrefixQueries,
-  driverPrefixQueriesForField,
-  tokenPrefixMatch,
-} from "../core/search-text";
+import { digitSubsequenceMatch, textContainsMatch } from "../core/search-text";
 import {
   logDriverOperation,
   pickBoolean,
@@ -36,7 +30,13 @@ import {
   pickTriBool,
   type Dict,
 } from "./_shared";
-import { canDeferDriverJoin, dedupeRestaurantEdges, rosterKpis } from "./driver-list-plan";
+import {
+  canDeferDriverJoin,
+  canonicalDriversGroupBy,
+  canonicalDriversSearchField,
+  dedupeRestaurantEdges,
+  rosterKpis,
+} from "./driver-list-plan";
 import { invalidateDriverHomeDailySafe } from "./driver-home";
 import { sendDriverHomeRefresh } from "./driver-refresh";
 
@@ -66,18 +66,6 @@ const LIST_FILTER_KEYS = new Set([
   "section",
   "nationalityCategory",
   "project",
-]);
-
-const GROUP_BY_KEYS = new Set([
-  "none",
-  "employeeStatus",
-  "zone",
-  "partner",
-  "project",
-  "company",
-  "section",
-  "nationalityCategory",
-  "riderCategory",
 ]);
 
 const SORT_KEYS = new Set([
@@ -331,12 +319,10 @@ function searchMatches(row: Dict, search: string | null, searchField: string | n
   const field = searchField && searchField !== "all" ? searchField : null;
   if (field) {
     const value = searchFieldValue(row, field);
-    if (field === "phone" || field === "civilId") {
-      const digits = needle.replace(/\D/g, "");
-      if (!digits) return false;
-      return String(value ?? "").replace(/\D/g, "").startsWith(digits);
-    }
-    return tokenPrefixMatch(typeof value === "string" ? value : "", needle);
+    const text = typeof value === "string" ? value : "";
+    if (field === "phone" || field === "civilId") return digitSubsequenceMatch(text, needle);
+    if (textContainsMatch(text, needle)) return true;
+    return field === "employeeId" || field === "driverId" ? digitSubsequenceMatch(text, needle) : false;
   }
   const fields = [
     row["full_name"],
@@ -350,11 +336,14 @@ function searchMatches(row: Dict, search: string | null, searchField: string | n
     row["company_client_code"],
     row["civil_id"],
     row["passport_number"],
+    row["email"],
+    row["phone_digits"],
   ];
-  if (fields.some((part) => tokenPrefixMatch(typeof part === "string" ? part : "", needle))) return true;
-  const digits = needle.replace(/\D/g, "");
-  if (digits === "") return false;
-  return String(row["phone_digits"] ?? "").startsWith(digits);
+  if (fields.some((part) => textContainsMatch(part, needle))) return true;
+  if (asStrList(row["restaurant_names"]).some((name) => textContainsMatch(name, needle))) return true;
+  return [row["mg_id"], row["driver_code"], row["civil_id"], row["passport_number"], row["phone_digits"]].some(
+    (part) => digitSubsequenceMatch(part, needle),
+  );
 }
 
 function groupKeyOf(row: Dict, groupBy: string): string {
@@ -579,6 +568,24 @@ async function loadDriverRows(
     if (devices.size > 1) multiDevice.add(driverId);
   }
 
+  // One lookup for the plates actually referenced, not the whole garage.
+  const vehicleIds = new Set<string>();
+  for (const doc of intakes) {
+    const id = asStr(doc.get("vehicle_id"));
+    if (id) vehicleIds.add(id);
+  }
+  for (const driver of driverById.values()) {
+    const id = asStr(driver["vehicle_id"]);
+    if (id) vehicleIds.add(id);
+  }
+  const vehicleById = new Map<string, Dict>();
+  if (vehicleIds.size > 0) {
+    const vehicleDocs = await timedPhase(marks, "vehiclesMs", () =>
+      docsByIds(db, COLLECTIONS.vehicles, [...vehicleIds]),
+    );
+    for (const snap of vehicleDocs) vehicleById.set(snap.id, (snap.data() ?? {}) as Dict);
+  }
+
   return intakes.map((doc) => {
     const intake = doc.data() as Dict;
     const linkedProfileId = asStr(intake["linked_profile_id"]);
@@ -600,6 +607,9 @@ async function loadDriverRows(
     const accountStatus = (driver ? asStr(driver["status"]) : null) ?? "pending";
     const isBlocked = driver ? driver["is_blocked"] === true : false;
 
+    const vehicleId = (driver ? asStr(driver["vehicle_id"]) : null) ?? asStr(intake["vehicle_id"]);
+    const vehicle = vehicleId ? vehicleById.get(vehicleId) : undefined;
+
     return {
       id: doc.id,
       created_at: instantOf(intake["created_at"]),
@@ -615,6 +625,16 @@ async function loadDriverRows(
       partner_logo_key: partnerId ? asStr(partnerById.get(partnerId)?.["logo_url"]) : null,
       zone_id: zoneId,
       zone_name: zoneId ? asStr(zoneById.get(zoneId)?.["name"]) : null,
+      vehicle_id: vehicleId,
+      vehicle_label: vehicle
+        ? asStr(vehicle["reg_number"]) ?? asStr(vehicle["bike_id"]) ?? null
+        : null,
+      // The live driver row wins, then the assigned vehicle: a car assigned
+      // after approval must not keep reading as the bike the intake sheet named.
+      vehicle_type_key:
+        (driver ? asStr(driver["vehicle_type_key"]) : null) ??
+        (vehicle ? asStr(vehicle["vehicle_type_key"]) : null) ??
+        asStr(intake["vehicle_type_key"]),
       restaurant_ids: restaurantIds,
       restaurant_names: restaurantNames,
       workflow_status: asStr(intake["workflow_status"]),
@@ -785,6 +805,19 @@ async function hydrateDeferredPage(rows: Dict[], phases: PhaseMarks): Promise<vo
       const zoneSnaps = await db.getAll(...zoneIds.map((id) => db.collection(COLLECTIONS.zones).doc(id)));
       for (const snap of zoneSnaps) zoneName.set(snap.id, asStr(snap.get("name")));
     }
+    const vehicleIds = [...new Set(
+      [...driverById.values()]
+        .map((driver) => asStr(driver["vehicle_id"]))
+        .concat(rows.map((row) => asStr(row["vehicle_id"])))
+        .filter((id): id is string => id !== null),
+    )];
+    const vehicleById = new Map<string, Dict>();
+    if (vehicleIds.length > 0) {
+      const vehicleSnaps = await db.getAll(...vehicleIds.map((id) => db.collection(COLLECTIONS.vehicles).doc(id)));
+      for (const snap of vehicleSnaps) {
+        if (snap.exists) vehicleById.set(snap.id, (snap.data() ?? {}) as Dict);
+      }
+    }
     for (const row of rows) {
       const linkedId = asStr(row["linked_profile_id"]);
       const driver = linkedId ? driverById.get(linkedId) : undefined;
@@ -795,6 +828,16 @@ async function hydrateDeferredPage(rows: Dict[], phases: PhaseMarks): Promise<vo
       row["mg_id"] = asStr(driver["employee_id"]) ?? asStr(row["mg_id"]);
       row["zone_id"] = zoneId;
       row["zone_name"] = zoneId ? zoneName.get(zoneId) ?? asStr(row["zone_name"]) : null;
+      const vehicleId = asStr(driver["vehicle_id"]) ?? asStr(row["vehicle_id"]);
+      const vehicle = vehicleId ? vehicleById.get(vehicleId) : undefined;
+      row["vehicle_id"] = vehicleId;
+      row["vehicle_label"] = vehicle
+        ? asStr(vehicle["reg_number"]) ?? asStr(vehicle["bike_id"]) ?? null
+        : asStr(row["vehicle_label"]);
+      row["vehicle_type_key"] =
+        asStr(driver["vehicle_type_key"]) ??
+        (vehicle ? asStr(vehicle["vehicle_type_key"]) : null) ??
+        asStr(row["vehicle_type_key"]);
       row["account_status"] = accountStatus;
       row["status_key"] = isBlocked ? "blocked" : accountStatus;
       row["is_blocked"] = isBlocked;
@@ -809,39 +852,27 @@ async function hydrateDeferredPage(rows: Dict[], phases: PhaseMarks): Promise<vo
 }
 
 /**
- * Search term + a stored `name_lower` → prefix query, then load those intakes.
- * No term, or no lowercase field yet (dump still running) → the existing fleet scan.
- * KPIs stay fleet-wide on the prefix path so the tiles do not shrink to the matches.
+ * The roster is about a thousand intakes. A field-start prefix query never
+ * loaded a surname, a restaurant, or the digits of `EMP13123`, and one missing
+ * index rejected the whole page so the panel kept the previous 953 rows.
+ * `searchMatches` runs on this full roster. KPIs stay fleet-wide.
  */
 async function loadDriversForList(
   archived: boolean,
   search: string | null,
   phases?: PhaseMarks,
   deferLive = false,
-  searchField: string | null = null,
 ): Promise<{ rows: Dict[]; kpis: DriverKpis | null }> {
   const term = (search ?? "").trim();
+  const rows = await loadDriverRows(archived, null, phases, term ? false : deferLive);
   if (!term) {
-    const rows = await loadDriverRows(archived, null, phases, deferLive);
     const kpis = deferLive ? await timedPhase(phases ?? {}, "kpiMs", () => fleetKpiCounts(archived)) : null;
     return { rows, kpis };
   }
-  const db = getFirestore();
-  const mapped =
-    searchField && searchField !== "all" && searchField in DRIVER_SEARCH_FIELD_MAP
-      ? DRIVER_SEARCH_FIELD_MAP[searchField as keyof typeof DRIVER_SEARCH_FIELD_MAP]
-      : "name_lower";
-  const indexField = mapped ?? "name_lower";
-  const indexed = await lowercaseFieldIndexed(db, COLLECTIONS.driverIntakes, indexField);
-  if (fullScanFallback(indexed, term)) return { rows: await loadDriverRows(archived, null, phases), kpis: null };
-  const queries = searchField && searchField !== "all" ? driverPrefixQueriesForField(term, searchField) : driverPrefixQueries(term);
-  if (queries.length === 0) return { rows: await loadDriverRows(archived, null, phases), kpis: null };
-  const ids = await prefixMatchIds(db, COLLECTIONS.driverIntakes, queries);
-  const rows = await loadDriverRows(archived, new Set(ids), phases);
   try {
     return { rows, kpis: await fleetKpiCounts(archived) };
   } catch {
-    return { rows: await loadDriverRows(archived, null, phases), kpis: null };
+    return { rows, kpis: null };
   }
 }
 
@@ -862,12 +893,8 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
   if (!DRIVER_TABS.has(tab)) throw new HttpsError("invalid-argument", "invalid_tab");
 
   const search = pickText(data, "search", "p_search");
-  const searchFieldRaw = (pickText(data, "searchField", "p_search_field") ?? "all").trim();
-  const searchField =
-    searchFieldRaw && searchFieldRaw in DRIVER_SEARCH_FIELD_MAP ? searchFieldRaw : "all";
-  const groupByRaw = (pickText(data, "groupBy", "p_group_by") ?? "none").trim();
-  if (!GROUP_BY_KEYS.has(groupByRaw)) throw new HttpsError("invalid-argument", "invalid_group_by");
-  const groupBy = groupByRaw;
+  const searchField = canonicalDriversSearchField(pickText(data, "searchField", "p_search_field"));
+  const groupBy = canonicalDriversGroupBy(pickText(data, "groupBy", "p_group_by"));
   const filters = validateFilters(data["filters"] ?? data["p_filters"] ?? {});
   const sortKey = pickText(data, "sortKey", "p_sort_key") ?? "name";
   if (!SORT_KEYS.has(sortKey) && !CUSTOM_KEY_PATTERN.test(sortKey)) {
@@ -884,7 +911,7 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
     sortKey,
   });
 
-  const loaded = await loadDriversForList(tab === "archived", search, phases, deferLive, searchField);
+  const loaded = await loadDriversForList(tab === "archived", search, phases, deferLive);
   const base = loaded.rows;
   const tabbed = base.filter((row) => tabMatches(row, tab));
   const filtered = tabbed.filter(

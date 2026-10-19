@@ -36,6 +36,35 @@ function dictMap(rows: readonly Row[]): Map<string, Dict> {
   return out;
 }
 
+/**
+ * Only the fields a snapshot reads come off the wire. A month of deliveries is
+ * tens of thousands of documents and the container runs at 1 GiB; selecting the
+ * four columns the roll needs is what keeps that inside the limit.
+ */
+async function loadLeanDocs(collection: string, fields: readonly string[]): Promise<Row[]> {
+  const snap = await getFirestore().collection(collection).select(...fields).get();
+  return snap.docs.map((doc) => toRow(doc.id, doc.data() as Dict));
+}
+
+/** `getAll` takes a bounded batch; a fleet-sized id list is fetched in chunks. */
+async function loadDocsInChunks(collection: string, ids: readonly string[]): Promise<Map<string, Dict>> {
+  const unique = Array.from(new Set(ids.filter((id) => id.length > 0)));
+  const out = new Map<string, Dict>();
+  for (let index = 0; index < unique.length; index += 300) {
+    const slice = unique.slice(index, index + 300);
+    const batch = await loadDocMap(collection, slice);
+    for (const [id, row] of batch) out.set(id, row as Dict);
+  }
+  return out;
+}
+
+function text(row: Dict, key: string): string | null {
+  const value = row[key];
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
 function dayDiff(from: string, to: string): number {  return Math.round((kuwaitDayStart(to).getTime() - kuwaitDayStart(from).getTime()) / 86400000);
 }
 
@@ -685,6 +714,14 @@ type RiderRoll = {
   zone_name: string | null;
   restaurant_id: string | null;
   store_name: string | null;
+  partner_id: string | null;
+  partner_key: string | null;
+  partner_label: string | null;
+  vehicle_key: string | null;
+  nationality: string | null;
+  project_key: string | null;
+  source_type: string | null;
+  source_company: string | null;
   orders: number;
   working_days: number;
   dpd: number | null;
@@ -753,30 +790,80 @@ async function buildRoll(args: OpsArgs): Promise<{
   driverById: Map<string, Dict>;
   zoneById: Map<string, Dict>;
   partnerById: Map<string, Dict>;
+  restaurantById: Map<string, Dict>;
+  nationalities: string[];
   targetDpd: number;
 }> {
   const db = getFirestore();
   const [driverSnaps, deliverySnaps, ruleSnaps, scopeSnaps, vehicleDocs, restaurantDocs, zoneDocs, partnerDocs, targetSnaps] =
     await Promise.all([
-      db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get(),
+      db
+        .collection(COLLECTIONS.drivers)
+        .where("archived_at", "==", null)
+        .select(
+          "zone_id",
+          "zone_name",
+          "partner_id",
+          "partner_name",
+          "project_key",
+          "vehicle_id",
+          "vehicle_type_key",
+          "profile_id",
+          "name",
+          "driver_code",
+          "employee_id",
+          "restaurant_id",
+          "nationality",
+          "status",
+          "source_type",
+          "source_company",
+        )
+        .get(),
       db
         .collection(COLLECTIONS.deliveries)
         .where(FIELDS.deliveries.deliveredAt, ">=", kuwaitDayStart(args.from))
         .where(FIELDS.deliveries.deliveredAt, "<", kuwaitDayEnd(args.to))
+        .select("status", "driver_id", "delivered_at", "restaurant_id")
         .get(),
       db.collection(COLLECTIONS.deliveryRules).get(),
       db.collection(COLLECTIONS.deliveryRuleScopes).get(),
-      loadAllDocs(COLLECTIONS.vehicles),
-      loadAllDocs(COLLECTIONS.restaurants),
-      loadAllDocs(COLLECTIONS.zones),
-      loadAllDocs(COLLECTIONS.partners),
+      loadLeanDocs(COLLECTIONS.vehicles, ["vehicle_type_key"]),
+      loadLeanDocs(COLLECTIONS.restaurants, ["name", "is_active"]),
+      loadLeanDocs(COLLECTIONS.zones, ["name"]),
+      loadLeanDocs(COLLECTIONS.partners, ["slug", "key", "name"]),
       db.collection(PERFORMANCE_TARGET_DPD).get(),
     ]);
+
+  const deliveryRows: Dict[] = deliverySnaps.docs.map((doc) => {
+    const row = doc.data() as Dict;
+    return {
+      status: row.status,
+      driver_id: row.driver_id,
+      delivered_at: row.delivered_at,
+      restaurant_id: row.restaurant_id,
+    };
+  });
+
+  const driverIds = driverSnaps.docs.map((doc) => doc.id);
+  const profileById = await loadDocsInChunks(COLLECTIONS.profiles, driverIds);
+  const profileIds = driverSnaps.docs
+    .map((doc) => text(doc.data() as Dict, "profile_id"))
+    .filter((id): id is string => id !== null);
+  const extraProfiles = await loadDocsInChunks(
+    COLLECTIONS.profiles,
+    profileIds.filter((id) => !profileById.has(id)),
+  );
+  for (const [id, row] of extraProfiles) profileById.set(id, row);
 
   const vehicleById = dictMap(vehicleDocs);
   const restaurantById = dictMap(restaurantDocs);
   const zoneById = dictMap(zoneDocs);
   const partnerById = dictMap(partnerDocs);
+  const partnerBySlug = new Map<string, Dict>();
+  for (const partner of partnerDocs) {
+    const slug = text(partner, "slug") ?? text(partner, "key");
+    if (slug) partnerBySlug.set(slug.toLowerCase(), partner);
+  }
 
   const globalTargets = targetSnaps.docs
     .map((doc) => toRow(doc.id, doc.data() as Dict))
@@ -814,8 +901,7 @@ async function buildRoll(args: OpsArgs): Promise<{
   for (const doc of driverSnaps.docs) driverById.set(doc.id, toRow(doc.id, doc.data() as Dict));
 
   const expected = new Set<string>();
-  for (const doc of deliverySnaps.docs) {
-    const row = doc.data() as Dict;
+  for (const row of deliveryRows) {
     if (row.status !== "verified") continue;
     const driverId = parseId(row.driver_id);
     if (!driverId) continue;
@@ -826,8 +912,7 @@ async function buildRoll(args: OpsArgs): Promise<{
     string,
     { orders: number; days: Set<string>; restaurantId: string | null; storeName: string | null }
   >();
-  for (const doc of deliverySnaps.docs) {
-    const row = doc.data() as Dict;
+  for (const row of deliveryRows) {
     if (row.status !== "verified") continue;
     const driverId = parseId(row.driver_id);
     if (!driverId) continue;
@@ -845,6 +930,47 @@ async function buildRoll(args: OpsArgs): Promise<{
     perDriver.set(driverId, entry);
   }
 
+  const resolvePartner = (driver: Dict): { id: string | null; key: string | null; label: string | null } => {
+    const directId = parseId(driver.partner_id);
+    if (directId) {
+      const partner = partnerById.get(directId);
+      const slug = text(partner ?? {}, "slug") ?? text(partner ?? {}, "key");
+      return {
+        id: directId,
+        key: slug ?? text(driver, "project_key"),
+        label: text(partner ?? {}, "name") ?? text(driver, "partner_name"),
+      };
+    }
+    const projectKey = text(driver, "project_key");
+    if (projectKey) {
+      const partner = partnerBySlug.get(projectKey.toLowerCase());
+      const slug = text(partner ?? {}, "slug") ?? text(partner ?? {}, "key");
+      return {
+        id: parseId(partner?.id),
+        key: slug ?? projectKey,
+        label: text(partner ?? {}, "name") ?? projectKey,
+      };
+    }
+    return { id: null, key: null, label: text(driver, "partner_name") };
+  };
+
+  const resolveVehicleKey = (driver: Dict): string | null => {
+    const vehicleId = parseId(driver.vehicle_id);
+    const vehicle = vehicleId ? vehicleById.get(vehicleId) : undefined;
+    return text(vehicle ?? {}, "vehicle_type_key") ?? text(driver, "vehicle_type_key");
+  };
+
+  const resolveDriverName = (driverId: string, driver: Dict): string | null => {
+    const profileId = text(driver, "profile_id");
+    const profile = profileById.get(driverId) ?? (profileId ? profileById.get(profileId) : undefined);
+    return (
+      text(profile ?? {}, "full_name") ??
+      text(driver, "name") ??
+      text(driver, "driver_code") ??
+      null
+    );
+  };
+
   const riders: RiderRoll[] = [];
   for (const driverId of expected) {
     const driver = driverById.get(driverId);
@@ -854,7 +980,8 @@ async function buildRoll(args: OpsArgs): Promise<{
     const zoneId = parseId(driver.zone_id);
     const restaurantId = entry.restaurantId ?? parseId(driver.restaurant_id);
     const zone = zoneId ? zoneById.get(zoneId) : undefined;
-    const zoneName = zone ? ((zone.name as string | null) ?? null) : null;
+    const zoneName = text(zone ?? {}, "name") ?? text(driver, "zone_name");
+    const partner = resolvePartner(driver);
     const target =
       (restaurantId ? restaurantRuleTarget.get(restaurantId) : undefined) ??
       (zoneId ? zoneRuleTarget.get(zoneId) : undefined) ??
@@ -863,13 +990,21 @@ async function buildRoll(args: OpsArgs): Promise<{
     const dpd = workingDays > 0 ? entry.orders / workingDays : null;
     riders.push({
       driver_id: driverId,
-      driver_name: (driver.name as string | null) ?? null,
-      driver_code: (driver.driver_code as string | null) ?? null,
-      employee_id: (driver.employee_id as string | null) ?? null,
+      driver_name: resolveDriverName(driverId, driver),
+      driver_code: text(driver, "driver_code"),
+      employee_id: text(driver, "employee_id"),
       zone_id: zoneId,
       zone_name: zoneName,
       restaurant_id: restaurantId,
       store_name: entry.storeName,
+      partner_id: partner.id,
+      partner_key: partner.key,
+      partner_label: partner.label,
+      vehicle_key: resolveVehicleKey(driver),
+      nationality: text(driver, "nationality"),
+      project_key: text(driver, "project_key"),
+      source_type: text(driver, "source_type"),
+      source_company: text(driver, "source_company"),
       orders: entry.orders,
       working_days: workingDays,
       dpd,
@@ -881,12 +1016,15 @@ async function buildRoll(args: OpsArgs): Promise<{
 
   const matches = (driver: Dict): boolean => {
     if (args.zoneIds && !args.zoneIds.includes(String(driver.zone_id ?? ""))) return false;
-    if (args.partnerIds && !args.partnerIds.includes(String(driver.partner_id ?? ""))) return false;
+    if (args.partnerIds) {
+      const partner = resolvePartner(driver);
+      const candidates = new Set([String(driver.partner_id ?? ""), partner.id ?? ""]);
+      if (!Array.from(candidates).some((id) => args.partnerIds?.includes(id))) return false;
+    }
     if (args.nationalities && !args.nationalities.includes(String(driver.nationality ?? ""))) return false;
     if (args.driverStatuses && !args.driverStatuses.includes(String(driver.status ?? ""))) return false;
     if (args.vehicleKeys) {
-      const vehicle = driver.vehicle_id ? vehicleById.get(String(driver.vehicle_id)) : undefined;
-      const key = (vehicle?.vehicle_type_key as string | null) ?? "—";
+      const key = resolveVehicleKey(driver) ?? "—";
       if (!args.vehicleKeys.includes(key)) return false;
     }
     if (args.companyIds && !args.companyIds.includes(String(driver.source_company ?? ""))) return false;
@@ -978,12 +1116,10 @@ async function buildRoll(args: OpsArgs): Promise<{
   });
 
   const scopedIds = new Set(scoped.map((row) => row.driver_id));
-  const scopedDeliveries = deliverySnaps.docs
-    .map((doc) => doc.data() as Dict)
-    .filter((row) => {
-      const driverId = parseId(row.driver_id);
-      return driverId !== null && scopedIds.has(driverId);
-    });
+  const scopedDeliveries = deliveryRows.filter((row) => {
+    const driverId = parseId(row.driver_id);
+    return driverId !== null && scopedIds.has(driverId);
+  });
 
   return {
     riders: scoped,
@@ -994,6 +1130,14 @@ async function buildRoll(args: OpsArgs): Promise<{
     driverById,
     zoneById,
     partnerById,
+    restaurantById,
+    nationalities: Array.from(
+      new Set(
+        Array.from(driverById.values())
+          .map((row) => row.nationality)
+          .filter((value): value is string => typeof value === "string" && value.length > 0),
+      ),
+    ).sort(),
     targetDpd,
   };
 }
@@ -1037,8 +1181,6 @@ export const adminPerformanceOpsSnapshot = measureOnCall("adminPerformanceOpsSna
   const roll = await buildRoll(args);
 
   const days = kuwaitDayRange(args.from, args.to);
-  const prevDays =
-    args.prevFrom && args.prevTo ? kuwaitDayRange(args.prevFrom, args.prevTo) : [];
 
   const sumOrders = (rows: Array<{ orders: number }>) => rows.reduce((sum, row) => sum + row.orders, 0);
   const sumDays = (rows: Array<{ working_days: number }>) =>
@@ -1111,12 +1253,7 @@ export const adminPerformanceOpsSnapshot = measureOnCall("adminPerformanceOpsSna
   const byVehicle = (): Dict[] => {
     const map = new Map<string, RiderRoll[]>();
     for (const row of roll.riders) {
-      const driver = roll.driverById.get(row.driver_id) ?? {};
-      const vehicle = driver.vehicle_id
-        ? roll.driverById.get(String(driver.vehicle_id))
-        : undefined;
-      void vehicle;
-      const key = (driver.vehicle_type_key as string | null) ?? "—";
+      const key = row.vehicle_key ?? "—";
       const list = map.get(key) ?? [];
       list.push(row);
       map.set(key, list);
@@ -1126,12 +1263,14 @@ export const adminPerformanceOpsSnapshot = measureOnCall("adminPerformanceOpsSna
       .sort((a, b) => String(a.key ?? "").localeCompare(String(b.key ?? "")));
   };
 
-  const byKey = (pick: (driver: Dict) => { id: string | null; label: string | null }): Dict[] => {
+  const byKey = (
+    pick: (driver: Dict, row: RiderRoll) => { id: string | null; label: string | null },
+  ): Dict[] => {
     const map = new Map<string, RiderRoll[]>();
     const labels = new Map<string, string | null>();
     for (const row of roll.riders) {
       const driver = roll.driverById.get(row.driver_id) ?? {};
-      const { id, label } = pick(driver);
+      const { id, label } = pick(driver, row);
       const key = id ?? "—";
       const list = map.get(key) ?? [];
       list.push(row);
@@ -1143,11 +1282,7 @@ export const adminPerformanceOpsSnapshot = measureOnCall("adminPerformanceOpsSna
       .sort((a, b) => String(a.key ?? "").localeCompare(String(b.key ?? "")));
   };
 
-  const byZone = byKey((driver) => {
-    const id = parseId(driver.zone_id);
-    const name = id ? roll.zoneById.get(id)?.name : undefined;
-    return { id, label: (name as string | null) ?? ((driver.zone_name as string | null) ?? null) };
-  });
+  const byZone = byKey((_driver, row) => ({ id: row.zone_id, label: row.zone_name }));
   await overlayZoneMonthDocs(getFirestore(), args.from, args.to, byZone);
 
   return {
@@ -1177,11 +1312,7 @@ export const adminPerformanceOpsSnapshot = measureOnCall("adminPerformanceOpsSna
     trend,
     by_vehicle: byVehicle(),
     by_zone: byZone,
-    by_partner: byKey((driver) => {
-      const id = parseId(driver.partner_id);
-      const name = id ? roll.partnerById.get(id)?.name : undefined;
-      return { id, label: (name as string | null) ?? ((driver.partner_name as string | null) ?? null) };
-    }),
+    by_partner: byKey((_driver, row) => ({ id: row.partner_id, label: row.partner_label })),
     by_nationality: byKey((driver) => ({
       id: parseId(driver.nationality),
       label: (driver.nationality as string | null) ?? null,
@@ -1199,13 +1330,13 @@ export const adminPerformanceOpsSnapshot = measureOnCall("adminPerformanceOpsSna
         driver_code: row.driver_code,
         zone_id: row.zone_id,
         zone: row.zone_name,
-        vehicle_key: null,
-        nationality: null,
-        project_key: null,
+        vehicle_key: row.vehicle_key,
+        nationality: row.nationality,
+        project_key: row.partner_key ?? row.project_key,
         store_id: row.restaurant_id,
         store: row.store_name,
-        source_type: null,
-        source_company: null,
+        source_type: row.source_type,
+        source_company: row.source_company,
         orders: row.orders,
         working_days: row.working_days,
         dpd: row.dpd,
@@ -1217,34 +1348,25 @@ export const adminPerformanceOpsSnapshot = measureOnCall("adminPerformanceOpsSna
         status: row.working_days > 0 ? "Active" : "Inactive",
       }))
       .sort((a, b) => b.orders - a.orders || String(a.name ?? "").localeCompare(String(b.name ?? ""))),
-    options: await snapshotOptions(days, prevDays),
+    options: optionsFromRoll(roll),
   };
 });
 
-async function snapshotOptions(days: string[], prevDays: string[]): Promise<Dict> {
-  const [zoneDocs, restaurantDocs, driverSnaps] = await Promise.all([
-    loadAllDocs(COLLECTIONS.zones),
-    loadAllDocs(COLLECTIONS.restaurants),
-    getFirestore().collection(COLLECTIONS.drivers).where("archived_at", "==", null).get(),
-  ]);
-  void days;
-  void prevDays;
-
-  const nationalities = new Set<string>();
-  for (const doc of driverSnaps.docs) {
-    const value = (doc.data() as Dict).nationality;
-    if (typeof value === "string" && value.length) nationalities.add(value);
-  }
-
+/** Built from the roll's own lean maps, so a snapshot reads each collection once. */
+function optionsFromRoll(roll: {
+  zoneById: Map<string, Dict>;
+  restaurantById: Map<string, Dict>;
+  nationalities: string[];
+}): Dict {
   return {
-    zones: zoneDocs
+    zones: Array.from(roll.zoneById.values())
       .map((zone) => ({ id: zone.id, name: (zone.name as string | null) ?? null }))
       .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""))),
-    restaurants: restaurantDocs
+    restaurants: Array.from(roll.restaurantById.values())
       .filter((restaurant) => restaurant.is_active === true)
       .map((restaurant) => ({ id: restaurant.id, name: (restaurant.name as string | null) ?? null }))
       .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""))),
-    nationalities: Array.from(nationalities).sort(),
+    nationalities: roll.nationalities,
   };
 }
 

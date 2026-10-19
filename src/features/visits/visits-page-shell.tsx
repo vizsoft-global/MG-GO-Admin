@@ -196,7 +196,7 @@ export function VisitsPageShell() {
     if (deptFilter !== "all") list = list.filter((r) => r.department_key === deptFilter);
     if (statusFilter !== "all") list = list.filter((r) => r.status === statusFilter);
     list = list.filter((r) =>
-      fieldSearchMatch(r, search, prefs.searchField, {
+      fieldSearchMatch(r, search, {
         name: (item) => item.driver_name,
         employee_id: (item) => item.driver_code,
         status: (item) => item.status,
@@ -211,7 +211,7 @@ export function VisitsPageShell() {
       );
     }
     return list;
-  }, [tabRows, branchFilter, deptFilter, statusFilter, search, prefs.searchField, sortDir]);
+  }, [tabRows, branchFilter, deptFilter, statusFilter, search, sortDir]);
 
   const grouped = useMemo(
     () =>
@@ -461,15 +461,6 @@ export function VisitsPageShell() {
         onSearchChange={setSearch}
         searchPlaceholder={t("allVisits.searchPlaceholder")}
         clearSearchLabel={labels.clearSearch}
-        searchFields={[
-          labels.field.all,
-          labels.field.name,
-          labels.field.employee_id,
-          labels.field.status,
-        ]}
-        searchField={prefs.searchField}
-        onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-        searchFieldLabel={labels.searchBy}
         groupByOptions={[labels.group.none, labels.group.status, labels.group.date]}
         groupBy={prefs.groupBy}
         onGroupByChange={(value) => updateListPrefs({ groupBy: value })}

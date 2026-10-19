@@ -10,6 +10,13 @@ export function digitsOnly(value: unknown): string {
   return value.replace(/\D/g, "");
 }
 
+/** `13123` matches `EMP13123` because the digit run starts with the typed digits. */
+export function digitRunPrefixMatch(haystack: string, needle: string): boolean {
+  const digits = digitsOnly(needle);
+  if (!digits) return false;
+  return digitsOnly(haystack).startsWith(digits);
+}
+
 export function prefixBounds(term: string): { start: string; end: string } | null {
   const start = lowerText(term);
   if (!start) return null;
@@ -41,6 +48,102 @@ export function tokenPrefixMatch(haystack: string, needle: string): boolean {
 
 export function anyTokenPrefix(fields: readonly (string | null | undefined)[], needle: string): boolean {
   return fields.some((field) => tokenPrefixMatch(field ?? "", needle));
+}
+
+const SPACE_SPLIT = /\s+/;
+
+/**
+ * Substring search for in-memory roster scans.
+ *
+ * Every typed word must appear somewhere in the text, in any order — `doe jen`
+ * finds "Jenson Doe", and `ally` finds "Hawally". A single-word needle is just
+ * a substring test. Prefix-only matching is kept for the indexed Firestore
+ * range queries, which cannot express a substring.
+ */
+export function textContainsMatch(haystack: unknown, needle: string): boolean {
+  const term = lowerText(needle);
+  if (!term) return true;
+  const text = lowerText(haystack);
+  if (!text) return false;
+  const words = term.split(SPACE_SPLIT).filter(Boolean);
+  return words.every((word) => text.includes(word));
+}
+
+export function anyTextContains(fields: readonly unknown[], needle: string): boolean {
+  return fields.some((field) => textContainsMatch(field, needle));
+}
+
+/** Digit subsequence: `13123` and `312` both match `EMP13123`; `213` does not. */
+export function digitSubsequenceMatch(haystack: unknown, needle: string): boolean {
+  const digits = digitsOnly(typeof needle === "string" ? needle : "");
+  if (!digits) return false;
+  const text = digitsOnly(typeof haystack === "string" ? haystack : "");
+  if (!text) return false;
+  if (text.includes(digits)) return true;
+  let cursor = 0;
+  for (const char of text) {
+    if (char === digits[cursor]) cursor += 1;
+    if (cursor === digits.length) return true;
+  }
+  return false;
+}
+
+/**
+ * Every column that names or identifies a rider, in the order they are printed
+ * on a roster row. A search box is one field for the operator, so a scan that
+ * only looked at name + driver code refused `10034`, `2910…`, a passport or the
+ * client company the rider is supplied to — the same identifiers every other
+ * list lets them type.
+ */
+const IDENTITY_SEARCH_KEYS = [
+  "full_name",
+  "name",
+  "driver_name",
+  "rider_name",
+  "driver_code",
+  "employee_id",
+  "mg_id",
+  "civil_id",
+  "passport_number",
+  "passport",
+  "phone",
+  "phone_digits",
+  "client_id",
+  "client_name",
+  "project_key",
+  "reg_number",
+  "bike_id",
+] as const;
+
+/** Flattens the identity columns of one or more docs into a search haystack. */
+export function identitySearchValues(
+  ...sources: Array<Record<string, unknown> | null | undefined>
+): unknown[] {
+  const values: unknown[] = [];
+  for (const source of sources) {
+    if (!source) continue;
+    for (const key of IDENTITY_SEARCH_KEYS) {
+      const value = source[key];
+      if (value !== null && value !== undefined) values.push(value);
+    }
+  }
+  return values;
+}
+
+/**
+ * Text match first, then digit subsequence — so a name, code, ID or phone all
+ * answer the same box. Letters are required before the digit shortcut runs, or
+ * a two-letter query would match any rider whose phone happens to contain them.
+ */
+export function identityMatchesSearch(values: readonly unknown[], needle: string): boolean {
+  const words = needle.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  // Each typed word may live in a different column — `doe 10034` is a name and
+  // an employee ID, which no single field contains.
+  if (words.every((word) => values.some((value) => textContainsMatch(value, word)))) return true;
+  const digits = digitsOnly(needle);
+  if (!digits || digits.length < 2) return false;
+  return values.some((value) => digitSubsequenceMatch(value, digits));
 }
 
 function put(out: Record<string, string>, key: string, value: string): void {

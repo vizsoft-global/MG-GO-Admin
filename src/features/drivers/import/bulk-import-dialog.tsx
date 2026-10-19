@@ -653,6 +653,8 @@ export function DriverBulkImportDialog({
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colPlatform")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colZone")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colRestaurants")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colVehicle")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colVehicleType")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colActive")}</th>
                       </tr>
                     </thead>
@@ -676,6 +678,16 @@ export function DriverBulkImportDialog({
                           <td className="px-2 py-1">
                             {row.restaurant_names.length > 0
                               ? row.restaurant_names.join(", ")
+                              : "—"}
+                          </td>
+                          <td className="px-2 py-1">{row.vehicle_label ?? "—"}</td>
+                          <td className="px-2 py-1">
+                            {row.vehicle_type_key
+                              ? t(
+                                  row.vehicle_type_key === "car"
+                                    ? "typeCar"
+                                    : "typeBike",
+                                )
                               : "—"}
                           </td>
                           <td className="px-2 py-1">

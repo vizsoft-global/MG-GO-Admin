@@ -8,6 +8,7 @@ import {
   fetchDriverDetail,
   fetchDriverDeviceOverview,
   fetchDriverDocuments,
+  fetchDriverExtraDocuments,
   fetchDriversForAdmin,
   fetchDriversMultiDeviceRecent,
   forceSignOutDriver,
@@ -56,6 +57,19 @@ export function useDriverDocuments(
     queryFn: () => fetchDriverDocuments(intakeId, profileId),
     enabled: enabled && Boolean(intakeId),
     staleTime: 5 * 60_000,
+  });
+}
+
+export function useDriverExtraDocuments(
+  intakeId: string,
+  profileId: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.drivers.extraDocuments(intakeId, profileId),
+    queryFn: () => fetchDriverExtraDocuments(intakeId, profileId),
+    enabled: enabled && Boolean(intakeId),
+    staleTime: 60_000,
   });
 }
 

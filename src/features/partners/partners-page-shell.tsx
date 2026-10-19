@@ -127,7 +127,7 @@ function PartnersPageContent() {
   const visible = useMemo(() => {
     return partners.filter((p) => {
       if (
-        !fieldSearchMatch(p, search, prefs.searchField, {
+        !fieldSearchMatch(p, search, {
           name: (row) => row.name,
           slug: (row) => row.slug,
           description: (row) => row.description,
@@ -141,7 +141,7 @@ function PartnersPageContent() {
       if (logoFilter === "noLogo" && p.logo_url) return false;
       return true;
     });
-  }, [partners, search, prefs.searchField, driversFilter, logoFilter]);
+  }, [partners, search, driversFilter, logoFilter]);
   const grouped = useMemo(
     () => groupRows(visible, "none", {}, {}, "—"),
     [visible],
@@ -333,10 +333,6 @@ function PartnersPageContent() {
             searchPlaceholder={t("searchPlaceholder")}
             searchAriaLabel={t("searchPlaceholder")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[labels.field.all, labels.field.name]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             viewMode={prefs.viewMode}
             onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
             tableViewLabel={labels.viewTable}

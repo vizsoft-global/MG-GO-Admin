@@ -73,6 +73,8 @@ export type RawPayrollDriver = {
   vehicleKey: string | null;
   restaurantId: string | null;
   restaurantName: string | null;
+  /** The restaurant's external merchant id, printed as the Client/Restaurant ID. */
+  restaurantClientId?: string | null;
 };
 
 export type RawPayrollCheckIn = {
@@ -123,7 +125,20 @@ export type RawPayrollAdjustment = {
   status: AdjustmentStatus;
   hours: number | null;
   reason: string | null;
+  adjustedAt?: string | null;
 };
+
+/**
+ * The adjustments table is append-only, so the row that wins a cell is the one
+ * written last. When a caller cannot supply a timestamp, the later row in the
+ * list wins — that is the order every reader returns.
+ */
+function adjustmentIsNewer(next: RawPayrollAdjustment, current: RawPayrollAdjustment): boolean {
+  const nextAt = next.adjustedAt ? Date.parse(next.adjustedAt) : Number.NaN;
+  const currentAt = current.adjustedAt ? Date.parse(current.adjustedAt) : Number.NaN;
+  if (Number.isNaN(nextAt) || Number.isNaN(currentAt)) return true;
+  return nextAt >= currentAt;
+}
 
 export function kuwaitYmdFromIso(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kuwait" }).format(
@@ -208,6 +223,7 @@ export type RawRpcRider = {
   employeeId: string | null;
   restaurant: string;
   restaurantId: string | null;
+  restaurantClientId?: string | null;
   zone: string;
   zoneId: string | null;
   zoneName: string | null;
@@ -497,11 +513,16 @@ export function assemblePayrollSnapshot(input: {
     }
   }
 
+  // Manual PAYROLL cells outrank every other source, and this is the only map
+  // they enter. Sheet uploads (order recon, attendance, off structure) write
+  // their own collections and never touch these rows, so re-importing a sheet
+  // cannot overwrite a hand-entered cell — it only refreshes ORDERS beside it.
   const adjustmentByDriver = new Map<string, Map<string, RawPayrollAdjustment>>();
   for (const row of input.adjustments ?? []) {
     if (!rosterIds.has(row.driverId)) continue;
     const perDate = adjustmentByDriver.get(row.driverId) ?? new Map<string, RawPayrollAdjustment>();
-    perDate.set(row.date, row);
+    const existing = perDate.get(row.date);
+    if (!existing || adjustmentIsNewer(row, existing)) perDate.set(row.date, row);
     adjustmentByDriver.set(row.driverId, perDate);
   }
 
@@ -727,6 +748,7 @@ function riderRow(input: {
       storeName: r.restaurantName,
     }),
     restaurantId: r.restaurantId,
+    restaurantClientId: r.restaurantClientId ?? null,
     zone: input.zoneName ?? "—",
     zoneId: input.zoneId,
     zoneCategory: input.zoneCategory,
@@ -1046,6 +1068,7 @@ export function snapshotFromRpc(
         status: row.status === "Active" ? "active" : "inactive",
         vehicleKey: row.vehicleKey,
         restaurantId: row.restaurantId,
+        restaurantClientId: row.restaurantClientId ?? null,
         restaurantName: row.restaurant,
       },
       zoneId: row.zoneId,

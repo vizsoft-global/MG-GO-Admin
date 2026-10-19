@@ -2,6 +2,9 @@ export const ESIGN_BUCKET = "esign-documents";
 
 export type EsignDocumentKind = "document" | "signature" | "signed";
 
+/** `attachment` is a separate collection row; the other three are request columns. */
+export type EsignDownloadKind = EsignDocumentKind | "attachment";
+
 /** Strip a leading bucket prefix so createSignedUrl / download hit the object. */
 export function normalizeEsignStorageKey(key: string): string {
   const trimmed = key.trim().replace(/^\/+/, "");
@@ -16,7 +19,7 @@ export function esignObjectPath(key: string): string {
 
 export function esignDocumentHref(
   requestId: string,
-  kind: EsignDocumentKind,
+  kind: EsignDownloadKind,
   disposition: "inline" | "attachment" = "attachment",
 ): string {
   const params = new URLSearchParams({ id: requestId, kind, disposition });

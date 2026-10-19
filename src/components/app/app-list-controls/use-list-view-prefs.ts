@@ -6,13 +6,11 @@ import type { ListViewMode } from "./types";
 export type ListViewPrefs = {
   viewMode: ListViewMode;
   groupBy: string;
-  searchField: string;
 };
 
 const DEFAULT_PREFS: ListViewPrefs = {
   viewMode: "table",
   groupBy: "none",
-  searchField: "all",
 };
 
 function storageKey(prefKey: string): string {
@@ -28,8 +26,6 @@ function readPrefs(prefKey: string): ListViewPrefs {
     return {
       viewMode: parsed.viewMode === "cards" ? "cards" : "table",
       groupBy: typeof parsed.groupBy === "string" && parsed.groupBy ? parsed.groupBy : "none",
-      searchField:
-        typeof parsed.searchField === "string" && parsed.searchField ? parsed.searchField : "all",
     };
   } catch {
     return DEFAULT_PREFS;

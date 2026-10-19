@@ -31,6 +31,8 @@ export const queryKeys = {
       ["drivers", "history", intakeId, source] as const,
     documents: (intakeId: string, profileId: string | null) =>
       ["drivers", "documents", intakeId, profileId] as const,
+    extraDocuments: (intakeId: string, profileId: string | null) =>
+      ["drivers", "extra-documents", intakeId, profileId] as const,
     importJobs: () => ["drivers", "import-jobs"] as const,
     importJob: (id: string) => ["drivers", "import-job", id] as const,
     loginVerifications: (
@@ -82,8 +84,8 @@ export const queryKeys = {
     all: () => ["live-tracking-v2"] as const,
     snapshot: () => ["live-tracking-v2", "snapshot"] as const,
     zones: () => ["live-tracking-v2", "zones"] as const,
-    dayRoute: (driverId: string, date: string) =>
-      ["live-tracking-v2", "day-route", driverId, date] as const,
+    dayRoute: (driverId: string, date: string, windowEnd: string | null = null) =>
+      ["live-tracking-v2", "day-route", driverId, date, windowEnd] as const,
     events: (filters: Record<string, unknown> = {}) =>
       ["live-tracking-v2", "events", filters] as const,
     driverEvents: (driverId: string, date: string) =>

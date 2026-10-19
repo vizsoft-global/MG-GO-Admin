@@ -75,6 +75,12 @@ export type PayrollRiderRow = {
   name: string;
   restaurant: string;
   restaurantId: string | null;
+  /**
+   * The ID an operator reads off the Restaurants list ("External ID", the
+   * partner's own merchant id) for `restaurantId`. Display only — slicers and
+   * matching keep using `restaurantId`, which is the Firestore doc id.
+   */
+  restaurantClientId?: string | null;
   zone: string;
   zoneId: string | null;
   /** The zone's category from the previous month, as the rules see it. */
@@ -256,6 +262,7 @@ export type PayrollHubTab =
   | "payroll"
   | "combined"
   | "attendance-orders"
+  | "app-attendance"
   | "requests"
   | "settings";
 

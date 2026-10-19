@@ -125,7 +125,7 @@ export function FuelPageShell({
     return withFuelRequestRows(fillsOnly, requests, range.days)
       .map((row) => applyWithdrawnOverride(row, overrideByKey.get(`${row.vehicleId}:${row.driverId}`)))
       .filter((row) =>
-        fieldSearchMatch(row, search, prefs.searchField, {
+        fieldSearchMatch(row, search, {
           name: (item) => item.driverName,
           employee_id: (item) => item.employeeId,
           plate: (item) => item.plate,
@@ -135,7 +135,7 @@ export function FuelPageShell({
           chip: (item) => item.chip,
         }),
       );
-  }, [fills, prefs.searchField, range.days, range.start, requestRows, search, withdrawnOverrides.data]);
+  }, [fills, range.days, range.start, requestRows, search, withdrawnOverrides.data]);
   const selected = rows.find((row) => row.key === selectedKey) ?? null;
 
   const applyCustom = () => {
@@ -247,16 +247,6 @@ export function FuelPageShell({
               onSearchChange={setSearch}
               searchPlaceholder={t("searchPlaceholder")}
               clearSearchLabel={labels.clearSearch}
-              searchFields={[
-                labels.field.all,
-                labels.field.name,
-                labels.field.employee_id,
-                labels.field.plate,
-                labels.field.zone,
-              ]}
-              searchField={prefs.searchField}
-              onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-              searchFieldLabel={labels.searchBy}
             />
             <Select
               items={[

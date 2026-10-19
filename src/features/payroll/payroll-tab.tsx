@@ -5,15 +5,23 @@ import { useTranslations } from "next-intl";
 import { AlertTriangle, Award, Clock, Hand, Percent, UserCheck, Users } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { GroupedSections, groupRows } from "@/components/app/app-list-controls";
+import { AppTableColumnPicker } from "@/components/app/app-table-column-picker";
+import {
+  useTableColumnVisibility,
+  type TableColumnVisibilityOption,
+} from "@/hooks/use-table-column-visibility";
 import {
   payrollRiderMatchesSearch,
   type PayrollKpis,
   type PayrollPeriod,
 } from "./payroll-formulas";
+import { PAYROLL_SUMMARY_COLUMNS, PAYROLL_SUMMARY_LOCKED_COLUMNS } from "./payroll-rider-columns";
 import { PayrollListToolbar, usePayrollListPrefs } from "./payroll-list-toolbar";
 import { PayrollSummaryTable } from "./payroll-grid";
 import { exportPayrollViewCsv } from "./payroll-csv";
 import type { PayrollRiderRow } from "./payroll-types";
+
+const SUMMARY_HIDDEN_BY_DEFAULT = new Set(["restaurantId", "nationality", "zoneOrders", "zoneDpd", "zoneEff"]);
 
 export function PayrollTab({
   month,
@@ -29,9 +37,24 @@ export function PayrollTab({
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
   const { prefs } = usePayrollListPrefs("payroll-summary");
+  const columnOptions = useMemo<TableColumnVisibilityOption[]>(
+    () =>
+      PAYROLL_SUMMARY_COLUMNS.map((column) => ({
+        id: column.id,
+        label: t(`riderCols.${column.labelKey}`),
+        locked: (PAYROLL_SUMMARY_LOCKED_COLUMNS as readonly string[]).includes(column.id),
+        defaultVisible: !SUMMARY_HIDDEN_BY_DEFAULT.has(column.id),
+      })),
+    [t],
+  );
+  const columnVisibility = useTableColumnVisibility("payroll:summary-columns", columnOptions);
+  const visibleColumnIds = useMemo(
+    () => PAYROLL_SUMMARY_COLUMNS.filter((column) => columnVisibility.isVisible(column.id)).map((column) => column.id),
+    [columnVisibility.isVisible],
+  );
   const searched = useMemo(
-    () => riders.filter((r) => payrollRiderMatchesSearch(r, search, prefs.searchField)),
-    [prefs.searchField, riders, search],
+    () => riders.filter((r) => payrollRiderMatchesSearch(r, search)),
+    [riders, search],
   );
   const grouped = useMemo(
     () =>
@@ -92,13 +115,28 @@ export function PayrollTab({
           accent="warning"
         />
       </div>
-      <PayrollListToolbar prefKey="payroll-summary" search={search} onSearchChange={setSearch} />
+      <PayrollListToolbar
+        prefKey="payroll-summary"
+        search={search}
+        onSearchChange={setSearch}
+        trailing={
+          <AppTableColumnPicker
+            options={columnVisibility.pickerOptions}
+            isVisible={columnVisibility.isVisible}
+            onToggle={columnVisibility.toggle}
+            onReset={columnVisibility.reset}
+            sourceLabel={t("tabPayroll")}
+            hiddenCount={columnVisibility.hiddenToggleableCount}
+          />
+        }
+      />
       <GroupedSections groups={grouped}>
         {(rows) => (
           <PayrollSummaryTable
             rows={rows}
             empty={t("emptyRiders")}
             rangeLabel={month.label}
+            visibleColumnIds={visibleColumnIds}
             exportLabel={canExport ? t("downloadTable") : undefined}
             onExport={
               canExport ? (visible) => exportPayrollViewCsv(month.key, month.dates, visible) : undefined

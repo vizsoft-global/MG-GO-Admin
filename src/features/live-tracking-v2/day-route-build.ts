@@ -143,6 +143,28 @@ function deriveStops(points: Work[]): DayRouteStop[] {
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
+/**
+ * Merges the Kuwait days a shift crosses. The archive is stored per calendar day,
+ * so a 23:50 → 00:10 shift lives in two objects; the day route needs one series.
+ * Points outside the shift window are dropped and `(t, lat, lng)` is deduped, so a
+ * fix present in both day files renders once.
+ */
+export function mergeArchivePoints(
+  days: EdgeArchivePoint[][],
+  fromMs: number,
+  toMs: number,
+): EdgeArchivePoint[] {
+  const byKey = new Map<string, EdgeArchivePoint>();
+  for (const points of days) {
+    for (const point of points) {
+      if (point.t < fromMs || point.t > toMs) continue;
+      const key = `${point.t}|${point.la}|${point.lo}`;
+      if (!byKey.has(key)) byKey.set(key, point);
+    }
+  }
+  return [...byKey.values()].sort((a, b) => a.t - b.t);
+}
+
 /** The polyline, jumps and stops of one rider-day, from R2 archive points. */
 export function buildDayRouteTrack(archive: EdgeArchivePoint[], toleranceMeters = 8): DayRouteTrack {
   const series = archive

@@ -60,12 +60,64 @@ function asDate(value: unknown): Date | null {
   return null;
 }
 
-function firstRestaurantId(raw: Record<string, unknown>): string | null {
-  const single = asString(raw["restaurant_id"]);
-  if (single) return single;
+function restaurantIdsOf(raw: Record<string, unknown>): string[] {
+  const single = trimmedOrNull(raw["restaurant_id"]);
   const list = Array.isArray(raw["restaurant_ids"])
     ? (raw["restaurant_ids"] as unknown[]).filter((id): id is string => typeof id === "string")
     : [];
+  const ids: string[] = [];
+  if (single) ids.push(single);
+  for (const id of [...list].sort((a, b) => a.localeCompare(b))) {
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+/**
+ * Every restaurant a rider could be assigned to, denormalised copy first and
+ * edge rows second. The grid used to take only the denormalised first id, so a
+ * rider whose copy pointed at a missing document printed "(Pool)" even when a
+ * live `driver_restaurants` edge named a real restaurant.
+ */
+function restaurantCandidates(raw: Record<string, unknown>, edgeIds: string[] = []): string[] {
+  const ids = restaurantIdsOf(raw);
+  for (const id of edgeIds) if (!ids.includes(id)) ids.push(id);
+  return ids;
+}
+
+function asStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+        .map((item) => trimmedOrNull(item))
+        .filter((item): item is string => Boolean(item))
+    : [];
+}
+
+/**
+ * `drivers` holds `full_name`; older intake-shaped rows held `name`, and a
+ * rider approved from an intake can hold the name only on `profiles.full_name`.
+ * The payroll grid must never print a dash — or a bare employee id — for a
+ * rider who has a real name on any of them.
+ */
+function driverDisplayName(
+  raw: Record<string, unknown>,
+  profileName?: string | null,
+): string | null {
+  return (
+    trimmedOrNull(raw["name"]) ??
+    trimmedOrNull(raw["full_name"]) ??
+    trimmedOrNull(raw["driver_name"]) ??
+    trimmedOrNull(profileName) ??
+    trimmedOrNull(raw["employee_id"]) ??
+    trimmedOrNull(raw["driver_code"])
+  );
+}
+
+/** First assigned restaurant name, used when the restaurant doc is unavailable. */
+function firstRestaurantName(raw: Record<string, unknown>): string | null {
+  const single = trimmedOrNull(raw["restaurant_name"]);
+  if (single) return single;
+  const list = asStringList(raw["restaurant_names"]);
   if (!list.length) return null;
   return [...list].sort((a, b) => a.localeCompare(b))[0];
 }
@@ -237,24 +289,28 @@ async function loadPayrollContext(input: {
       .get(),
   ]));
 
-  // Requests created by the rider app carry only `driver_id`, so the AO grid's
-  // rider column falls back to `profiles.full_name` instead of a dash.
-  const requestDriverIds = [
-    ...new Set(
-      requestsSnap.docs
+  // `drivers` does not always carry the rider's name — a rider approved from an
+  // intake can hold the name only on `profiles.full_name` — so the roster's
+  // name, and the AO grid's rider column for app-created requests, both read
+  // this map before falling back to the employee id.
+  const driverIds = driverSnap.docs.map((doc) => doc.id);
+  const profileIds = [
+    ...new Set([
+      ...driverIds,
+      ...requestsSnap.docs
         .map((doc) => asString(doc.get("driver_id")))
         .filter((id): id is string => Boolean(id)),
-    ),
+    ]),
   ];
-  const requestProfileNames = new Map<string, string>();
-  for (let index = 0; index < requestDriverIds.length; index += GET_ALL_CHUNK) {
-    const chunk = requestDriverIds.slice(index, index + GET_ALL_CHUNK);
+  const profileNames = new Map<string, string>();
+  for (let index = 0; index < profileIds.length; index += GET_ALL_CHUNK) {
+    const chunk = profileIds.slice(index, index + GET_ALL_CHUNK);
     const snaps = await db.getAll(
       ...chunk.map((id) => db.collection(COLLECTIONS.profiles).doc(id)),
     );
     for (const snap of snaps) {
       const name = trimmedOrNull((snap.data() ?? {})["full_name"]);
-      if (name) requestProfileNames.set(snap.id, name);
+      if (name) profileNames.set(snap.id, name);
     }
   }
 
@@ -267,6 +323,33 @@ async function loadPayrollContext(input: {
 
   const restaurantById = new Map<string, Record<string, unknown>>();
   for (const doc of restaurantsSnap.docs) restaurantById.set(doc.id, doc.data());
+
+  // Restaurant assignment for a linked rider lives in `driver_restaurants`
+  // edges, not on `drivers` — the payroll grid read only the denormalised copy,
+  // so every row whose assignment predates that copy printed "(Pool)".
+  const driverRestaurantIds = new Map<string, string[]>();
+  const edgeQueries: Array<Promise<QuerySnapshot>> = [];
+  for (let index = 0; index < driverIds.length; index += 30) {
+    edgeQueries.push(
+      db
+        .collection(COLLECTIONS.driverRestaurants)
+        .where("driver_id", "in", driverIds.slice(index, index + 30))
+        .get(),
+    );
+  }
+  if (edgeQueries.length) {
+    const edgeSnaps = await timedPhase(phases, "restaurantEdgesMs", () => Promise.all(edgeQueries));
+    for (const snap of edgeSnaps) {
+      for (const doc of snap.docs) {
+        const driverId = asString(doc.get("driver_id"));
+        const restaurantId = asString(doc.get("restaurant_id"));
+        if (!driverId || !restaurantId) continue;
+        const list = driverRestaurantIds.get(driverId) ?? [];
+        if (!list.includes(restaurantId)) list.push(restaurantId);
+        driverRestaurantIds.set(driverId, list);
+      }
+    }
+  }
 
   const offStructure = new Map<string, { offDays: number; source: string }>();
   for (const doc of offSnap.docs) {
@@ -288,18 +371,22 @@ async function loadPayrollContext(input: {
   }
 
   // Newest adjustment per (driver, day), because the table is append-only and an
-  // 'auto' row is a revert rather than a delete.
+  // 'auto' row is a revert rather than a delete. Equal timestamps break on the
+  // document id, so two applies a millisecond apart cannot make the winning cell
+  // depend on the order Firestore happened to return them in.
   const adjustmentByDriverDay = new Map<string, Record<string, unknown>>();
+  const adjustmentStamp = new Map<string, { at: number; id: string }>();
   for (const doc of adjustmentsSnap.docs) {
     const raw = doc.data();
     const driverId = asString(raw["driver_id"]);
     const workDate = asString(raw["work_date"]);
     if (!driverId || !workDate) continue;
     const key = `${driverId}|${workDate}`;
-    const existing = adjustmentByDriverDay.get(key);
     const at = asDate(raw["adjusted_at"])?.getTime() ?? 0;
-    const existingAt = existing ? (asDate(existing["adjusted_at"])?.getTime() ?? 0) : -1;
-    if (at >= existingAt) adjustmentByDriverDay.set(key, raw);
+    const held = adjustmentStamp.get(key);
+    if (held && (held.at > at || (held.at === at && held.id > doc.id))) continue;
+    adjustmentStamp.set(key, { at, id: doc.id });
+    adjustmentByDriverDay.set(key, raw);
   }
 
   return {
@@ -314,6 +401,7 @@ async function loadPayrollContext(input: {
     clientsSnap,
     zonesSnap,
     restaurantById,
+    driverRestaurantIds,
     rulesSnaps,
     metricsSnap,
     requestsSnap,
@@ -322,7 +410,7 @@ async function loadPayrollContext(input: {
     offStructure,
     workedByDriverDay,
     adjustmentByDriverDay,
-    requestProfileNames,
+    profileNames,
   };
 }
 
@@ -613,8 +701,9 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
   const driverNameById = new Map<string, string>();
   const driverCodeById = new Map<string, string>();
   for (const doc of ctx.driverSnap.docs) {
-    const name = trimmedOrNull(doc.get("name"));
-    const code = trimmedOrNull(doc.get("driver_code"));
+    const raw = doc.data();
+    const name = driverDisplayName(raw, ctx.profileNames.get(doc.id)) ?? null;
+    const code = trimmedOrNull(raw["driver_code"]);
     if (name) driverNameById.set(doc.id, name);
     if (code) driverCodeById.set(doc.id, code);
   }
@@ -672,8 +761,8 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
       code: asString(raw["request_code"]) ?? doc.id,
       driverId,
       riderName:
-        asString(raw["driver_name"]) ??
-        ctx.requestProfileNames.get(driverId) ??
+        trimmedOrNull(raw["driver_name"]) ??
+        ctx.profileNames.get(driverId) ??
         driverNameById.get(driverId) ??
         asString(raw["driver_code"]) ??
         driverCodeById.get(driverId) ??
@@ -703,7 +792,9 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
       const driverCode = trimmedOrNull(raw["driver_code"]);
       const projectKey = asString(raw["project_key"]);
       const client = projectKey ? clientByKey.get(projectKey) : undefined;
-      const restaurantId = firstRestaurantId(raw);
+      const restaurantIds = restaurantCandidates(raw, ctx.driverRestaurantIds.get(driverId));
+      const restaurantId =
+        restaurantIds.find((id) => ctx.restaurantById.has(id)) ?? restaurantIds[0] ?? null;
       const restaurant = restaurantId ? ctx.restaurantById.get(restaurantId) : undefined;
       const driverZoneId = asString(raw["zone_id"]);
       // SOP: an Americana rider belongs to their restaurant's zone, falling back
@@ -740,23 +831,37 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
         driverId,
         amId: employeeId ?? "—",
         mgId: driverCode ?? "—",
-        name: trimmedOrNull(raw["name"]) ?? "—",
+        name: driverDisplayName(raw, ctx.profileNames.get(driverId)) ?? "—",
         employeeId,
         restaurant:
           projectKey === "keeta"
             ? "(Pool)"
-            : trimmedOrNull(raw["restaurant_name"]) ?? "(Pool)",
+            : asString(restaurant?.["name"]) ?? firstRestaurantName(raw) ?? "(Pool)",
         restaurantId,
+        // The rider's merchant-facing id (what staff know the store by) — the
+        // same `client_id` the Employees page shows for the rider. The doc id
+        // above stays the slicer key; this is display only.
+        restaurantClientId:
+          asString(raw["client_id"]) ?? asString(restaurant?.["external_merchant_id"]),
         zone: zoneName ?? "—",
         zoneId,
         zoneName,
         partner:
-          projectKey === "americana" ? "Americana" : projectKey === "keeta" ? "Keeta" : "—",
+          projectKey === "americana"
+            ? "Americana"
+            : projectKey === "keeta"
+              ? "Keeta"
+              : trimmedOrNull(raw["partner_name"]) ?? "—",
         projectKey,
-        nationality: asString(raw["nationality"]) ?? "—",
-        nationalityCode: asString(raw["nationality"]),
+        nationality:
+          asString(raw["nationality"]) ?? asString(raw["nationality_code"]) ?? "—",
+        nationalityCode:
+          asString(raw["nationality_code"]) ?? asString(raw["nationality"]),
         status: asString(raw["status"]) === "active" ? "Active" : "Inactive",
-        vehicleKey: asString(raw["vehicle_key"]),
+        vehicleKey:
+          asString(raw["vehicle_key"]) ??
+          asString(raw["vehicle_type_key"]) ??
+          asString(raw["vehicle_kind"]),
         sourceType: asString(raw["rider_category"]),
         sourceCompany: asString(raw["source_company"]),
         offStructureDays: off?.offDays ?? client?.defaultOffDays ?? DEFAULT_OFF_DAYS,

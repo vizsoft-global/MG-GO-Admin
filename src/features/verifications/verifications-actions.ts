@@ -150,6 +150,41 @@ function includesCi(value: unknown, term: string): boolean {
   return String(value ?? "").toLowerCase().includes(term.toLowerCase());
 }
 
+const VERIFICATION_DRIVER_IDENTITY_KEYS = [
+  "full_name",
+  "name",
+  "name_lower",
+  "driver_code",
+  "driver_code_lower",
+  "employee_id",
+  "employee_id_lower",
+  "civil_id",
+  "civil_id_lower",
+  "phone",
+  "phone_digits",
+  "passport",
+  "passport_lower",
+  "client_id",
+  "client_id_lower",
+  "client_name",
+  "client_name_lower",
+  "search_name",
+] as const;
+
+function driverIdentityMatches(row: Record<string, unknown>, term: string): boolean {
+  const values = VERIFICATION_DRIVER_IDENTITY_KEYS.map((key) => row[key])
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.toLowerCase());
+  if (values.length === 0) return false;
+  const words = term.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length > 0 && words.every((word) => values.some((value) => value.includes(word)))) {
+    return true;
+  }
+  const digits = term.replace(/\D+/g, "");
+  if (digits.length < 2) return false;
+  return values.some((value) => value.replace(/\D+/g, "").includes(digits));
+}
+
 type SearchHits = { driverIds: Set<string>; restaurantIds: Set<string>; partnerIds: Set<string> };
 
 async function buildVerificationSearchOrFilter(
@@ -168,8 +203,7 @@ async function buildVerificationSearchOrFilter(
     db.collection(COLLECTIONS.profiles).limit(2000).get(),
   ]);
   for (const doc of drivers.docs) {
-    const row = doc.data();
-    if (includesCi(row.driver_code, term) || includesCi(row.employee_id, term)) {
+    if (driverIdentityMatches(doc.data(), term)) {
       if (driverIds.size < 200) driverIds.add(doc.id);
     }
   }

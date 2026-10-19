@@ -99,8 +99,15 @@ function hasVerb(tokens: string[], verbs: Set<string>): boolean {
   return false;
 }
 
+/** Names whose verb is not in the write list, but which still change data. */
+const FORCE_MUTATING = new Set([
+  "adminReviewOrderException",
+  "adminEvaluateDriverLevelsSweep",
+]);
+
 /** Staff RPC names that mutate. Reads win when a name contains both kinds of verb. */
 export function isMutatingAdminRpc(rpcName: string): boolean {
+  if (FORCE_MUTATING.has(rpcName)) return true;
   const tokens = rpcTokens(rpcName);
   if (hasVerb(tokens, READ_VERBS)) return false;
   return hasVerb(tokens, WRITE_VERBS);

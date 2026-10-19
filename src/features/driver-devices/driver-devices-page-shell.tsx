@@ -187,7 +187,7 @@ export function DriverDevicesPageShell() {
     const filtered = rows.filter(
       (row) =>
         driverDeviceMatchesTab(row, activeTab) &&
-        fieldSearchMatch(row, search, prefs.searchField, {
+        fieldSearchMatch(row, search, {
           name: (item) => item.full_name,
           employee_id: (item) => item.employee_id ?? item.driver_code,
           zone: (item) => item.zone_name,
@@ -199,7 +199,7 @@ export function DriverDevicesPageShell() {
         (buildFilter == null || row.app_version_code === buildFilter),
     );
     return sortDriverDeviceRows(filtered, sortKey);
-  }, [rows, activeTab, search, prefs.searchField, buildFilter, sortKey]);
+  }, [rows, activeTab, search, buildFilter, sortKey]);
   const grouped = useMemo(
     () =>
       groupRows(
@@ -461,15 +461,6 @@ export function DriverDevicesPageShell() {
             onSearchChange={setSearch}
             searchPlaceholder={t("searchPlaceholder")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[
-              labels.field.all,
-              labels.field.name,
-              labels.field.employee_id,
-              labels.field.zone,
-            ]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             groupByOptions={[labels.group.none, labels.group.zone]}
             groupBy={prefs.groupBy}
             onGroupByChange={(value) => updateListPrefs({ groupBy: value })}

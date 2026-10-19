@@ -139,6 +139,20 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     label: "Manage payroll off structure",
     category: "payroll",
   },
+  { slug: "payroll.payroll", label: "Payroll tab", category: "payroll" },
+  { slug: "payroll.combined", label: "Combined payroll tab", category: "payroll" },
+  {
+    slug: "payroll.attendance_orders",
+    label: "Payroll attendance & orders tab",
+    category: "payroll",
+  },
+  {
+    slug: "payroll.app_attendance",
+    label: "Payroll application attendance tab",
+    category: "payroll",
+  },
+  { slug: "payroll.requests", label: "Payroll requests tab", category: "payroll" },
+  { slug: "payroll.settings", label: "Payroll settings tab", category: "payroll" },
   {
     slug: "performance.view",
     label: "View performance dashboard",

@@ -211,7 +211,7 @@ function RestaurantsPageContent() {
   const visible = useMemo(() => {
     return restaurants.filter((r) => {
       if (
-        !fieldSearchMatch(r, search, prefs.searchField, {
+        !fieldSearchMatch(r, search, {
           name: (row) => row.name,
           zone: (row) => row.zone_name,
           status: (row) => row.status,
@@ -232,9 +232,7 @@ function RestaurantsPageContent() {
     });
   }, [
     restaurants,
-    search,
-    prefs.searchField,
-    statusFilter,
+    search, statusFilter,
     partnerFilter,
     zoneFilter,
     hasDriversFilter,
@@ -435,15 +433,6 @@ function RestaurantsPageContent() {
               searchPlaceholder={t("searchPlaceholder")}
               searchAriaLabel={t("searchPlaceholder")}
               clearSearchLabel={labels.clearSearch}
-              searchFields={[
-                labels.field.all,
-                labels.field.name,
-                labels.field.zone,
-                labels.field.status,
-              ]}
-              searchField={prefs.searchField}
-              onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-              searchFieldLabel={labels.searchBy}
               groupByOptions={[
                 labels.group.none,
                 labels.group.status,

@@ -190,7 +190,7 @@ function AssetsPageContent() {
   const visible = useMemo(() => {
     return items.filter((row) => {
       if (
-        !fieldSearchMatch(row, search, prefs.searchField, {
+        !fieldSearchMatch(row, search, {
           name: (item) => item.name,
           status: (item) => (item.is_active ? "active" : "inactive"),
           code: (item) => item.code,
@@ -206,7 +206,7 @@ function AssetsPageContent() {
       if (categoryFilter !== "all" && row.category !== categoryFilter) return false;
       return true;
     });
-  }, [items, search, prefs.searchField, statusFilter, categoryFilter]);
+  }, [items, search, statusFilter, categoryFilter]);
   const grouped = useMemo(
     () =>
       groupRows(
@@ -378,10 +378,6 @@ function AssetsPageContent() {
             searchPlaceholder={t("searchPlaceholder")}
             searchAriaLabel={t("searchPlaceholder")}
             clearSearchLabel={labels.clearSearch}
-            searchFields={[labels.field.all, labels.field.name, labels.field.status]}
-            searchField={prefs.searchField}
-            onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-            searchFieldLabel={labels.searchBy}
             groupByOptions={[labels.group.none, labels.group.status]}
             groupBy={prefs.groupBy}
             onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
@@ -416,7 +412,7 @@ function AssetsPageContent() {
                       value={statusFilter}
                       onValueChange={(v) => setStatusFilter((v as StatusFilter) ?? "all")}
                     >
-                      {(["all", "lowStock", "inactive", "assigned"] as const).map((value) => (
+                      {(["lowStock", "inactive", "assigned"] as const).map((value) => (
                         <DropdownMenuRadioItem key={value} value={value}>
                           {filterLabel(value)}
                         </DropdownMenuRadioItem>

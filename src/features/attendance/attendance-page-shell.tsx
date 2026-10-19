@@ -543,14 +543,15 @@ function AttendancePageContent() {
   const dailyRows = useMemo(() => {
     const sorted = sortAttendanceDailyRows(dailyData?.rows ?? [], sortKey);
     return sorted.filter((row) =>
-      fieldSearchMatch(row, search, prefs.searchField, {
+      fieldSearchMatch(row, search, {
         name: (item) => item.driver_name,
         employee_id: (item) => item.employee_id ?? item.driver_code,
+        phone: (item) => item.driver_phone,
         zone: (item) => item.zone_name,
         status: (item) => item.live_status,
       }),
     );
-  }, [dailyData?.rows, prefs.searchField, search, sortKey]);
+  }, [dailyData?.rows, search, sortKey]);
   const groupedSections = useMemo(() => {
     if (prefs.groupBy === "none") return [{ key: "all", label: "", rows: dailyRows }];
     if (prefs.groupBy === "partner" || prefs.groupBy === "date") {
@@ -701,15 +702,6 @@ function AttendancePageContent() {
                   searchPlaceholder={t("searchPlaceholder")}
                   searchAriaLabel={t("searchPlaceholder")}
                   clearSearchLabel={labels.clearSearch}
-                  searchFields={[
-                    labels.field.all,
-                    labels.field.name,
-                    labels.field.employee_id,
-                    labels.field.zone,
-                  ]}
-                  searchField={prefs.searchField}
-                  onSearchFieldChange={(value) => updateListPrefs({ searchField: value })}
-                  searchFieldLabel={labels.searchBy}
                   groupByOptions={
                     tab === "history"
                       ? [labels.group.none, labels.group.partner, labels.group.date]
