@@ -836,6 +836,12 @@ export async function resetDriverAppSettings(
       driver_app_login_verification_exempt_all: false,
       driver_app_delivery_proximity_meters:
         DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters,
+      driver_app_checkin_photo_required:
+        DEFAULT_DRIVER_APP_SETTINGS.driver_app_checkin_photo_required,
+      driver_app_early_drop_meters:
+        DEFAULT_DRIVER_APP_SETTINGS.driver_app_early_drop_meters,
+      driver_app_proof_ocr_mode:
+        DEFAULT_DRIVER_APP_SETTINGS.driver_app_proof_ocr_mode,
       driver_app_sideload_updates_enabled: false,
       driver_app_force_update: false,
       driver_app_min_version_code: null,
