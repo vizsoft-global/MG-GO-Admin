@@ -8,16 +8,18 @@ import { contentDispositionAttachment } from "@/lib/storage/order-proof-url";
 import { guessProofContentType } from "@/lib/storage/proof-image-url";
 import { readEsignObject } from "@/features/esign/esign-r2";
 import {
-  type EsignDocumentKind,
+  type EsignDownloadKind,
   normalizeEsignStorageKey,
 } from "@/features/esign/esign-storage-key";
 
-function parseKind(raw: string | null): EsignDocumentKind | null {
-  if (raw === "document" || raw === "signature" || raw === "signed") return raw;
+function parseKind(raw: string | null): EsignDownloadKind | null {
+  if (raw === "document" || raw === "signature" || raw === "signed" || raw === "attachment") {
+    return raw;
+  }
   return null;
 }
 
-const KEY_COLUMN: Record<EsignDocumentKind, string> = {
+const KEY_COLUMN: Record<"document" | "signature" | "signed", string> = {
   document: "document_storage_key",
   signature: "signature_storage_key",
   signed: "signed_document_storage_key",
@@ -94,6 +96,59 @@ export async function GET(request: Request) {
 
   const db = await staffDb();
   if (!db) return NextResponse.json({ error: "read_failed" }, { status: 500 });
+
+  if (kind === "attachment") {
+    let attachment: Record<string, unknown> | null = null;
+    try {
+      const snap = await db.collection(COLLECTIONS.esignRequestAttachments).doc(id).get();
+      attachment = snap.exists ? docFields(snap.data()) : null;
+    } catch {
+      return NextResponse.json({ error: "read_failed" }, { status: 500 });
+    }
+    if (!attachment) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+    const requestId = String(attachment.request_id ?? "").trim();
+    if (!requestId) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    if (!canManage) {
+      try {
+        const assigned = await db
+          .collection(COLLECTIONS.esignRequestSigners)
+          .where("request_id", "==", requestId)
+          .where("staff_user_id", "==", session.id)
+          .limit(1)
+          .get();
+        if (assigned.empty) {
+          return NextResponse.json({ error: "not_authorized" }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ error: "not_authorized" }, { status: 403 });
+      }
+    }
+
+    const rawAttachmentKey = attachment.storage_key;
+    if (rawAttachmentKey == null || String(rawAttachmentKey).trim() === "") {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+    const key = normalizeEsignStorageKey(String(rawAttachmentKey));
+    const downloaded = await downloadEsignObject(key);
+    if ("error" in downloaded) {
+      return NextResponse.json({ error: "read_failed" }, { status: 500 });
+    }
+    const filename =
+      String(attachment.name ?? "").trim() || filenameFromKey(key, "attachment.bin");
+    const contentType =
+      String(attachment.content_type ?? "").trim() ||
+      downloaded.contentType ||
+      guessProofContentType(key) ||
+      "application/octet-stream";
+    return new NextResponse(new Uint8Array(downloaded.bytes), {
+      headers: {
+        "Content-Type": contentType,
+        "Content-Disposition": contentDisposition(filename, disposition),
+        "Cache-Control": "private, no-store",
+      },
+    });
+  }
 
   if (!canManage) {
     try {

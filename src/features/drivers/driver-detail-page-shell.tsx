@@ -59,7 +59,9 @@ import { DriverHistoryTab } from "./driver-history-tab";
 import { DriverPerformanceTab } from "./driver-performance-tab";
 import { DriverWrongActionsTab } from "@/features/wrong-actions/driver-wrong-actions-tab";
 import { DriverArchiveDialog } from "./driver-archive-dialog";
+import { DriverLevelBadge, DriverLevelOverrideDialog } from "./driver-level-badge";
 import { DriverEditSheet } from "./driver-edit-sheet";
+import { useDriverLevel, useDriverLevelOverride } from "./use-driver-levels";
 import { getCountryLabel } from "@/lib/geo/countries";
 import { riderCategoryMessageKey } from "./driver-rider-category";
 import { avatarTintFromName } from "./form/driver-form-primitives";
@@ -298,6 +300,9 @@ function DriverDetailContent({ id }: { id: string }) {
   const router = useRouter();
   const { can } = useAuth();
   const canManage = can("drivers.manage");
+  const { data: levelRow } = useDriverLevel(id);
+  const { sweep, pending: levelSweepPending } = useDriverLevelOverride();
+  const [levelOverrideOpen, setLevelOverrideOpen] = useState(false);
   const canViewOps = can("driver_ops.view");
   const canViewPerformance = can("performance.view");
   const canViewWrongActions = can("wrong_actions.view");
@@ -817,6 +822,7 @@ function DriverDetailContent({ id }: { id: string }) {
                   <h1 className="text-xl font-semibold text-foreground">
                     {driver.full_name}
                   </h1>
+                  <DriverLevelBadge level={levelRow?.level} />
                   <WorkflowStatusPill
                     status={resolveWorkflowPillStatus(driver)}
                     label={
@@ -838,6 +844,43 @@ function DriverDetailContent({ id }: { id: string }) {
                     </span>
                   ) : null}
                 </div>
+                {levelRow ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {tList("levelRequired", { count: levelRow.metrics.required_orders })}
+                    {" · "}
+                    {tList("levelVerified", { count: levelRow.metrics.mtd_verified_deliveries })}
+                    {" · "}
+                    {tList("levelGap", { count: levelRow.metrics.gap })}
+                    {" · "}
+                    {levelRow.override_level != null ? tList("levelSet") : tList("levelAuto")}
+                  </p>
+                ) : null}
+                {canManage ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9"
+                      onClick={() => setLevelOverrideOpen(true)}
+                    >
+                      {tList("levelOverrideTitle")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9"
+                      disabled={levelSweepPending}
+                      onClick={() => {
+                        void sweep().then((result) => {
+                          if (result.ok) toast.success(tList("levelEvaluateDone"));
+                          else toast.error(tList("levelOverrideFailed"));
+                        });
+                      }}
+                    >
+                      {tList("levelEvaluate")}
+                    </Button>
+                  </div>
+                ) : null}
                 <p className="mt-1 font-mono text-sm text-muted-foreground">
                   {formatDriverCodeDisplay(driver.driver_code)}
                 </p>
@@ -1184,6 +1227,11 @@ function DriverDetailContent({ id }: { id: string }) {
           </div>
         </aside>
       </div>
+      <DriverLevelOverrideDialog
+        driverId={id}
+        open={levelOverrideOpen}
+        onOpenChange={setLevelOverrideOpen}
+      />
     </AppPage>
   );
 }

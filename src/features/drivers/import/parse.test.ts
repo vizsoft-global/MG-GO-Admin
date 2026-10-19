@@ -1,6 +1,28 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { guessColumnMapping, mapRowsFromSheet, parseRiderCategory } from "./parse";
+import {
+  guessColumnMapping,
+  mapRowsFromSheet,
+  parseImportVehicleType,
+  parseRiderCategory,
+} from "./parse";
+
+describe("parseImportVehicleType", () => {
+  it("reads English and Arabic car labels", () => {
+    for (const raw of ["Car", "car", "Van", "سيارة", "مركبة", "شاحنة", "Car (4 wheels)"]) {
+      assert.equal(parseImportVehicleType(raw), "car", raw);
+    }
+  });
+
+  it("treats bikes, blanks and a cargo bike as bike or blank", () => {
+    assert.equal(parseImportVehicleType("Bike"), "bike");
+    assert.equal(parseImportVehicleType("Motorcycle"), "bike");
+    assert.equal(parseImportVehicleType("Cargo bike"), "bike");
+    assert.equal(parseImportVehicleType("دراجة"), "bike");
+    assert.equal(parseImportVehicleType(""), null);
+    assert.equal(parseImportVehicleType(null), null);
+  });
+});
 
 describe("parseRiderCategory", () => {
   it("defaults blank to null so preview can apply in_house", () => {

@@ -37,6 +37,12 @@ import {
 } from "@/components/app/app-list-controls";
 import { EmployeeStatusBadge } from "@/features/employees/employee-status-badge";
 import { catalogLabel } from "@/features/employees/employee-catalogs";
+import { DriverLevelBadge } from "@/features/drivers/driver-level-badge";
+import {
+  matchesLevelFilter,
+  useDriverLevelIndex,
+  type DriverLevelFilter,
+} from "@/features/drivers/use-driver-levels";
 import { useEmployeeStatuses } from "@/features/employees/use-employee-catalogs";
 import {
   AppDataTable,
@@ -82,6 +88,7 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import {
   AccountStatusPill,
   AttendancePill,
+  DriverVehicleCell,
   formatDriverCodeDisplay,
   formatPhoneInternational,
   PasscodeCell,
@@ -236,6 +243,8 @@ function DriversPageContent() {
   const statusesQuery = useEmployeeStatuses();
   const [columnFilters, setColumnFilters] = useState<DriversColumnFilters>({});
   const [sort, setSort] = useState<DriversSort>(DEFAULT_DRIVERS_SORT);
+  const [levelFilter, setLevelFilter] = useState<DriverLevelFilter>("all");
+  const levelIndex = useDriverLevelIndex();
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(search.trim()), LIST_SEARCH_DEBOUNCE_MS);
@@ -266,6 +275,11 @@ function DriversPageContent() {
     () => (listFailed ? [] : pageQuery.data?.pages.flatMap((p) => p.rows) ?? []),
     [pageQuery.data, listFailed],
   );
+  const shownDrivers = useMemo(() => {
+    if (levelFilter === "all") return drivers;
+    if (!levelIndex.data) return [];
+    return drivers.filter((driver) => matchesLevelFilter(levelIndex.data?.get(driver.id), levelFilter));
+  }, [drivers, levelFilter, levelIndex.data]);
   const groupedDrivers = useMemo(() => {
     const statusRows = statusesQuery.data ?? [];
     const labels: Record<string, string> = {};
@@ -273,7 +287,7 @@ function DriversPageContent() {
       labels[row.key] = catalogLabel(row.key, statusRows, locale);
     }
     return groupRows(
-      drivers,
+      shownDrivers,
       prefs.groupBy,
       {
         zone: (row) => row.zone_name,
@@ -286,7 +300,7 @@ function DriversPageContent() {
       labels,
       t("companyUnassigned"),
     );
-  }, [drivers, prefs.groupBy, statusesQuery.data, locale, t]);
+  }, [shownDrivers, prefs.groupBy, statusesQuery.data, locale, t]);
   const firstPage = pageQuery.data?.pages[0];
   const kpiCounts = firstPage?.kpis ?? EMPTY_KPIS;
   const filteredTotal = listFailed ? 0 : firstPage?.filteredTotal ?? 0;
@@ -388,15 +402,15 @@ function DriversPageContent() {
   const showEmptyAll = !isLoading && drivers.length === 0 && !showEmptySearch;
 
   const allVisibleSelected =
-    drivers.length > 0 && drivers.every((d) => selectedIds.has(d.id));
+    shownDrivers.length > 0 && shownDrivers.every((d) => selectedIds.has(d.id));
 
   const toggleSelectAll = useCallback(() => {
     setSelectedIds((prev) =>
-      drivers.length > 0 && drivers.every((d) => prev.has(d.id))
+      shownDrivers.length > 0 && shownDrivers.every((d) => prev.has(d.id))
         ? new Set()
-        : new Set(drivers.map((d) => d.id)),
+        : new Set(shownDrivers.map((d) => d.id)),
     );
-  }, [drivers]);
+  }, [shownDrivers]);
 
   const toggleRow = (id: string) => {
     setSelectedIds((prev) => {
@@ -419,6 +433,7 @@ function DriversPageContent() {
       { id: "phone", label: t("colPhone") },
       { id: "restaurants", label: t("colRestaurants") },
       { id: "zone", label: t("colZone") },
+      { id: "vehicle", label: t("colVehicle") },
       // Off by default: most operations never reference a platform, and the
       // list already runs to the edge of a 14" viewport.
       { id: "clientId", label: t("colClientId"), defaultVisible: false as const },
@@ -553,6 +568,7 @@ function DriversPageContent() {
       fixed("phone", t("colPhone")),
       fixed("restaurants", t("colRestaurants")),
       fixed("zone", t("colZone")),
+      { id: "vehicle", label: t("colVehicle") },
       fixed("clientId", t("colClientId")),
       fixed("clientName", t("colClientName")),
       fixed("todayDeliveries", t("colTodayDeliveries")),
@@ -664,6 +680,37 @@ function DriversPageContent() {
                     {tabSelectItems.map((item) => (
                       <SelectItem key={item.value} value={item.value} className="cursor-pointer">
                         {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  items={[
+                    { value: "all", label: t("levelFilterAll") },
+                    { value: "D", label: t("levelFilterD") },
+                    { value: "standard", label: t("levelFilterStandard") },
+                    { value: "override", label: t("levelFilterOverride") },
+                  ]}
+                  value={levelFilter}
+                  onValueChange={(value) => {
+                    if (!value) return;
+                    setLevelFilter(value as DriverLevelFilter);
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-[120px] shrink-0 cursor-pointer rounded-lg text-xs" aria-label={t("levelFilterAll")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(
+                      [
+                        ["all", t("levelFilterAll")],
+                        ["D", t("levelFilterD")],
+                        ["standard", t("levelFilterStandard")],
+                        ["override", t("levelFilterOverride")],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <SelectItem key={value} value={value} className="cursor-pointer">
+                        {label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -813,7 +860,10 @@ function DriversPageContent() {
                       onClick={() => router.push(driverDetailHref(driver.id, tabFilter))}
                       className="cursor-pointer rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/30"
                     >
-                      <p className="truncate text-sm font-semibold text-foreground">{driver.full_name}</p>
+                      <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
+                        <span className="truncate">{driver.full_name}</span>
+                        <DriverLevelBadge level={levelIndex.data?.get(driver.id)?.level} />
+                      </p>
                       <p className="mt-0.5 font-mono text-xs text-muted-foreground">
                         {driver.employee_id ?? formatDriverCodeDisplay(driver.driver_code)}
                       </p>
@@ -949,8 +999,11 @@ function DriversPageContent() {
                         </VisibleTableCell>
                         <VisibleTableCell columnId="name" isVisible={isColumnVisible}>
                           <div className="min-w-0">
-                            <span className="truncate font-medium text-foreground">
-                              {driver.full_name}
+                            <span className="inline-flex min-w-0 items-center gap-1.5">
+                              <span className="truncate font-medium text-foreground">
+                                {driver.full_name}
+                              </span>
+                              <DriverLevelBadge level={levelIndex.data?.get(driver.id)?.level} />
                             </span>
                             <Link
                               href={driverDetailHref(driver.id, tabFilter)}
@@ -977,6 +1030,15 @@ function DriversPageContent() {
                           className="text-sm text-muted-foreground"
                         >
                           {driver.zone_name}
+                        </VisibleTableCell>
+                        <VisibleTableCell columnId="vehicle" isVisible={isColumnVisible}>
+                          <DriverVehicleCell
+                            vehicleTypeKey={driver.vehicle_type_key}
+                            vehicleLabel={driver.vehicle_label}
+                            bikeLabel={t("vehicleBike")}
+                            carLabel={t("vehicleCar")}
+                            emptyLabel={t("vehicleNone")}
+                          />
                         </VisibleTableCell>
                         <VisibleTableCell
                           columnId="clientId"

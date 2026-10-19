@@ -46,7 +46,11 @@ import {
   offDaysForRpc,
   parseImportOffDays,
 } from "./import/import-off-days";
-import { parseImportActive, parseRiderCategory } from "./import/parse";
+import {
+  parseImportActive,
+  parseImportVehicleType,
+  parseRiderCategory,
+} from "./import/parse";
 import { kuwaitToday } from "@/features/performance/performance-formulas";
 import {
   companyMatchesCategory,
@@ -275,7 +279,7 @@ export async function resolveDriverImportPreview(
   ] = await Promise.all([
     db.from("partners").select("id, name"),
     db.from("zones").select("id, name, code"),
-    db.from("vehicles").select("id, bike_id, reg_number"),
+    db.from("vehicles").select("id, bike_id, reg_number, vehicle_type_key"),
     db
       .from("restaurants")
       .select("id, name, restaurant_code, partner_id, status, is_active")
@@ -309,13 +313,17 @@ export async function resolveDriverImportPreview(
     })),
   );
 
-  const vehicleByLabel = new Map<string, string>();
+  const vehicleByLabel = new Map<
+    string,
+    { id: string; typeKey: "bike" | "car" | null }
+  >();
   for (const v of vehicles ?? []) {
+    const entry = { id: v.id, typeKey: parseImportVehicleType(v.vehicle_type_key) };
     const bike = v.bike_id?.trim().toLowerCase() ?? "";
-    if (bike) vehicleByLabel.set(bike, v.id);
+    if (bike) vehicleByLabel.set(bike, entry);
     const reg = v.reg_number?.trim().toLowerCase() ?? "";
-    if (reg) vehicleByLabel.set(reg, v.id);
-    if (bike && reg) vehicleByLabel.set(`${bike} · ${reg}`, v.id);
+    if (reg) vehicleByLabel.set(reg, entry);
+    if (bike && reg) vehicleByLabel.set(`${bike} · ${reg}`, entry);
   }
 
   const roster: ImportIdentityRoster = {
@@ -364,6 +372,7 @@ export async function resolveDriverImportPreview(
     let zone_id: string | null = null;
     let zone_name: string | null = null;
     let vehicle_id: string | null = null;
+    let vehicle_type_key: "bike" | "car" | null = null;
     let restaurant_ids: string[] = [];
     let restaurant_names: string[] = [];
     let nationality: string | null = null;
@@ -398,10 +407,14 @@ export async function resolveDriverImportPreview(
       else status = "unmatched_zone";
     }
 
-    if (lookupStillOpen() && row.vehicle_label?.trim()) {
-      const vlabel = row.vehicle_label.trim().toLowerCase();
-      vehicle_id = vehicleByLabel.get(vlabel) ?? null;
-      if (!vehicle_id) status = "unmatched_vehicle";
+    if (lookupStillOpen()) {
+      const label = row.vehicle_label?.trim().toLowerCase() ?? "";
+      const matched = label ? vehicleByLabel.get(label) : undefined;
+      vehicle_id = matched?.id ?? null;
+      // An unknown plate is not a rejection: the row keeps the type it named
+      // (or the matched vehicle's, or one bike) and imports without a link.
+      vehicle_type_key =
+        parseImportVehicleType(row.vehicle_type) ?? matched?.typeKey ?? "bike";
     }
 
     if (lookupStillOpen()) {
@@ -484,6 +497,7 @@ export async function resolveDriverImportPreview(
       zone_id,
       zone_name,
       vehicle_id,
+      vehicle_type_key,
       restaurant_ids,
       restaurant_names,
       nationality,
@@ -597,6 +611,7 @@ export async function applyOneImportRow(
           partner_id: row.partner_id,
           zone_id: row.zone_id,
           vehicle_id: row.vehicle_id,
+          vehicle_type_key: row.vehicle_type_key ?? "bike",
           nationality: row.nationality,
           rider_category: row.rider_category,
           source_company: row.source_company,
@@ -624,6 +639,7 @@ export async function applyOneImportRow(
             partner_id: row.partner_id,
             zone_id: row.zone_id,
             vehicle_id: row.vehicle_id,
+            vehicle_type_key: row.vehicle_type_key ?? "bike",
             civil_id: civilId,
             employee_id: employeeId,
             nationality: row.nationality,
@@ -711,6 +727,7 @@ export async function applyOneImportRow(
       partner_id: row.partner_id,
       zone_id: row.zone_id,
       vehicle_id: row.vehicle_id,
+      vehicle_type_key: row.vehicle_type_key ?? "bike",
       nationality: row.nationality,
       rider_category: row.rider_category,
       source_company: row.source_company,

@@ -87,6 +87,7 @@ async function loadSnapshotFallback(
   to: string,
 ): Promise<ComparisonSnapshot> {
   const rowDocs = await pageRange(db, COLLECTIONS.orderReconRows, "work_date", from, to, true);
+  let docsRead = rowDocs.length;
   const rowPage = rowDocs.map((doc) => {
     const row = doc.data();
     return {
@@ -103,6 +104,7 @@ async function loadSnapshotFallback(
   for (let i = 0; i < runIds.length; i += 100) {
     const refs = runIds.slice(i, i + 100).map((id) => db.collection(COLLECTIONS.orderReconRuns).doc(id));
     const found = refs.length ? await db.getAll(...refs) : [];
+    docsRead += found.length;
     for (const doc of found) {
       if (!doc.exists) continue;
       const row = doc.data() ?? {};
@@ -147,6 +149,7 @@ async function loadSnapshotFallback(
   const startIso = `${from}T00:00:00+03:00`;
   const endIso = `${addKuwaitDays(to, 1)}T00:00:00+03:00`;
   const deliveryDocs = await pageRange(db, COLLECTIONS.deliveries, "delivered_at", startIso, endIso, false);
+  docsRead += deliveryDocs.length;
   const allowed = new Set(["pending", "in_transit", "verified"]);
   const deliveries = deliveryDocs
     .map((doc) => doc.data())
@@ -162,6 +165,7 @@ async function loadSnapshotFallback(
   for (let i = 0; i < driverIds.length; i += 100) {
     const refs = driverIds.slice(i, i + 100).map((id) => db.collection(COLLECTIONS.drivers).doc(id));
     const found = refs.length ? await db.getAll(...refs) : [];
+    docsRead += found.length;
     for (const doc of found) {
       if (!doc.exists) continue;
       drivers.push({ id: doc.id, employee_id: (doc.data()?.employee_id as string | null) ?? null });
@@ -190,6 +194,7 @@ async function loadSnapshotFallback(
   const wanted = [...new Set([...amIds, ...mgIds].map((id) => id.toLowerCase()))];
   const riderRows: { id: string; employee_id: string | null }[] = [];
   const liveSnap = await db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get();
+  docsRead += liveSnap.size;
   for (const doc of liveSnap.docs) {
     const employeeId = doc.data().employee_id as string | null;
     if (employeeId && wanted.includes(employeeId.trim().toLowerCase())) {
@@ -201,6 +206,7 @@ async function loadSnapshotFallback(
   for (let i = 0; i < profileIds.length; i += 100) {
     const refs = profileIds.slice(i, i + 100).map((id) => db.collection(COLLECTIONS.profiles).doc(id));
     const found = refs.length ? await db.getAll(...refs) : [];
+    docsRead += found.length;
     for (const doc of found) {
       if (!doc.exists) continue;
       names.set(doc.id, String(doc.data()?.full_name ?? ""));
@@ -210,6 +216,7 @@ async function loadSnapshotFallback(
   for (let i = 0; i < profileIds.length; i += 30) {
     const ids = profileIds.slice(i, i + 30);
     const mapSnap = await db.collection(COLLECTIONS.driverRestaurants).where("driver_id", "in", ids).get();
+    docsRead += mapSnap.size;
     const maps = mapSnap.docs.map((doc) => ({
       driver_id: String(doc.data().driver_id ?? ""),
       restaurant_id: String(doc.data().restaurant_id ?? ""),
@@ -217,6 +224,7 @@ async function loadSnapshotFallback(
     const restIds = [...new Set(maps.map((m) => m.restaurant_id).filter(Boolean))];
     const restRefs = restIds.map((id) => db.collection(COLLECTIONS.restaurants).doc(id));
     const restDocs = restRefs.length ? await db.getAll(...restRefs) : [];
+    docsRead += restDocs.length;
     const byId = new Map(
       restDocs.filter((doc) => doc.exists).map((doc) => [doc.id, String(doc.data()?.name ?? "")]),
     );
@@ -233,6 +241,8 @@ async function loadSnapshotFallback(
       restName.set(driverId, list[0] ?? "—");
     }
   }
+
+  console.info(JSON.stringify({ perf: "handler", name: "loadSnapshotFallback", docsRead }));
 
   return {
     from,

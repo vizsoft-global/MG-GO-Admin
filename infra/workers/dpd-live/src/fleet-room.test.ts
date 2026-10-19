@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   alarmIntervalMs,
   downsampleForDurability,
+  FleetRoom,
   IDLE_ALARM_MS,
   INGEST_HOT_WINDOW_MS,
   isDriverAttachment,
@@ -216,5 +217,104 @@ describe("alarmIntervalMs", () => {
       }),
       IDLE_ALARM_MS,
     );
+  });
+});
+
+function fakeRoom() {
+  const sql = { exec: () => ({ toArray: () => [] }) };
+  const state = {
+    storage: { sql },
+    getWebSockets: () => [],
+  } as unknown as DurableObjectState;
+  const env = {
+    GPS_SINK: "r2",
+    GPS_SINK_PERCENT: "100",
+    GPS_DUAL_WRITE: "0",
+    GPS_ARCHIVE: {},
+    FIREBASE_FUNCTIONS_BASE_URL: "https://functions.test",
+    WORKER_SHARED_SECRET: "secret",
+  } as never;
+  return new FleetRoom(state, env);
+}
+
+function seedPending(room: FleetRoom, points: PendingPoint[]) {
+  const entity = { driverId: "driver-a", inAssignedZone: true, pending: points };
+  (room as unknown as { entities: Map<string, unknown> }).entities.set("driver-a", entity);
+  return entity;
+}
+
+/** Captures the `p_events` body of the Functions call; returns a restore function. */
+function captureFlushCalls(): { calls: Array<{ p_events: Array<Record<string, unknown>> }>; restore: () => void } {
+  const calls: Array<{ p_events: Array<Record<string, unknown>> }> = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    calls.push(JSON.parse(String(init?.body ?? "{}")) as { p_events: Array<Record<string, unknown>> });
+    return new Response(JSON.stringify({ ok: true, skipped: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+  return { calls, restore: () => (globalThis.fetch = original) };
+}
+
+describe("flushPositions archive safety", () => {
+  it("keeps the batch pending when archive.record throws, then archives it on retry", async () => {
+    const room = fakeRoom();
+    const entity = seedPending(room, batch(2));
+    let attempts = 0;
+    let archivedPoints = 0;
+    (room as unknown as { archive: unknown }).archive = {
+      record: (_driverId: string, points: unknown[]) => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("sqlite_busy");
+        archivedPoints = points.length;
+        return { accepted: true };
+      },
+      persistBuffers: () => ({ capped: false }),
+      distanceTodayM: () => 42,
+    };
+    const capture = captureFlushCalls();
+    try {
+      await (room as unknown as { flushPositions: () => Promise<void> }).flushPositions();
+
+      assert.equal(attempts, 1);
+      assert.equal(entity.pending.length, 2, "a failed record must not clear pending");
+      assert.equal(capture.calls.length, 0, "a failed record must not reach Firestore");
+
+      await (room as unknown as { flushPositions: () => Promise<void> }).flushPositions();
+
+      assert.equal(attempts, 2);
+      assert.equal(archivedPoints, 2);
+      assert.equal(entity.pending.length, 0);
+      assert.equal(capture.calls.length, 1);
+      assert.equal(capture.calls[0]!.p_events.length, 2);
+      assert.equal(capture.calls[0]!.p_events[0]!.history_in_r2, true);
+      assert.equal(capture.calls[0]!.p_events[0]!.distance_today_m, 42);
+    } finally {
+      capture.restore();
+    }
+  });
+
+  it("retries a capped buffer once, then falls back to Firestore instead of dropping", async () => {
+    const room = fakeRoom();
+    const entity = seedPending(room, batch(2));
+    (room as unknown as { archive: unknown }).archive = {
+      record: () => ({ accepted: false, reason: "buffer_capped" }),
+      persistBuffers: () => ({ capped: false }),
+      distanceTodayM: () => null,
+    };
+    const capture = captureFlushCalls();
+    try {
+      await (room as unknown as { flushPositions: () => Promise<void> }).flushPositions();
+      assert.equal(entity.pending.length, 2, "first cap keeps the batch pending");
+      assert.equal(capture.calls.length, 0);
+
+      await (room as unknown as { flushPositions: () => Promise<void> }).flushPositions();
+      assert.equal(entity.pending.length, 0);
+      assert.equal(capture.calls.length, 1);
+      assert.equal(capture.calls[0]!.p_events[0]!.history_in_r2, false);
+    } finally {
+      capture.restore();
+    }
   });
 });

@@ -1,21 +1,37 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
+  Check,
   Download,
   FileText,
   Loader2,
+  Paperclip,
   Printer,
   Shield,
   ShieldOff,
+  Trash2,
+  X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import {
+  addEsignAttachment,
+  decideEsignRequest,
+  removeEsignAttachment,
+  uploadEsignAttachmentFile,
+  type EsignReviewDecision,
+} from "./esign-actions";
 import { esignDocumentHref } from "./esign-storage-key";
 import { EsignSignersEditor } from "./esign-signers-editor";
 import { formatStampInstant } from "./esign-stamp-layout";
@@ -39,6 +55,13 @@ function formatStamp(value: string | null): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function formatBytes(size: number): string {
+  if (!Number.isFinite(size) || size <= 0) return "—";
+  return size >= 1024 * 1024
+    ? `${(size / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(size / 1024))} KB`;
 }
 
 /** Signature proof keys the driver app writes into `esign_requests.signer_meta`. */
@@ -98,9 +121,83 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
   const t = useTranslations("pages.requests.esign.detail");
   const tCommon = useTranslations("pages.requests.esign");
   const placerRef = useRef<EsignStampPlacerHandle>(null);
-  const { data, isLoading } = useEsignRequestDetail(requestId);
+  const { data, isLoading, refetch } = useEsignRequestDetail(requestId);
   const { data: links, isLoading: linksLoading } = useEsignDocumentLinks(requestId);
   const request = data?.request;
+  const [busy, setBusy] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
+
+  async function addAttachments(files: FileList | null) {
+    if (!files || files.length === 0 || !request) return;
+    setBusy(true);
+    try {
+      const remaining = Math.max(0, 5 - (request.attachments?.length ?? 0));
+      if (remaining === 0) {
+        toast.error(t("attachmentLimit"));
+        return;
+      }
+      for (const file of Array.from(files).slice(0, remaining)) {
+        const form = new FormData();
+        form.append("file", file);
+        const uploaded = await uploadEsignAttachmentFile(form);
+        if (!uploaded.ok || !uploaded.key) {
+          toast.error(t("attachmentUploadFailed"));
+          continue;
+        }
+        const added = await addEsignAttachment({
+          requestId,
+          storageKey: uploaded.key,
+          name: uploaded.name ?? file.name,
+          contentType: uploaded.contentType ?? file.type,
+          size: uploaded.size ?? file.size,
+        });
+        if (!added.ok) toast.error(t("attachmentUploadFailed"));
+      }
+      await refetch();
+      toast.success(t("attachmentsSaved"));
+    } finally {
+      setBusy(false);
+      if (attachmentInputRef.current) attachmentInputRef.current.value = "";
+    }
+  }
+
+  async function removeAttachment(attachmentId: string) {
+    setBusy(true);
+    const result = await removeEsignAttachment(attachmentId);
+    setBusy(false);
+    if (!result.ok) {
+      toast.error(t("reviewFailed"));
+      return;
+    }
+    await refetch();
+    toast.success(t("attachmentRemoved"));
+  }
+
+  async function decide(decision: EsignReviewDecision) {
+    setBusy(true);
+    const result = await decideEsignRequest({
+      requestId,
+      decision,
+      note: decision === "reject" ? rejectReason.trim() : null,
+    });
+    setBusy(false);
+    if (!result.ok) {
+      toast.error(t("reviewFailed"));
+      return;
+    }
+    setRejectOpen(false);
+    setRejectReason("");
+    await refetch();
+    toast.success(
+      decision === "reject"
+        ? t("reviewRejected")
+        : decision === "acknowledge"
+          ? t("reviewAcknowledged")
+          : t("reviewApproved"),
+    );
+  }
 
   if (isLoading) {
     return (
@@ -286,6 +383,132 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
           <EsignSignersEditor requestId={request.id} />
 
           <AppListCard className="space-y-2 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">{t("attachmentsSection")}</h3>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={busy || (request.attachments?.length ?? 0) >= 5}
+                onClick={() => attachmentInputRef.current?.click()}
+              >
+                {busy ? (
+                  <Loader2 className="me-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Paperclip className="me-1 h-3.5 w-3.5" />
+                )}
+                {t("addAttachment")}
+              </Button>
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                multiple
+                accept="application/pdf,image/png,image/jpeg"
+                className="hidden"
+                onChange={(event) => void addAttachments(event.target.files)}
+              />
+            </div>
+            {(request.attachments ?? []).length === 0 ? (
+              <p className="text-[10px] text-muted-foreground">{t("noAttachments")}</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {(request.attachments ?? []).map((attachment) => (
+                  <li
+                    key={attachment.id}
+                    className="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5"
+                  >
+                    <a
+                      href={attachment.downloadUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="min-w-0 truncate text-xs font-medium text-primary hover:underline"
+                    >
+                      {attachment.name}
+                    </a>
+                    <span className="flex shrink-0 items-center gap-1">
+                      <span className="text-[10px] text-muted-foreground">
+                        {formatBytes(attachment.size)}
+                      </span>
+                      <button
+                        type="button"
+                        className="inline-flex size-7 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
+                        aria-label={t("removeAttachment")}
+                        disabled={busy}
+                        onClick={() => void removeAttachment(attachment.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </AppListCard>
+
+          {request.status === "signed" ? (
+            <AppListCard className="space-y-2 p-4">
+              <h3 className="text-sm font-semibold">{t("reviewSection")}</h3>
+              {request.review_status ? (
+                <div className="space-y-1 rounded-md border border-border bg-muted/30 p-2">
+                  <p className="flex items-center gap-1.5 text-xs font-medium">
+                    {request.review_status === "rejected" ? (
+                      <X className="h-3.5 w-3.5 text-destructive" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5 text-emerald-600" />
+                    )}
+                    {request.review_status === "rejected"
+                      ? t("reviewRejected")
+                      : request.review_status === "acknowledged"
+                        ? t("reviewAcknowledged")
+                        : t("reviewApproved")}
+                  </p>
+                  {request.review_note ? (
+                    <p className="text-xs text-muted-foreground">{request.review_note}</p>
+                  ) : null}
+                  {request.reviewed_at ? (
+                    <p className="text-[10px] text-muted-foreground">
+                      {formatStamp(request.reviewed_at)}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8"
+                    disabled={busy}
+                    onClick={() => void decide("approve")}
+                  >
+                    {t("approve")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    disabled={busy}
+                    onClick={() => void decide("acknowledge")}
+                  >
+                    {t("acknowledge")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="h-8"
+                    disabled={busy}
+                    onClick={() => setRejectOpen(true)}
+                  >
+                    {t("reject")}
+                  </Button>
+                </div>
+              )}
+            </AppListCard>
+          ) : null}
+
+          <AppListCard className="space-y-2 p-4">
             <h3 className="text-sm font-semibold">{t("detailsSection")}</h3>
             <dl className="space-y-1.5">
               <Row label={t("category")} value={request.category_label ?? "—"} />
@@ -424,6 +647,43 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
           </Button>
         </div>
       </div>
+
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogContent className="sm:max-w-md" showCloseButton>
+          <div className="space-y-2 px-5 pt-4">
+            <Label>{t("rejectReason")}</Label>
+            <Textarea
+              className="min-h-24"
+              value={rejectReason}
+              placeholder={t("rejectReasonPlaceholder")}
+              onChange={(event) => setRejectReason(event.target.value)}
+            />
+          </div>
+          <div className="px-5 pb-4">
+            <AppModalFooter title={t("reject")} subtitle={t("rejectReason")}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setRejectOpen(false)}
+              >
+                {t("back")}
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                className="h-9"
+                disabled={busy || !rejectReason.trim()}
+                onClick={() => void decide("reject")}
+              >
+                {t("reject")}
+              </Button>
+            </AppModalFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </AppPage>
   );
 }

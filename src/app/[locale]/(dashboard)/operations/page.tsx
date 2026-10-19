@@ -1,5 +1,6 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import {
+  Bike,
   Building2,
   ClipboardCheck,
   ClipboardList,
@@ -51,6 +52,12 @@ const CARDS: ReadonlyArray<{
     href: "/settings/attendance",
     icon: ClipboardCheck,
     permission: "attendance.manage",
+  },
+  {
+    key: "vehicleTypes",
+    href: "/settings/vehicle-types",
+    icon: Bike,
+    permission: "vehicles.manage",
   },
   {
     key: "sourceCompanies",

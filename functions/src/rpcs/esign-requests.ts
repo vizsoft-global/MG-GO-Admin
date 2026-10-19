@@ -50,6 +50,7 @@ import {
 } from "./_shared";
 import { asDate, dayTextOf, notifyDriverTransactional } from "./visits-shared";
 import { normalizeDocumentKind, slotsForKind } from "./esign-signature-slots";
+import { canAddEsignAttachment } from "./esign-attachments";
 
 const APP_SETTINGS_DOC_ID = "1";
 const REQUEST_CODE_COUNTER = "esign_code_seq";
@@ -58,8 +59,8 @@ const DEFAULT_REMINDER_COOLDOWN_HOURS = 24;
 const LIST_PAGE_SIZE = 500;
 const LIST_SCAN_CAP = 20_000;
 const EXPIRE_SCAN_CAP = 20_000;
-const SIGN_DEEP_LINK_PREFIX = "musallam:///profile/support/sign/";
-const SIGN_ROUTE_PREFIX = "/profile/support/sign/";
+export const SIGN_DEEP_LINK_PREFIX = "musallam:///profile/support/sign/";
+export const SIGN_ROUTE_PREFIX = "/profile/support/sign/";
 
 const TEMPLATE_DOCUMENT_KINDS = ["penalty", "loan", "payslip", "general"] as const;
 const FIELD_SOURCE_KINDS = ["system", "entry", "fixed", "signature"] as const;
@@ -658,6 +659,193 @@ export const adminCreateEsignRequest = onCall(async (request) => {
   const staff = await requireStaff(request, "requests.manage");
   const data = (request.data ?? {}) as Dict;
   return createEsignRequestCore(parseCreateEsignRequestInput(data), staff.uid);
+});
+
+// ---------------------------------------------------------------------------
+// Attachments
+// ---------------------------------------------------------------------------
+
+/** Five supporting documents is more than any one accident / medical case needs. */
+type AttachmentRow = {
+  request_id: string;
+  name: string;
+  storage_key: string;
+  content_type: string;
+  size: number;
+  uploaded_by: string;
+  source: "admin" | "driver";
+  created_at: Timestamp;
+};
+
+function attachmentInput(data: Dict) {
+  const requestId = pickId(data, "requestId", "p_request_id");
+  const storageKey = pickText(data, "storageKey", "p_storage_key");
+  if (!requestId || !storageKey) return null;
+  return {
+    requestId,
+    storageKey,
+    name: pickText(data, "name", "p_name") ?? "Attachment",
+    contentType: pickText(data, "contentType", "p_content_type") ?? "application/octet-stream",
+    size: Math.max(0, numberOrNull(pick(data, "size", "p_size")) ?? 0),
+  };
+}
+
+async function loadAttachmentRows(requestId: string): Promise<QueryDocumentSnapshot[]> {
+  const snap = await getFirestore()
+    .collection(COLLECTIONS.esignRequestAttachments)
+    .where("request_id", "==", requestId)
+    .get();
+  return [...snap.docs].sort((a, b) => {
+    const left = (dataOf(a).created_at as Timestamp | undefined)?.toMillis?.() ?? 0;
+    const right = (dataOf(b).created_at as Timestamp | undefined)?.toMillis?.() ?? 0;
+    return left - right;
+  });
+}
+
+export const adminAddEsignAttachment = onCall(async (request) => {
+  const staff = await requireStaff(request, "requests.manage");
+  const input = attachmentInput((request.data ?? {}) as Dict);
+  if (!input) return { ok: false, error: "invalid_request" };
+
+  const db = getFirestore();
+  const requestSnap = await db.collection(COLLECTIONS.esignRequests).doc(input.requestId).get();
+  if (!requestSnap.exists) return { ok: false, error: "not_found" };
+
+  const existing = await loadAttachmentRows(input.requestId);
+  if (!canAddEsignAttachment(existing.length)) {
+    return { ok: false, error: "attachment_limit" };
+  }
+
+  const ref = db.collection(COLLECTIONS.esignRequestAttachments).doc();
+  const row: AttachmentRow = {
+    request_id: input.requestId,
+    name: input.name,
+    storage_key: input.storageKey,
+    content_type: input.contentType,
+    size: input.size,
+    uploaded_by: staff.uid,
+    source: "admin",
+    created_at: Timestamp.now(),
+  };
+  await ref.set(row);
+  await logAdminActivity({
+    actorId: staff.uid,
+    action: "esign.attachment.add",
+    entity: "esign_request",
+    entityId: input.requestId,
+    detail: { attachment_id: ref.id, name: input.name, size: input.size },
+  });
+  return {
+    ok: true,
+    attachment: { id: ref.id, ...row, created_at: row.created_at.toDate().toISOString() },
+  };
+});
+
+export const adminRemoveEsignAttachment = onCall(async (request) => {
+  const staff = await requireStaff(request, "requests.manage");
+  const data = (request.data ?? {}) as Dict;
+  const attachmentId = pickId(data, "attachmentId", "id", "p_attachment_id");
+  if (!attachmentId) return { ok: false, error: "invalid_request" };
+
+  const db = getFirestore();
+  const ref = db.collection(COLLECTIONS.esignRequestAttachments).doc(attachmentId);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, error: "not_found" };
+  const row = dataOf(snap);
+  await ref.delete();
+  await logAdminActivity({
+    actorId: staff.uid,
+    action: "esign.attachment.remove",
+    entity: "esign_request",
+    entityId: textOrNull(row.request_id),
+    detail: { attachment_id: attachmentId, name: textOrNull(row.name) },
+  });
+  return { ok: true, id: attachmentId };
+});
+
+// ---------------------------------------------------------------------------
+// Management decision (a signed request with no staff signer)
+// ---------------------------------------------------------------------------
+
+const REVIEW_DECISIONS = ["approve", "acknowledge", "reject"] as const;
+type ReviewDecision = (typeof REVIEW_DECISIONS)[number];
+
+function reviewStatusOf(decision: ReviewDecision): "approved" | "acknowledged" | "rejected" {
+  return decision === "reject" ? "rejected" : decision === "acknowledge" ? "acknowledged" : "approved";
+}
+
+/**
+ * Closes a signed request that has no staff counter-signer — accident, medical
+ * report, declaration. A rejection needs a reason because that reason is what
+ * the rider is shown and notified with.
+ */
+export const adminDecideEsignRequest = onCall(async (request) => {
+  const staff = await requireStaff(request, "requests.manage");
+  const data = (request.data ?? {}) as Dict;
+  const requestId = pickId(data, "requestId", "p_request_id");
+  const decision = pickText(data, "decision", "p_decision") as ReviewDecision | null;
+  const note = trimmedOrNull(pick(data, "note", "p_note"));
+  if (!requestId || !decision || !(REVIEW_DECISIONS as readonly string[]).includes(decision)) {
+    return { ok: false, error: "invalid_decision" };
+  }
+  if (decision === "reject" && !note) return { ok: false, error: "reason_required" };
+
+  const db = getFirestore();
+  const ref = db.collection(COLLECTIONS.esignRequests).doc(requestId);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, error: "not_found" };
+  const row = dataOf(snap);
+  if (String(row.status ?? "") !== "signed") return { ok: false, error: "not_signed" };
+
+  const reviewStatus = reviewStatusOf(decision);
+  await ref.update({
+    review_status: reviewStatus,
+    review_decision: decision,
+    review_note: note,
+    reviewed_at: FieldValue.serverTimestamp(),
+    reviewed_by: staff.uid,
+    updated_at: FieldValue.serverTimestamp(),
+  });
+  await logAdminActivity({
+    actorId: staff.uid,
+    action: `esign.review.${decision}`,
+    entity: "esign_request",
+    entityId: requestId,
+    detail: { review_status: reviewStatus, note },
+  });
+
+  const driverId = textOrNull(row.driver_id);
+  if (driverId) {
+    const code = textOrNull(row.request_code) ?? requestId;
+    const documentName = textOrNull(row.title) ?? code;
+    const body =
+      decision === "reject"
+        ? note
+          ? `${documentName} was rejected by management: ${note}`
+          : `${documentName} was rejected by management.`
+        : `${documentName} was reviewed by management.`;
+    try {
+      await notifyDriverTransactional({
+        driverId,
+        title: `${decision === "reject" ? "Document rejected" : "Document reviewed"} - ${code}`,
+        body,
+        deepLink: `${SIGN_DEEP_LINK_PREFIX}${requestId}`,
+        category: "operations",
+        priority: "high",
+        actionParams: {
+          record_type: "esign",
+          record_id: requestId,
+          route: `${SIGN_ROUTE_PREFIX}${requestId}`,
+        },
+        createdBy: staff.uid,
+      });
+    } catch (error) {
+      // The decision is committed; a push failure must not undo it.
+      console.error("esign review notify", requestId, error);
+    }
+  }
+
+  return { ok: true, review_status: reviewStatus };
 });
 
 // ---------------------------------------------------------------------------

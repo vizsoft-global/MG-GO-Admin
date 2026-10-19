@@ -612,9 +612,13 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
       status: asString(raw["status"]),
       vehicleKey: vehicleId ? asString(vehicle?.["vehicle_type_key"]) : null,
       restaurantId: resolvedRestaurantId,
-      restaurantClientId: resolvedRestaurantId
-        ? (restaurantClientIds.get(resolvedRestaurantId) ?? null)
-        : null,
+      // Same value the Employees page prints as "Client ID": the rider's own
+      // `client_id`, falling back to the partner's external merchant id.
+      restaurantClientId:
+        trimmedOrNull(raw["client_id"]) ??
+        (resolvedRestaurantId
+          ? (restaurantClientIds.get(resolvedRestaurantId) ?? null)
+          : null),
       restaurantName:
         projectKey === "keeta" || !resolvedRestaurantId
           ? null

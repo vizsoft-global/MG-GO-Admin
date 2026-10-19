@@ -82,7 +82,7 @@ export function OpsTopBottomTab({
             zones,
             (z) => dimMetricValue(z, metric),
             requestedZones,
-            (z) => z.key,
+            (z) => z.label || z.key,
             (z) => z.working_days,
           ),
     [auto, zones, metric, requestedZones],
@@ -257,13 +257,13 @@ export function OpsTopBottomTab({
                   "ops-top-zones",
                   toCsv(
                     ["zone", "value"],
-                    byZone.top.map((z) => [z.key, z.value]),
+                    byZone.top.map((z) => [z.label || z.key, z.value]),
                   ),
                 )
               }
             >
               <OpsBarChart
-                data={byZone.top.map((z) => ({ key: z.key, value: z.value }))}
+                data={byZone.top.map((z) => ({ key: z.label || z.key, value: z.value }))}
                 xKey="key"
                 series={[{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }]}
                 layout="horizontal"
@@ -278,13 +278,13 @@ export function OpsTopBottomTab({
                     "ops-bottom-zones",
                     toCsv(
                       ["zone", "value"],
-                      byZone.bottom.map((z) => [z.key, z.value]),
+                      byZone.bottom.map((z) => [z.label || z.key, z.value]),
                     ),
                   )
                 }
               >
                 <OpsBarChart
-                  data={byZone.bottom.map((z) => ({ key: z.key, value: z.value }))}
+                  data={byZone.bottom.map((z) => ({ key: z.label || z.key, value: z.value }))}
                   xKey="key"
                   series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
                   layout="horizontal"

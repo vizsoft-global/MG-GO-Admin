@@ -309,11 +309,14 @@ function parseKpis(raw: unknown): PerformanceKpis {
   };
 }
 
-async function loadDriverRestaurantNames(driverIds: string[]): Promise<Map<string, string>> {
+async function loadDriverRestaurantNames(
+  driverIds: string[],
+): Promise<{ names: Map<string, string>; docsRead: number }> {
   const names = new Map<string, string>();
-  if (driverIds.length === 0) return names;
+  if (driverIds.length === 0) return { names, docsRead: 0 };
   const db = await staffDb();
-  if (!db) return names;
+  if (!db) return { names, docsRead: 0 };
+  let docsRead = 0;
   const wanted = new Set(driverIds);
   const links: Array<{ driver_id: string; restaurant_id: string }> = [];
   const ids = [...wanted];
@@ -323,6 +326,7 @@ async function loadDriverRestaurantNames(driverIds: string[]): Promise<Map<strin
       .collection(COLLECTIONS.driverRestaurants)
       .where("driver_id", "in", chunk)
       .get();
+    docsRead += snap.size;
     for (const doc of snap.docs) {
       const row = doc.data();
       const driverId = String(row.driver_id ?? "");
@@ -337,6 +341,7 @@ async function loadDriverRestaurantNames(driverIds: string[]): Promise<Map<strin
     const docs = await db.getAll(
       ...chunk.map((id) => db.collection(COLLECTIONS.restaurants).doc(id)),
     );
+    docsRead += docs.length;
     for (const doc of docs) {
       const name = String(doc.data()?.name ?? "").trim();
       if (name) restaurantNames.set(doc.id, name);
@@ -351,7 +356,7 @@ async function loadDriverRestaurantNames(driverIds: string[]): Promise<Map<strin
     buckets.set(link.driver_id, list);
   }
   for (const [id, list] of buckets) names.set(id, list.join(", "));
-  return names;
+  return { names, docsRead };
 }
 
 /** Ungated read. Every caller must have gated on its own permission first. */
@@ -393,7 +398,12 @@ async function runPerformanceList(
     data && typeof data === "object" ? (data as Record<string, unknown>) : {};
   const rowsRaw = Array.isArray(payload.rows) ? payload.rows : [];
   const rows = rowsRaw.map((r) => parseRow(r as Record<string, unknown>));
-  const restaurantNames = await loadDriverRestaurantNames(rows.map((r) => r.driver_id));
+  const { names: restaurantNames, docsRead } = await loadDriverRestaurantNames(
+    rows.map((r) => r.driver_id),
+  );
+  console.info(
+    JSON.stringify({ perf: "handler", name: "fetchDriverPerformanceList", docsRead }),
+  );
 
   return {
     rows: rows.map((row) => ({
@@ -1597,6 +1607,9 @@ export async function fetchRatingEligibleStaff(): Promise<
   if (!db) throw new Error("not_configured");
 
   const snap = await db.collection(COLLECTIONS.profiles).where("role", "==", "staff").get();
+  console.info(
+    JSON.stringify({ perf: "handler", name: "fetchRatingEligibleStaff", docsRead: snap.size }),
+  );
   return snap.docs
     .map((doc) => {
       const row = doc.data();
@@ -1669,6 +1682,11 @@ export async function fetchRecentDeliveriesFeed(
     loadMap(COLLECTIONS.zones, zoneIds),
   ]);
 
+  const docsRead = snap.size + drivers.size + profiles.size + partners.size + zones.size;
+  console.info(
+    JSON.stringify({ perf: "handler", name: "fetchRecentDeliveriesFeed", docsRead }),
+  );
+
   return rows.map((row) => ({
     id: row.id,
     driver_id: row.driver_id,
@@ -1717,8 +1735,11 @@ function parseOpsKpis(raw: unknown): OpsKpis {
 
 function parseDim(raw: unknown): OpsDimRow {
   const o = (raw ?? {}) as Record<string, unknown>;
+  const key = String(o.key ?? "—");
+  const label = typeof o.label === "string" && o.label.trim() ? o.label : key;
   return {
-    key: String(o.key ?? "—"),
+    key,
+    label,
     id: o.id != null ? String(o.id) : null,
     orders: asInt(o.orders),
     working_days: asInt(o.working_days),

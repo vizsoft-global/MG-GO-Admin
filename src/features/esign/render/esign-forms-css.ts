@@ -1,1 +1,213 @@
-export const ESIGN_FORMS_CSS = "/* =====================================================================\n   DPD HR Forms — shared stylesheet\n   Used by: salary-slip.html, penalty-notice.html, loan-request.html\n   Page: A4 portrait, 1 page per document. Print backgrounds must be ON.\n   ===================================================================== */\n\n/* ---------- Fonts (IBM Plex Sans Arabic covers Latin + Arabic) ---------- */\n/* ---------- Design tokens ---------- */\n:root {\n  --ink:      #161A33;   /* primary text            */\n  --muted:    #5D6478;   /* labels, secondary text  */\n  --ar-label: #454C60;   /* Arabic labels           */\n  --line:     #CFD4DC;   /* inner cell borders      */\n  --tint:     #F3F4F7;   /* label cell background   */\n  --navy:     #1B2140;   /* outer borders, headers  */\n  --accent:   #C8202F;   /* section number, alerts  */\n  --acc-tint: #FCEDEE;   /* selected / alert fill   */\n  --ok:       #1F7A55;   --ok-tint:   #E3F3EC;\n  --warn:     #8A5A00;   --warn-tint: #FFF3DC;\n  --dots:     #8A90A0;   /* signature lines         */\n}\n\n@page { size: A4; margin: 0; }\n* { box-sizing: border-box; }\nhtml, body { margin: 0; padding: 0; }\nbody {\n  font-family: \"Plex\", sans-serif; color: var(--ink);\n  font-size: 8.4pt; line-height: 1.3;\n  -webkit-print-color-adjust: exact; print-color-adjust: exact;\n}\n.ar { direction: rtl; unicode-bidi: isolate; }\n.ar-start { text-align: left; }           /* Arabic line placed under English, left edge */\n\n/* ---------- Page ---------- */\n.page { width: 210mm; height: 297mm; padding: 10mm 12mm 8mm; display: flex; flex-direction: column; overflow: hidden; }\n@media screen { body { background: #E6E8EC; } .page { background: #fff; margin: 10mm auto; box-shadow: 0 2px 14px rgba(0,0,0,.12); } }\n\n/* ---------- Header: document type only ---------- */\n.doc-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 3mm; }\n.doc-header .en { font-size: 18pt; font-weight: 700; letter-spacing: -.2pt; line-height: 1.1; }\n.doc-header .ar { font-size: 16pt; font-weight: 700; line-height: 1.3; }\n.doc-rule { height: 1.2mm; border-radius: 1mm; margin-bottom: 3mm;\n  background: linear-gradient(90deg, var(--accent) 0 18%, var(--navy) 18% 100%); }\n\n/* ---------- Boxes & tables ---------- */\ntable { width: 100%; border-collapse: collapse; table-layout: fixed; }\ntd, th { border: .5pt solid var(--line); padding: 1.3mm 2.2mm; vertical-align: middle; height: 8.5mm; text-align: left; }\n.box { border: .9pt solid var(--navy); margin-top: 4.2mm; background: #fff; }\n.box--flush { margin-top: 0; }\n.box--open { border: 0; }\n/* remove inner-table edges that would double the box border */\n.box table tr:first-child > td, .box table tr:first-child > th { border-top: 0; }\n.box table tr > td:first-child, .box table tr > th:first-child { border-left: 0; }\n.box table tr > td:last-child,  .box table tr > th:last-child  { border-right: 0; }\n.box table tr:last-child > td { border-bottom: 0; }\n.divider       { border-top: .9pt solid var(--navy); }\n.divider-thin  { border-top: .5pt solid var(--line); }\n.box table.divider-thin tr:first-child > td { border-top: 0; }\n\n/* Field grid: label | value | label | value  (24/26/24/26) */\n.grid col.c-lab { width: 24%; }\n.grid col.c-val { width: 26%; }\n\n/* Label cell: English left, Arabic right, same line */\n.lab { background: var(--tint); color: var(--muted); font-size: 7.1pt; font-weight: 500; }\n.lab .row { display: flex; justify-content: space-between; align-items: center; gap: 1.5mm; }\n.lab .row > span { white-space: nowrap; }\n.lab .ar { font-size: 8pt; color: var(--ar-label); }\n.lab--strong { color: var(--ink); font-weight: 600; }\n\n/* Value cell */\n.val { font-weight: 600; font-size: 8.8pt; }\n.val .sub { display: block; font-weight: 500; font-size: 7.6pt; color: var(--muted); }\n.num { font-variant-numeric: tabular-nums; text-align: right; }\n.center { text-align: center; }\n.muted { color: var(--muted); }\n.code { font-size: 7.8pt; color: var(--muted); }\n.total-cell { background: var(--tint); font-size: 9.4pt; }\n\n/* Column header row */\nth { background: var(--tint); font-size: 7pt; font-weight: 600; color: var(--muted);\n  text-transform: uppercase; letter-spacing: .4pt; height: 6.4mm; }\nth .ar { text-transform: none; letter-spacing: 0; font-size: 7.6pt; display: block; font-weight: 500; }\n\n/* Section header band */\n.sec { background: var(--navy); color: #fff; display: flex; align-items: center; gap: 2.2mm;\n  padding: 1.5mm 2.4mm; font-weight: 600; font-size: 8.6pt; }\n.sec .k { background: var(--accent); border-radius: .8mm; padding: 0 1.4mm; font-size: 7.2pt; font-weight: 700; letter-spacing: .4pt; }\n.sec .ar { margin-left: auto; font-size: 9pt; }\n\n/* ---------- Meta strip (doc no / date / status) ---------- */\n.meta td { height: auto; padding: 1.4mm 2.2mm; }\n.meta .l { font-size: 6.8pt; color: var(--muted); display: flex; justify-content: space-between; gap: 2mm; font-weight: 500; }\n.meta .v { font-weight: 600; font-size: 9pt; margin-top: .3mm; }\n\n/* ---------- Status chips ---------- */\n.chip { display: inline-block; padding: .2mm 2mm; border-radius: 5mm; font-size: 7.4pt; font-weight: 600; }\n.chip + .chip, .val .chip { margin-left: 1mm; }\n.chip--ok   { background: var(--ok-tint);   color: var(--ok); }\n.chip--wait { background: var(--warn-tint); color: var(--warn); }\n.chip--red  { background: var(--acc-tint);  color: var(--accent); }\n\n/* ---------- Checkbox ---------- */\n.cb { display: inline-flex; width: 3.3mm; height: 3.3mm; border: .8pt solid var(--dots); border-radius: .6mm;\n  vertical-align: -.6mm; align-items: center; justify-content: center; flex: none; background: #fff; }\n.cb.on { background: var(--navy); border-color: var(--navy); }\n.cb.on::after { content: \"\"; width: 1.7mm; height: .9mm; border-left: .5mm solid #fff; border-bottom: .5mm solid #fff;\n  transform: rotate(-45deg) translate(.15mm, -.15mm); }\n.checks { display: flex; gap: 3mm; font-size: 7.2pt; font-weight: 600; margin-bottom: 1.6mm; white-space: nowrap; }\n.checks--light { font-weight: 500; color: var(--muted); font-size: 7.4pt; gap: 2.6mm; margin-bottom: 1.4mm; }\n\n/* ---------- Signature blocks ---------- */\n.sigs { display: grid; gap: 3mm; margin-top: 4.2mm; }\n.sigs--2 { grid-template-columns: 1fr 1fr; }\n.sigs--3 { grid-template-columns: 1fr 1fr 1fr; gap: 2.4mm; padding: 2.4mm; margin-top: 0; }\n.sigs--joined { margin-top: 0; gap: 0; }\n.sigs--joined .sig { border-top: 0; }\n.sigs--joined .sig + .sig { border-left: 0; }\n.sig { border: .9pt solid var(--navy); background: #fff; }\n.sig--bare { border: 0; }\n.sig .h { background: var(--tint); border-bottom: .5pt solid var(--line); padding: 1.3mm 2.2mm;\n  display: flex; justify-content: space-between; font-weight: 600; font-size: 7.8pt; }\n.sig .h--ok  { background: var(--ok-tint); }\n.sig .h--red { background: var(--acc-tint); }\n.sig .b { padding: 2mm 2.2mm 1.6mm; display: flex; gap: 3mm; }\n.sig .b--col { flex-direction: column; gap: 0; }\n.lines { flex: 1; }\n.ln { display: flex; align-items: flex-end; gap: 2mm; font-size: 7pt; color: var(--muted); margin-top: 2.2mm; }\n.ln:first-child { margin-top: 0; }\n.ln > span { white-space: nowrap; }\n.ln > i { flex: 1; border-bottom: .6pt dotted var(--dots); height: 3.4mm; font-style: normal;\n  color: var(--ink); font-weight: 600; font-size: 8pt; padding-left: 1mm; }\n.ln.tall > i { height: 8mm; }\n.stamp { width: 17mm; height: 17mm; border: .7pt dashed #A0A6B4; border-radius: 50%; display: flex; align-items: center;\n  justify-content: center; text-align: center; font-size: 6pt; color: #9AA0AE; flex: none; align-self: center; }\n\n/* Statement + signature strip (acknowledgements) */\n.ack { display: flex; gap: 4mm; align-items: center; padding: 2mm 2.4mm; }\n.ack--inner { padding: 1.6mm 2.4mm; }\n.ack .text { flex: 1; font-size: 7.6pt; color: var(--muted); }\n.ack .text b { color: var(--ink); }\n.ack .text .ar { margin-top: .6mm; }\n.ack .sign { width: 78mm; }\n.ack .sign .sig .b { padding: 1.6mm 2.2mm; }\n\n/* ---------- Salary slip specifics ---------- */\n.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; }\n.lines-table col.c-code { width: 15%; }\n.lines-table col.c-qty  { width: 17%; }\n.lines-table col.c-amt  { width: 22%; }\n.net { display: flex; align-items: stretch; }\n.net .words { flex: 1; padding: 2.6mm 3mm; }\n.net .words .t { display: flex; justify-content: space-between; font-weight: 700; font-size: 10pt; }\n.net .words .en { font-size: 7.8pt; color: var(--muted); margin-top: 1mm; }\n.net .words .ar { font-size: 8.4pt; color: var(--muted); }\n.net .amount { background: var(--navy); color: #fff; padding: 2.6mm 5mm; min-width: 52mm;\n  display: flex; flex-direction: column; justify-content: center; align-items: flex-end; }\n.net .amount small { font-size: 7pt; opacity: .75; letter-spacing: .5pt; }\n.net .amount strong { font-size: 20pt; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }\n\n/* ---------- Penalty notice specifics ---------- */\n.opt-table .grp { width: 24%; }\n.opt-table .grp .en { font-weight: 600; color: var(--ink); font-size: 7.6pt; }\n.opt-table .grp .ar { font-size: 7.8pt; }\n.opt-table + .opt-table { border-top: .5pt solid var(--line); }\n.opt .inner { display: flex; gap: 1.8mm; align-items: center; }\n.opt .en { font-weight: 600; font-size: 7.8pt; line-height: 1.2; }\n.opt .ar { font-size: 7.8pt; color: var(--muted); line-height: 1.2; }\n.opt.is-selected { background: var(--acc-tint); box-shadow: inset 0 0 0 .9pt var(--accent); }\n\n/* ---------- Loan request specifics ---------- */\n.schedule .lab .en { font-weight: 600; color: var(--ink); }\n.schedule .lab .sum { margin-top: .8mm; }\n.schedule th { text-align: center; }\n\n/* ---------- Notes & footer ---------- */\n.note { font-size: 7pt; color: var(--muted); margin-top: 1.6mm; }\n.doc-footer { margin-top: auto; padding-top: 2.4mm; border-top: .6pt solid var(--line);\n  display: flex; align-items: center; gap: 3mm; font-size: 6.6pt; color: var(--muted); }\n.doc-footer .grow { flex: 1; }\n.doc-footer .ref { text-align: right; }\n.doc-footer b { color: var(--ink); font-weight: 600; }\n.doc-footer .qr { width: 13mm; height: 13mm; display: block; }\n.sig--bare + .sig--bare { border-left: .5pt solid var(--line); }\n\n.page-fit{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}\n.sheet-dock{flex:none;}\n.ln.tall > i[data-slot-role]{flex:none;width:42mm;margin-left:auto;}\nhtml,body{direction:ltr;}\n.employee-block { border: .9pt solid var(--navy); margin-top: 4.2mm; background: #fff; }\n.employee-block table tr:first-child > td, .employee-block table tr:first-child > th { border-top: 0; }\n.employee-block table tr > td:first-child, .employee-block table tr > th:first-child { border-left: 0; }\n.employee-block table tr > td:last-child, .employee-block table tr > th:last-child { border-right: 0; }\n.employee-block table tr:last-child > td { border-bottom: 0; }\n";
+/**
+ * Shared HR-sheet stylesheet. Rendered into every eSign client sheet
+ * (penalty, loan, payslip, accident / sick leave, general document).
+ *
+ * Kept as a template literal rather than an escaped one-line string so the
+ * rules stay readable and editable; nothing here interpolates.
+ */
+export const ESIGN_FORMS_CSS = `/* =====================================================================
+   DPD HR Forms — shared stylesheet
+   Page: A4 portrait, 1 page per document. Print backgrounds must be ON.
+   ===================================================================== */
+
+/* ---------- Design tokens ---------- */
+:root {
+  --ink:      #161A33;   /* primary text            */
+  --muted:    #5D6478;   /* labels, secondary text  */
+  --ar-label: #454C60;   /* Arabic labels           */
+  --line:     #CFD4DC;   /* inner cell borders      */
+  --tint:     #F3F4F7;   /* label cell background   */
+  --navy:     #1B2140;   /* outer borders, headers  */
+  --accent:   #C8202F;   /* section number, alerts  */
+  --acc-tint: #FCEDEE;   /* selected / alert fill   */
+  --ok:       #1F7A55;   --ok-tint:   #E3F3EC;
+  --warn:     #8A5A00;   --warn-tint: #FFF3DC;
+  --dots:     #8A90A0;   /* signature lines         */
+  --sig-box:  #DC2626;   /* employee signature box  */
+  --name-box: #2563EB;   /* employee name box       */
+}
+
+@page { size: A4; margin: 0; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: "Plex", sans-serif; color: var(--ink);
+  font-size: 8.4pt; line-height: 1.3;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+html, body { direction: ltr; }
+.ar { direction: rtl; unicode-bidi: isolate; }
+.ar-start { text-align: left; }           /* Arabic line placed under English, left edge */
+
+/* ---------- Page ---------- */
+.page { width: 210mm; height: 297mm; padding: 10mm 12mm 8mm; display: flex; flex-direction: column; overflow: hidden; }
+@media screen { body { background: #E6E8EC; } .page { background: #fff; margin: 10mm auto; box-shadow: 0 2px 14px rgba(0,0,0,.12); } }
+
+/* ---------- Header: document type only ---------- */
+.doc-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 3mm; }
+.doc-header .en { font-size: 18pt; font-weight: 700; letter-spacing: -.2pt; line-height: 1.1; }
+.doc-header .ar { font-size: 16pt; font-weight: 700; line-height: 1.3; }
+.doc-rule { height: 1.2mm; border-radius: 1mm; margin-bottom: 3mm;
+  background: linear-gradient(90deg, var(--accent) 0 18%, var(--navy) 18% 100%); }
+
+/* ---------- Boxes & tables ---------- */
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+td, th { border: .5pt solid var(--line); padding: 1.3mm 2.2mm; vertical-align: middle; height: 8.5mm; text-align: left; }
+.box { border: .9pt solid var(--navy); margin-top: 4.2mm; background: #fff; }
+.box--flush { margin-top: 0; }
+.box--open { border: 0; }
+/* remove inner-table edges that would double the box border */
+.box table tr:first-child > td, .box table tr:first-child > th { border-top: 0; }
+.box table tr > td:first-child, .box table tr > th:first-child { border-left: 0; }
+.box table tr > td:last-child,  .box table tr > th:last-child  { border-right: 0; }
+.box table tr:last-child > td { border-bottom: 0; }
+.divider       { border-top: .9pt solid var(--navy); }
+.divider-thin  { border-top: .5pt solid var(--line); }
+.box table.divider-thin tr:first-child > td { border-top: 0; }
+
+/* Field grid: label | value | label | value  (24/26/24/26) */
+.grid col.c-lab { width: 24%; }
+.grid col.c-val { width: 26%; }
+
+/* Label cell: English left, Arabic right, same line */
+.lab { background: var(--tint); color: var(--muted); font-size: 7.1pt; font-weight: 500; }
+.lab .row { display: flex; justify-content: space-between; align-items: center; gap: 1.5mm; }
+.lab .row > span { white-space: nowrap; }
+.lab .ar { font-size: 8pt; color: var(--ar-label); }
+.lab--strong { color: var(--ink); font-weight: 600; }
+
+/* Value cell */
+.val { font-weight: 600; font-size: 8.8pt; }
+.val .sub { display: block; font-weight: 500; font-size: 7.6pt; color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; text-align: right; }
+.center { text-align: center; }
+.muted { color: var(--muted); }
+.code { font-size: 7.8pt; color: var(--muted); }
+.total-cell { background: var(--tint); font-size: 9.4pt; }
+
+/* Column header row */
+th { background: var(--tint); font-size: 7pt; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .4pt; height: 6.4mm; }
+th .ar { text-transform: none; letter-spacing: 0; font-size: 7.6pt; display: block; font-weight: 500; }
+
+/* Section header band */
+.sec { background: var(--navy); color: #fff; display: flex; align-items: center; gap: 2.2mm;
+  padding: 1.5mm 2.4mm; font-weight: 600; font-size: 8.6pt; }
+.sec .k { background: var(--accent); border-radius: .8mm; padding: 0 1.4mm; font-size: 7.2pt; font-weight: 700; letter-spacing: .4pt; }
+.sec .ar { margin-left: auto; font-size: 9pt; }
+
+/* ---------- Meta strip (doc no / date / status) ---------- */
+.meta td { height: auto; padding: 1.4mm 2.2mm; }
+.meta .l { font-size: 6.8pt; color: var(--muted); display: flex; justify-content: space-between; gap: 2mm; font-weight: 500; }
+.meta .v { font-weight: 600; font-size: 9pt; margin-top: .3mm; }
+
+/* ---------- Status chips ---------- */
+.chip { display: inline-block; padding: .2mm 2mm; border-radius: 5mm; font-size: 7.4pt; font-weight: 600; }
+.chip + .chip, .val .chip { margin-left: 1mm; }
+.chip--ok   { background: var(--ok-tint);   color: var(--ok); }
+.chip--wait { background: var(--warn-tint); color: var(--warn); }
+.chip--red  { background: var(--acc-tint);  color: var(--accent); }
+
+/* ---------- Checkbox ---------- */
+.cb { display: inline-flex; width: 3.3mm; height: 3.3mm; border: .8pt solid var(--dots); border-radius: .6mm;
+  vertical-align: -.6mm; align-items: center; justify-content: center; flex: none; background: #fff; }
+.cb.on { background: var(--navy); border-color: var(--navy); }
+.cb.on::after { content: ""; width: 1.7mm; height: .9mm; border-left: .5mm solid #fff; border-bottom: .5mm solid #fff;
+  transform: rotate(-45deg) translate(.15mm, -.15mm); }
+.checks { display: flex; gap: 3mm; font-size: 7.2pt; font-weight: 600; margin-bottom: 1.6mm; white-space: nowrap; }
+.checks--light { font-weight: 500; color: var(--muted); font-size: 7.4pt; gap: 2.6mm; margin-bottom: 1.4mm; }
+
+/* ---------- Signature blocks ---------- */
+.sigs { display: grid; gap: 3mm; margin-top: 4.2mm; }
+.sigs--2 { grid-template-columns: 1fr 1fr; }
+.sigs--3 { grid-template-columns: 1fr 1fr 1fr; gap: 2.4mm; padding: 2.4mm; margin-top: 0; }
+.sigs--joined { margin-top: 0; gap: 0; }
+.sigs--joined .sig { border-top: 0; }
+.sigs--joined .sig + .sig { border-left: 0; }
+.sig { border: .9pt solid var(--navy); background: #fff; }
+.sig--bare { border: 0; }
+.sig .h { background: var(--tint); border-bottom: .5pt solid var(--line); padding: 1.3mm 2.2mm;
+  display: flex; justify-content: space-between; font-weight: 600; font-size: 7.8pt; }
+.sig .h--ok  { background: var(--ok-tint); }
+.sig .h--red { background: var(--acc-tint); }
+.sig .b { padding: 2mm 2.2mm 1.6mm; display: flex; gap: 3mm; }
+.sig .b--col { flex-direction: column; gap: 0; }
+.lines { flex: 1; }
+.ln { display: flex; align-items: flex-end; gap: 2mm; font-size: 7pt; color: var(--muted); margin-top: 2.2mm; }
+.ln:first-child { margin-top: 0; }
+.ln > span { white-space: nowrap; }
+.ln > i { flex: 1; border-bottom: .6pt dotted var(--dots); height: 3.4mm; font-style: normal;
+  color: var(--ink); font-weight: 600; font-size: 8pt; padding-left: 1mm; }
+.ln.tall > i { height: 8mm; }
+.stamp { width: 17mm; height: 17mm; border: .7pt dashed #A0A6B4; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; text-align: center; font-size: 6pt; color: #9AA0AE; flex: none; align-self: center; }
+
+/* Statement + signature strip (acknowledgements) */
+.ack { display: flex; gap: 4mm; align-items: center; padding: 2mm 2.4mm; }
+.ack--inner { padding: 1.6mm 2.4mm; }
+.ack .text { flex: 1; font-size: 7.6pt; color: var(--muted); }
+.ack .text b { color: var(--ink); }
+.ack .text .ar { margin-top: .6mm; }
+.ack .sign { width: 78mm; }
+.ack .sign .sig .b { padding: 1.6mm 2.2mm; }
+
+/* ---------- Salary slip specifics ---------- */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; }
+.lines-table col.c-code { width: 15%; }
+.lines-table col.c-qty  { width: 17%; }
+.lines-table col.c-amt  { width: 22%; }
+.net { display: flex; align-items: stretch; }
+.net .words { flex: 1; padding: 2.6mm 3mm; }
+.net .words .t { display: flex; justify-content: space-between; font-weight: 700; font-size: 10pt; }
+.net .words .en { font-size: 7.8pt; color: var(--muted); margin-top: 1mm; }
+.net .words .ar { font-size: 8.4pt; color: var(--muted); }
+.net .amount { background: var(--navy); color: #fff; padding: 2.6mm 5mm; min-width: 52mm;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-end; }
+.net .amount small { font-size: 7pt; opacity: .75; letter-spacing: .5pt; }
+.net .amount strong { font-size: 20pt; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+
+/* ---------- Penalty notice specifics ---------- */
+.opt-table .grp { width: 24%; }
+.opt-table .grp .en { font-weight: 600; color: var(--ink); font-size: 7.6pt; }
+.opt-table .grp .ar { font-size: 7.8pt; }
+.opt-table + .opt-table { border-top: .5pt solid var(--line); }
+.opt .inner { display: flex; gap: 1.8mm; align-items: center; }
+.opt .en { font-weight: 600; font-size: 7.8pt; line-height: 1.2; }
+.opt .ar { font-size: 7.8pt; color: var(--muted); line-height: 1.2; }
+.opt.is-selected { background: var(--acc-tint); box-shadow: inset 0 0 0 .9pt var(--accent); }
+
+/* ---------- Loan request specifics ---------- */
+.schedule .lab .en { font-weight: 600; color: var(--ink); }
+.schedule .lab .sum { margin-top: .8mm; }
+.schedule th { text-align: center; }
+
+/* ---------- Notes & footer ---------- */
+.note { font-size: 7pt; color: var(--muted); margin-top: 1.6mm; }
+.doc-footer { margin-top: auto; padding-top: 2.4mm; border-top: .6pt solid var(--line);
+  display: flex; align-items: center; gap: 3mm; font-size: 6.6pt; color: var(--muted); }
+.doc-footer .grow { flex: 1; }
+.doc-footer .ref { text-align: right; }
+.doc-footer b { color: var(--ink); font-weight: 600; }
+.doc-footer .qr { width: 13mm; height: 13mm; display: block; }
+.sig--bare + .sig--bare { border-left: .5pt solid var(--line); }
+
+.page-fit{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
+.sheet-dock{flex:none;}
+.ln.tall > i[data-slot-role]{flex:none;width:42mm;margin-left:auto;}
+
+/* ---------- Signature slot & name field ---------- */
+/* Employee signature is a red outline; employee name is a blue outline, so a
+   printed sheet makes it obvious which box the signer must fill. */
+.ln.tall > i[data-slot-role]{border:2px solid var(--sig-box);border-radius:1mm;padding:0 1.2mm;background:#FFF5F5;}
+.ln.tall > i[data-slot-role]:not(:empty){background:#fff;}
+.ln.name-box > i{border:2px solid var(--name-box);border-radius:1mm;padding:0 1.2mm;background:#EFF6FF;}
+.ln.name-box > i:not(:empty){background:#fff;}
+.ln.name-box > span{color:#1D4ED8;font-weight:600;}
+
+/* ---------- Employee information block ---------- */
+.employee-block { border: .9pt solid var(--navy); margin-top: 4.2mm; background: #fff; }
+.employee-block table tr:first-child > td, .employee-block table tr:first-child > th { border-top: 0; }
+.employee-block table tr > td:first-child, .employee-block table tr > th:first-child { border-left: 0; }
+.employee-block table tr > td:last-child, .employee-block table tr > th:last-child { border-right: 0; }
+.employee-block table tr:last-child > td { border-bottom: 0; }
+`;

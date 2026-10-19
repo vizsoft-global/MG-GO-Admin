@@ -599,6 +599,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     permission: "wrong_actions.view",
   },
   {
+    id: "order-exceptions",
+    defaultLabel: "Order exceptions",
+    defaultIcon: "ClipboardList",
+    href: "/order-exceptions",
+    defaultGroup: "Operations",
+    defaultOrder: 7.2,
+    permission: "deliveries.view",
+  },
+  {
     id: "compliance",
     defaultLabel: "Compliance Upload",
     defaultIcon: "ClipboardCheck",
@@ -939,6 +948,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   requests: "requests",
   "visit-bookings": "visitSlots",
   "wrong-actions": "wrongActions",
+  "order-exceptions": "orderExceptions",
   compliance: "compliance",
   "pay-plan": "payPlan",
   earnings: "earnings",

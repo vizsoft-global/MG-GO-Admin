@@ -8,6 +8,7 @@ export const DRIVER_UPLOAD_ENTITY_TYPES = [
   "order_proof",
   "login_verification",
   "esign_signature",
+  "esign_attachment",
   "request_attachment",
 ] as const;
 
@@ -40,6 +41,10 @@ const ENTITY_RULES: Record<
   esign_signature: {
     maxBytes: 4 * 1024 * 1024,
     allowedMimePrefixes: ["image/png"],
+  },
+  esign_attachment: {
+    maxBytes: 10 * 1024 * 1024,
+    allowedMimePrefixes: ["image/", "application/pdf"],
   },
   request_attachment: {
     maxBytes: 10 * 1024 * 1024,
@@ -96,6 +101,10 @@ export function buildDriverObjectKey(params: {
   switch (params.entityType) {
     case "esign_signature": {
       return esignSignatureStoredKey(params.driverId, params.entityId ?? "");
+    }
+    case "esign_attachment": {
+      const ext = extensionFromFilename(params.originalFilename);
+      return `${params.driverId}/esign-attachments/${randomUUID()}.${ext}`;
     }
     case "driver_avatar": {
       const date = new Date().toISOString().slice(0, 10);

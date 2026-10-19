@@ -122,7 +122,7 @@ export function OpsOutsourceTab({
               "ops-outsource-zones",
               toCsv(
                 ["zone", metric],
-                zones.map((r) => [r.key, dimMetricValue(r, metric)]),
+                zones.map((r) => [r.label || r.key, dimMetricValue(r, metric)]),
               ),
             )
           }
@@ -130,7 +130,7 @@ export function OpsOutsourceTab({
           emptyTitle={t("emptyChart")}
         >
           <OpsBarChart
-            data={zones.map((r) => ({ key: r.key, value: dimMetricValue(r, metric) }))}
+            data={zones.map((r) => ({ key: r.label || r.key, value: dimMetricValue(r, metric) }))}
             xKey="key"
             series={series}
             layout="horizontal"

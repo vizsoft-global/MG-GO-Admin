@@ -145,3 +145,37 @@ export function employeeSampleValues(): Record<string, string> {
 export function isEmployeeRowKey(key: string): key is EsignEmployeeRowKey {
   return ESIGN_EMPLOYEE_ROWS.some((row) => row.key === key);
 }
+
+/**
+ * Accident sheet identity rows, in the order the reference prints them.
+ *
+ * The catalogue above is the full employee block; an accident document prints a
+ * narrower set (no nationality, zone, project, accommodation, joining date or
+ * company) so the date rows have room on the fixed skeleton. Exporting the list
+ * keeps the builder preview and the downloaded PDF on the same order.
+ */
+export const ACCIDENT_EMPLOYEE_ROW_KEYS = [
+  "employee_id",
+  "employee_name",
+  "civil_id",
+  "position",
+  "sponsor",
+] as const satisfies readonly EsignEmployeeRowKey[];
+
+export type AccidentEmployeeValueRow = {
+  key: EsignEmployeeRowKey;
+  label_en: string;
+  label_ar: string;
+  value: string;
+};
+
+export function accidentEmployeeRows(
+  values: Record<string, string>,
+): AccidentEmployeeValueRow[] {
+  return ACCIDENT_EMPLOYEE_ROW_KEYS.map((key) => ({
+    key,
+    label_en: META[key].label_en,
+    label_ar: META[key].label_ar,
+    value: (values[key] ?? "").trim(),
+  }));
+}

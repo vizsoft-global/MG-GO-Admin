@@ -84,6 +84,7 @@ export const COLLECTIONS = {
   requestExceptionActions: "request_exception_actions",
   esignCategories: "esign_categories",
   esignRequestSigners: "esign_request_signers",
+  esignRequestAttachments: "esign_request_attachments",
   esignBatches: "esign_batches",
   esignBatchRows: "esign_batch_rows",
   esignDrafts: "esign_drafts",

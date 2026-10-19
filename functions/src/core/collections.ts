@@ -104,6 +104,8 @@ export const COLLECTIONS = {
   requestExceptionActions: "request_exception_actions",
   esignCategories: "esign_categories",
   esignRequestSigners: "esign_request_signers",
+  /** Rider- or admin-uploaded supporting documents, capped per request. */
+  esignRequestAttachments: "esign_request_attachments",
   esignBatches: "esign_batches",
   esignBatchRows: "esign_batch_rows",
   esignDrafts: "esign_drafts",
@@ -135,6 +137,26 @@ export const COLLECTIONS = {
   driverPerformanceRatings: "driver_performance_ratings",
   driverPerformanceRatingNotes: "driver_performance_rating_notes",
   performanceRatingTeamMembers: "performance_rating_team_members",
+  /**
+   * Per-restaurant (or zone / partner) daily DPD target, read by the driver-level
+   * resolver. Same shape the earnings engine already reads: `target_dpd` per
+   * scope key.
+   */
+  performanceTargetDpd: "performance_target_dpd",
+  /**
+   * The rider's own account of a rejected / cancelled order, with proof and a
+   * mandatory reason. One row per reported case; the admin verdict rides on the
+   * row and never rewrites `deliveries`.
+   */
+  orderExceptions: "order_exceptions",
+  /**
+   * The persisted month-to-date level verdict, `{driverId}_{YYYY-MM}`.
+   *
+   * The panel and the app compute the level live; this collection exists so a
+   * rider becoming D is a *transition* that can be detected and notified once,
+   * rather than a state re-announced on every sweep.
+   */
+  driverLevelSnapshots: "driver_level_snapshots",
   driverDeviceSessions: "driver_device_sessions",
   driverOperationEvents: "driver_operation_events",
   driverTelemetryEvents: "driver_telemetry_events",

@@ -231,6 +231,9 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
     "adminExpireEsignRequests",
     "adminListEsignRequests",
     "adminCreateEsignRequest",
+    "adminAddEsignAttachment",
+    "adminRemoveEsignAttachment",
+    "adminDecideEsignRequest",
     "adminRemindEsignRequests",
     "adminEsignReminderState",
     "adminLinkEsignResend",
@@ -354,6 +357,7 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   "./rpcs/driver-esign": [
     "driverListEsignRequests",
     "driverGetEsignRequest",
+    "driverAddEsignAttachment",
     "driverSubmitEsignature",
     "driverMarkEsignViewed",
     "driverDeclineEsignature",
@@ -406,6 +410,19 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   ],
   "./rpcs/sync-staff-claims": [
     "syncStaffClaims"
+  ],
+  "./rpcs/order-exceptions": [
+    "driverSubmitOrderException",
+    "driverListMyOrderExceptions",
+    "adminListOrderExceptions",
+    "adminReviewOrderException",
+    "adminOrderExceptionSummary"
+  ],
+  "./rpcs/driver-levels": [
+    "driverGetMyLevel",
+    "adminListDriverLevels",
+    "adminSetDriverLevelOverride",
+    "adminEvaluateDriverLevelsSweep"
   ]
 };
 

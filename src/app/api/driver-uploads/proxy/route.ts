@@ -57,7 +57,9 @@ async function handler(request: Request): Promise<Response> {
     return NextResponse.json({ error: "invalid_entity_id" }, { status: 400 });
   }
 
-  if (validation.entityType === "esign_signature") {
+  const isEsignUpload =
+    validation.entityType === "esign_signature" || validation.entityType === "esign_attachment";
+  if (isEsignUpload) {
     if (!entityId) {
       return NextResponse.json({ error: "invalid_entity_id" }, { status: 400 });
     }
@@ -72,11 +74,11 @@ async function handler(request: Request): Promise<Response> {
   const buffer = Buffer.from(await file.arrayBuffer());
 
   try {
-    if (validation.entityType === "esign_signature") {
+    if (isEsignUpload) {
       const uploaded = await putEsignObject(
         objectKey,
         buffer,
-        file.type || "image/png",
+        file.type || (validation.entityType === "esign_signature" ? "image/png" : "application/octet-stream"),
       );
       if (!uploaded.ok) {
         return NextResponse.json(

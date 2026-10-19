@@ -84,8 +84,8 @@ export const queryKeys = {
     all: () => ["live-tracking-v2"] as const,
     snapshot: () => ["live-tracking-v2", "snapshot"] as const,
     zones: () => ["live-tracking-v2", "zones"] as const,
-    dayRoute: (driverId: string, date: string) =>
-      ["live-tracking-v2", "day-route", driverId, date] as const,
+    dayRoute: (driverId: string, date: string, windowEnd: string | null = null) =>
+      ["live-tracking-v2", "day-route", driverId, date, windowEnd] as const,
     events: (filters: Record<string, unknown> = {}) =>
       ["live-tracking-v2", "events", filters] as const,
     driverEvents: (driverId: string, date: string) =>

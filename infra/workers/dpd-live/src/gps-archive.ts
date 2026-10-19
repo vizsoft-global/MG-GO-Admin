@@ -75,6 +75,59 @@ const MAX_SEGMENT_M = 500;
 const MAX_SEGMENT_MPS = 40;
 const COMPACT_ROWS_PER_FLUSH = 200;
 
+/**
+ * SQLite buffer safety caps. A capped buffer stops accepting new lines instead of
+ * deleting old ones; the caller sends the affected batch to Firestore instead.
+ */
+export const BUFFER_MAX_BYTES = 8_000_000;
+export const BUFFER_MAX_ROWS = 50_000;
+
+/** An uncompacted hour older than this means compaction is not keeping up. */
+export const BUFFER_STALE_MS = 7_200_000;
+
+/**
+ * Archive clock window. The Worker writes the archive before `parseIngestBatch`
+ * clamps the same fix for Firestore, so a phone with a wrong clock must not create
+ * a day key in the future or a phantom hour a week back.
+ */
+export const ARCHIVE_LIVE_PAST_MS = 15 * 60_000;
+export const ARCHIVE_FUTURE_MS = 5 * 60_000;
+export const ARCHIVE_REPLAY_PAST_MS = 7 * 24 * 60 * 60_000;
+
+/**
+ * Returns the timestamp an archived point may be stored under, or null when the
+ * point must be dropped. Replayed fixes keep their own time (up to 7 days back);
+ * live fixes are clamped to `[now - 15m, now + 5m]`.
+ */
+export function clampArchiveTime(t: number, replay: boolean, nowMs: number): number | null {
+  if (!Number.isFinite(t)) return null;
+  if (replay) return t >= nowMs - ARCHIVE_REPLAY_PAST_MS ? t : null;
+  return Math.min(Math.max(t, nowMs - ARCHIVE_LIVE_PAST_MS), nowMs + ARCHIVE_FUTURE_MS);
+}
+
+export type ArchiveRecordResult =
+  | { accepted: true }
+  | { accepted: false; reason: "buffer_capped" };
+
+export type BufferStatus = {
+  bytes: number;
+  rows: number;
+  capped: boolean;
+  /** Age of the oldest uncompacted hour, measured from the start of that hour. */
+  ageMs: number;
+};
+
+export type BufferLimits = { maxBytes: number; maxRows: number };
+
+function byteLength(text: string): number {
+  return new TextEncoder().encode(text).byteLength;
+}
+
+/** Start of a Kuwait `day` + `hour` in UTC milliseconds. */
+export function kuwaitHourStartMs(day: string, hour: string): number {
+  return Date.parse(`${day}T${hour}:00:00.000+03:00`);
+}
+
 export function kuwaitParts(ms: number): { day: string; hour: string; minute: string } {
   const iso = new Date(ms + KUWAIT_OFFSET_MS).toISOString();
   return { day: iso.slice(0, 10), hour: iso.slice(11, 13), minute: iso.slice(14, 16) };
@@ -169,15 +222,23 @@ export class GpsArchive {
   private readonly dirtyLatest = new Set<string>();
   /** driverId -> `day|hour` -> JSONL lines not yet in SQLite. */
   private readonly pendingRows = new Map<string, Map<string, string[]>>();
+  private pendingBytes = 0;
+  /** `${driverId}|${day}|${hour}` keys currently counted in `pendingBytes`. */
+  private readonly pendingKeys = new Set<string>();
+  private readonly limits: BufferLimits;
   private minuteLines: string[] = [];
   private lastFlushAt = 0;
   private lastMinuteKey = "";
   private minuteSeq = 0;
   private flushing: Promise<void> | null = null;
 
-  constructor(sql: SqlLike, bucket: BucketLike | null) {
+  constructor(sql: SqlLike, bucket: BucketLike | null, limits: Partial<BufferLimits> = {}) {
     this.sql = sql;
     this.bucket = bucket;
+    this.limits = {
+      maxBytes: limits.maxBytes ?? BUFFER_MAX_BYTES,
+      maxRows: limits.maxRows ?? BUFFER_MAX_ROWS,
+    };
   }
 
   private ensureSchema(): void {
@@ -348,9 +409,72 @@ export class GpsArchive {
     return [...byTs.values()].sort((a, b) => a.t - b.t);
   }
 
-  record(driverId: string, points: ArchivePoint[], inAssignedZone: boolean | null): void {
-    if (points.length === 0) return;
+  /** SQLite rows only. Cached because the cap guard runs per rider per flush. */
+  private usageCache: { bytes: number; rows: number } | null = null;
+
+  private sqlBufferUsage(): { bytes: number; rows: number } {
+    if (!this.usageCache) {
+      const row = this.sql
+        .exec("SELECT COUNT(*) AS rows, COALESCE(SUM(LENGTH(CAST(points AS BLOB))), 0) AS bytes FROM buffer")
+        .toArray()[0];
+      this.usageCache = { bytes: Number(row?.bytes ?? 0), rows: Number(row?.rows ?? 0) };
+    }
+    return this.usageCache;
+  }
+
+  /** SQLite plus the lines this turn has not persisted yet. */
+  private bufferUsage(): { bytes: number; rows: number } {
+    const sql = this.sqlBufferUsage();
+    return { bytes: sql.bytes + this.pendingBytes, rows: sql.rows + this.pendingKeys.size };
+  }
+
+  /** Age of the oldest uncompacted hour, measured from the start of that hour. */
+  bufferAgeMs(nowMs: number): number {
     this.ensureSchema();
+    const row = this.sql
+      .exec("SELECT day, hour FROM buffer ORDER BY day, hour LIMIT 1")
+      .toArray()[0];
+    if (!row) return 0;
+    return Math.max(0, nowMs - kuwaitHourStartMs(String(row.day), String(row.hour)));
+  }
+
+  /** One snapshot for the flush log and the cap controls. */
+  bufferStatus(nowMs: number): BufferStatus {
+    const usage = this.bufferUsage();
+    return {
+      ...usage,
+      capped: usage.bytes >= this.limits.maxBytes || usage.rows >= this.limits.maxRows,
+      ageMs: this.bufferAgeMs(nowMs),
+    };
+  }
+
+  record(
+    driverId: string,
+    points: ArchivePoint[],
+    inAssignedZone: boolean | null,
+  ): ArchiveRecordResult {
+    if (points.length === 0) return { accepted: true };
+    this.ensureSchema();
+
+    // Check the cap before mutating anything: a rejected batch stays in the
+    // caller's pending buffer, so the next flush can retry it (and eventually
+    // fall back to Firestore). Nothing is deleted to make room.
+    const prepared = points.map((point) => {
+      const parts = kuwaitParts(point.t);
+      return {
+        point,
+        day: parts.day,
+        bucketKey: `${parts.day}|${parts.hour}`,
+        line: JSON.stringify(point),
+      };
+    });
+    const bytes = prepared.reduce((sum, row) => sum + byteLength(row.line) + 1, 0);
+    const keys = new Set(prepared.map((row) => `${driverId}|${row.bucketKey}`));
+    const usage = this.bufferUsage();
+    if (usage.bytes + bytes > this.limits.maxBytes || usage.rows + keys.size > this.limits.maxRows) {
+      return { accepted: false, reason: "buffer_capped" };
+    }
+
     const rider = this.riderState(driverId, points[0]!.t);
     let rows = this.pendingRows.get(driverId);
     if (!rows) {
@@ -358,10 +482,7 @@ export class GpsArchive {
       this.pendingRows.set(driverId, rows);
     }
 
-    for (const point of points) {
-      const { day, hour } = kuwaitParts(point.t);
-      const line = JSON.stringify(point);
-      const bucketKey = `${day}|${hour}`;
+    for (const { point, day, bucketKey, line } of prepared) {
       const lines = rows.get(bucketKey) ?? [];
       lines.push(line);
       rows.set(bucketKey, lines);
@@ -433,6 +554,10 @@ export class GpsArchive {
       this.dirtyLatest.add(driverId);
       this.dirtyStats.add(`${driverId}|${day}`);
     }
+
+    this.pendingBytes += bytes;
+    for (const key of keys) this.pendingKeys.add(key);
+    return { accepted: true };
   }
 
   /** Persists to SQLite, writes the minute file, compacts finished hours. Idempotent per minute. */
@@ -448,7 +573,7 @@ export class GpsArchive {
 
   private async flush(nowMs: number): Promise<void> {
     this.ensureSchema();
-    this.persistBuffers();
+    const persisted = this.persistBuffers();
     this.persistLatest();
     this.persistStats();
 
@@ -467,31 +592,98 @@ export class GpsArchive {
       } catch (error) {
         // The minute file is a fleet-wide audit copy; the per-rider buffer in SQLite
         // still holds these points, so a failed put loses nothing the history reads.
-        console.error("gps_minute_put_failed", String(error));
+        console.error(
+          JSON.stringify({ event: "gps_minute_put_failed", failures: 1, key, error: String(error) }),
+        );
       }
     }
 
     await this.compact(nowMs);
+
+    const status = this.bufferStatus(nowMs);
+    console.info(
+      JSON.stringify({
+        event: "gps_archive_flush",
+        bufferBytes: status.bytes,
+        bufferRows: status.rows,
+        bufferCapped: persisted.capped || status.capped,
+        bufferAgeMs: status.ageMs,
+      }),
+    );
+    if (status.ageMs > BUFFER_STALE_MS) {
+      console.error(
+        JSON.stringify({
+          event: "gps_buffer_stale",
+          failures: 1,
+          bufferBytes: status.bytes,
+          bufferRows: status.rows,
+          bufferAgeMs: status.ageMs,
+        }),
+      );
+    }
   }
 
-  private persistBuffers(): void {
-    for (const [driverId, rows] of this.pendingRows) {
-      for (const [bucketKey, lines] of rows) {
-        const [day, hour] = bucketKey.split("|") as [string, string];
-        const text = lines.join("\n") + "\n";
-        this.sql.exec(
-          `INSERT INTO buffer (driver_id, day, hour, points, n) VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT (driver_id, day, hour) DO UPDATE SET
-             points = buffer.points || excluded.points, n = buffer.n + excluded.n`,
-          driverId,
-          day,
-          hour,
-          text,
-          lines.length,
-        );
+  /**
+   * Moves this turn's lines into SQLite. Returns `capped` when the guard refused
+   * a bucket; refused lines stay in memory (never deleted) so the next flush can
+   * retry them or hand them to Firestore.
+   *
+   * Successfully inserted buckets are removed even if a later insert throws, so a
+   * retry cannot append the same line twice.
+   */
+  persistBuffers(): { capped: boolean } {
+    this.ensureSchema();
+    let capped = false;
+    const usage = this.sqlBufferUsage();
+    const done: Array<[string, string]> = [];
+    try {
+      for (const [driverId, rows] of this.pendingRows) {
+        for (const [bucketKey, lines] of rows) {
+          const [day, hour] = bucketKey.split("|") as [string, string];
+          const text = lines.join("\n") + "\n";
+          const bytes = byteLength(text);
+          const key = `${driverId}|${bucketKey}`;
+          const exists =
+            this.sql
+              .exec(
+                "SELECT 1 FROM buffer WHERE driver_id = ? AND day = ? AND hour = ? LIMIT 1",
+                driverId,
+                day,
+                hour,
+              )
+              .toArray().length > 0;
+          if (
+            (!exists && usage.rows + 1 > this.limits.maxRows) ||
+            usage.bytes + bytes > this.limits.maxBytes
+          ) {
+            capped = true;
+            continue;
+          }
+          this.sql.exec(
+            `INSERT INTO buffer (driver_id, day, hour, points, n) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT (driver_id, day, hour) DO UPDATE SET
+               points = buffer.points || excluded.points, n = buffer.n + excluded.n`,
+            driverId,
+            day,
+            hour,
+            text,
+            lines.length,
+          );
+          usage.bytes += bytes;
+          if (!exists) usage.rows += 1;
+          this.pendingBytes = Math.max(0, this.pendingBytes - bytes);
+          this.pendingKeys.delete(key);
+          done.push([driverId, bucketKey]);
+        }
+      }
+    } finally {
+      for (const [driverId, bucketKey] of done) {
+        const rows = this.pendingRows.get(driverId);
+        rows?.delete(bucketKey);
+        if (rows && rows.size === 0) this.pendingRows.delete(driverId);
       }
     }
-    this.pendingRows.clear();
+    return { capped };
   }
 
   private persistLatest(): void {
@@ -600,7 +792,17 @@ export class GpsArchive {
           customMetadata: { points: String(combined.length) },
         });
       } catch (error) {
-        console.error("gps_compact_failed", key, String(error));
+        console.error(
+          JSON.stringify({
+            event: "gps_compact_failed",
+            failures: 1,
+            driverId,
+            day: rowDay,
+            hour: rowHour,
+            key,
+            error: String(error),
+          }),
+        );
         continue;
       }
 
@@ -625,12 +827,15 @@ export class GpsArchive {
         Number.isFinite(firstTs) ? firstTs : null,
         Number.isFinite(lastTs) ? lastTs : null,
       );
+      const usage = this.sqlBufferUsage();
       this.sql.exec(
         "DELETE FROM buffer WHERE driver_id = ? AND day = ? AND hour = ?",
         driverId,
         rowDay,
         rowHour,
       );
+      usage.bytes = Math.max(0, usage.bytes - byteLength(String(row.points)));
+      usage.rows = Math.max(0, usage.rows - 1);
       written += 1;
     }
     return written;

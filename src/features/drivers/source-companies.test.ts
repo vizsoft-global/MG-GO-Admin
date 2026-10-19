@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { guessColumnMapping } from "./import/parse";
 import {
+  COMPANY_KEY_RE,
   companyKeyFromName,
   companyMatchesCategory,
   computeSourceCompanyIncentive,
@@ -81,6 +82,24 @@ describe("key and code normalisation", () => {
     assert.equal(companyKeyFromName("Al Sadeeq Co."), "al_sadeeq_co");
     assert.equal(normalizeClientCode(" cl-0002 "), "CL-0002");
     assert.equal(normalizeClientCode("  "), null);
+  });
+
+  it("transliterates an Arabic name instead of rejecting it", () => {
+    assert.equal(companyKeyFromName("شركة الصديق"), "shrkh_alsdyq");
+  });
+
+  it("keeps two long names that share a prefix apart", () => {
+    const a = companyKeyFromName("شركة النقل السريع الدولية");
+    const b = companyKeyFromName("شركة النقل السريع الدولى");
+    assert.match(a, COMPANY_KEY_RE);
+    assert.match(b, COMPANY_KEY_RE);
+    assert.notEqual(a, b);
+  });
+
+  it("still yields a valid key for a name with no letters at all", () => {
+    const key = companyKeyFromName("★★★");
+    assert.match(key, COMPANY_KEY_RE);
+    assert.ok(key.startsWith("co_"));
   });
 });
 

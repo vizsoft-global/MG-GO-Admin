@@ -85,6 +85,13 @@ export const SCAN_FUNCTIONS = [
   "adminAttendanceKpis",
   "adminIncentiveDailyReport",
   "adminEmployeesDashboard",
+  /**
+   * Month-to-date level for the fleet: one attendance window, one rollup
+   * window, and the roster joined in. The single-rider call from a detail page
+   * narrows all three, but the fleet view is the same shape as the other
+   * roster snapshots above.
+   */
+  "adminListDriverLevels",
 ] as const;
 
 export const HEAVY_FUNCTIONS = [
@@ -114,6 +121,12 @@ export const HEAVY_FUNCTIONS = [
   "cleanupDriverTelemetryEvents",
   "cleanupStaleDriverLocations",
   "esignComposeSignedDocument",
+  /**
+   * Writes one snapshot per rider and, when asked, one notification per rider
+   * whose level changed into D. Sequential writes and FCM sends behind a whole
+   * roster: concurrency 1 and 300s, not the scan lane's 120s.
+   */
+  "adminEvaluateDriverLevelsSweep",
 ] as const;
 
 const SCAN = new Set<string>(SCAN_FUNCTIONS);

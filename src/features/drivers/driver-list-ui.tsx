@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Eye, EyeOff } from "lucide-react";
+import { Bike, Car, Copy, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
+import { vehicleSpriteKey } from "@/features/vehicles/vehicle-type";
+import { cn } from "@/lib/utils";
 import {
   formatPhoneDisplay,
   isValidKuwaitPhoneDigits,
@@ -136,6 +138,43 @@ export function PartnerCell({
         )}
       </div>
       <span className="truncate text-sm text-foreground">{name}</span>
+    </div>
+  );
+}
+
+export function DriverVehicleCell({
+  vehicleTypeKey,
+  vehicleLabel,
+  bikeLabel,
+  carLabel,
+  emptyLabel,
+}: {
+  vehicleTypeKey: string | null;
+  vehicleLabel: string | null;
+  bikeLabel: string;
+  carLabel: string;
+  emptyLabel: string;
+}) {
+  if (!vehicleTypeKey && !vehicleLabel) {
+    return <span className="text-sm text-muted-foreground">{emptyLabel}</span>;
+  }
+  const sprite = vehicleSpriteKey(vehicleTypeKey);
+  const Icon = sprite === "car" ? Car : Bike;
+  return (
+    <div className="flex min-w-0 items-center gap-1.5" title={vehicleLabel ?? undefined}>
+      <span
+        className={cn(
+          "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border",
+          sprite === "car"
+            ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+            : "border-pink-200 bg-pink-50 text-pink-700",
+        )}
+      >
+        <Icon className="h-3.5 w-3.5" aria-hidden />
+      </span>
+      <span className="truncate text-sm text-foreground">
+        {vehicleLabel ?? (sprite === "car" ? carLabel : bikeLabel)}
+      </span>
     </div>
   );
 }

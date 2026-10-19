@@ -32,7 +32,7 @@ import {
   type RuleState,
 } from "./fleet-rules";
 import { hashToken, verifyAdminToken } from "./auth";
-import { GpsArchive, inGpsRollout, isImportHourKey, kuwaitParts, type ArchivePoint } from "./gps-archive";
+import { GpsArchive, clampArchiveTime, inGpsRollout, isImportHourKey, kuwaitParts, type ArchivePoint } from "./gps-archive";
 import { callWorkerFunction, resolveUserFromToken } from "./supabase";
 import {
   emptyView,
@@ -271,6 +271,12 @@ export class FleetRoom implements DurableObject {
   private opsCursor: { at: string; id: string } | null = null;
   private readonly archive: GpsArchive;
   private archiveSeeded = false;
+  /**
+   * Riders whose last archive batch was refused by the SQLite buffer cap. The
+   * first refusal keeps the points pending; a second refusal sends them to
+   * Firestore rather than dropping them silently.
+   */
+  private readonly bufferCapDeferred = new Set<string>();
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -566,7 +572,9 @@ export class FleetRoom implements DurableObject {
     try {
       pins = this.archive.latestPins();
     } catch (error) {
-      console.error("gps_archive_seed_failed", String(error));
+      console.error(
+        JSON.stringify({ event: "gps_archive_seed_failed", failures: 1, error: String(error) }),
+      );
       return;
     }
     for (const pin of pins) {
@@ -1445,7 +1453,9 @@ export class FleetRoom implements DurableObject {
     if (this.gpsSinkPercent > 0) {
       this.state.waitUntil(
         this.archive.maybeFlush(nowMs).catch((error) => {
-          console.error("gps_archive_flush_failed", String(error));
+          console.error(
+            JSON.stringify({ event: "gps_archive_flush_failed", failures: 1, error: String(error) }),
+          );
         }),
       );
       if (nowMs - this.lastStatsSyncAt >= STATS_SYNC_MS) {
@@ -1505,32 +1515,133 @@ export class FleetRoom implements DurableObject {
         if (rows.length < STATS_SYNC_PAGE) return;
       }
     } catch (error) {
-      console.error("day_stats_sync_failed", String(error));
+      console.error(
+        JSON.stringify({ event: "day_stats_sync_failed", failures: 1, error: String(error) }),
+      );
     }
   }
 
+  /**
+   * Durable flush for every rider with pending fixes.
+   *
+   * Archived riders are recorded and their SQLite buffer is persisted in this same
+   * turn, so a deploy can only lose the batch that was still inside this turn when
+   * the isolate died — roughly one `POSTGRES_FLUSH_MS` (10s) of downsampled points.
+   * SQLite rows and the hours already compacted to R2 survive a deploy.
+   *
+   * This is not zero loss: an isolate killed between `record()` and the next flush
+   * still drops that turn's `entity.pending` / `pendingRows` / `minuteLines`.
+   */
   private async flushPositions(): Promise<void> {
     const events: Array<Record<string, unknown>> = [];
     const dualWrite = this.env.GPS_DUAL_WRITE === "1";
+    const nowMs = Date.now();
+
     for (const entity of this.entities.values()) {
       if (entity.pending.length === 0) continue;
       const kept = downsampleForDurability(entity.pending);
       const archived = this.archives(entity.driverId);
+      let batch = kept;
       let distanceTodayM: number | null = null;
-      if (archived) {
+      let historyInR2 = archived && !dualWrite;
+
+      if (archived && kept.length > 0) {
+        // Same clock window the Functions apply to Firestore history, applied
+        // before the archive picks a Kuwait day/hour key. A replayed fix older
+        // than 7 days is dropped on purpose rather than stored under today.
+        const clamped: PendingPoint[] = [];
+        let dropped = 0;
+        for (const point of kept) {
+          const at = Date.parse(point.clientTs);
+          const next = clampArchiveTime(at, point.replay, nowMs);
+          if (next == null) {
+            dropped += 1;
+            continue;
+          }
+          clamped.push(next === at ? point : { ...point, clientTs: new Date(next).toISOString() });
+        }
+        if (dropped > 0) {
+          console.error(
+            JSON.stringify({
+              event: "gps_archive_point_dropped",
+              failures: 1,
+              driverId: entity.driverId,
+              dropped,
+              reason: "outside_archive_window",
+            }),
+          );
+        }
+        batch = clamped;
+
         try {
-          this.archive.record(entity.driverId, kept.map(toArchivePoint), entity.inAssignedZone);
-          const lastTs = Date.parse(kept[kept.length - 1]?.clientTs ?? "");
-          distanceTodayM = Number.isFinite(lastTs)
-            ? this.archive.distanceTodayM(entity.driverId, kuwaitParts(lastTs).day)
-            : null;
+          const recorded = this.archive.record(
+            entity.driverId,
+            clamped.map(toArchivePoint),
+            entity.inAssignedZone,
+          );
+          if (!recorded.accepted) {
+            if (!this.bufferCapDeferred.has(entity.driverId)) {
+              this.bufferCapDeferred.add(entity.driverId);
+              console.error(
+                JSON.stringify({
+                  event: "gps_buffer_capped",
+                  failures: 1,
+                  driverId: entity.driverId,
+                  points: kept.length,
+                  fallback: "retry",
+                }),
+              );
+              continue; // the points stay in entity.pending
+            }
+            historyInR2 = false;
+            console.error(
+              JSON.stringify({
+                event: "gps_buffer_capped",
+                failures: 1,
+                driverId: entity.driverId,
+                points: kept.length,
+                fallback: "firestore",
+              }),
+            );
+          } else {
+            // Persist in the same turn as record(): a deploy between the two
+            // would otherwise lose the batch that only lived in memory.
+            const persisted = this.archive.persistBuffers();
+            if (persisted.capped) {
+              historyInR2 = false;
+              console.error(
+                JSON.stringify({
+                  event: "gps_buffer_capped",
+                  failures: 1,
+                  driverId: entity.driverId,
+                  points: kept.length,
+                  fallback: "firestore",
+                }),
+              );
+            }
+            const lastTs = Date.parse(batch[batch.length - 1]?.clientTs ?? "");
+            distanceTodayM = Number.isFinite(lastTs)
+              ? this.archive.distanceTodayM(entity.driverId, kuwaitParts(lastTs).day)
+              : null;
+          }
         } catch (error) {
-          console.error("gps_archive_record_failed", String(error));
+          // record() threw: `entity.pending` is untouched, so the next flush
+          // retries the same batch. It is not written to Firestore either.
+          console.error(
+            JSON.stringify({
+              event: "gps_archive_record_failed",
+              failures: 1,
+              driverId: entity.driverId,
+              error: String(error),
+            }),
+          );
+          continue;
         }
       }
-      for (const point of kept) {
+
+      for (const point of batch) {
         events.push({
-          history_in_r2: archived && !dualWrite,
+          history_in_r2: historyInR2,
           distance_today_m: distanceTodayM,
           driver_id: entity.driverId,
           lat: point.lat,
@@ -1552,6 +1663,7 @@ export class FleetRoom implements DurableObject {
         });
       }
       entity.pending = [];
+      this.bufferCapDeferred.delete(entity.driverId);
     }
 
     if (events.length === 0) return;
@@ -1577,7 +1689,9 @@ export class FleetRoom implements DurableObject {
         }
       }
     } catch (error) {
-      console.error("position_flush_failed", String(error));
+      console.error(
+        JSON.stringify({ event: "position_flush_failed", failures: 1, error: String(error) }),
+      );
     }
   }
 

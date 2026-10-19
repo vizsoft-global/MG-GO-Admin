@@ -39,6 +39,44 @@ export function parseImportActive(
   return "invalid";
 }
 
+/**
+ * Reads the sheet's Vehicle Type cell. The catalogue is locked to two keys
+ * because a map sprite is drawn from it, so anything that is not clearly a car
+ * is a bike — rule 12's unknown-vehicle default. `null` means the cell was
+ * blank, and the matched vehicle's own type (or bike) decides.
+ */
+export function parseImportVehicleType(
+  raw: string | null | undefined,
+): "bike" | "car" | null {
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (!value) return null;
+  const key = value.replace(/[\s-]+/g, "_");
+  if (
+    [
+      "car",
+      "cars",
+      "van",
+      "truck",
+      "lorry",
+      "suv",
+      "four_wheeler",
+      "4_wheeler",
+      "auto",
+      "سيارة",
+      "سياره",
+      "مركبة",
+      "مركبه",
+      "شاحنة",
+      "شاحنه",
+    ].includes(key) ||
+    value.includes("سيار") ||
+    /(^|[^a-z])cars?([^a-z]|$)/.test(value)
+  ) {
+    return "car";
+  }
+  return "bike";
+}
+
 export function mapRowsFromSheet(
   headers: string[],
   rows: string[][],
@@ -77,6 +115,7 @@ export function mapRowsFromSheet(
         partner_id: get("partner_id"),
         zone_id: get("zone_id"),
         vehicle_label: get("vehicle_label"),
+        vehicle_type: get("vehicle_type"),
         restaurant_ids: get("restaurant_ids"),
         nationality: get("nationality"),
         rider_category: get("rider_category"),
@@ -131,7 +170,17 @@ export function guessColumnMapping(
     employee_id: find("mg id", "mg_id", "mgid", "emp id", "emp_id", "employee"),
     partner_id: find("partner id", "partner_id", "partner uuid", "partner"),
     zone_id: find("zone id", "zone_id", "zone uuid", "zone"),
-    vehicle_label: find("vehicle", "bike", "plate"),
+    // "Vehicle Type" is its own column, so the plate lookup must not swallow it.
+    vehicle_label: findExcept(["type", "kind"], "vehicle", "bike", "plate"),
+    vehicle_type: find(
+      "vehicle type",
+      "vehicle_type",
+      "vehicle kind",
+      "vehicle_kind",
+      "bike type",
+      "car type",
+      "type of vehicle",
+    ),
     restaurant_ids: find(
       "restaurant id",
       "restaurant_ids",

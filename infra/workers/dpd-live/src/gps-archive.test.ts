@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import {
+  ARCHIVE_FUTURE_MS,
+  ARCHIVE_LIVE_PAST_MS,
+  BUFFER_STALE_MS,
   GpsArchive,
+  clampArchiveTime,
   gunzipText,
   gzipText,
   importHourKey,
@@ -243,4 +247,73 @@ test("latest pin survives a new archive instance on the same SQLite", async () =
 
   second.record("r1", [point(BASE + 20_000, 29.3718, 47.97)], false);
   assert.ok((second.dayStats("r1", DAY)?.distanceM ?? 0) > 190);
+});
+
+// 2026-10-19 09:00 Kuwait = 06:00Z, independent of the wall clock.
+const CLAMP_NOW = Date.UTC(2026, 9, 19, 6, 0, 0);
+
+test("rolloutBucket stays byte-compatible with the probe script", () => {
+  assert.equal(rolloutBucket("driver-a"), 93);
+});
+
+test("clampArchiveTime clamps a future live fix to now + 5 minutes", () => {
+  const clamped = clampArchiveTime(CLAMP_NOW + 3_600_000, false, CLAMP_NOW);
+  assert.equal(clamped, CLAMP_NOW + ARCHIVE_FUTURE_MS);
+  assert.equal(kuwaitParts(clamped!).day, "2026-10-19");
+});
+
+test("clampArchiveTime pulls a live fix from a day back into the last 15 minutes", () => {
+  const clamped = clampArchiveTime(CLAMP_NOW - 86_400_000, false, CLAMP_NOW);
+  assert.equal(clamped, CLAMP_NOW - ARCHIVE_LIVE_PAST_MS);
+  assert.equal(kuwaitParts(clamped!).day, "2026-10-19");
+});
+
+test("clampArchiveTime keeps a two-day replay under its own day", () => {
+  const replayed = CLAMP_NOW - 2 * 86_400_000;
+  assert.equal(clampArchiveTime(replayed, true, CLAMP_NOW), replayed);
+  assert.equal(kuwaitParts(replayed).day, "2026-10-17");
+});
+
+test("clampArchiveTime drops a replay older than seven days", () => {
+  assert.equal(clampArchiveTime(CLAMP_NOW - 8 * 86_400_000, true, CLAMP_NOW), null);
+  assert.equal(clampArchiveTime(Number.NaN, false, CLAMP_NOW), null);
+});
+
+test("buffer row cap refuses new lines and keeps the old ones", () => {
+  const archive = new GpsArchive(memorySql(), memoryBucket(), { maxRows: 1 });
+  assert.deepEqual(archive.record("r1", [point(BASE, 29.37, 47.97)], true), { accepted: true });
+  assert.equal(archive.persistBuffers().capped, false);
+  assert.deepEqual(archive.record("r2", [point(BASE, 29.3, 47.9)], true), {
+    accepted: false,
+    reason: "buffer_capped",
+  });
+  assert.equal(archive.bufferedPoints("r1", DAY).length, 1);
+  assert.equal(archive.bufferedPoints("r2", DAY).length, 0);
+});
+
+test("buffer byte cap refuses a batch larger than the limit", () => {
+  const archive = new GpsArchive(memorySql(), memoryBucket(), { maxBytes: 1 });
+  assert.deepEqual(archive.record("r1", [point(BASE, 29.37, 47.97)], true), {
+    accepted: false,
+    reason: "buffer_capped",
+  });
+});
+
+test("persistBuffers writes the turn to SQLite for the next archive instance", () => {
+  const sql = memorySql();
+  const first = new GpsArchive(sql, memoryBucket());
+  first.record("r1", [point(BASE, 29.37, 47.97)], true);
+  assert.equal(first.persistBuffers().capped, false);
+  const second = new GpsArchive(sql, memoryBucket());
+  assert.equal(second.bufferedPoints("r1", DAY).length, 1);
+});
+
+test("bufferStatus reports an old uncompacted hour as stale", () => {
+  const archive = new GpsArchive(memorySql(), memoryBucket());
+  archive.record("r1", [point(BASE, 29.37, 47.97)], true);
+  archive.persistBuffers();
+  const status = archive.bufferStatus(BASE + 3 * 3_600_000);
+  assert.equal(status.rows, 1);
+  assert.ok(status.bytes > 0);
+  assert.ok(status.ageMs > BUFFER_STALE_MS, `age ${status.ageMs}`);
 });

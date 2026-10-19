@@ -131,6 +131,7 @@ export async function previewOrderRecon(
     db.collection(COLLECTIONS.restaurants).get(),
     db.collection("order_recon_store_aliases").get(),
   ]);
+  let docsRead = driverSnap.size + restaurantSnap.size + aliasSnap.size;
   const drivers = driverSnap.docs.map((doc) => ({
     id: doc.id,
     employee_id: (doc.data().employee_id as string | null) ?? null,
@@ -148,6 +149,7 @@ export async function previewOrderRecon(
   for (let i = 0; i < driverIds.length; i += 100) {
     const refs = driverIds.slice(i, i + 100).map((id) => db.collection(COLLECTIONS.profiles).doc(id));
     const found = refs.length ? await db.getAll(...refs) : [];
+    docsRead += found.length;
     for (const doc of found) {
       if (!doc.exists) continue;
       nameById.set(doc.id, (doc.data()?.full_name as string | null) ?? null);
@@ -167,6 +169,8 @@ export async function previewOrderRecon(
   );
 
   const issues = collapseReconIssues(resolved);
+
+  console.info(JSON.stringify({ perf: "handler", name: "previewOrderRecon", docsRead }));
 
   return {
     preview: {
@@ -465,6 +469,9 @@ export async function listOrderReconRuns(): Promise<OrderReconRunSummary[]> {
 
   const db = await reconDb();
   const snap = await db.collection(COLLECTIONS.orderReconRuns).get();
+  console.info(
+    JSON.stringify({ perf: "handler", name: "listOrderReconRuns", docsRead: snap.size }),
+  );
   return snap.docs
     .map((doc) => mapStoredRun(doc))
     .filter((run): run is OrderReconRunSummary => run != null)
@@ -481,6 +488,9 @@ export async function getOrderRecon(runId: string): Promise<OrderReconRun | null
   const run = mapStoredRun(doc);
   if (!run) return null;
   const rows = await fetchAllReconRows(run.id);
+  console.info(
+    JSON.stringify({ perf: "handler", name: "getOrderRecon", docsRead: 1 + rows.length }),
+  );
   return { ...run, rows: mapRunRows(rows) };
 }
 
@@ -496,6 +506,9 @@ export async function getLatestOrderRecon(): Promise<OrderReconRun | null> {
     .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   if (!run) return null;
   const rows = await fetchAllReconRows(run.id);
+  console.info(
+    JSON.stringify({ perf: "handler", name: "getLatestOrderRecon", docsRead: 1 + rows.length }),
+  );
   return { ...run, rows: mapRunRows(rows) };
 }
 

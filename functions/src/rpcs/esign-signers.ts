@@ -18,6 +18,8 @@ import {
 } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { requireStaff } from "../core/staff";
+import { SIGN_DEEP_LINK_PREFIX, SIGN_ROUTE_PREFIX } from "./esign-requests";
+import { notifyDriverTransactional } from "./visits-shared";
 import {
   IN_FILTER_LIMIT,
   SCAN_CAP,
@@ -471,6 +473,51 @@ export const adminListMyEsignSignatures = onCall(async (request) => {
   return { ok: true, rows };
 });
 
+/**
+ * Staff counter-signature outcome -> rider inbox + push.
+ *
+ * Wrapped so a notification failure can never undo a signature that already
+ * committed. Replays never reach here: `matchOwnSigner` refuses a signer that
+ * is already signed or declined before any write or notify.
+ */
+async function notifySignerOutcome(input: {
+  driverId: string | null;
+  requestId: string;
+  requestCode: string | null;
+  documentTitle: string | null;
+  approved: boolean;
+  declineReason?: string | null;
+  actorUid: string;
+}): Promise<void> {
+  if (!input.driverId) return;
+  const code = input.requestCode ?? input.requestId;
+  const documentName = input.documentTitle ?? code;
+  const reason = input.declineReason?.trim() ?? "";
+  const body = input.approved
+    ? `${documentName} was approved by management.`
+    : reason !== ""
+      ? `${documentName} was rejected by management: ${reason}`
+      : `${documentName} was rejected by management.`;
+  try {
+    await notifyDriverTransactional({
+      driverId: input.driverId,
+      title: `${input.approved ? "Document approved" : "Document rejected"} - ${code}`,
+      body,
+      deepLink: `${SIGN_DEEP_LINK_PREFIX}${input.requestId}`,
+      category: "operations",
+      priority: "high",
+      actionParams: {
+        record_type: "esign",
+        record_id: input.requestId,
+        route: `${SIGN_ROUTE_PREFIX}${input.requestId}`,
+      },
+      createdBy: input.actorUid,
+    });
+  } catch (error) {
+    console.error("esign signer outcome notify", input.requestId, error);
+  }
+}
+
 export const adminSubmitEsignSignature = onCall(async (request) => {
   const staff = await requireStaff(request);
   const data = (request.data ?? {}) as Dict;
@@ -492,9 +539,9 @@ export const adminSubmitEsignSignature = onCall(async (request) => {
     const match = matchOwnSigner(signerSnap.docs, staff.uid);
     if (match.kind !== "pending") return decidedSignerError(match.kind);
     const target = match.doc;
-    if (!requestSnap.exists || dataOf(requestSnap).status !== "signed") {
-      return { ok: false as const, error: "not_ready" };
-    }
+    if (!requestSnap.exists) return { ok: false as const, error: "not_ready" };
+    const requestRow = dataOf(requestSnap);
+    if (requestRow.status !== "signed") return { ok: false as const, error: "not_ready" };
 
     const current = dataOf(target);
     const now = Timestamp.now();
@@ -514,6 +561,9 @@ export const adminSubmitEsignSignature = onCall(async (request) => {
       signerId: target.id,
       role: textOf(current.role),
       state: counterSignatureState(after),
+      driverId: textOf(requestRow.driver_id),
+      requestCode: textOf(requestRow.request_code),
+      documentTitle: textOf(requestRow.title),
     };
   });
 
@@ -532,6 +582,17 @@ export const adminSubmitEsignSignature = onCall(async (request) => {
     },
   });
 
+  if (result.state === "signed") {
+    await notifySignerOutcome({
+      driverId: result.driverId,
+      requestId,
+      requestCode: result.requestCode,
+      documentTitle: result.documentTitle,
+      approved: true,
+      actorUid: staff.uid,
+    });
+  }
+
   return { ok: true, counter_signature_state: result.state };
 });
 
@@ -543,8 +604,12 @@ export const adminDeclineEsignSignature = onCall(async (request) => {
   if (!requestId) return { ok: false, error: "not_assigned" };
 
   const db = getFirestore();
+  const requestRef = db.collection(COLLECTIONS.esignRequests).doc(requestId);
   const result = await db.runTransaction(async (tx) => {
-    const signerSnap = await tx.get(signersForRequestQuery(requestId));
+    const [signerSnap, requestSnap] = await Promise.all([
+      tx.get(signersForRequestQuery(requestId)),
+      tx.get(requestRef),
+    ]);
     assertWithinCap(signerSnap.size);
     const match = matchOwnSigner(signerSnap.docs, staff.uid);
     if (match.kind !== "pending") return decidedSignerError(match.kind);
@@ -568,11 +633,15 @@ export const adminDeclineEsignSignature = onCall(async (request) => {
     const after = signerSnap.docs.map((doc) =>
       doc.id === target.id ? { ...dataOf(doc), status: "declined" } : dataOf(doc),
     );
+    const requestRow = requestSnap.exists ? dataOf(requestSnap) : {};
     return {
       ok: true as const,
       signerId: target.id,
       role: textOf(current.role),
       state: counterSignatureState(after),
+      driverId: textOf(requestRow.driver_id),
+      requestCode: textOf(requestRow.request_code),
+      documentTitle: textOf(requestRow.title),
     };
   });
 
@@ -589,6 +658,16 @@ export const adminDeclineEsignSignature = onCall(async (request) => {
       signer_role: result.role,
       counter_signature_state: result.state,
     },
+  });
+
+  await notifySignerOutcome({
+    driverId: result.driverId,
+    requestId,
+    requestCode: result.requestCode,
+    documentTitle: result.documentTitle,
+    approved: false,
+    declineReason: reason,
+    actorUid: staff.uid,
   });
 
   return { ok: true, counter_signature_state: result.state };

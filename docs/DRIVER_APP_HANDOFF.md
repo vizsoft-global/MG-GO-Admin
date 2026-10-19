@@ -1243,6 +1243,16 @@ Every completed upload is recorded in `storage_uploads` and shown on **Settings 
 
 ---
 
+## 14b. Order exceptions and Level D (2026-10-19)
+
+Both are Firebase callables in `me-central1` (`callRiderFunction`). The panel does not deploy with this change; the callables do.
+
+**Rejected / cancelled orders.** `driverSubmitOrderException` writes `order_exceptions`. Body: `kind` `rejected|cancelled`, `source` `driver_declined|store_or_customer`, `orderId` 1–32 digits, `reason` 8–500 chars, `proofKeys` 1–5 R2 keys from `entityType: order_proof` (10 MB, image or pdf). Kuwait day of the write. Caps: 20 rows per rider per day, one row per order+kind+day. Errors: `reason_required`, `reason_too_long`, `proof_required`, `invalid_proof_keys`, `too_many_proofs`, `invalid_order_id`, `daily_limit_reached`, `duplicate_exception`. `driverListMyOrderExceptions` returns `{ rows, counts: { pending, approved, rejected } }`. Admin review notifies with `record_type: order_exception`, category `delivery`, deep link `musallam:///profile/order-exceptions`.
+
+**Level D.** `driverGetMyLevel` returns `{ month, level, auto_level, override_level, override_reason, classified, metrics, live_deliveries }`. `level` is `D` or `standard`. Metrics: `active_days`, `mtd_verified_deliveries`, `target_dpd`, `required_orders`, `gap`, `dpd`, `days_elapsed`. A rider is Level D when `active_days >= 3` and verified orders this Kuwait month are below `active_days * target_dpd` (fallback target 25). An admin override replaces the badge. Show a D chip only when `level == "D"`. Sweep and override pushes use `record_type: driver_level`, deep link `musallam:///profile/performance-level`.
+
+---
+
 ## 15. Supabase connection
 
 All driver builds use the **DPD production** Supabase project (`eoksxkdssptgyqyywdju`) and admin `https://dpdadmin-prod.vercel.app`. Prefer driver `env/prod.json` / dart-defines:

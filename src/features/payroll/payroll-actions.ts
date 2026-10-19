@@ -266,6 +266,22 @@ async function assembleFromTables(
         .catch(() => null),
     ]);
 
+  // Cost attribution for the fallback that reads live tables. The callable path
+  // logs its own handler timing in Functions; this one is a Next server action.
+  const docsRead = [
+    driverSnap,
+    profileSnap,
+    zoneSnap,
+    vehicleSnap,
+    mapSnap,
+    restaurantSnap,
+    logSnap,
+    requestSnap,
+    offSnap,
+    adjustmentSnap,
+  ].reduce((sum, snap) => sum + (snap?.size ?? 0), 0);
+  console.info(JSON.stringify({ perf: "handler", name: "assembleFromTables", docsRead }));
+
   const driverRows = driverSnap.docs.map((doc) => {
     const row = doc.data();
     const single = textOf(row.restaurant_id);
@@ -282,6 +298,7 @@ async function assembleFromTables(
       nationality: textOf(row.nationality),
       rider_category: textOf(row.rider_category),
       source_company: textOf(row.source_company),
+      client_id: textOf(row.client_id),
       status: textOf(row.status),
       vehicle_id: textOf(row.vehicle_id),
       restaurant_ids: single ? [single, ...many.filter((id) => id !== single)] : many,
@@ -403,7 +420,8 @@ async function assembleFromTables(
       vehicleKey: d.vehicle_id ? vehicles.get(d.vehicle_id) ?? null : null,
       restaurantId,
       restaurantName: restaurantId ? restaurants.get(restaurantId) ?? null : null,
-      restaurantClientId: restaurantId ? restaurantClientIds.get(restaurantId) ?? null : null,
+      restaurantClientId:
+        d.client_id ?? (restaurantId ? restaurantClientIds.get(restaurantId) ?? null : null),
     };
   });
 

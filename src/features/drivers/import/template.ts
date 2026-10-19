@@ -101,8 +101,16 @@ const STANDARD_COLUMNS: Array<
   {
     field: "vehicle_label",
     header: "Vehicle",
-    allowed: "Bike ID or registration number of an existing vehicle.",
+    allowed:
+      "Bike ID or registration number of an existing vehicle. An unmatched value is kept as-is; the row still imports.",
     example: "BIKE-1024",
+  },
+  {
+    field: "vehicle_type",
+    header: "Vehicle Type",
+    allowed:
+      "bike or car (bike | motorcycle | scooter | motor, car | van | truck are accepted). Blank means bike.",
+    example: "bike",
   },
   {
     field: "nationality",

@@ -568,6 +568,24 @@ async function loadDriverRows(
     if (devices.size > 1) multiDevice.add(driverId);
   }
 
+  // One lookup for the plates actually referenced, not the whole garage.
+  const vehicleIds = new Set<string>();
+  for (const doc of intakes) {
+    const id = asStr(doc.get("vehicle_id"));
+    if (id) vehicleIds.add(id);
+  }
+  for (const driver of driverById.values()) {
+    const id = asStr(driver["vehicle_id"]);
+    if (id) vehicleIds.add(id);
+  }
+  const vehicleById = new Map<string, Dict>();
+  if (vehicleIds.size > 0) {
+    const vehicleDocs = await timedPhase(marks, "vehiclesMs", () =>
+      docsByIds(db, COLLECTIONS.vehicles, [...vehicleIds]),
+    );
+    for (const snap of vehicleDocs) vehicleById.set(snap.id, (snap.data() ?? {}) as Dict);
+  }
+
   return intakes.map((doc) => {
     const intake = doc.data() as Dict;
     const linkedProfileId = asStr(intake["linked_profile_id"]);
@@ -589,6 +607,9 @@ async function loadDriverRows(
     const accountStatus = (driver ? asStr(driver["status"]) : null) ?? "pending";
     const isBlocked = driver ? driver["is_blocked"] === true : false;
 
+    const vehicleId = (driver ? asStr(driver["vehicle_id"]) : null) ?? asStr(intake["vehicle_id"]);
+    const vehicle = vehicleId ? vehicleById.get(vehicleId) : undefined;
+
     return {
       id: doc.id,
       created_at: instantOf(intake["created_at"]),
@@ -604,6 +625,16 @@ async function loadDriverRows(
       partner_logo_key: partnerId ? asStr(partnerById.get(partnerId)?.["logo_url"]) : null,
       zone_id: zoneId,
       zone_name: zoneId ? asStr(zoneById.get(zoneId)?.["name"]) : null,
+      vehicle_id: vehicleId,
+      vehicle_label: vehicle
+        ? asStr(vehicle["reg_number"]) ?? asStr(vehicle["bike_id"]) ?? null
+        : null,
+      // The live driver row wins, then the assigned vehicle: a car assigned
+      // after approval must not keep reading as the bike the intake sheet named.
+      vehicle_type_key:
+        (driver ? asStr(driver["vehicle_type_key"]) : null) ??
+        (vehicle ? asStr(vehicle["vehicle_type_key"]) : null) ??
+        asStr(intake["vehicle_type_key"]),
       restaurant_ids: restaurantIds,
       restaurant_names: restaurantNames,
       workflow_status: asStr(intake["workflow_status"]),
@@ -774,6 +805,19 @@ async function hydrateDeferredPage(rows: Dict[], phases: PhaseMarks): Promise<vo
       const zoneSnaps = await db.getAll(...zoneIds.map((id) => db.collection(COLLECTIONS.zones).doc(id)));
       for (const snap of zoneSnaps) zoneName.set(snap.id, asStr(snap.get("name")));
     }
+    const vehicleIds = [...new Set(
+      [...driverById.values()]
+        .map((driver) => asStr(driver["vehicle_id"]))
+        .concat(rows.map((row) => asStr(row["vehicle_id"])))
+        .filter((id): id is string => id !== null),
+    )];
+    const vehicleById = new Map<string, Dict>();
+    if (vehicleIds.length > 0) {
+      const vehicleSnaps = await db.getAll(...vehicleIds.map((id) => db.collection(COLLECTIONS.vehicles).doc(id)));
+      for (const snap of vehicleSnaps) {
+        if (snap.exists) vehicleById.set(snap.id, (snap.data() ?? {}) as Dict);
+      }
+    }
     for (const row of rows) {
       const linkedId = asStr(row["linked_profile_id"]);
       const driver = linkedId ? driverById.get(linkedId) : undefined;
@@ -784,6 +828,16 @@ async function hydrateDeferredPage(rows: Dict[], phases: PhaseMarks): Promise<vo
       row["mg_id"] = asStr(driver["employee_id"]) ?? asStr(row["mg_id"]);
       row["zone_id"] = zoneId;
       row["zone_name"] = zoneId ? zoneName.get(zoneId) ?? asStr(row["zone_name"]) : null;
+      const vehicleId = asStr(driver["vehicle_id"]) ?? asStr(row["vehicle_id"]);
+      const vehicle = vehicleId ? vehicleById.get(vehicleId) : undefined;
+      row["vehicle_id"] = vehicleId;
+      row["vehicle_label"] = vehicle
+        ? asStr(vehicle["reg_number"]) ?? asStr(vehicle["bike_id"]) ?? null
+        : asStr(row["vehicle_label"]);
+      row["vehicle_type_key"] =
+        asStr(driver["vehicle_type_key"]) ??
+        (vehicle ? asStr(vehicle["vehicle_type_key"]) : null) ??
+        asStr(row["vehicle_type_key"]);
       row["account_status"] = accountStatus;
       row["status_key"] = isBlocked ? "blocked" : accountStatus;
       row["is_blocked"] = isBlocked;

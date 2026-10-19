@@ -490,6 +490,17 @@ export type EsignBatchLine = {
   recipient_declined_at?: string | null;
 };
 
+export type EsignAttachmentRow = {
+  id: string;
+  name: string;
+  content_type: string | null;
+  size: number;
+  source: string;
+  created_at: string | null;
+  /** Same-origin download link; the R2 key never reaches the browser. */
+  downloadUrl: string;
+};
+
 export type EsignDetail = EsignListRow & {
   declaration_accepted_at: string | null;
   signer_meta: Record<string, unknown>;
@@ -505,6 +516,10 @@ export type EsignDetail = EsignListRow & {
   position?: string | null;
   civil_id?: string | null;
   zone_name?: string | null;
+  review_status?: string | null;
+  review_note?: string | null;
+  reviewed_at?: string | null;
+  attachments?: EsignAttachmentRow[];
 };
 
 export type EsignCategoryRow = {
