@@ -102,6 +102,13 @@ export const LAUNCHER_TILE_HEX: Record<string, string> = {
   "driver-app": "#4761A3",
   vehicles: "#6f7a4a",
   assets: "#8a7254",
+  compliance: "#6a7a52",
+  "wrong-actions": "#84545a",
+  "order-exceptions": "#7f5b7a",
+  "payroll-hub": "#b0873a",
+  "earnings-calculation": "#a8843a",
+  "group-settings": "#5d6275",
+  "group-system": "#4a5768",
 };
 
 /** Launcher tile fill for a module id; falls back to the brand teal. */
