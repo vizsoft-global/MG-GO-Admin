@@ -43,7 +43,7 @@ describe("esign bilingual layout", () => {
     }
   });
 
-  it("prints D2 title and keeps acknowledgement slots empty of the employee stamp", () => {
+  it("prints D2 title and keeps the loan signature slots to employee and HR", () => {
     const layout = buildEsignDocumentLayout({
       kind: "loan",
       headerEn: "Loan Request",
@@ -54,8 +54,9 @@ describe("esign bilingual layout", () => {
     const employee = layout.slots.find((row) => row.role === "employee");
     const ack = layout.slots.filter((row) => row.role.startsWith("ack_"));
     assert.ok(employee);
-    assert.equal(ack.length, 2);
-    assert.ok(ack.every((row) => row.id !== employee?.id));
+    assert.equal(ack.length, 0);
+    assert.equal(layout.slots.filter((row) => row.role === "hr").length, 1);
+    assert.equal(layout.slots.some((row) => row.role === "ceo"), false);
   });
 
   it("seeds the D1 penalty checkbox set", () => {
@@ -227,8 +228,8 @@ describe("payslip sheet", () => {
     assert.equal(sheet.identity.find((row) => row.key === "employee_position")?.value, "Employee A / Rider");
     assert.match(sheet.identity.find((row) => row.key === "pay_bank")?.value ?? "", /KW81…1041/);
     assert.equal(sheet.lines[0]?.key, "actual_working_days");
-    assert.equal(sheet.lines[0]?.rate, "1.00");
-    assert.equal(sheet.lines[0]?.amount, "26 days");
+    assert.equal(sheet.lines[0]?.rate, "");
+    assert.equal(sheet.lines[0]?.amount, "26 Days");
     assert.equal(sheet.lines.find((line) => line.key === "net_salary_kwd")?.code, "NET");
     assert.equal(sheet.lines.find((line) => line.key === "deduction_amount_kwd")?.code, "Ded");
     assert.deepEqual(layout.slots, PAYSLIP_SLOTS);

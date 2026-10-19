@@ -8,12 +8,13 @@ import {
 } from "./render/esign-document-layout";
 
 /**
- * The two boxes a fresh layout always draws. Date, request code, employee id,
- * company, position, civil id and zone are opt-in, so the default stamp cannot
- * stack a caption over the pre-printed lines beneath the signature.
+ * A saved layout must always carry the signature box. The name caption is
+ * optional: the reference sheets already print the rider's name, so a caption
+ * under the signature would land on the declaration paragraph.
  */
-export const STAMP_CORE_IDS = ["signature", "name"] as const;
+export const STAMP_CORE_IDS = ["signature"] as const;
 export const STAMP_EXTRA_IDS = [
+  "name",
   "date",
   "code",
   "employee_id",
@@ -25,7 +26,7 @@ export const STAMP_EXTRA_IDS = [
 export const STAMP_PIECE_IDS = [...STAMP_CORE_IDS, ...STAMP_EXTRA_IDS] as const;
 export type StampPieceId = (typeof STAMP_PIECE_IDS)[number];
 
-/** What a default layout draws. `STAMP_PIECE_IDS` is the full opt-in catalogue. */
+/** What a fresh layout draws when the sheet has room for a caption. */
 export const STAMP_DEFAULT_IDS = ["signature", "name"] as const;
 
 export const RESIZE_CORNERS = ["nw", "ne", "sw", "se"] as const;
@@ -123,7 +124,10 @@ export function completeStampLayout(layout: StampLayout): StampLayout {
   const have = new Set(layout.pieces.map((piece) => piece.id));
   const gone = new Set<StampPieceId>(layout.removed ?? []);
   const missing = defaults.pieces.filter(
-    (piece) => !have.has(piece.id) && !gone.has(piece.id),
+    (piece) =>
+      (STAMP_CORE_IDS as readonly string[]).includes(piece.id) &&
+      !have.has(piece.id) &&
+      !gone.has(piece.id),
   );
   if (missing.length === 0) return layout;
   return { ...layout, pieces: [...layout.pieces, ...missing] };
@@ -261,6 +265,11 @@ export function formatStampInstant(value: unknown): string {
 /** Name, date, and request code sit just under a signature box, in PDF points. */
 export function layoutAroundSignature(signature: StampPiece): StampLayout {
   return layoutWithIds(signature, STAMP_DEFAULT_IDS);
+}
+
+/** Signature only — the reference sheets already print the rider's name. */
+export function layoutSignatureOnly(signature: StampPiece): StampLayout {
+  return { pieces: [clampPiece({ ...signature, id: "signature" })] };
 }
 
 /** Every opt-in box, in print order, anchored under the signature. */

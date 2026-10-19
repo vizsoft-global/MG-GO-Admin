@@ -36,7 +36,7 @@ function employeeBlockOf(html: string): string {
 }
 
 describe("buildEsignDocumentHtml", () => {
-  it("keeps the accident dates stored on the request in the printed sheet", () => {
+  it("prints the accident declaration, commitment list and rider name", () => {
     const input = filledEsignDocumentInput({
       template: {
         document_kind: "general",
@@ -62,15 +62,20 @@ describe("buildEsignDocumentHtml", () => {
         request_kind: "accident",
         accident_date: "2026-10-18",
         report_date: "2026-10-19",
+        rider_name: "Ahmed Ali",
       },
       description: "",
     });
     const html = buildEsignDocumentHtml(input);
-    assert.match(html, /data-section="request_details"/);
-    assert.match(html, /Accident date/);
-    assert.match(html, /2026-10-18/);
-    assert.match(html, /Report date/);
-    assert.match(html, /2026-10-19/);
+    assert.match(html, /acc-tail/);
+    assert.match(html, /Rider Name/);
+    assert.match(html, /Ahmed Ali/);
+    assert.match(html, /Police traffic report/);
+    assert.match(html, /Initial medical report/);
+    assert.match(html, /data-slot-role="employee"/);
+    // The reference is a declaration sheet, not a dated incident report.
+    assert.doesNotMatch(html, /Accident date/);
+    assert.doesNotMatch(html, /2026-10-18/);
   });
 
   it("prints long sheets across two pages without splitting boxes", () => {
@@ -262,8 +267,8 @@ describe("buildEsignDocumentHtml", () => {
     assert.doesNotMatch(html, /max-width: 56%/);
   });
 
-  it("prints the request code as Document ID on every kind", () => {
-    for (const kind of ["penalty", "loan", "payslip", "general"] as const) {
+  it("prints the request code as Document ID on the generic kinds", () => {
+    for (const kind of ["penalty", "general"] as const) {
       const html = buildEsignDocumentHtml({
         language: "en",
         kind,
@@ -280,6 +285,17 @@ describe("buildEsignDocumentHtml", () => {
       assert.doesNotMatch(html, /Slip No\./);
       assert.doesNotMatch(html, /Notice No\./);
       assert.doesNotMatch(html, /Request No\./);
+    }
+    // The three signed-off reference sheets have no meta strip by design.
+    for (const kind of ["loan", "payslip"] as const) {
+      const html = buildEsignDocumentHtml({
+        language: "en",
+        kind,
+        headerEn: "Sheet",
+        employee: sampleEmployee(),
+        requestCode: "SIG-1428",
+      });
+      assert.doesNotMatch(html, /Document ID/);
     }
     const html = buildEsignDocumentHtml({
       language: "en",
@@ -424,7 +440,7 @@ describe("buildEsignDocumentHtml", () => {
     assert.doesNotMatch(html, /CEO Decision/);
   });
 
-  it("prints a payslip identity grid and amount table without a bottom stamp", () => {
+  it("prints the reference payslip grid, line table and signature pair", () => {
     const html = buildEsignDocumentHtml({
       language: "en",
       kind: "payslip",
@@ -444,23 +460,20 @@ describe("buildEsignDocumentHtml", () => {
         position: "Rider",
       }),
     });
-    assert.match(html, /data-payslip="identity"/);
-    assert.match(html, /data-payslip="sheet"/);
-    assert.match(html, /Description/);
-    assert.match(html, /البيان/);
+    assert.match(html, /pay-grid/);
+    assert.match(html, /pay-lines/);
+    assert.match(html, /Salary Slip/);
     assert.match(html, /MGGO Logistics LLC/);
-    assert.match(html, /KW81…1041/);
-    assert.match(html, /data-payslip-line="actual_working_days"/);
-    assert.match(html, /data-tone="net"/);
-    assert.match(html, /1\.00/);
-    assert.doesNotMatch(html, /data-management="1"/);
-    assert.doesNotMatch(html, /data-section="opening"/);
-    assert.doesNotMatch(html, /data-section="declaration"/);
-    assert.match(html, /data-signature-band="1"/);
-    assert.match(html, /Employee Signature/);
-    assert.match(html, /Authorised Signatory/);
+    assert.match(html, /KW81XXXX1041/);
+    assert.match(html, /Actual Working Days/);
+    assert.match(html, /Net Salary/);
+    assert.match(html, /Employee signature/);
+    assert.match(html, /Authorized signature/);
     assert.match(html, /توقيع الموظف/);
     assert.match(html, /المفوض بالتوقيع/);
+    assert.match(html, /data-slot-role="employee"/);
+    assert.match(html, /data-slot-role="hr"/);
+    assert.doesNotMatch(html, /data-management="1"/);
   });
 
   it("prints the payslip opening paragraph, declaration, extra fields, and named sign boxes", () => {
@@ -509,15 +522,14 @@ describe("buildEsignDocumentHtml", () => {
       employee: sampleEmployee(),
     });
     assert.match(html, /page-fit/);
-    assert.match(html, /data-section="opening"/);
-    assert.match(html, /This slip covers the month/);
-    assert.match(html, /data-section="declaration"/);
+    assert.doesNotMatch(html, /data-section="opening"/);
+    assert.doesNotMatch(html, /This slip covers the month/);
     assert.match(html, /I received this payslip/);
-    assert.match(html, /data-section="payslip_extra"/);
+    assert.match(html, /pay-extra/);
     assert.match(html, /Night shift/);
     assert.doesNotMatch(html, /data-logo="1"/);
-    assert.match(html, /data-payslip-line="deduction_amount_kwd"/);
-    assert.match(html, /12\.000/);
+    assert.match(html, /Administration deduction/);
+    assert.match(html, /12\.00 KD/);
     assert.match(html, /data-slot-role="employee"/);
     assert.match(html, /data-slot-role="hr"/);
     assert.doesNotMatch(html, /data-management="1"/);
@@ -577,7 +589,7 @@ describe("buildEsignDocumentHtml", () => {
     assert.doesNotMatch(html, /data-section="opening"/);
   });
 
-  it("prints a loan sheet foot outside the geom stack", () => {
+  it("prints the reference loan sheet without a generic foot", () => {
     const html = buildEsignDocumentHtml({
       language: "en",
       kind: "loan",
@@ -585,24 +597,33 @@ describe("buildEsignDocumentHtml", () => {
       headerAr: "طلب قرض",
       employee: sampleEmployee(),
     });
-    assert.match(html, /data-sheet-foot="1"/);
+    assert.match(html, /loan-page/);
+    assert.match(html, /Employee Information/);
+    assert.match(html, /Loan Request/);
+    assert.match(html, /HR Verification/);
+    assert.match(html, /Management Decision/);
+    assert.match(html, /data-slot-role="employee"/);
+    assert.match(html, /data-slot-role="hr"/);
+    assert.doesNotMatch(html, /data-sheet-foot="1"/);
     assert.doesNotMatch(html, /data-logo="1"/);
-    assert.match(html, /Document ID/);
-    assert.doesNotMatch(html, /Form Ref:/);
-    assert.doesNotMatch(html, /Page 1 of 1/);
+    assert.doesNotMatch(html, /Document ID/);
     assert.doesNotMatch(html, />Logo</);
   });
 
-  it("prints a payslip sheet foot without a management box", () => {
+  it("prints the reference payslip without a management box", () => {
     const html = buildEsignDocumentHtml({
       language: "en",
       kind: "payslip",
       headerEn: "Payslip",
       employee: sampleEmployee(),
     });
-    assert.match(html, /data-sheet-foot="1"/);
+    assert.match(html, /pay-page/);
+    assert.match(html, /Salary Slip/);
+    assert.match(html, /pay-grid/);
+    assert.match(html, /data-slot-role="employee"/);
+    assert.match(html, /data-slot-role="hr"/);
+    assert.doesNotMatch(html, /data-sheet-foot="1"/);
     assert.doesNotMatch(html, /data-logo="1"/);
-    assert.match(html, /payslip-page-foot/);
     assert.doesNotMatch(html, /data-management="1"/);
     assert.doesNotMatch(html, />Logo</);
   });

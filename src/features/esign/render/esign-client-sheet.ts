@@ -12,6 +12,11 @@ import {
 import type { EsignDocumentKind } from "../types";
 import { ESIGN_FORMS_CSS } from "./esign-forms-css";
 import { escapeHtml } from "./esign-placeholders";
+import {
+  renderAccidentReferenceSheet,
+  renderLoanReferenceSheet,
+  renderPayslipReferenceSheet,
+} from "./esign-reference-sheets";
 
 const WARNING_KEYS = ["written_warning", "dismissal_warning"];
 const PERCENT_KEYS = ["deduct_10", "deduct_25", "deduct_50"];
@@ -342,10 +347,16 @@ export function renderClientSheetHtml(
   fontCss?: string,
   staffLabel?: string,
 ): string {
+  if (layout.kind === "loan") return renderLoanReferenceSheet(layout, fontCss);
+  if (layout.kind === "payslip") return renderPayslipReferenceSheet(layout, fontCss);
+  if (layout.accident) return renderAccidentReferenceSheet(layout, fontCss);
+  // The three reference kinds returned above; the generic grid still carries
+  // the payslip/loan branches for callers that pass a layout without a kind.
+  const genericKind = layout.kind as EsignDocumentKind;
   let boxIndex = 1;
   const blocks: string[] = [];
   const hasEmployee = layout.sections.some((section) => section.key === "employee");
-  if (layout.kind === "payslip") {
+  if (genericKind === "payslip") {
     blocks.push(payslipIdentity(layout));
     boxIndex = 2;
   } else if (!hasEmployee) {
@@ -369,12 +380,12 @@ export function renderClientSheetHtml(
       if (note) blocks.push(note);
       continue;
     }
-    if (section.key === "employee" && layout.kind === "payslip") continue;
+    if (section.key === "employee" && genericKind === "payslip") continue;
     const box = sectionBox(section, boxIndex);
     if (!box) continue;
     blocks.push(box);
     boxIndex += 1;
-    if (layout.kind === "loan" && section.key === "loan") {
+    if (genericKind === "loan" && section.key === "loan") {
       blocks.push(loanSchedule(layout, boxIndex));
       boxIndex += 1;
     }

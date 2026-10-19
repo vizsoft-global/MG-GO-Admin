@@ -11,6 +11,7 @@ import {
   defaultStampLayout,
   layoutAllPieces,
   layoutAroundSignature,
+  layoutSignatureOnly,
   missingStampPieces,
   parseStampLayout,
   pieceFromPageRect,
@@ -115,14 +116,22 @@ describe("stamp layout", () => {
   });
 
   it("rejects a layout that is missing a piece", () => {
-    assert.equal(parseStampLayout({ pieces: sample.pieces.slice(0, 1) }), null);
-    assert.equal(parseInFunctions({ pieces: sample.pieces.slice(0, 1) }), null);
+    assert.equal(parseStampLayout({ pieces: sample.pieces.slice(1, 2) }), null);
+    assert.equal(parseInFunctions({ pieces: sample.pieces.slice(1, 2) }), null);
   });
 
   it("accepts the same JSON in the panel and in functions", () => {
     const panel = parseStampLayout(sample);
     const functions = parseInFunctions(sample);
     assert.deepEqual(panel, functions);
+  });
+
+  it("accepts a signature-only layout for the reference sheets", () => {
+    const only = layoutSignatureOnly(sample.pieces[0]);
+    assert.deepEqual(only.pieces.map((piece) => piece.id), ["signature"]);
+    assert.equal(parseStampLayout(only)?.pieces.length, 1);
+    assert.equal(parseInFunctions(only)?.pieces.length, 1);
+    assert.equal(completeStampLayout(only).pieces.length, 1);
   });
 
   it("round-trips a box through CSS pixels", () => {

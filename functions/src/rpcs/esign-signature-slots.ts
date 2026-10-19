@@ -39,11 +39,8 @@ export const PENALTY_SLOTS: SignSlot[] = [
 ];
 
 export const LOAN_SLOTS: SignSlot[] = [
-  { id: "employee", role: "employee", page: 1, xPt: 446, yPt: 307, wPt: 119, hPt: 23 },
-  { id: "hr", role: "hr", page: 1, xPt: 172, yPt: 184, wPt: 119, hPt: 23 },
-  { id: "ceo", role: "ceo", page: 1, xPt: 379, yPt: 184, wPt: 119, hPt: 23 },
-  { id: "ack_received", role: "ack_received", page: 1, xPt: 429, yPt: 117, wPt: 119, hPt: 23 },
-  { id: "ack_not_received", role: "ack_not_received", page: 1, xPt: 436, yPt: 59, wPt: 119, hPt: 23 },
+  { id: "employee", role: "employee", page: 1, xPt: 252.29, yPt: 407.8, wPt: 124.9, hPt: 14.73 },
+  { id: "hr", role: "hr", page: 1, xPt: 252.29, yPt: 188.9, wPt: 124.9, hPt: 14.73 },
 ];
 
 export const PAYSLIP_SLOTS: SignSlot[] = [

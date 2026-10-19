@@ -20,7 +20,7 @@ describe("assignStaffStampSlots", () => {
     );
   });
 
-  it("maps loan signers to hr then ceo, and never to an acknowledgement box", () => {
+  it("maps the first loan signer to the single HR box", () => {
     const assigned = assignStaffStampSlots({
       kind: "loan",
       signers: [
@@ -29,10 +29,8 @@ describe("assignStaffStampSlots", () => {
         { id: "three", sortOrder: 2 },
       ],
     });
-    assert.deepEqual(
-      assigned.map((row) => row.slot.role),
-      ["hr", "ceo"],
-    );
+    assert.deepEqual(assigned.map((row) => row.slot.role), ["hr"]);
+    assert.equal(assigned.length, 1);
     assert.equal(assigned.some((row) => row.slot.role.startsWith("ack_")), false);
   });
 

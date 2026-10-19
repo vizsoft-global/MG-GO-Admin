@@ -155,13 +155,12 @@ function resolveStampSlot(input: {
 }
 
 /**
- * A saved layout must always carry the signature box and the signer's name.
- * Everything else — date, request code, employee id, company, position, civil
- * id, zone — is opt-in, so a default stamp cannot spread a caption stack over
- * the pre-printed lines underneath the signature.
+ * A saved layout must always carry the signature box. The name caption is
+ * optional: the reference sheets already print the rider's name.
  */
-export const STAMP_CORE_IDS = ["signature", "name"] as const;
+export const STAMP_CORE_IDS = ["signature"] as const;
 export const STAMP_EXTRA_IDS = [
+  "name",
   "date",
   "code",
   "employee_id",
@@ -173,7 +172,7 @@ export const STAMP_EXTRA_IDS = [
 export const STAMP_PIECE_IDS = [...STAMP_CORE_IDS, ...STAMP_EXTRA_IDS] as const;
 export type StampPieceId = (typeof STAMP_PIECE_IDS)[number];
 
-/** What a fresh layout draws before an operator opts into the extra boxes. */
+/** What a fresh layout draws when the sheet has room for a caption. */
 export const STAMP_DEFAULT_IDS = ["signature", "name"] as const;
 
 export type StampTextLabels = {
@@ -232,7 +231,7 @@ export const STAFF_STAMP_SLOT_ROLES: Record<
   readonly SignSlotRole[]
 > = {
   penalty: ["hr", "gm"],
-  loan: ["hr", "ceo"],
+  loan: ["hr"],
   payslip: ["hr"],
   general: ["hr"],
 };
@@ -250,7 +249,8 @@ export function assignStaffStampSlots<T extends StaffStampSigner>(input: {
   signers: readonly T[];
 }): Array<T & { slot: SignSlot }> {
   const kind = normalizeDocumentKind(input.kind);
-  const persisted = parseSignatureSlots(input.persistedSlots) ?? slotsForKind(kind);
+  const parsed = parseSignatureSlots(input.persistedSlots);
+  const slots = parsed ?? slotsForKind(kind);
   const roles = STAFF_STAMP_SLOT_ROLES[kind];
   const ordered = [...input.signers].sort(
     (a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id),
@@ -259,9 +259,10 @@ export function assignStaffStampSlots<T extends StaffStampSigner>(input: {
   for (const signer of ordered) {
     if (out.length >= roles.length) break;
     const role = roles[out.length];
-    const slot =
-      persisted.find((row) => row.role === role && isUsableSlot(row)) ??
-      slotsForKind(kind).find((row) => row.role === role && isUsableSlot(row));
+    // The printed sheet decides which boxes exist. A measured sheet without a
+    // manager box (the accident declaration is one) skips the staff stamp
+    // rather than drawing it on a line the rider never saw.
+    const slot = slots.find((row) => row.role === role && isUsableSlot(row));
     if (!slot) continue;
     out.push({ ...signer, slot });
   }

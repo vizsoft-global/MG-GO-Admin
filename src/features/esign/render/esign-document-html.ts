@@ -15,7 +15,7 @@ export const SIGNATURE_BAND_PT = 140;
  * old design forever. `esign_requests.sheet_render_version` records the value
  * used to build the stored HTML; a miss re-renders an unsigned row once.
  */
-export const ESIGN_SHEET_RENDER_VERSION = 4;
+export const ESIGN_SHEET_RENDER_VERSION = 6;
 
 /** Inline MG mark when Settings has no logo, or `/logo.png` is missing from public/. */
 export const ESIGN_DEFAULT_LOGO_SRC =

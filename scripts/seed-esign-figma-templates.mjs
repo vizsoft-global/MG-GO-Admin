@@ -68,6 +68,7 @@ const PAYSLIP_SHEET = [
   ["hr_manager_name", "HR manager", "مدير الموارد البشرية", "text"],
   ["hr_manager_position", "HR manager position", "منصب مدير الموارد البشرية", "text"],
   ["computed_by", "Computed by", "احتسب بواسطة", "text"],
+  ["company_name_ar", "Company (Arabic)", "اسم الشركة بالعربية", "text"],
 ];
 
 const PENALTY_ACTION_OPTIONS = [

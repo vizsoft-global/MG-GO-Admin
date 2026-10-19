@@ -38,6 +38,7 @@ import {
   defaultStampLayout,
   isExtraStampPiece,
   layoutAroundSignature,
+  layoutSignatureOnly,
   missingStampPieces,
   parseStampLayout,
   pieceFromPageRect,
@@ -71,7 +72,10 @@ type Gesture = {
 };
 
 const FORM_EDIT_SELECTOR =
-  ".sec, .l, .v, .h, .ln > span:not([data-slot-role]), .note, .text, th, td, .doc-header, .doc-header .en, .doc-header .ar, .opt, .opt .en, .opt .ar, .net, .net .amount, .meta, .meta .v, .doc-footer, .doc-footer .grow, .doc-footer .ref, .lab .row > span, .val, .chip, .sub, .ar";
+  ".sec, .l, .v, .h, .ln > span:not([data-slot-role]), .note, .text, th, td, .doc-header, .doc-header .en, .doc-header .ar, .opt, .opt .en, .opt .ar, .net, .net .amount, .meta, .meta .v, .doc-footer, .doc-footer .grow, .doc-footer .ref, .lab .row > span, .val, .chip, .sub, .ar, " +
+  ".loan-title, .ref-sec, .ref-lab, .ref-val, .ref-ar, .ref-decl, .ref-policy, .ref-policy p, .ref-checks, " +
+  ".acc-title, .acc-body p, .acc-list li, .acc-ar-list li, .acc-tail-row .en, .acc-tail-row .ar, " +
+  ".pay-title, .pay-sub, .pay-company .en, .pay-company .ar, .pay-grid .lab, .pay-grid .val, .pay-subtable .lab, .pay-subtable td, .pay-lines th, .pay-lines td, .pay-sponsor, .pay-decl, .pay-signs .label";
 /**
  * Only the stamp slot itself is structural. Titles, the management band and the
  * footer are ordinary text now: every line HR can read, HR can correct.
@@ -348,7 +352,9 @@ export const EsignStampPlacer = forwardRef<
       const pageBox = page.getBoundingClientRect();
       const lineBox = line.getBoundingClientRect();
       if (pageBox.width > 0 && lineBox.width > 0) {
-        const next = layoutAroundSignature(pieceFromPageRect(lineBox, pageBox));
+        const piece = pieceFromPageRect(lineBox, pageBox);
+        const reference = Boolean(doc.querySelector(".loan-page, .pay-page, .acc-page"));
+        const next = reference ? layoutSignatureOnly(piece) : layoutAroundSignature(piece);
         layoutRef.current = next;
         setLayout(next);
       }

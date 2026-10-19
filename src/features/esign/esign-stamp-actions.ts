@@ -35,6 +35,7 @@ import {
   type StampPieceLabels,
 } from "./esign-stamp-layout";
 import { launchEsignBrowser, renderStoredSheetPdf } from "./render/esign-pdf-renderer";
+import { measureEsignSlots } from "./render/esign-slot-measure";
 import { parseSignatureSlots, slotsForKind, type SignSlot } from "./render/esign-document-layout";
 
 function mayPlace(session: {
@@ -582,9 +583,11 @@ export async function regenerateEsignSheet(
 
   const storageKey = `regenerated/${id}/document.pdf`;
   let browser: Awaited<ReturnType<typeof launchEsignBrowser>> | null = null;
+  let measuredSlots: SignSlot[] = [];
   try {
     browser = await launchEsignBrowser();
     const pdf = await renderStoredSheetPdf(html, browser);
+    measuredSlots = await measureEsignSlots(html, browser);
     const stored = await putEsignObject(storageKey, pdf, "application/pdf");
     if (!stored.ok) return { ok: false, error: stored.error };
   } catch {
@@ -598,6 +601,7 @@ export async function regenerateEsignSheet(
     sheet_html: html,
     sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
     document_storage_key: storageKey,
+    ...(measuredSlots.length > 0 ? { signature_slots: measuredSlots } : {}),
     updated_at: now,
   });
   await logAdminMutation({
