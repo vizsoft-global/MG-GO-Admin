@@ -1,6 +1,12 @@
 import { getFirestore } from "./fs";
 import { COLLECTIONS } from "./collections";
 import { createConfigCache } from "./config-cache";
+import {
+  DEFAULT_EARLY_DROP_METERS,
+  DEFAULT_PROOF_OCR_MODE,
+  normalizeProofOcrMode,
+  type ProofOcrMode,
+} from "./delivery-flags";
 
 const APP_SETTINGS_DOC_ID = "1";
 
@@ -86,4 +92,35 @@ export async function loadHomeSnapshotFlags(configEpoch = 0): Promise<HomeSnapsh
 
 export async function loadHomeSnapshotEnabled(configEpoch = 0): Promise<boolean> {
   return (await loadHomeSnapshotFlags(configEpoch)).enabled;
+}
+
+export type DriverAppSafetySettings = {
+  checkInPhotoRequired: boolean;
+  proximityMeters: number;
+  earlyDropMeters: number;
+  proofOcrMode: ProofOcrMode;
+};
+
+/**
+ * Rider integrity switches are read with the same defaults the admin panel
+ * writes, so a deploy before the settings doc is patched does not silently turn
+ * the check-in photo or the OCR block off.
+ */
+export async function loadDriverAppSafetySettings(): Promise<DriverAppSafetySettings> {
+  const snap = await getFirestore().collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC_ID).get();
+  const data = (snap.data() ?? {}) as Record<string, unknown>;
+  const earlyDrop = data["driver_app_early_drop_meters"];
+  const proximityMeters = data["driver_app_delivery_proximity_meters"];
+  return {
+    checkInPhotoRequired: data["driver_app_checkin_photo_required"] !== false,
+    proximityMeters:
+      typeof proximityMeters === "number" && Number.isFinite(proximityMeters)
+        ? Math.max(0, proximityMeters)
+        : 500,
+    earlyDropMeters:
+      typeof earlyDrop === "number" && Number.isFinite(earlyDrop) && earlyDrop >= 0
+        ? earlyDrop
+        : DEFAULT_EARLY_DROP_METERS,
+    proofOcrMode: normalizeProofOcrMode(data["driver_app_proof_ocr_mode"] ?? DEFAULT_PROOF_OCR_MODE),
+  };
 }

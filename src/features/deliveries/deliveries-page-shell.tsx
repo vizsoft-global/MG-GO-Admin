@@ -91,6 +91,7 @@ import {
 } from "./delivery-status-filter";
 import {
   fetchDeliveriesForExport,
+  type DeliveryFlagFilter,
   type DeliveriesQueryFilter,
   type DeliveryExportRow,
 } from "./deliveries-actions";
@@ -202,6 +203,7 @@ function DeliveriesPageContent() {
   const [zoneFilter, setZoneFilter] = useState("all");
   const [partnerFilter, setPartnerFilter] = useState("all");
   const [cancelReasonFilter, setCancelReasonFilter] = useState<"all" | CancelReasonCode>("all");
+  const [flagsFilter, setFlagsFilter] = useState<DeliveryFlagFilter>("all");
   const [dateRange, setDateRange] = useState<DateRangeValue>(DATE_RANGE_ALL);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -235,13 +237,14 @@ function DeliveriesPageContent() {
       zoneId: zoneFilter,
       partnerId: partnerFilter,
       cancelReason: tabFilter === "cancelled" ? cancelReasonFilter : "all",
+      flags: flagsFilter,
       search: debouncedSearch,
       searchShape: "prefix",
       dateFrom: dateRange.from ?? undefined,
       dateTo: dateRange.to ?? undefined,
       dateToExclusive: dateRange.toExclusive,
     }),
-    [tabFilter, zoneFilter, partnerFilter, cancelReasonFilter, debouncedSearch, dateRange],
+    [tabFilter, zoneFilter, partnerFilter, cancelReasonFilter, flagsFilter, debouncedSearch, dateRange],
   );
 
   const {
@@ -544,6 +547,16 @@ function DeliveriesPageContent() {
     ];
   }, [kpiCounts, kpiError, t]);
 
+  const flagSelectItems = useMemo<Array<{ value: DeliveryFlagFilter; label: string }>>(
+    () => [
+      { value: "all", label: t("filterFlagsAll") },
+      { value: "early_drop", label: t("filterFlagsEarlyDrop") },
+      { value: "outside_zone", label: t("filterFlagsOutsideZone") },
+      { value: "photo_mismatch", label: t("filterFlagsPhotoMismatch") },
+    ],
+    [t],
+  );
+
   const cancelReasonSelectItems = useMemo(
     () => [
       { value: "all", label: t("filterCancelReasonAll"), keywords: [t("filterCancelReasonAll")] },
@@ -687,6 +700,7 @@ function DeliveriesPageContent() {
   const hasActiveFilters =
     zoneFilter !== "all" ||
     partnerFilter !== "all" ||
+    flagsFilter !== "all" ||
     dateRange.preset !== "all" ||
     (tabFilter === "cancelled" && cancelReasonFilter !== "all");
 
@@ -742,6 +756,30 @@ function DeliveriesPageContent() {
                     </SelectTrigger>
                     <SelectContent align="start">
                       {statusFilterOptions.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          className="cursor-pointer"
+                        >
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={flagsFilter}
+                    onValueChange={(value) =>
+                      setFlagsFilter((value as DeliveryFlagFilter | null) ?? "all")
+                    }
+                  >
+                    <SelectTrigger
+                      className="h-9 w-[min(180px,42vw)] shrink-0 cursor-pointer rounded-lg bg-background"
+                      aria-label={t("filterFlags")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent align="start">
+                      {flagSelectItems.map((option) => (
                         <SelectItem
                           key={option.value}
                           value={option.value}
@@ -1080,9 +1118,43 @@ function DeliveriesPageContent() {
                         isVisible={isColumnVisible}
                         className="text-end"
                       >
-                        <StatusPill variant={resolveDeliveryStatusVariant(delivery.status)} dot>
-                          {t(deliveryStatusMessageKey(delivery.status))}
-                        </StatusPill>
+                        <div className="flex flex-col items-end gap-1">
+                          <StatusPill variant={resolveDeliveryStatusVariant(delivery.status)} dot>
+                            {t(deliveryStatusMessageKey(delivery.status))}
+                          </StatusPill>
+                          {delivery.is_early_drop === true ? (
+                            <span
+                              className="rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[10px] font-medium text-amber-800"
+                              title={
+                                delivery.pickup_delivery_distance_m !== null
+                                  ? `${Math.round(delivery.pickup_delivery_distance_m)} m`
+                                  : undefined
+                              }
+                            >
+                              {t("flagEarlyDrop")}
+                            </span>
+                          ) : null}
+                          {delivery.is_out_of_zone === true ? (
+                            <span
+                              className="rounded border border-rose-200 bg-rose-50 px-1 py-0.5 text-[10px] font-medium text-rose-700"
+                              title={
+                                delivery.zone_distance_m !== null
+                                  ? `${Math.round(delivery.zone_distance_m)} m`
+                                  : undefined
+                              }
+                            >
+                              {t("flagOutsideZone")}
+                            </span>
+                          ) : null}
+                          {delivery.order_proof_ocr_matched === false ? (
+                            <span
+                              className="rounded border border-purple-200 bg-purple-50 px-1 py-0.5 text-[10px] font-medium text-purple-700"
+                              title={delivery.order_proof_ocr_order_id ?? undefined}
+                            >
+                              {t("flagPhotoMismatch")}
+                            </span>
+                          ) : null}
+                        </div>
                       </VisibleTableCell>
                       <VisibleTableCell
                         columnId="orderId"

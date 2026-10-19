@@ -33,7 +33,7 @@ import { saveVehicle, assignVehicleDriver } from "./vehicles-actions";
 import { plateToBikeId } from "./plate-id";
 import { listVehicleTabDrivers } from "./vehicle-tabs-actions";
 import { useTypeLabel } from "./vehicle-use-types";
-import { useVehiclePartners, useVehicleUseTypes } from "./use-vehicles";
+import { useVehicleCompanies, useVehiclePartners, useVehicleUseTypes } from "./use-vehicles";
 import type { VehicleListRow, VehicleTypeRow } from "./types";
 import {
   filterChassis,
@@ -67,6 +67,7 @@ export function VehicleFormDialog({
   const [pending, startTransition] = useTransition();
   const { data: partners = [] } = useVehiclePartners();
   const { data: useTypes = [] } = useVehicleUseTypes();
+  const { data: companies = [] } = useVehicleCompanies();
   const [regNumber, setRegNumber] = useState("");
   const [chassisNo, setChassisNo] = useState("");
   const [make, setMake] = useState("");
@@ -77,6 +78,7 @@ export function VehicleFormDialog({
   const [status, setStatus] = useState("active");
   const [condition, setCondition] = useState("running");
   const [typeOfUse, setTypeOfUse] = useState("operational");
+  const [companyId, setCompanyId] = useState<string | null>(null);
   const [locationText, setLocationText] = useState("");
   const [fuelType, setFuelType] = useState("chip");
   const [fuelCompany, setFuelCompany] = useState("mus");
@@ -115,6 +117,7 @@ export function VehicleFormDialog({
     setStatus(vehicle?.status ?? "active");
     setCondition(vehicle?.condition ?? "running");
     setTypeOfUse(vehicle?.type_of_use ?? "operational");
+    setCompanyId(vehicle?.company_id ?? null);
     setLocationText(vehicle?.location_text ?? "");
     setFuelType(vehicle?.fuel_type ?? "chip");
     setFuelCompany(vehicle?.fuel_company ?? "mus");
@@ -148,6 +151,18 @@ export function VehicleFormDialog({
       { key: "standby", label: t("typeOfUse.standby") },
     ];
   }, [locale, t, typeOfUse, useTypes]);
+
+  const companyItems = useMemo(
+    () =>
+      companies
+        .filter((item) => item.is_active || item.key === companyId)
+        .map((item) => ({
+          value: item.key,
+          label: locale.startsWith("ar") ? item.label_ar || item.label_en : item.label_en,
+          keywords: [item.key],
+        })),
+    [companies, companyId, locale],
+  );
 
   const replacementItems = useMemo(
     () =>
@@ -213,6 +228,7 @@ export function VehicleFormDialog({
             formData.set("status", status);
             formData.set("condition", condition);
             formData.set("typeOfUse", typeOfUse);
+            if (companyId) formData.set("companyId", companyId);
             formData.set("locationText", locationText);
             formData.set("fuelType", fuelType);
             formData.set("fuelCompany", fuelCompany);
@@ -436,6 +452,18 @@ export function VehicleFormDialog({
                 </SelectContent>
               </Select>
               <p className="text-[10px] text-muted-foreground">{t("typeOfUseHint")}</p>
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t("colVehicleCompany")}</FieldLabel>
+              <SearchSelect
+                items={companyItems}
+                value={companyId}
+                onChange={setCompanyId}
+                placeholder={t("vehicleCompanyPlaceholder")}
+                searchPlaceholder={t("vehicleCompanySearch")}
+                recentsKey="vehicle-company"
+                className="h-9"
+              />
             </FieldBlock>
           </div>
 

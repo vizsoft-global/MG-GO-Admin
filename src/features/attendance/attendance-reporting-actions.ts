@@ -18,6 +18,7 @@ import type {
   ExceptionResolutionStatus,
 } from "./attendance-reporting-types";
 import { attendanceWindowTooLarge } from "./attendance-query-error";
+import { resolveOrderProofUrl } from "@/lib/storage/order-proof-resolve";
 
 const KUWAIT_TZ = "Asia/Kuwait";
 const DEFAULT_PAGE_SIZE = 50;
@@ -109,7 +110,33 @@ function parseDailyRow(raw: Record<string, unknown>): AttendanceDailyRow {
     live_status: String(raw.live_status ?? "scheduled"),
     compliance_score:
       raw.compliance_score != null ? Number(raw.compliance_score) : null,
+    check_in_photo_key:
+      raw.check_in_photo_key != null ? String(raw.check_in_photo_key) : null,
+    check_in_photo_at:
+      raw.check_in_photo_at != null ? String(raw.check_in_photo_at) : null,
+    check_in_restaurant_id:
+      raw.check_in_restaurant_id != null ? String(raw.check_in_restaurant_id) : null,
+    check_in_restaurant_name:
+      raw.check_in_restaurant_name != null ? String(raw.check_in_restaurant_name) : null,
+    check_in_distance_m:
+      raw.check_in_distance_m != null ? Number(raw.check_in_distance_m) : null,
   };
+}
+
+/**
+ * Resolve a stored check-in photo key only for an attendance viewer. Keys are
+ * prefix-checked here as well as at upload time so a crafted row cannot turn
+ * this action into a signer for arbitrary bucket objects.
+ */
+export async function resolveAttendancePhoto(
+  objectKey: string | null,
+): Promise<{ url: string; contentType: string | null } | null> {
+  await requireAttendanceView();
+  if (!objectKey || !objectKey.startsWith("drivers/") || objectKey.includes("..")) {
+    return null;
+  }
+  const resolved = await resolveOrderProofUrl(objectKey);
+  return resolved ? { url: resolved.url, contentType: resolved.contentType } : null;
 }
 
 function parseExceptionRow(raw: Record<string, unknown>): AttendanceExceptionRow {

@@ -56,6 +56,7 @@ import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator"
 import { useTableColumnVisibility } from "@/hooks/use-table-column-visibility";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
 import { AttendanceAnalyticsPanel } from "./attendance-analytics-panel";
+import { AttendanceCheckInCell } from "./attendance-check-in-cell";
 import { AttendanceCorrectionSheet } from "./attendance-correction-sheet";
 import { AttendanceDriverExplorePanel } from "./attendance-driver-explore-panel";
 import {
@@ -265,6 +266,7 @@ function AttendancePageContent() {
       { id: "date", label: t("colDate") },
       { id: "status", label: t("colStatus") },
       { id: "checkIn", label: t("colCheckIn") },
+      { id: "checkInPhoto", label: t("colCheckInPhoto") },
       { id: "checkOut", label: t("colCheckOut") },
       { id: "workingHours", label: t("colWorkingHours") },
       { id: "onDuty", label: t("colOnDuty") },
@@ -387,6 +389,7 @@ function AttendancePageContent() {
         ...(tab === "history" ? ["date"] : []),
         "status",
         "checkIn",
+        "checkInPhoto",
         "checkOut",
         "workingHours",
         "onDuty",
@@ -435,6 +438,13 @@ function AttendancePageContent() {
             className="whitespace-nowrap"
           >
             {formatTimeKuwait(row.check_in_at)}
+          </VisibleTableCell>
+          <VisibleTableCell columnId="checkInPhoto" isVisible={isColumnVisible}>
+            <AttendanceCheckInCell
+              photoKey={row.check_in_photo_key}
+              restaurantName={row.check_in_restaurant_name}
+              distanceM={row.check_in_distance_m}
+            />
           </VisibleTableCell>
           <VisibleTableCell
             columnId="checkOut"
@@ -578,6 +588,7 @@ function AttendancePageContent() {
           { id: "date", label: sortColumnHeader("date", t("colDate")) },
           { id: "status", label: sortColumnHeader("status", t("colStatus")) },
           { id: "checkIn", label: sortColumnHeader("check_in", t("colCheckIn")) },
+          { id: "checkInPhoto", label: t("colCheckInPhoto") },
           { id: "checkOut", label: sortColumnHeader("check_out", t("colCheckOut")) },
           {
             id: "workingHours",
@@ -591,6 +602,7 @@ function AttendancePageContent() {
           { id: "driver", label: sortColumnHeader("driver", t("colDriver")) },
           { id: "status", label: sortColumnHeader("status", t("colStatus")) },
           { id: "checkIn", label: sortColumnHeader("check_in", t("colCheckIn")) },
+          { id: "checkInPhoto", label: t("colCheckInPhoto") },
           { id: "checkOut", label: sortColumnHeader("check_out", t("colCheckOut")) },
           {
             id: "workingHours",

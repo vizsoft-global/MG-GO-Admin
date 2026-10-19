@@ -79,6 +79,17 @@ export type DeliveryListRow = {
   created_at: string;
   /** Latest GPS event for this delivery (mock flag for list badge). */
   gps_is_mocked: boolean | null;
+  /** Written at completion; null on rows completed before the integrity pass. */
+  is_early_drop: boolean | null;
+  pickup_delivery_distance_m: number | null;
+  is_out_of_zone: boolean | null;
+  delivery_zone_id: string | null;
+  zone_distance_m: number | null;
+  flag_labels: string[];
+  order_proof_ocr_order_id: string | null;
+  order_proof_ocr_matched: boolean | null;
+  order_proof_ocr_confidence: number | null;
+  order_proof_ocr_override_reason: string | null;
 };
 
 export type DeliveryDetailModel = DeliveryListRow;

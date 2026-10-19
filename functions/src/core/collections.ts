@@ -162,6 +162,8 @@ export const COLLECTIONS = {
   driverTelemetryEvents: "driver_telemetry_events",
   fleetEvents: "fleet_events",
   vehicleUseTypes: "vehicle_use_types",
+  /** Vehicle make/company catalog (`company_id` on `vehicles`). */
+  vehicleCompanies: "vehicle_companies",
   employeeStatuses: "employee_statuses",
   employeeSections: "employee_sections",
   nationalityCategories: "nationality_categories",
@@ -205,6 +207,17 @@ export const FIELDS = {
     /** Denormalised so a list row never has to join `drivers`. */
     driverName: "driver_name",
     driverCode: "driver_code",
+    /** Delivery integrity flags written at completion time (add-only). */
+    isEarlyDrop: "is_early_drop",
+    pickupDeliveryDistanceM: "pickup_delivery_distance_m",
+    isOutOfZone: "is_out_of_zone",
+    deliveryZoneId: "delivery_zone_id",
+    zoneDistanceM: "zone_distance_m",
+    flagLabels: "flag_labels",
+    orderProofOcrOrderId: "order_proof_ocr_order_id",
+    orderProofOcrMatched: "order_proof_ocr_matched",
+    orderProofOcrConfidence: "order_proof_ocr_confidence",
+    orderProofOcrOverrideReason: "order_proof_ocr_override_reason",
   },
   attendanceLogs: {
     driverId: "driver_id",
@@ -236,6 +249,12 @@ export const FIELDS = {
     isOnDuty: "is_on_duty",
     liveStatus: "live_status",
     complianceScore: "compliance_score",
+    /** Check-in proof captured by the rider app (add-only on old rows). */
+    checkInPhotoKey: "check_in_photo_key",
+    checkInPhotoAt: "check_in_photo_at",
+    checkInRestaurantId: "check_in_restaurant_id",
+    checkInRestaurantName: "check_in_restaurant_name",
+    checkInDistanceM: "check_in_distance_m",
   },
   drivers: {
     id: "id",

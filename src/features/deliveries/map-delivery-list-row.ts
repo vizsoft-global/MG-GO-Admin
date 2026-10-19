@@ -46,6 +46,16 @@ export type DeliveryDbRowForList = {
   cancel_proof_url: string | null;
   cancel_proof_urls?: string[] | null;
   created_at: string;
+  is_early_drop?: boolean | null;
+  pickup_delivery_distance_m?: number | null;
+  is_out_of_zone?: boolean | null;
+  delivery_zone_id?: string | null;
+  zone_distance_m?: number | null;
+  flag_labels?: string[] | null;
+  order_proof_ocr_order_id?: string | null;
+  order_proof_ocr_matched?: boolean | null;
+  order_proof_ocr_confidence?: number | null;
+  order_proof_ocr_override_reason?: string | null;
   drivers: {
     driver_code: string;
     employee_id?: string | null;
@@ -163,6 +173,19 @@ export async function mapDeliveryDbRowsToListRows(
         delivered_lng: parseCoord(row.delivered_lng),
         created_at: row.created_at,
         gps_is_mocked: gpsMockFlags.get(row.id) ?? false,
+        is_early_drop: typeof row.is_early_drop === "boolean" ? row.is_early_drop : null,
+        pickup_delivery_distance_m: parseCoord(row.pickup_delivery_distance_m),
+        is_out_of_zone: typeof row.is_out_of_zone === "boolean" ? row.is_out_of_zone : null,
+        delivery_zone_id: row.delivery_zone_id ?? null,
+        zone_distance_m: parseCoord(row.zone_distance_m),
+        flag_labels: Array.isArray(row.flag_labels)
+          ? row.flag_labels.filter((item): item is string => typeof item === "string")
+          : [],
+        order_proof_ocr_order_id: row.order_proof_ocr_order_id ?? null,
+        order_proof_ocr_matched:
+          typeof row.order_proof_ocr_matched === "boolean" ? row.order_proof_ocr_matched : null,
+        order_proof_ocr_confidence: parseCoord(row.order_proof_ocr_confidence),
+        order_proof_ocr_override_reason: row.order_proof_ocr_override_reason ?? null,
       };
     }),
   );

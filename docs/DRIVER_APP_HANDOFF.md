@@ -1251,6 +1251,18 @@ Both are Firebase callables in `me-central1` (`callRiderFunction`). The panel do
 
 **Level D.** `driverGetMyLevel` returns `{ month, level, auto_level, override_level, override_reason, classified, metrics, live_deliveries }`. `level` is `D` or `standard`. Metrics: `active_days`, `mtd_verified_deliveries`, `target_dpd`, `required_orders`, `gap`, `dpd`, `days_elapsed`. A rider is Level D when `active_days >= 3` and verified orders this Kuwait month are below `active_days * target_dpd` (fallback target 25). An admin override replaces the badge. Show a D chip only when `level == "D"`. Sweep and override pushes use `record_type: driver_level`, deep link `musallam:///profile/performance-level`.
 
+## 14c. Check-in gate, delivery integrity flags and OCR (2026-10-19)
+
+All rider-facing on `driverSetDutyState` / `driverCompleteDelivery` / `driverGetDeliveryProximityContext` in `me-central1`.
+
+**Check-in (fresh clock-in only).** `driverSetDutyState` accepts `p_check_in_photo_key` (R2 key from `entityType: check_in_photo`, max 5 MB image), `p_lat` / `p_lng` and optional `p_restaurant_id`. When `app_settings.driver_app_checkin_photo_required` is true (default), a missing photo is `check_in_photo_required`; no location is `check_in_location_required`; a rider outside every assigned published restaurant is `check_in_outside_restaurant_range` with details `{ nearest_restaurant, nearest_restaurant_id, distance_m }`. The attendance log stores `check_in_photo_key`, `check_in_photo_at`, `check_in_restaurant_id`, `check_in_restaurant_name`, `check_in_distance_m`. Refusals are permanent — do not queue them for replay.
+
+**Completion flags.** `driverCompleteDelivery` writes `is_early_drop`, `pickup_delivery_distance_m`, `is_out_of_zone`, `delivery_zone_id`, `zone_distance_m`, `flag_labels`, `order_proof_ocr_order_id`, `order_proof_ocr_matched`, `order_proof_ocr_confidence`, `order_proof_ocr_override_reason`. Early drop is `distance <= driver_app_early_drop_meters` (default 50 m) and is a review flag, not a block. Zone fields stay `null` when the delivery has no `zone_id`, and the app must render null as **not checked**, never clean.
+
+**OCR.** The rider app reads the order number on-device (ML Kit) and sends `p_order_proof_ocr_order_id` plus `p_order_proof_ocr_override_reason` when the rider chooses to use a mismatched photo. `driver_app_proof_ocr_mode` is `block` (default), `warn` or `off`; `block` refuses a mismatch with `proof_order_mismatch` unless an override reason is present. No OCR value means no mismatch.
+
+**Rules snapshot.** `driverGetDeliveryProximityContext` and the `driverCreatePickup` response include `rules: { early_drop_meters, proof_ocr_mode, proximity_meters, required_zone: { id, name } | null, dpd_target, rule_name, rule_tiers }`. Show it before the rider starts the delivery.
+
 ---
 
 ## 15. Supabase connection

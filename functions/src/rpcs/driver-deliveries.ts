@@ -10,8 +10,17 @@ import {
   haversineMeters,
   pointWithinZoneProximity,
   type ZoneFeature,
-  type ZoneGeometryType,
 } from "../core/geo";
+import { restaurantAllowed, zoneTypeOf } from "../core/restaurant-proximity";
+import {
+  evaluateDeliveryZone,
+  flagLabelsFor,
+  isEarlyDrop,
+  normalizeOrderIdForProof,
+  orderIdsMatch,
+  proofOcrDecision,
+  type ProofOcrMode,
+} from "../core/delivery-flags";
 import { driverRestaurantIds } from "./deliveries-shared";
 import { findActiveShift } from "./driver-shift";
 import { invalidateDriverHomeDailySafe } from "./driver-home";
@@ -105,10 +114,6 @@ function asDate(value: unknown): Date | null {
 
 function pickOptionalNumber(data: Dict, ...names: string[]): number | null {
   return numberOrNull(pick(data, ...names));
-}
-
-function zoneTypeOf(value: unknown): ZoneGeometryType {
-  return value === "circle" ? "circle" : "polygon";
 }
 
 function freezeActive(driver: Dict, at: Date): boolean {
@@ -295,25 +300,7 @@ export function restaurantDeliveryAllowed(args: {
   geofences: Dict[];
   proximityMeters: number;
 }): boolean {
-  const { lat, lng, restaurant, geofences, proximityMeters } = args;
-  const contains = (fence: Dict) =>
-    pointWithinZoneProximity(
-      lat,
-      lng,
-      fence["geometry"] as ZoneFeature,
-      zoneTypeOf(fence["zone_type"]),
-      0,
-    );
-  const inclusions = geofences.filter((fence) => fence["kind"] === "inclusion");
-  if (geofences.some((fence) => fence["kind"] === "exclusion" && contains(fence))) {
-    return false;
-  }
-  if (inclusions.length > 0) return inclusions.some(contains);
-
-  const pinLat = numberOrNull(restaurant["latitude"]);
-  const pinLng = numberOrNull(restaurant["longitude"]);
-  if (pinLat === null || pinLng === null) return false;
-  return haversineMeters(lat, lng, pinLat, pinLng) <= Math.max(proximityMeters, 0);
+  return restaurantAllowed(args);
 }
 
 /** `driver_resolve_pickup_restaurant` after published candidates are loaded. */
@@ -388,15 +375,49 @@ export function isWithinDeliveryRange(args: {
   );
 }
 
-export async function loadProximitySettings(): Promise<{
+export type DeliveryProximitySettings = {
   proximityMeters: number;
   minIntervalSeconds: number;
-}> {
+  earlyDropMeters: number;
+  proofOcrMode: ProofOcrMode;
+};
+
+export async function loadProximitySettings(): Promise<DeliveryProximitySettings> {
   const snap = await getFirestore().collection(COLLECTIONS.appSettings).doc(APP_SETTINGS_DOC).get();
   const data = (snap.data() ?? {}) as Dict;
+  const earlyDrop = numberOrNull(data["driver_app_early_drop_meters"]);
   return {
     proximityMeters: numberOrNull(data["driver_app_delivery_proximity_meters"]) ?? 500,
     minIntervalSeconds: numberOrNull(data["driver_location_rpc_min_interval_seconds"]) ?? 15,
+    earlyDropMeters: earlyDrop !== null && earlyDrop >= 0 ? earlyDrop : 50,
+    proofOcrMode: (() => {
+      const mode = data["driver_app_proof_ocr_mode"];
+      return mode === "warn" || mode === "off" || mode === "block" ? mode : "block";
+    })(),
+  };
+}
+
+/**
+ * The rules block the rider sees before and during a delivery. It is deliberately
+ * a snapshot of the fleet switches plus the rider's zone, not a new rule engine.
+ */
+export function deliveryRulesPayload(input: {
+  settings: Pick<DeliveryProximitySettings, "proximityMeters" | "earlyDropMeters" | "proofOcrMode">;
+  zoneId: string | null;
+  zoneData: Dict | null;
+  driver: Dict;
+}): Dict {
+  const tiers = input.driver["dpd_rule_tiers"];
+  return {
+    early_drop_meters: input.settings.earlyDropMeters,
+    proof_ocr_mode: input.settings.proofOcrMode,
+    proximity_meters: input.settings.proximityMeters,
+    required_zone: input.zoneData
+      ? { id: input.zoneId, name: asString(input.zoneData["name"]) }
+      : null,
+    dpd_target: numberOrNull(input.driver["dpd_target"]),
+    rule_name: asString(input.driver["dpd_rule_name"]),
+    rule_tiers: Array.isArray(tiers) ? tiers : [],
   };
 }
 
@@ -539,6 +560,19 @@ function serializeDelivery(id: string, raw: Dict): Dict {
     cancel_proof_urls: proofUrls(raw["cancel_proof_urls"]),
     rejection_reason: asString(raw["rejection_reason"]),
     shift_date: typeof raw["shift_date"] === "string" ? raw["shift_date"].slice(0, 10) : null,
+    is_early_drop: typeof raw["is_early_drop"] === "boolean" ? raw["is_early_drop"] : null,
+    pickup_delivery_distance_m: numberOrNull(raw["pickup_delivery_distance_m"]),
+    is_out_of_zone: typeof raw["is_out_of_zone"] === "boolean" ? raw["is_out_of_zone"] : null,
+    delivery_zone_id: asString(raw["delivery_zone_id"]),
+    zone_distance_m: numberOrNull(raw["zone_distance_m"]),
+    flag_labels: Array.isArray(raw["flag_labels"])
+      ? (raw["flag_labels"] as unknown[]).filter((item): item is string => typeof item === "string")
+      : [],
+    order_proof_ocr_order_id: asString(raw["order_proof_ocr_order_id"]),
+    order_proof_ocr_matched:
+      typeof raw["order_proof_ocr_matched"] === "boolean" ? raw["order_proof_ocr_matched"] : null,
+    order_proof_ocr_confidence: numberOrNull(raw["order_proof_ocr_confidence"]),
+    order_proof_ocr_override_reason: asString(raw["order_proof_ocr_override_reason"]),
     created_at: isoTimestamp(raw["created_at"]),
     updated_at: isoTimestamp(raw["updated_at"]),
   };
@@ -700,7 +734,15 @@ export const driverCreatePickup = onCall(async (request) => {
   // moment this commits. The flag is one write; the rider's next Home call
   // recomputes the count it has to show anyway.
   await invalidateDriverHomeDailySafe(ctx.uid, "pickup", { signal: false });
-  return serializeDelivery(id, row);
+  return {
+    ...serializeDelivery(id, row),
+    rules: deliveryRulesPayload({
+      settings,
+      zoneId: asString(ctx.driver["zone_id"]),
+      zoneData: zone ? { ...zone, name: null } : null,
+      driver: ctx.driver,
+    }),
+  };
 });
 
 export const driverCompleteDelivery = onCall(async (request) => {
@@ -749,7 +791,56 @@ export const driverCompleteDelivery = onCall(async (request) => {
   const proofKeys = parseProofKeys(
     pick(data, "p_delivery_proof_url", "delivery_proof_url", "deliveryProofUrl"),
   );
-  const [shiftDate, mocked] = await Promise.all([resolveShiftDate(ctx.uid, now), pinIsMocked(ctx.uid)]);
+  const [shiftDate, mocked, settings] = await Promise.all([
+    resolveShiftDate(ctx.uid, now),
+    pinIsMocked(ctx.uid),
+    loadProximitySettings(),
+  ]);
+
+  const pickupLat = numberOrNull(current["pickup_lat"]);
+  const pickupLng = numberOrNull(current["pickup_lng"]);
+  const pickupDistanceM =
+    pickupLat !== null && pickupLng !== null
+      ? haversineMeters(pickupLat, pickupLng, lat, lng)
+      : null;
+  const earlyDrop = isEarlyDrop(pickupDistanceM, settings.earlyDropMeters);
+
+  const deliveryZoneId = asString(current["zone_id"]);
+  const zoneData = deliveryZoneId ? await loadDriverZone(deliveryZoneId) : null;
+  const zoneEvaluation = evaluateDeliveryZone(
+    lat,
+    lng,
+    zoneData ? { id: deliveryZoneId, ...zoneData } : null,
+  );
+  const outOfZone = zoneEvaluation ? !zoneEvaluation.inside : null;
+
+  const ocrOrderId = normalizeOrderIdForProof(
+    pickText(data, "p_order_proof_ocr_order_id", "order_proof_ocr_order_id", "ocrOrderId"),
+  );
+  const ocrMatched = orderIdsMatch(ocrOrderId, asString(current["external_order_id"]));
+  const ocrOverrideReason = pickText(
+    data,
+    "p_order_proof_ocr_override_reason",
+    "order_proof_ocr_override_reason",
+    "ocrOverrideReason",
+  );
+  const ocrConfidence = pickOptionalNumber(
+    data,
+    "p_order_proof_ocr_confidence",
+    "order_proof_ocr_confidence",
+    "ocrConfidence",
+  );
+  if (
+    proofOcrDecision({
+      mode: settings.proofOcrMode,
+      matched: ocrMatched,
+      overrideReason: ocrOverrideReason,
+    }) === "block"
+  ) {
+    throw riderError("failed-precondition", "proof_order_mismatch");
+  }
+
+  const flagLabels = flagLabelsFor({ earlyDrop, outOfZone });
   const patch: Dict = {
     gps_is_mocked: current["gps_is_mocked"] === true || mocked,
     order_proof_url: proofKeys[0] ?? null,
@@ -761,6 +852,16 @@ export const driverCompleteDelivery = onCall(async (request) => {
     status: "pending",
     shift_date: shiftDate,
     updated_at: stamp,
+    is_early_drop: earlyDrop,
+    pickup_delivery_distance_m: pickupDistanceM,
+    is_out_of_zone: outOfZone,
+    delivery_zone_id: deliveryZoneId,
+    zone_distance_m: zoneEvaluation?.distanceM ?? null,
+    flag_labels: flagLabels,
+    order_proof_ocr_order_id: ocrOrderId,
+    order_proof_ocr_matched: ocrMatched,
+    order_proof_ocr_confidence: ocrConfidence,
+    order_proof_ocr_override_reason: ocrOverrideReason,
     ...deliveryIdentityStamp(ctx.driver, ctx.profile, current["external_order_id"]),
   };
   await snap.ref.set(patch, { merge: true });
@@ -800,6 +901,12 @@ export const driverCompleteDelivery = onCall(async (request) => {
       order_id: current["external_order_id"] ?? null,
       restaurant_id: current["restaurant_id"] ?? null,
       proof_count: proofKeys.length,
+      distance_m: pickupDistanceM,
+      early_drop: earlyDrop,
+      out_of_zone: outOfZone,
+      zone_distance_m: zoneEvaluation?.distanceM ?? null,
+      ocr_matched: ocrMatched,
+      ocr_order_id: ocrOrderId,
       bites_synced: bites.synced,
       bites_sync_reason: bites.reason,
     },
@@ -919,5 +1026,11 @@ export const driverGetDeliveryProximityContext = onCall(async (request) => {
     zone_type: zoneData ? asString(zoneData["zone_type"]) : null,
     zone_geometry: zoneData ? (zoneData["geometry"] ?? null) : null,
     restaurants,
+    rules: deliveryRulesPayload({
+      settings,
+      zoneId,
+      zoneData,
+      driver: ctx.driver,
+    }),
   };
 });

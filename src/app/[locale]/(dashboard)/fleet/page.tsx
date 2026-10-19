@@ -2,6 +2,7 @@ import { setRequestLocale, getTranslations } from "next-intl/server";
 import {
   AlertTriangle,
   ArrowLeftRight,
+  Building2,
   Car,
   FileX,
   Fuel,
@@ -62,6 +63,12 @@ const CARDS: ReadonlyArray<{
   },
   { key: "vehicleTypes", href: "/settings/vehicle-types", icon: Tags, permission: "vehicles.manage" },
   { key: "vehicleUses", href: "/settings/vehicle-uses", icon: Waypoints, permission: "vehicles.manage" },
+  {
+    key: "vehicleCompanies",
+    href: "/settings/vehicle-companies",
+    icon: Building2,
+    permission: "vehicles.manage",
+  },
 ];
 
 function cardVisible(

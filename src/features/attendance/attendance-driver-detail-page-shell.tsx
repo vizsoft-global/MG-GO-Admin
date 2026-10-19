@@ -7,6 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import { AppPage, AppPageHeader } from "@/components/app";
 import { Button } from "@/components/ui/button";
 import { kuwaitToday } from "./attendance-list-utils";
+import { AttendanceCheckInCell } from "./attendance-check-in-cell";
 import { AttendanceDriverExplorePanel } from "./attendance-driver-explore-panel";
 import { useDriverAttendanceDetail } from "./use-attendance-table";
 
@@ -37,6 +38,26 @@ export function AttendanceDriverDetailPageShell({ driverId }: { driverId: string
           />
         }
       />
+
+      {dayRow ? (
+        <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("colCheckInPhoto")}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <AttendanceCheckInCell
+              photoKey={dayRow.check_in_photo_key}
+              restaurantName={dayRow.check_in_restaurant_name}
+              distanceM={dayRow.check_in_distance_m}
+            />
+            {dayRow.check_in_photo_at ? (
+              <span className="text-[11px] text-muted-foreground">
+                {new Date(dayRow.check_in_photo_at).toLocaleString()}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <AttendanceDriverExplorePanel
         driverId={driverId}

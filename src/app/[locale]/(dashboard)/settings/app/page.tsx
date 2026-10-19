@@ -34,6 +34,9 @@ export default async function DriverAppSettingsPage({
           settings.driverAppLoginVerificationExemptAll
         }
         driverAppDeliveryProximityMeters={settings.driverAppDeliveryProximityMeters}
+        driverAppCheckinPhotoRequired={settings.driverAppCheckinPhotoRequired}
+        driverAppEarlyDropMeters={settings.driverAppEarlyDropMeters}
+        driverAppProofOcrMode={settings.driverAppProofOcrMode}
         driverAppForceUpdate={settings.driverAppForceUpdate}
         driverAppMinVersionCode={settings.driverAppMinVersionCode}
         driverAppMinVersionName={settings.driverAppMinVersionName}

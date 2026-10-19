@@ -14,6 +14,7 @@ const DRIVERS = COLLECTIONS.drivers;
 const DRIVER_RESTAURANTS = COLLECTIONS.driverRestaurants;
 const VEHICLE_TYPES = "vehicle_types";
 const VEHICLE_USE_TYPES = COLLECTIONS.vehicleUseTypes;
+const VEHICLE_COMPANIES = COLLECTIONS.vehicleCompanies;
 const ASSET_CATALOG = COLLECTIONS.assetCatalog;
 const ASSET_ASSIGNMENTS = "asset_assignments";
 const CUSTOM_FIELD_DEFINITIONS = "custom_field_definitions";
@@ -367,6 +368,36 @@ export const adminUpsertVehicleUseType = onCall(async (request) => {
 
   const sortOrder = readNumber(data, "sortOrder") ?? 100;
   const ref = getFirestore().collection(VEHICLE_USE_TYPES).doc(key);
+  await ref.set(
+    {
+      key,
+      label_en: labelEn,
+      label_ar: optionalString(data, "labelAr"),
+      is_active: readBool(data, "isActive", true),
+      sort_order: sortOrder,
+      updated_at: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+  return { success: true, id: key };
+});
+
+/**
+ * `admin_upsert_vehicle_company` — the make/brand catalog behind
+ * `vehicles.company_id`. Reached from the Fleet hub, so the fleet permission is
+ * the gate, not `settings.manage`.
+ */
+export const adminUpsertVehicleCompany = onCall(async (request) => {
+  await requireStaff(request, "vehicles.manage");
+
+  const data = asRecord(request.data);
+  const key = readString(data, "key").toLowerCase();
+  if (!key || !SLUG_KEY_RE.test(key)) throw new HttpsError("invalid-argument", "invalid_key");
+  const labelEn = readString(data, "labelEn") || readString(data, "label");
+  if (!labelEn) throw new HttpsError("invalid-argument", "missing_fields");
+
+  const sortOrder = readNumber(data, "sortOrder") ?? 100;
+  const ref = getFirestore().collection(VEHICLE_COMPANIES).doc(key);
   await ref.set(
     {
       key,

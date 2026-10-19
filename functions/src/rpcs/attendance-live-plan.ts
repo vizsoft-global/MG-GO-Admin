@@ -21,6 +21,11 @@ export const ATTENDANCE_PROJECTION = [
   "shift_type",
   "online_seconds",
   "is_on_duty",
+  "check_in_photo_key",
+  "check_in_photo_at",
+  "check_in_restaurant_id",
+  "check_in_restaurant_name",
+  "check_in_distance_m",
 ] as const;
 
 export function minutesLateOf(

@@ -32,3 +32,7 @@ Retired (never link, push, or deploy to): `dpdadmin` · `ytfmsgckjatiserpgdbz` �
 Before **any** UI or UX change, read and follow [`.cursor/rules/ui-system.mdc`](.cursor/rules/ui-system.mdc). It is `alwaysApply: true` in Cursor — treat it as non-negotiable. Complete the pre-ship checklist in that file before claiming work is done.
 
 Key patterns: footer-first modals via `AppModalFooter` (title in footer, Close top-right outside), action differentiation (view vs delete), compact `h-9` controls, semantic color for state.
+
+## Change log
+
+- **2026-10-19 — [admin+app] Delivery integrity:** check-in photo + restaurant proximity gate, early-drop/zone flags, on-device order-photo OCR with server cross-check, delivery timeline (admin + rider), vehicle companies catalog, fuel chip request id removal, attendance check-in proof. New `adminUpsertVehicleCompany` callable; `driverSetDutyState` / `driverCompleteDelivery` / `driverCreatePickup` / `driverGetDeliveryProximityContext` / `driverGetActivePickup` / `adminListAttendanceDaily` updated in `me-central1`.

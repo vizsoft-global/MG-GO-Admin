@@ -7,6 +7,7 @@ export const DRIVER_UPLOAD_ENTITY_TYPES = [
   "driver_avatar",
   "order_proof",
   "login_verification",
+  "check_in_photo",
   "esign_signature",
   "esign_attachment",
   "request_attachment",
@@ -35,6 +36,10 @@ const ENTITY_RULES: Record<
     allowedMimePrefixes: ["image/", "application/pdf"],
   },
   login_verification: {
+    maxBytes: 5 * 1024 * 1024,
+    allowedMimePrefixes: ["image/"],
+  },
+  check_in_photo: {
     maxBytes: 5 * 1024 * 1024,
     allowedMimePrefixes: ["image/"],
   },
@@ -110,6 +115,11 @@ export function buildDriverObjectKey(params: {
       const date = new Date().toISOString().slice(0, 10);
       const ext = extensionFromFilename(params.originalFilename);
       return `driver-avatars/${params.driverId}/${date}/${randomUUID()}.${ext}`;
+    }
+    case "check_in_photo": {
+      const date = new Date().toISOString().slice(0, 10);
+      const ext = extensionFromFilename(params.originalFilename) || "jpg";
+      return `drivers/${params.driverId}/check_in/${date}.${ext}`;
     }
     case "driver_doc":
     case "driver_selfie":

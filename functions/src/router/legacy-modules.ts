@@ -108,6 +108,7 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
     "adminDeleteRestaurant",
     "adminUpsertVehicleType",
     "adminUpsertVehicleUseType",
+    "adminUpsertVehicleCompany",
     "adminUpsertAssetCatalog",
     "adminDeleteAssetCatalog",
     "adminAdjustAssetStock",
