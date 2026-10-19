@@ -73,3 +73,5 @@ qa-esign-*.png
 # local deploy/debug artifacts
 .tmp-*
 firebase-debug.log
+
+# function signer key (local).fn-signer.json
