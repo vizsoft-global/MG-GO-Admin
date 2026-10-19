@@ -37,6 +37,15 @@ type Props = {
   onImportPreviewStatsChange?: (stats: { okCount: number; totalCount: number } | null) => void;
 };
 
+/**
+ * Spreadsheets in the wild label the same two columns in many ways ("Employee ID",
+ * "AM ID", "Emp ID", "Driver ID", "Driver Code", "MG ID", "Rider ID"...). Either
+ * column resolves through the same lookup, so a narrow pair of patterns dropped
+ * a perfectly valid sheet's identity column and every row came back unresolved.
+ */
+const AM_ID_HEADER = /employee\s*(?:id|code|no|num|number|#)|emp\s*(?:id|code|no|num|number)|am\s*(?:id|code)|staff\s*(?:id|code)|^\s*id\s*$/i;
+const MG_ID_HEADER = /driver\s*(?:id|code|no|num|number|#)|mg\s*(?:id|code)|rider\s*(?:id|code|no|num|number)|plat(?:form)?\s*id/i;
+
 function summarizeImportPreview(
   preview: Array<{ status: string }>,
 ): { okCount: number; totalCount: number } {
@@ -114,53 +123,64 @@ export function NotificationImportPanel({
   }, [importSpec]);
 
   const handleFile = async (file: File) => {
-    const parsed = await parseSpreadsheetFile(file);
-    const employeeHeader = parsed.headers.find((h) => /employee\s*id|am\s*id/i.test(h)) ?? "";
-    const codeHeader =
-      parsed.headers.find((h) => /driver\s*code|mg\s*id/i.test(h)) ?? "";
-    const identityHeaders = new Set([employeeHeader, codeHeader].filter(Boolean));
-    // QA #38: with no "Employee ID" column the first column used to be copied
-    // into `employee_id`, so an MG-ID-only sheet was resolved as if its values
-    // were AM IDs. Keep each column under the name it actually carries and leave
-    // the other blank — the resolver reports a row it cannot prove instead of
-    // accepting it as Ready.
-    const mapping: NotificationImportSpec["column_mapping"] = {
-      employee_id: employeeHeader,
-      driver_code: codeHeader,
-    };
-    const variable_columns = parsed.headers.filter((h) => !identityHeaders.has(h));
-    const rows: NotificationImportRow[] = parsed.rows.map((cells) => {
-      const row: NotificationImportRow = {};
-      parsed.headers.forEach((header, idx) => {
-        const key =
-          header === employeeHeader
-            ? "employee_id"
-            : header === codeHeader
-              ? "driver_code"
-              : header.replace(/\s+/g, "_").toLowerCase();
-        row[key] = cells[idx] ?? "";
-      });
-      return row;
-    });
-    const spec: NotificationImportSpec = { column_mapping: mapping, variable_columns, rows };
-    onImportSpecChange(spec);
-    onImportPreviewStatsChange?.(null);
-    startTransition(async () => {
-      try {
-        const preview = await previewNotificationImport({
-          titleTemplate,
-          bodyTemplate,
-          importSpec: spec,
-        });
-        setPreviewRows(preview);
-        setSelectedPreview(0);
-        onPreviewRowChange?.(0);
-        onImportPreviewStatsChange?.(summarizeImportPreview(preview));
-      } catch {
-        onImportPreviewStatsChange?.({ okCount: 0, totalCount: rows.length });
-        toast.error(t("importPreviewFailed"));
+    try {
+      const parsed = await parseSpreadsheetFile(file);
+      if (parsed.headers.length === 0 || parsed.rows.length === 0) {
+        toast.error(t("importEmptyFile"));
+        return;
       }
-    });
+      const employeeHeader = parsed.headers.find((h) => AM_ID_HEADER.test(h)) ?? "";
+      const codeHeader =
+        parsed.headers.find((h) => h !== employeeHeader && MG_ID_HEADER.test(h)) ?? "";
+      const identityHeaders = new Set([employeeHeader, codeHeader].filter(Boolean));
+      // QA #38: with no "Employee ID" column the first column used to be copied
+      // into `employee_id`, so an MG-ID-only sheet was resolved as if its values
+      // were AM IDs. Keep each column under the name it actually carries and leave
+      // the other blank — the resolver reports a row it cannot prove instead of
+      // accepting it as Ready.
+      const mapping: NotificationImportSpec["column_mapping"] = {
+        employee_id: employeeHeader,
+        driver_code: codeHeader,
+      };
+      const variable_columns = parsed.headers.filter((h) => !identityHeaders.has(h));
+      const rows: NotificationImportRow[] = parsed.rows.map((cells) => {
+        const row: NotificationImportRow = {};
+        parsed.headers.forEach((header, idx) => {
+          const key =
+            header === employeeHeader
+              ? "employee_id"
+              : header === codeHeader
+                ? "driver_code"
+                : header.replace(/\s+/g, "_").toLowerCase();
+          row[key] = cells[idx] ?? "";
+        });
+        return row;
+      });
+      const spec: NotificationImportSpec = { column_mapping: mapping, variable_columns, rows };
+      onImportSpecChange(spec);
+      onImportPreviewStatsChange?.(null);
+      startTransition(async () => {
+        try {
+          const preview = await previewNotificationImport({
+            titleTemplate,
+            bodyTemplate,
+            importSpec: spec,
+          });
+          setPreviewRows(preview);
+          setSelectedPreview(0);
+          onPreviewRowChange?.(0);
+          onImportPreviewStatsChange?.(summarizeImportPreview(preview));
+        } catch (error) {
+          console.error("[notifications] import preview failed:", error);
+          onImportPreviewStatsChange?.({ okCount: 0, totalCount: rows.length });
+          toast.error(t("importPreviewFailed"));
+        }
+      });
+    } catch (error) {
+      // A malformed file must say so, not leave the panel silently idle.
+      console.error("[notifications] spreadsheet parse failed:", error);
+      toast.error(t("importParseFailed"));
+    }
   };
 
   const refreshPreview = () => {

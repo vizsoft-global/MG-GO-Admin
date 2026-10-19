@@ -7,10 +7,27 @@ import {
   slotsForKind,
 } from "./render/esign-document-layout";
 
-export const STAMP_CORE_IDS = ["signature", "name", "date", "code"] as const;
-export const STAMP_EXTRA_IDS = ["employee_id", "company", "position", "civil_id", "zone"] as const;
+/**
+ * A saved layout must always carry the signature box. The name caption is
+ * optional: the reference sheets already print the rider's name, so a caption
+ * under the signature would land on the declaration paragraph.
+ */
+export const STAMP_CORE_IDS = ["signature"] as const;
+export const STAMP_EXTRA_IDS = [
+  "name",
+  "date",
+  "code",
+  "employee_id",
+  "company",
+  "position",
+  "civil_id",
+  "zone",
+] as const;
 export const STAMP_PIECE_IDS = [...STAMP_CORE_IDS, ...STAMP_EXTRA_IDS] as const;
 export type StampPieceId = (typeof STAMP_PIECE_IDS)[number];
+
+/** What a fresh layout draws when the sheet has room for a caption. */
+export const STAMP_DEFAULT_IDS = ["signature", "name"] as const;
 
 export const RESIZE_CORNERS = ["nw", "ne", "sw", "se"] as const;
 export type ResizeCorner = (typeof RESIZE_CORNERS)[number];
@@ -107,7 +124,10 @@ export function completeStampLayout(layout: StampLayout): StampLayout {
   const have = new Set(layout.pieces.map((piece) => piece.id));
   const gone = new Set<StampPieceId>(layout.removed ?? []);
   const missing = defaults.pieces.filter(
-    (piece) => !have.has(piece.id) && !gone.has(piece.id),
+    (piece) =>
+      (STAMP_CORE_IDS as readonly string[]).includes(piece.id) &&
+      !have.has(piece.id) &&
+      !gone.has(piece.id),
   );
   if (missing.length === 0) return layout;
   return { ...layout, pieces: [...layout.pieces, ...missing] };
@@ -138,7 +158,7 @@ export function addStampPiece(layout: StampLayout, id: StampPieceId): StampLayou
   if (layout.pieces.some((piece) => piece.id === id)) return layout;
   const signature = layout.pieces.find((piece) => piece.id === "signature");
   const template = signature
-    ? layoutAroundSignature(signature).pieces.find((piece) => piece.id === id)
+    ? layoutAllPieces(signature).pieces.find((piece) => piece.id === id)
     : null;
   if (!template) return layout;
   const placed = freeStampPosition(template, layout.pieces);
@@ -166,7 +186,7 @@ export function restoreStampPieces(layout: StampLayout): StampLayout {
   const have = new Set(layout.pieces.map((piece) => piece.id));
   const pieces = [...layout.pieces];
   if (signature) {
-    const defaults = layoutAroundSignature(signature);
+    const defaults = layoutAllPieces(signature);
     for (const id of STAMP_PIECE_IDS) {
       if (!removed.includes(id) || have.has(id)) continue;
       const template = defaults.pieces.find((piece) => piece.id === id);
@@ -244,13 +264,30 @@ export function formatStampInstant(value: unknown): string {
 
 /** Name, date, and request code sit just under a signature box, in PDF points. */
 export function layoutAroundSignature(signature: StampPiece): StampLayout {
+  return layoutWithIds(signature, STAMP_DEFAULT_IDS);
+}
+
+/** Signature only — the reference sheets already print the rider's name. */
+export function layoutSignatureOnly(signature: StampPiece): StampLayout {
+  return { pieces: [clampPiece({ ...signature, id: "signature" })] };
+}
+
+/** Every opt-in box, in print order, anchored under the signature. */
+export function layoutAllPieces(signature: StampPiece): StampLayout {
+  return layoutWithIds(signature, STAMP_PIECE_IDS);
+}
+
+function layoutWithIds(
+  signature: StampPiece,
+  ids: readonly StampPieceId[],
+): StampLayout {
   const employee = clampPiece({ ...signature, id: "signature" });
   const textW = 160;
   const textH = 11;
   const gap = 1;
   let y = employee.yPt - gap - textH;
   const pieces: StampPiece[] = [employee];
-  for (const id of STAMP_PIECE_IDS) {
+  for (const id of ids) {
     if (id === "signature") continue;
     if (y < 8) y = 8;
     pieces.push(

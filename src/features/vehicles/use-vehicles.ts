@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import { listVehicleUseTypes } from "./vehicle-use-types-actions";
+import { listVehicleCompanies } from "./vehicle-companies-actions";
 import { listVehiclePartners, listVehicleTypes, listVehicles } from "./vehicles-actions";
 
 export function useVehiclesList() {
@@ -30,5 +31,12 @@ export function useVehicleUseTypes() {
   return useQuery({
     queryKey: queryKeys.vehicles.useTypes(),
     queryFn: listVehicleUseTypes,
+  });
+}
+
+export function useVehicleCompanies() {
+  return useQuery({
+    queryKey: [...queryKeys.vehicles.all(), "companies"] as const,
+    queryFn: listVehicleCompanies,
   });
 }

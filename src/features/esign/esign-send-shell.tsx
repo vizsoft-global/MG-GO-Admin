@@ -81,31 +81,78 @@ import {
 } from "./render/esign-placeholders";
 import type { EsignTemplateFieldRow } from "./types";
 
-const SNAPSHOT_FIELD_KEYS = new Set([
-  "company_name",
-  "employee_name",
-  "employee_id",
-  "civil_id",
-  "position",
-  "sponsor",
-  "pay_through",
-  "bank_number",
+const LOAN_HR_KEYS = new Set([
+  "years_of_service",
+  "max_loan_policy_kwd",
+  "previous_loan_outstanding_kwd",
+  "policy_check",
+  "verified_by",
+  "verified_date",
 ]);
+
+const LOAN_MANAGEMENT_KEYS = new Set([
+  "hr_manager_name",
+  "hr_manager_position",
+  "management_decision",
+  "amount_received",
+]);
+
+const PAYSLIP_VERIFICATION_KEYS = new Set(["hr_manager_name", "hr_manager_position", "computed_by"]);
+
+type SheetGroupKey = "loanRequest" | "hrVerification" | "management" | "verification" | "fields";
+
+const SHEET_GROUP_ORDER: SheetGroupKey[] = [
+  "fields",
+  "loanRequest",
+  "hrVerification",
+  "management",
+  "verification",
+];
+
+function sheetGroupKey(field: EsignTemplateFieldRow, kind: string | null): SheetGroupKey {
+  if (kind === "payslip") {
+    return PAYSLIP_VERIFICATION_KEYS.has(field.field_key) ? "verification" : "fields";
+  }
+  if (kind !== "loan") return "fields";
+  if (LOAN_HR_KEYS.has(field.field_key)) return "hrVerification";
+  if (LOAN_MANAGEMENT_KEYS.has(field.field_key)) return "management";
+  return "loanRequest";
+}
+
+function groupSheetFields(fields: EsignTemplateFieldRow[], kind: string | null) {
+  const groups = new Map<SheetGroupKey, EsignTemplateFieldRow[]>();
+  for (const field of fields) {
+    const key = sheetGroupKey(field, kind);
+    const list = groups.get(key) ?? [];
+    list.push(field);
+    groups.set(key, list);
+  }
+  return SHEET_GROUP_ORDER.filter((key) => groups.has(key)).map((key) => ({
+    key,
+    fields: groups.get(key) ?? [],
+  }));
+}
 
 function shown(value: string | null | undefined): string {
   const trimmed = value?.trim() ?? "";
   return trimmed || "—";
 }
 
+/**
+ * Every value on the sheet is Admin-controlled. A `system` field arrives
+ * pre-filled from the rider's snapshot and a `fixed` field from the template,
+ * but both stay editable here; only a `signature` field is not an input,
+ * because its value is the rider's ink, not text. Hiding a system row was the
+ * reason HR could not correct a salary or a policy figure before sending.
+ */
 function isSheetInput(field: EsignTemplateFieldRow): boolean {
-  if (SNAPSHOT_FIELD_KEYS.has(field.field_key)) return false;
   switch (field.source_kind) {
     case "system":
-    case "signature":
-      return false;
     case "entry":
     case "fixed":
       return true;
+    case "signature":
+      return false;
     default: {
       const exhaustive: never = field.source_kind;
       return exhaustive;
@@ -127,6 +174,11 @@ const PAYSLIP_MONEY_CODES: Record<string, string> = {
   net_salary_kwd: "NET",
   extra_input_kwd: "All",
   deduction_amount_kwd: "Ded",
+  deductions_total: "Ded",
+  monthly_salary_kwd: "BASIC",
+  monthly_installment: "INST",
+  max_loan_policy_kwd: "MAX",
+  previous_loan_outstanding_kwd: "OUT",
 };
 
 const PAYSLIP_KD_KEYS = new Set([
@@ -138,6 +190,11 @@ const PAYSLIP_KD_KEYS = new Set([
   "net_salary_kwd",
   "extra_input_kwd",
   "deduction_amount_kwd",
+  "deductions_total",
+  "monthly_salary_kwd",
+  "monthly_installment",
+  "max_loan_policy_kwd",
+  "previous_loan_outstanding_kwd",
 ]);
 
 function partitionPayslipFields(fields: EsignTemplateFieldRow[]) {
@@ -204,6 +261,7 @@ export function EsignSendShell({
   const t = useTranslations("pages.requests.esign.send");
   const tAccident = useTranslations("pages.esign.accident");
   const tHub = useTranslations("pages.requests.esign.hub");
+  const tSigners = useTranslations("pages.requests.esign.signers");
   const tRcm = useTranslations("pages.rcmV2");
   const tBuilder = useTranslations("pages.employeedesk.esign.templateBuilder");
   const router = useRouter();
@@ -341,6 +399,10 @@ export function EsignSendShell({
         !isPenaltyActionFieldKey(field.field_key),
     );
   }, [accidentKind, isAccident, isPenalty, payslipGroups, template, hiddenKeys]);
+  const sheetGroups = useMemo(
+    () => groupSheetFields(sheetFields, template?.document_kind ?? null),
+    [sheetFields, template?.document_kind],
+  );
   const resolvedTitle = title.trim() || template?.name_en || "";
 
   const hubHref = isV2 ? "/employeedesk" : "/requests/esign";
@@ -442,6 +504,35 @@ export function EsignSendShell({
     });
   }, [driverId, t, template?.fields]);
 
+  /**
+   * The person who will countersign is also the HR manager printed on the
+   * sheet. Picking them fills the management block once; every value stays an
+   * ordinary input, so HR can still correct a title or a verification date
+   * before the request is sent.
+   */
+  useEffect(() => {
+    if (!template) return;
+    const name = previewStaffLabel(staffSigners, pickedStaffName, "").trim();
+    if (!name) return;
+    const keys = new Set(template.fields.map((field) => field.field_key));
+    const role = staffSigners[0]?.role;
+    const position = role ? tSigners(`roles.${role}`) : "";
+    const today = kuwaitTodayYmd();
+    setValues((prev) => {
+      const next = { ...prev };
+      const fill = (key: string, value: string) => {
+        if (!value || !keys.has(key)) return;
+        if (next[key]?.trim()) return;
+        next[key] = value;
+      };
+      fill("hr_manager_name", name);
+      fill("verified_by", name);
+      fill("hr_manager_position", position);
+      fill("verified_date", today);
+      return next;
+    });
+  }, [pickedStaffName, staffSigners, tSigners, template]);
+
   async function addDocuments(files: FileList | null) {
     if (!files || files.length === 0) return;
     const remaining = Math.max(0, 5 - pendingAttachments.length);
@@ -491,7 +582,14 @@ export function EsignSendShell({
       locale: "en",
       due_at: dueAt || null,
       description: description.trim() || null,
-      field_values: { ...values, ...penaltyValues },
+      field_values: {
+        ...values,
+        // The accident dropdown defaults to Accident before the operator
+        // touches it, but that default only lived in preview state. Without
+        // this write the request rendered the generic document branch.
+        ...(isAccident ? { [REQUEST_KIND_KEY]: accidentKind } : {}),
+        ...penaltyValues,
+      },
       resent_from_id: initialResentFromId ?? null,
     });
     if (!result.ok) {
@@ -1016,10 +1114,25 @@ export function EsignSendShell({
           {sheetFields.length > 0 || isPenalty ? (
             <div className="space-y-2">
               {isV2 ? null : <p className="text-xs font-semibold">{t("sheetInputs")}</p>}
-              <div className="grid gap-2 sm:grid-cols-2">
-                {sheetFields.map((field) =>
-                  renderField(field, isPayslip ? PAYSLIP_MONEY_CODES[field.field_key] : undefined),
-                )}
+              <div className="space-y-3">
+                {sheetGroups.map((group) => (
+                  <div key={group.key} className="space-y-1.5">
+                    {group.key !== "fields" ? (
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {t(`groups.${group.key}`)}
+                      </p>
+                    ) : null}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {group.fields.map((field) =>
+                        renderField(
+                          field,
+                          isPayslip ? PAYSLIP_MONEY_CODES[field.field_key] : undefined,
+                        ),
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div className="grid gap-2 sm:grid-cols-2">
                 {isPenalty &&
                 !sheetFields.some(
                   (field) => field.field_key === "absence_from" || field.field_key === "from_date",
@@ -1105,6 +1218,7 @@ export function EsignSendShell({
                 ) : null}
               </div>
             </div>
+          </div>
           ) : null}
 
           {isV2 ? null : (

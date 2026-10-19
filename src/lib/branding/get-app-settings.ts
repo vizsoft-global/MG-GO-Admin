@@ -40,6 +40,9 @@ export type AppSettings = {
   driverAppMaintenanceMessage: string;
   driverAppLoginVerificationExemptAll: boolean;
   driverAppDeliveryProximityMeters: number;
+  driverAppCheckinPhotoRequired: boolean;
+  driverAppEarlyDropMeters: number;
+  driverAppProofOcrMode: "block" | "warn" | "off";
   driverAppForceUpdate: boolean;
   driverAppMinVersionCode: number | null;
   driverAppMinVersionName: string | null;
@@ -64,6 +67,9 @@ type SettingsRow = {
   driver_app_maintenance_message?: string | null;
   driver_app_login_verification_exempt_all?: boolean | null;
   driver_app_delivery_proximity_meters?: number | null;
+  driver_app_checkin_photo_required?: boolean | null;
+  driver_app_early_drop_meters?: number | null;
+  driver_app_proof_ocr_mode?: string | null;
   driver_app_force_update?: boolean | null;
   driver_app_min_version_code?: number | null;
   driver_app_min_version_name?: string | null;
@@ -107,6 +113,9 @@ function rowFromDoc(data: DocumentData): SettingsRow {
     driver_app_maintenance_message: text(data.driver_app_maintenance_message),
     driver_app_login_verification_exempt_all: flag(data.driver_app_login_verification_exempt_all),
     driver_app_delivery_proximity_meters: num(data.driver_app_delivery_proximity_meters),
+    driver_app_checkin_photo_required: flag(data.driver_app_checkin_photo_required),
+    driver_app_early_drop_meters: num(data.driver_app_early_drop_meters),
+    driver_app_proof_ocr_mode: text(data.driver_app_proof_ocr_mode),
     driver_app_force_update: flag(data.driver_app_force_update),
     driver_app_min_version_code: num(data.driver_app_min_version_code),
     driver_app_min_version_name: text(data.driver_app_min_version_name),
@@ -142,6 +151,15 @@ function normalizeRow(
     driverAppDeliveryProximityMeters:
       row.driver_app_delivery_proximity_meters ??
       DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters,
+    driverAppCheckinPhotoRequired: row.driver_app_checkin_photo_required ?? true,
+    driverAppEarlyDropMeters:
+      row.driver_app_early_drop_meters ?? DEFAULT_DRIVER_APP_SETTINGS.driver_app_early_drop_meters,
+    driverAppProofOcrMode:
+      row.driver_app_proof_ocr_mode === "warn" ||
+      row.driver_app_proof_ocr_mode === "off" ||
+      row.driver_app_proof_ocr_mode === "block"
+        ? row.driver_app_proof_ocr_mode
+        : DEFAULT_DRIVER_APP_SETTINGS.driver_app_proof_ocr_mode,
     driverAppForceUpdate: row.driver_app_force_update ?? false,
     driverAppMinVersionCode: row.driver_app_min_version_code ?? null,
     driverAppMinVersionName: row.driver_app_min_version_name?.trim() || null,
@@ -228,6 +246,12 @@ async function fetchAppSettings(): Promise<AppSettings> {
       driverAppLoginVerificationExemptAll: false,
       driverAppDeliveryProximityMeters:
         DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters,
+      driverAppCheckinPhotoRequired:
+        DEFAULT_DRIVER_APP_SETTINGS.driver_app_checkin_photo_required,
+      driverAppEarlyDropMeters:
+        DEFAULT_DRIVER_APP_SETTINGS.driver_app_early_drop_meters,
+      driverAppProofOcrMode:
+        DEFAULT_DRIVER_APP_SETTINGS.driver_app_proof_ocr_mode,
       driverAppForceUpdate: false,
       driverAppMinVersionCode: null,
       driverAppMinVersionName: null,

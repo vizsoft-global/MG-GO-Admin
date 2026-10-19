@@ -118,6 +118,7 @@ export const COLLECTIONS = {
   driverOperationEvents: "driver_operation_events",
   driverTelemetryEvents: "driver_telemetry_events",
   vehicleUseTypes: "vehicle_use_types",
+  vehicleCompanies: "vehicle_companies",
   employeeStatuses: "employee_statuses",
   employeeSections: "employee_sections",
   nationalityCategories: "nationality_categories",

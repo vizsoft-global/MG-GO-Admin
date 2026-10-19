@@ -22,11 +22,32 @@ describe("readEsignSnapshotExtra", () => {
   });
 
   it("leaves every key null when neither record has it", () => {
-    assert.deepEqual(readEsignSnapshotExtra({ employee_id: "1" }, null), {
-      position: null,
-      sponsor: null,
-      pay_through: null,
-      bank_number: null,
-    });
+    const empty = readEsignSnapshotExtra({ employee_id: "1" }, null);
+    for (const value of Object.values(empty)) assert.equal(value, null);
+    assert.equal("department" in empty, true);
+    assert.equal("monthly_salary_kwd" in empty, true);
+    assert.equal("policy_check" in empty, true);
+  });
+
+  it("reads the HR policy chips from custom fields", () => {
+    const row = readEsignSnapshotExtra(
+      {
+        department: "Ops",
+        custom_fields: {
+          monthly_salary_kwd: 260,
+          years_of_service: "3.4",
+          max_loan_policy_kwd: "780",
+          previous_loan_outstanding_kwd: 0,
+          policy_check: "Eligible",
+        },
+      },
+      null,
+    );
+    assert.equal(row.department, "Ops");
+    assert.equal(row.monthly_salary_kwd, "260");
+    assert.equal(row.years_of_service, "3.4");
+    assert.equal(row.max_loan_policy_kwd, "780");
+    assert.equal(row.previous_loan_outstanding_kwd, "0");
+    assert.equal(row.policy_check, "Eligible");
   });
 });

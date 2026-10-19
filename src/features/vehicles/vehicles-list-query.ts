@@ -14,6 +14,7 @@ export const VEHICLE_COLUMN_KINDS = {
   carsCompany: "list",
   project: "list",
   typeOfUse: "list",
+  company: "list",
   location: "text",
   driver: "text",
   empCompany: "list",
@@ -109,6 +110,8 @@ function cellText(row: VehicleListRow, column: VehiclesFixedColumn): string {
       return row.assigned_project_key ?? "";
     case "typeOfUse":
       return row.type_of_use ?? "";
+    case "company":
+      return row.company_id ?? "";
     case "location":
       return row.location_text ?? "";
     case "driver":

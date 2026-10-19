@@ -27,8 +27,12 @@ import {
 import { fetchMyDeskGrants } from "./desk-grants-actions";
 import { CHUNK_SIZE } from "./render/esign-batch-cap";
 import { filledEsignDocumentInput } from "./render/esign-filled-sheet";
-import { buildEsignDocumentHtml } from "./render/esign-document-html";
+import {
+  ESIGN_SHEET_RENDER_VERSION,
+  buildEsignDocumentHtml,
+} from "./render/esign-document-html";
 import { launchEsignBrowser, renderEsignPdf } from "./render/esign-pdf-renderer";
+import { measureEsignSlots } from "./render/esign-slot-measure";
 // Fallback: unsigned template PDFs still compile here via renderEsignPdf (needs Chrome). Signed copies are esignComposeSignedDocument.
 import { snapshotValues, type EsignEmployeeSnapshot } from "./render/esign-placeholders";
 import {
@@ -738,6 +742,17 @@ export async function createEsignFromTemplate(input: {
     input.field_values ?? {},
     loaded.template.fields,
   );
+  // Accident templates infer their section from `request_kind`. The send form
+  // shows Accident by default, so persist that default even if the operator
+  // never opens the dropdown.
+  const requestKindField = loaded.template.fields.find(
+    (field) => field.field_key === "request_kind",
+  );
+  if (requestKindField && !fieldValues.request_kind?.trim()) {
+    fieldValues.request_kind =
+      requestKindField.options.map((option) => option.trim()).find(Boolean) ??
+      "accident";
+  }
   if (firstMissingRequiredKey(fieldValues, loaded.template.fields)) {
     return { ok: false, error: "field_required" };
   }
@@ -783,7 +798,12 @@ export async function createEsignFromTemplate(input: {
     const id = result.id != null ? String(result.id) : undefined;
     if (id) {
       const sheetHtml = await sheetHtmlForStoredPdf(sheet, result.request_code, upload.key, browser);
-      await patchDoc(COLLECTIONS.esignRequests, id, { sheet_html: sheetHtml });
+      const measuredSlots = await measureEsignSlots(sheetHtml, browser);
+      await patchDoc(COLLECTIONS.esignRequests, id, {
+        sheet_html: sheetHtml,
+        sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
+        ...(measuredSlots.length > 0 ? { signature_slots: measuredSlots } : {}),
+      });
     }
     if (id && input.resent_from_id) {
       const linked = await callAdminFunction("admin_link_esign_resend", {
@@ -1420,7 +1440,12 @@ export async function runEsignBatchChunk(input: {
         const requestId = result.id != null ? String(result.id) : "";
         if (requestId) {
           const sheetHtml = await sheetHtmlForStoredPdf(sheet, result.request_code, upload.key, browser);
-          await patchDoc(COLLECTIONS.esignRequests, requestId, { sheet_html: sheetHtml });
+          const measuredSlots = await measureEsignSlots(sheetHtml, browser);
+          await patchDoc(COLLECTIONS.esignRequests, requestId, {
+            sheet_html: sheetHtml,
+            sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
+            ...(measuredSlots.length > 0 ? { signature_slots: measuredSlots } : {}),
+          });
         }
         created += 1;
       } catch (err) {

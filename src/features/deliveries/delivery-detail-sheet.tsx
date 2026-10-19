@@ -44,6 +44,7 @@ import { selectOptionsFrom } from "@/lib/select-items";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import { DeliveryGpsAuditPanel } from "./delivery-gps-audit-panel";
+import { DeliveryTimeline } from "./delivery-timeline";
 import {
   DeliveryLocationMap,
   deliveryMapPointsFromRow,
@@ -891,6 +892,7 @@ export function DeliveryDetailSheet({
             )}
           >
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <DeliveryTimeline delivery={delivery} />
               <DeliveryProofSplitView delivery={delivery} />
               <div className="grid max-h-[min(42vh,360px)] shrink-0 gap-3 overflow-hidden border-t border-border p-4 md:grid-cols-2">
                 <div className="min-h-0 overflow-y-auto">

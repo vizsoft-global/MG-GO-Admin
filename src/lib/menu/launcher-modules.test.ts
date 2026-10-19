@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Permission } from "@/lib/auth/permissions";
+import { buildInitialTree } from "./menu-merge";
 import { LAUNCHER_GLYPH } from "./launcher-glyphs";
 import {
   filterLauncherTiles,
   greetingBucket,
+  LAUNCHER_HIDDEN_TILE_IDS,
   LAUNCHER_LABEL_OVERRIDE,
   LAUNCHER_TILE_IDS,
   launcherRegistryItems,
+  launcherTilesFromMenu,
+  mergeLauncherTiles,
   visibleLauncherTiles,
 } from "./launcher-modules";
 
@@ -18,7 +22,7 @@ describe("launcher modules", () => {
     assert.equal(items.find((item) => item.id === "employeedesk")?.defaultLabel, "EmployeeDesk");
     assert.equal(items.find((item) => item.id === "vehicles")?.defaultLabel, "Fleet Hub");
     assert.equal(items.find((item) => item.id === "visit-bookings")?.defaultLabel, "Visit Slots");
-    assert.equal(LAUNCHER_LABEL_OVERRIDE.vehicles, "Vehicles");
+    assert.equal(LAUNCHER_LABEL_OVERRIDE.vehicles, undefined);
     assert.equal(LAUNCHER_LABEL_OVERRIDE["visit-bookings"], "Visit Slots");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.assets, "Assets");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.payroll, "Payroll");
@@ -68,8 +72,58 @@ describe("launcher modules", () => {
     assert.equal(filterLauncherTiles(items, "الموظف", labels).map((i) => i.id).join(), "drivers");
   });
 
-  it("splits the Kuwait day into greeting buckets", () => {
-    assert.equal(greetingBucket(8), "morning");
+  it("mirrors every sidebar row, so a hub the sidebar shows is a tile", () => {
+    const tree = buildInitialTree(() => true, true);
+    const derived = launcherTilesFromMenu(tree);
+    const ids = derived.map((tile) => tile.id);
+
+    assert.ok(ids.includes("vehicles"), "Fleet Hub");
+    assert.ok(ids.includes("payroll-hub"), "Payroll Hub");
+    assert.ok(ids.includes("attendance"));
+    assert.ok(ids.includes("payroll"));
+    assert.ok(!ids.includes("dashboard"), "the launcher is not its own tile");
+    assert.equal(new Set(ids).size, ids.length);
+
+    const settings = derived.filter((tile) => tile.href.startsWith("/settings"));
+    assert.equal(
+      settings.filter((tile) => tile.href === "/settings").length,
+      1,
+      "one Settings tile from the inline group",
+    );
+    assert.ok(derived.every((tile) => tile.href.startsWith("/")));
+  });
+
+  it("keeps launcher-only doors when merging with the curated list", () => {
+    const derived = launcherTilesFromMenu(buildInitialTree(() => true, true));
+    const merged = mergeLauncherTiles(derived, launcherRegistryItems());
+    const ids = merged.map((tile) => tile.id);
+    const hrefs = merged.map((tile) => tile.href);
+
+    assert.ok(ids.includes("vehicles"));
+    assert.ok(ids.includes("payroll-hub"));
+    assert.ok(ids.includes("assets"), "Assets is hidden in the sidebar");
+    assert.equal(new Set(ids).size, ids.length);
+    assert.equal(new Set(hrefs).size, hrefs.length);
+    assert.equal(hrefs.filter((href) => href === "/settings").length, 1);
+  });
+
+  it("drops Dashboard, Payroll and Earnings from the launcher only", () => {
+    const derived = launcherTilesFromMenu(buildInitialTree(() => true, true));
+    const merged = mergeLauncherTiles(derived, launcherRegistryItems());
+    const ids = merged.map((tile) => tile.id);
+
+    for (const hidden of LAUNCHER_HIDDEN_TILE_IDS) {
+      assert.ok(!ids.includes(hidden), hidden);
+    }
+    assert.ok(ids.includes("payroll-hub"));
+
+    const visible = visibleLauncherTiles(new Set(), true).map((tile) => tile.id);
+    for (const hidden of LAUNCHER_HIDDEN_TILE_IDS) {
+      assert.ok(visible.includes(hidden), `${hidden} keeps its permission surface`);
+    }
+  });
+
+  it("splits the Kuwait day into greeting buckets", () => {    assert.equal(greetingBucket(8), "morning");
     assert.equal(greetingBucket(14), "afternoon");
     assert.equal(greetingBucket(20), "evening");
   });

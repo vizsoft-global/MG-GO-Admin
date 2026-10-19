@@ -295,8 +295,8 @@ export const adminAddEsignSigner = onCall(async (request) => {
     ]);
     if (!requestSnap.exists) return { ok: false, error: "not_found" };
     const requestStatus = dataOf(requestSnap).status;
-    if (requestStatus === "cancelled" || requestStatus === "declined") {
-      return { ok: false, error: "closed" };
+    if (["signed", "cancelled", "declined", "expired"].includes(String(requestStatus ?? ""))) {
+      return { ok: false, error: "document_locked" };
     }
     if (!profileSnap.exists) return { ok: false, error: "unknown_signer" };
     const profile = dataOf(profileSnap);
@@ -345,6 +345,16 @@ export const adminRemoveEsignSigner = onCall(async (request) => {
     const row = dataOf(snap);
     if (!isStaffRow(row)) return { ok: false, error: "not_a_staff_signer" };
     if (row.status === "signed") return { ok: false, error: "already_signed" };
+    const requestId = textOf(row.request_id);
+    if (requestId) {
+      const requestSnap = await tx.get(db.collection(COLLECTIONS.esignRequests).doc(requestId));
+      if (requestSnap.exists) {
+        const status = String(dataOf(requestSnap).status ?? "");
+        if (["signed", "cancelled", "declined", "expired"].includes(status)) {
+          return { ok: false, error: "document_locked" };
+        }
+      }
+    }
     tx.delete(ref);
     return { ok: true };
   });

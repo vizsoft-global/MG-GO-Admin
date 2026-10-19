@@ -11,6 +11,7 @@ import {
   resetDriverAppSettings,
   setDriverAppLoginVerificationExemptAll,
   setDriverAppMaintenanceMode,
+  updateDriverAppDeliveryIntegrity,
   updateDriverAppDeliveryProximity,
   updateDriverAppForceUpdate,
   updateDriverAppMaintenanceMessage,
@@ -22,6 +23,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -44,6 +52,9 @@ type DriverAppSettingsPanelProps = {
   driverAppMaintenanceMessage: string;
   driverAppLoginVerificationExemptAll: boolean;
   driverAppDeliveryProximityMeters: number;
+  driverAppCheckinPhotoRequired: boolean;
+  driverAppEarlyDropMeters: number;
+  driverAppProofOcrMode: "block" | "warn" | "off";
   driverAppForceUpdate: boolean;
   driverAppMinVersionCode: number | null;
   driverAppMinVersionName: string | null;
@@ -159,6 +170,9 @@ export function DriverAppSettingsPanel({
   driverAppMaintenanceMessage,
   driverAppLoginVerificationExemptAll,
   driverAppDeliveryProximityMeters,
+  driverAppCheckinPhotoRequired,
+  driverAppEarlyDropMeters,
+  driverAppProofOcrMode,
   driverAppForceUpdate,
   driverAppMinVersionCode,
   driverAppMinVersionName,
@@ -181,6 +195,13 @@ export function DriverAppSettingsPanel({
   );
   const [proximityMeters, setProximityMeters] = useState(
     String(driverAppDeliveryProximityMeters),
+  );
+  const [checkinPhotoRequired, setCheckinPhotoRequired] = useState(
+    driverAppCheckinPhotoRequired,
+  );
+  const [earlyDropMeters, setEarlyDropMeters] = useState(String(driverAppEarlyDropMeters));
+  const [proofOcrMode, setProofOcrMode] = useState<"block" | "warn" | "off">(
+    driverAppProofOcrMode,
   );
   const [forceUpdate, setForceUpdate] = useState(driverAppForceUpdate);
   const [minVersionCode, setMinVersionCode] = useState(
@@ -526,6 +547,104 @@ export function DriverAppSettingsPanel({
                   </Button>
                 </div>
               </form>
+          </AppFormSection>
+
+          <AppFormSection
+            title={t("deliveryIntegrityTitle")}
+            description={t("deliveryIntegritySubtitle")}
+          >
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                startTransition(async () => {
+                  setError(null);
+                  const result = await updateDriverAppDeliveryIntegrity(locale, {
+                    checkInPhotoRequired: checkinPhotoRequired,
+                    earlyDropMeters: Number(earlyDropMeters),
+                    proofOcrMode,
+                  });
+                  if (result.error) {
+                    setError(result.error);
+                    toast.error(t("errors.saveFailed"));
+                    return;
+                  }
+                  toast.success(t("deliveryIntegritySaved"));
+                });
+              }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/10 p-3">
+                <div className="space-y-1">
+                  <span className="text-sm font-medium">{t("checkinPhotoLabel")}</span>
+                  <p className="text-xs text-muted-foreground">{t("checkinPhotoHint")}</p>
+                </div>
+                <Switch
+                  checked={checkinPhotoRequired}
+                  onCheckedChange={setCheckinPhotoRequired}
+                  disabled={isPending}
+                  aria-label={t("checkinPhotoLabel")}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="driverAppEarlyDrop">{t("earlyDropLabel")}</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    id="driverAppEarlyDrop"
+                    type="number"
+                    min={0}
+                    max={10000}
+                    step={1}
+                    value={earlyDropMeters}
+                    onChange={(event) => setEarlyDropMeters(event.target.value)}
+                    disabled={isPending}
+                    className="w-40 tabular-nums"
+                    required
+                  />
+                  <span className="text-sm text-muted-foreground">{t("earlyDropUnit")}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">{t("earlyDropHint")}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("proofOcrLabel")}</Label>
+                <Select
+                  items={[
+                    { value: "block", label: t("proofOcrBlock") },
+                    { value: "warn", label: t("proofOcrWarn") },
+                    { value: "off", label: t("proofOcrOff") },
+                  ]}
+                  value={proofOcrMode}
+                  onValueChange={(value) => {
+                    if (value === "block" || value === "warn" || value === "off") {
+                      setProofOcrMode(value);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="block" label={t("proofOcrBlock")}>
+                      {t("proofOcrBlock")}
+                    </SelectItem>
+                    <SelectItem value="warn" label={t("proofOcrWarn")}>
+                      {t("proofOcrWarn")}
+                    </SelectItem>
+                    <SelectItem value="off" label={t("proofOcrOff")}>
+                      {t("proofOcrOff")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t("proofOcrHint")}</p>
+              </div>
+
+              <div className="flex justify-end border-t border-border pt-4">
+                <Button type="submit" disabled={isPending} className="cursor-pointer rounded-lg">
+                  {isPending ? t("saving") : t("saveDeliveryIntegrity")}
+                </Button>
+              </div>
+            </form>
           </AppFormSection>
 
           <AppFormSection
@@ -1033,6 +1152,13 @@ export function DriverAppSettingsPanel({
               setProximityMeters(
                 String(DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters),
               );
+              setCheckinPhotoRequired(
+                DEFAULT_DRIVER_APP_SETTINGS.driver_app_checkin_photo_required,
+              );
+              setEarlyDropMeters(
+                String(DEFAULT_DRIVER_APP_SETTINGS.driver_app_early_drop_meters),
+              );
+              setProofOcrMode(DEFAULT_DRIVER_APP_SETTINGS.driver_app_proof_ocr_mode);
               if (logoRef.current) logoRef.current.value = "";
               if (splashRef.current) splashRef.current.value = "";
               if (iconRef.current) iconRef.current.value = "";

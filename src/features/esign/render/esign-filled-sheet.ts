@@ -5,7 +5,11 @@ import {
 } from "../esign-penalty-checks";
 import { buildEsignDocumentHtml, type EsignDocumentInput } from "./esign-document-html";
 import type { LayoutSource } from "./esign-document-layout";
-import type { EsignEmployeeSnapshot } from "./esign-placeholders";
+import type {
+  EsignEmployeeSnapshot,
+  EsignPolicySnapshot,
+} from "./esign-placeholders";
+import { ESIGN_POLICY_SNAPSHOT_KEYS } from "./esign-placeholders";
 
 export type FilledSheetField = {
   field_key: string;
@@ -102,6 +106,27 @@ export function filledEsignDocumentInput(input: FilledSheetInput): EsignDocument
       source: "entry",
     });
   }
+
+  // Accident templates add these date rows at send time, not in the template.
+  // Without them the filled sheet loses the values and drops the whole
+  // Request Details section, even though the request stored both dates.
+  const accidentSpecs = [
+    { key: "accident_date", en: "Accident date", ar: "تاريخ الحادث" },
+    { key: "report_date", en: "Report date", ar: "تاريخ التقرير" },
+  ] as const;
+  for (const spec of accidentSpecs) {
+    const value = fieldValues[spec.key]?.trim() ?? "";
+    if (!value || fields.some((field) => field.key === spec.key)) continue;
+    fields.push({
+      key: spec.key,
+      label: spec.en,
+      labelEn: spec.en,
+      labelAr: spec.ar,
+      value,
+      section: "document",
+      source: "entry",
+    });
+  }
   return {
     language: "en",
     kind: template.document_kind,
@@ -126,11 +151,13 @@ export function filledEsignSheetHtml(input: FilledSheetInput): string {
   return buildEsignDocumentHtml(filledEsignDocumentInput(input));
 }
 
-export function snapshotFromStored(value: unknown): EsignEmployeeSnapshot | null {
+export function snapshotFromStored(
+  value: unknown,
+): (EsignEmployeeSnapshot & EsignPolicySnapshot) | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   if (!row.employee_id && !row.employee_name) return null;
-  return {
+  const out: EsignEmployeeSnapshot & EsignPolicySnapshot = {
     company_name: String(row.company_name ?? ""),
     employee_name: String(row.employee_name ?? ""),
     employee_id: String(row.employee_id ?? ""),
@@ -146,4 +173,8 @@ export function snapshotFromStored(value: unknown): EsignEmployeeSnapshot | null
     pay_through: row.pay_through != null ? String(row.pay_through) : null,
     bank_number: row.bank_number != null ? String(row.bank_number) : null,
   };
+  for (const key of ESIGN_POLICY_SNAPSHOT_KEYS) {
+    out[key] = row[key] != null ? String(row[key]) : null;
+  }
+  return out;
 }

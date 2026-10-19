@@ -373,24 +373,27 @@ export function TemplatesShell() {
               <DialogDescription>{t("open")}</DialogDescription>
             )}
           </DialogHeader>
-          <div className="max-h-[min(70vh,640px)] overflow-y-auto px-5 py-4">
+          <div className="relative h-[min(70vh,640px)] overflow-hidden px-5 py-4">
             {detail ? (
-              <EsignDocumentPreview
-                templateName={detail.name_en}
-                nameAr={detail.name_ar}
-                company={tBuilder("previewCompany")}
-                body={detail.body_en}
-                bodyAr={detail.body_ar}
-                declaration={detail.declaration_en}
-                declarationAr={detail.declaration_ar}
-                fields={detail.fields}
-                values={previewValues}
-                documentKind={detail.document_kind}
-                signers={{
-                  employeeLabel: tBuilder("previewEmployeeSignature"),
-                  staffLabel: previewStaffLabel([], "", tBuilder("previewStaffSignature")),
-                }}
-              />
+              <div className="relative h-full w-full">
+                <EsignDocumentPreview
+                  templateName={detail.name_en}
+                  nameAr={detail.name_ar}
+                  company={tBuilder("previewCompany")}
+                  body={detail.body_en}
+                  bodyAr={detail.body_ar}
+                  declaration={detail.declaration_en}
+                  declarationAr={detail.declaration_ar}
+                  fields={detail.fields}
+                  values={previewValues}
+                  documentKind={detail.document_kind}
+                  fill
+                  signers={{
+                    employeeLabel: tBuilder("previewEmployeeSignature"),
+                    staffLabel: previewStaffLabel([], "", tBuilder("previewStaffSignature")),
+                  }}
+                />
+              </div>
             ) : null}
           </div>
           <DialogFooter className="border-t border-border px-5 py-3">

@@ -289,6 +289,59 @@ export async function updateDriverAppDeliveryProximity(
   return { success: true, epochs: result.epochs };
 }
 
+export type DeliveryIntegrityInput = {
+  checkInPhotoRequired: boolean;
+  earlyDropMeters: number;
+  proofOcrMode: "block" | "warn" | "off";
+};
+
+export async function updateDriverAppDeliveryIntegrity(
+  locale: string,
+  input: DeliveryIntegrityInput,
+): Promise<{ error?: string; errorDetail?: string; success?: boolean; epochs?: EpochCounters }> {
+  const auth = await requireSettingsManager();
+  if ("error" in auth) return auth;
+
+  if (typeof input.checkInPhotoRequired !== "boolean") {
+    return { error: "invalid_integrity" };
+  }
+  if (
+    !Number.isFinite(input.earlyDropMeters) ||
+    input.earlyDropMeters < 0 ||
+    input.earlyDropMeters > 10_000
+  ) {
+    return { error: "invalid_early_drop" };
+  }
+  if (!["block", "warn", "off"].includes(input.proofOcrMode)) {
+    return { error: "invalid_ocr_mode" };
+  }
+
+  const result = await patchAppSettings(
+    "updateDriverAppDeliveryIntegrity",
+    {
+      driver_app_checkin_photo_required: input.checkInPhotoRequired,
+      driver_app_early_drop_meters: Math.round(input.earlyDropMeters),
+      driver_app_proof_ocr_mode: input.proofOcrMode,
+    },
+    auth.session.id,
+  );
+  if (result.error) return result;
+
+  revalidateDriverAppSettings(locale);
+  void logAdminMutation({
+    action: "update",
+    entityType: "app_settings",
+    entityId: "1",
+    routeName: "updateDriverAppDeliveryIntegrity",
+    after: {
+      driver_app_checkin_photo_required: input.checkInPhotoRequired,
+      driver_app_early_drop_meters: Math.round(input.earlyDropMeters),
+      driver_app_proof_ocr_mode: input.proofOcrMode,
+    },
+  });
+  return { success: true, epochs: result.epochs };
+}
+
 export async function uploadDriverAppLogo(
   locale: string,
   formData: FormData,
@@ -783,6 +836,12 @@ export async function resetDriverAppSettings(
       driver_app_login_verification_exempt_all: false,
       driver_app_delivery_proximity_meters:
         DEFAULT_DRIVER_APP_SETTINGS.driver_app_delivery_proximity_meters,
+      driver_app_checkin_photo_required:
+        DEFAULT_DRIVER_APP_SETTINGS.driver_app_checkin_photo_required,
+      driver_app_early_drop_meters:
+        DEFAULT_DRIVER_APP_SETTINGS.driver_app_early_drop_meters,
+      driver_app_proof_ocr_mode:
+        DEFAULT_DRIVER_APP_SETTINGS.driver_app_proof_ocr_mode,
       driver_app_sideload_updates_enabled: false,
       driver_app_force_update: false,
       driver_app_min_version_code: null,

@@ -2,10 +2,8 @@
 
 import {
   forwardRef,
-  useCallback,
   useEffect,
   useImperativeHandle,
-  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
@@ -26,19 +24,21 @@ import {
   saveEsignFormSheet,
   saveEsignStampLayout,
 } from "./esign-stamp-actions";
-import {
-  A4_HEIGHT_PT,
-  A4_WIDTH_PT,
-} from "./render/esign-document-layout";
+import { A4_HEIGHT_PT } from "./render/esign-document-layout";
 import { fitEsignSinglePage } from "./render/esign-document-html";
 import {
+  A4_CSS_HEIGHT,
+  A4_CSS_WIDTH,
+  useA4Zoom,
+} from "./use-a4-zoom";
+import {
   addStampPiece,
-  centeredDocumentScroll,
   clampPiece,
   completeStampLayout,
   defaultStampLayout,
   isExtraStampPiece,
   layoutAroundSignature,
+  layoutSignatureOnly,
   missingStampPieces,
   parseStampLayout,
   pieceFromPageRect,
@@ -60,12 +60,7 @@ export type EsignStampPlacerHandle = {
   flush: () => Promise<boolean>;
 };
 
-const A4_CSS_WIDTH = (A4_WIDTH_PT * 96) / 72;
-const A4_CSS_HEIGHT = (A4_HEIGHT_PT * 96) / 72;
 const PX_PER_PT = 96 / 72;
-const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 3;
-const ZOOM_STEP = 1.25;
 
 type Gesture = {
   id: StampPieceId;
@@ -76,7 +71,21 @@ type Gesture = {
   corner: ResizeCorner | null;
 };
 
-const FORM_EDIT_SELECTOR = ".sec, .l, .v, .h, .ln > span, .note, .text";
+const FORM_EDIT_SELECTOR =
+  ".sec, .l, .v, .h, .ln > span:not([data-slot-role]), .note, .text, th, td, .doc-header, .doc-header .en, .doc-header .ar, .opt, .opt .en, .opt .ar, .net, .net .amount, .meta, .meta .v, .doc-footer, .doc-footer .grow, .doc-footer .ref, .lab .row > span, .val, .chip, .sub, .ar, " +
+  ".loan-title, .ref-sec, .ref-lab, .ref-val, .ref-ar, .ref-decl, .ref-policy, .ref-policy p, .ref-checks, " +
+  ".acc-title, .acc-body p, .acc-list li, .acc-ar-list li, .acc-tail-row .en, .acc-tail-row .ar, " +
+  ".pay-title, .pay-sub, .pay-company .en, .pay-company .ar, .pay-grid .lab, .pay-grid .val, .pay-subtable .lab, .pay-subtable td, .pay-lines th, .pay-lines td, .pay-sponsor, .pay-decl, .pay-signs .label";
+/**
+ * Only the stamp slot itself is structural. Titles, the management band and the
+ * footer are ordinary text now: every line HR can read, HR can correct.
+ */
+const FORM_PROTECTED_SELECTOR = "[data-slot-role]";
+
+/** True when this node is, or wraps, a protected slot. */
+function holdsProtected(node: Element): boolean {
+  return Boolean(node.closest(FORM_PROTECTED_SELECTOR) ?? node.querySelector(FORM_PROTECTED_SELECTOR));
+}
 
 /**
  * iframe nodes come from another realm, so `node instanceof HTMLElement` is false for every
@@ -123,9 +132,22 @@ export const EsignStampPlacer = forwardRef<
     signatureSlots: unknown;
     stampLayout: unknown;
     labels: StampPieceLabels;
+    /** Unsigned request: edit the printed sheet only; stamp boxes need a signature. */
+    formOnly?: boolean;
+    /** Signed / declined / cancelled: the sheet is evidence and cannot be rewritten. */
+    formLocked?: boolean;
   }
 >(function EsignStampPlacer(
-  { requestId, signatureUrl, documentKind, signatureSlots, stampLayout, labels },
+  {
+    requestId,
+    signatureUrl,
+    documentKind,
+    signatureSlots,
+    stampLayout,
+    labels,
+    formOnly = false,
+    formLocked = false,
+  },
   ref,
 ) {
   const t = useTranslations("pages.requests.esign.detail");
@@ -133,8 +155,6 @@ export const EsignStampPlacer = forwardRef<
   const saved = parseStampLayout(stampLayout);
   const [layout, setLayout] = useState<StampLayout | null>(() => openedLayout(stampLayout));
   const [html, setHtml] = useState<string | null>(null);
-  const [fitScale, setFitScale] = useState(1);
-  const [zoom, setZoom] = useState(1);
   const [previewError, setPreviewError] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [reason, setReason] = useState("");
@@ -146,13 +166,16 @@ export const EsignStampPlacer = forwardRef<
   const stageRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const layoutRef = useRef<StampLayout | null>(openedLayout(stampLayout));
-  const viewScaleRef = useRef(1);
-  const fitScaleRef = useRef(1);
-  const zoomRef = useRef(1);
-  const pendingScrollRef = useRef<{ left: number; top: number } | null>(null);
-  const viewScale = fitScale * zoom;
-  viewScaleRef.current = viewScale;
-  fitScaleRef.current = fitScale;
+  const {
+    zoom,
+    viewScale,
+    viewScaleRef,
+    zoomIn,
+    zoomOut,
+    canZoomIn,
+    canZoomOut,
+    resetZoom,
+  } = useA4Zoom({ stageRef, padding: 8 });
   const gestureRef = useRef<Gesture | null>(null);
   const formDirtyRef = useRef(false);
   const saveFormRef = useRef<() => Promise<boolean>>(async () => false);
@@ -265,6 +288,7 @@ export const EsignStampPlacer = forwardRef<
       const formOk = await saveFormRef.current();
       if (!formOk) return false;
     }
+    if (formOnly) return true;
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -284,67 +308,6 @@ export const EsignStampPlacer = forwardRef<
   useEffect(() => {
     if (parseStampLayout(stampLayout)) readyRef.current?.resolve();
   }, [stampLayout]);
-
-  const applyZoom = useCallback((nextZoom: number) => {
-    const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, nextZoom));
-    if (Math.abs(clamped - zoomRef.current) < 0.001) return;
-    const stage = stageRef.current;
-    const before = fitScaleRef.current * zoomRef.current;
-    const after = fitScaleRef.current * clamped;
-    if (stage && before > 0) {
-      pendingScrollRef.current = centeredDocumentScroll({
-        scrollLeft: stage.scrollLeft,
-        scrollTop: stage.scrollTop,
-        viewportWidth: stage.clientWidth,
-        viewportHeight: stage.clientHeight,
-        pageWidth: A4_CSS_WIDTH,
-        pageHeight: A4_CSS_HEIGHT,
-        before,
-        after,
-      });
-    }
-    zoomRef.current = clamped;
-    viewScaleRef.current = after;
-    setZoom(clamped);
-  }, []);
-
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    const observer = new ResizeObserver(() => {
-      const bounds = stage.getBoundingClientRect();
-      const scale = Math.min(
-        Math.max(bounds.width - 8, 160) / A4_CSS_WIDTH,
-        Math.max(bounds.height - 8, 220) / A4_CSS_HEIGHT,
-      );
-      fitScaleRef.current = scale;
-      viewScaleRef.current = scale * zoomRef.current;
-      setFitScale(scale);
-    });
-    observer.observe(stage);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    function onWheel(event: WheelEvent) {
-      if (!event.ctrlKey && !event.metaKey) return;
-      event.preventDefault();
-      applyZoom(zoomRef.current * (event.deltaY > 0 ? 1 / ZOOM_STEP : ZOOM_STEP));
-    }
-    stage.addEventListener("wheel", onWheel, { passive: false });
-    return () => stage.removeEventListener("wheel", onWheel);
-  }, [applyZoom]);
-
-  useLayoutEffect(() => {
-    const stage = stageRef.current;
-    const pending = pendingScrollRef.current;
-    if (!stage || !pending) return;
-    stage.scrollLeft = pending.left;
-    stage.scrollTop = pending.top;
-    pendingScrollRef.current = null;
-  }, [zoom]);
 
   useEffect(() => {
     let cancelled = false;
@@ -374,6 +337,11 @@ export const EsignStampPlacer = forwardRef<
       "@media screen{body{background:#fff !important;}.page{margin:0 !important;box-shadow:none !important;}}";
     doc.head.appendChild(style);
     fitEsignSinglePage(doc);
+    if (formOnly) {
+      setPreviewError(false);
+      readyRef.current?.resolve();
+      return;
+    }
     const page = doc.querySelector(".page");
     const line = doc.querySelector('i[data-slot-role="employee"]');
     if (
@@ -384,7 +352,9 @@ export const EsignStampPlacer = forwardRef<
       const pageBox = page.getBoundingClientRect();
       const lineBox = line.getBoundingClientRect();
       if (pageBox.width > 0 && lineBox.width > 0) {
-        const next = layoutAroundSignature(pieceFromPageRect(lineBox, pageBox));
+        const piece = pieceFromPageRect(lineBox, pageBox);
+        const reference = Boolean(doc.querySelector(".loan-page, .pay-page, .acc-page"));
+        const next = reference ? layoutSignatureOnly(piece) : layoutAroundSignature(piece);
         layoutRef.current = next;
         setLayout(next);
       }
@@ -408,6 +378,11 @@ export const EsignStampPlacer = forwardRef<
     clone.querySelectorAll("[data-form-edit]").forEach((node) => {
       node.removeAttribute("data-form-edit");
     });
+    clone.querySelectorAll("[data-form-protected]").forEach((node) => {
+      node.removeAttribute("data-form-protected");
+      const editable = node.getAttribute("contenteditable");
+      if (editable === "false") node.removeAttribute("contenteditable");
+    });
     clone.querySelector("#stamp-fit-style")?.remove();
     clone.querySelector("#form-edit-style")?.remove();
     return `<!doctype html>${clone.outerHTML}`;
@@ -417,8 +392,21 @@ export const EsignStampPlacer = forwardRef<
     const doc = frameRef.current?.contentDocument;
     if (!doc) return;
     doc.getElementById("form-edit-style")?.remove();
+    doc.querySelectorAll(FORM_PROTECTED_SELECTOR).forEach((node) => {
+      if (!isElement(node)) return;
+      if (on) {
+        node.setAttribute("contenteditable", "false");
+        node.setAttribute("data-form-protected", "1");
+      } else {
+        if (node.getAttribute("contenteditable") === "false") {
+          node.removeAttribute("contenteditable");
+        }
+        node.removeAttribute("data-form-protected");
+      }
+    });
     doc.querySelectorAll(FORM_EDIT_SELECTOR).forEach((node) => {
       if (!isElement(node)) return;
+      if (holdsProtected(node)) return;
       if (on) {
         node.setAttribute("contenteditable", "true");
         node.setAttribute("data-form-edit", "1");
@@ -437,14 +425,14 @@ export const EsignStampPlacer = forwardRef<
   async function saveForm(): Promise<boolean> {
     const current = layoutRef.current;
     const html = readSheetHtml();
-    if (!current || !html) {
+    if (!html || (!formOnly && !current)) {
       setFormStatus("error");
       setFormReason("invalid_sheet");
       return false;
     }
     setFormStatus("saving");
     setFormReason("");
-    const result = await saveEsignFormSheet(requestId, html, current);
+    const result = await saveEsignFormSheet(requestId, html, current ?? { pieces: [] });
     if (!result.ok) {
       setFormStatus("error");
       setFormReason(result.error);
@@ -453,7 +441,7 @@ export const EsignStampPlacer = forwardRef<
     formDirtyRef.current = false;
     setFormDirty(false);
     setFormStatus("saved");
-    savedKeyRef.current = stampLayoutKey(current);
+    if (current) savedKeyRef.current = stampLayoutKey(current);
     void queryClient.invalidateQueries({
       queryKey: [...queryKeys.esign.detail(requestId), "document-links"],
     });
@@ -463,6 +451,7 @@ export const EsignStampPlacer = forwardRef<
   saveFormRef.current = saveForm;
 
   async function toggleEdit() {
+    if (formLocked) return;
     if (editing) {
       if (formDirtyRef.current) {
         const ok = await saveForm();
@@ -489,6 +478,10 @@ export const EsignStampPlacer = forwardRef<
       if (key !== "Backspace" && key !== "Delete") return;
       const target = event.target;
       if (!isElement(target) || !target.hasAttribute("data-form-edit")) return;
+      if (target.closest(FORM_PROTECTED_SELECTOR) || holdsProtected(target)) {
+        event.preventDefault();
+        return;
+      }
       if ((target.textContent ?? "").trim() !== "") return;
       event.preventDefault();
       target.remove();
@@ -591,8 +584,8 @@ export const EsignStampPlacer = forwardRef<
               variant="outline"
               size="icon-lg"
               aria-label={t("zoomOut")}
-              disabled={zoom <= ZOOM_MIN + 0.001}
-              onClick={() => applyZoom(zoomRef.current / ZOOM_STEP)}
+              disabled={!canZoomOut}
+              onClick={zoomOut}
             >
               <ZoomOut />
             </Button>
@@ -601,7 +594,7 @@ export const EsignStampPlacer = forwardRef<
               variant="outline"
               className="h-9 min-w-14 px-2 text-xs tabular-nums"
               aria-label={t("zoomFit")}
-              onClick={() => applyZoom(1)}
+              onClick={resetZoom}
             >
               {Math.round(zoom * 100)}%
             </Button>
@@ -610,12 +603,12 @@ export const EsignStampPlacer = forwardRef<
               variant="outline"
               size="icon-lg"
               aria-label={t("zoomIn")}
-              disabled={zoom >= ZOOM_MAX - 0.001}
-              onClick={() => applyZoom(zoomRef.current * ZOOM_STEP)}
+              disabled={!canZoomIn}
+              onClick={zoomIn}
             >
               <ZoomIn />
             </Button>
-            {!editing && missingPieces.length > 0 ? (
+            {!formOnly && !editing && missingPieces.length > 0 ? (
               <Popover open={adding} onOpenChange={setAdding}>
                 <PopoverTrigger
                   render={
@@ -643,7 +636,7 @@ export const EsignStampPlacer = forwardRef<
                 </PopoverContent>
               </Popover>
             ) : null}
-            {layout?.removed?.length ? (
+            {!formOnly && layout?.removed?.length ? (
               <Button
                 type="button"
                 variant="outline"
@@ -653,6 +646,7 @@ export const EsignStampPlacer = forwardRef<
                 {t("restorePieces", { count: layout.removed.length })}
               </Button>
             ) : null}
+            {formLocked ? null : (
             <Button
               type="button"
               variant="outline"
@@ -667,6 +661,7 @@ export const EsignStampPlacer = forwardRef<
             >
               {t("editForm")}
             </Button>
+            )}
             {formDirty ? (
               <Button
                 type="button"
@@ -713,7 +708,7 @@ export const EsignStampPlacer = forwardRef<
                 style={{ width: A4_CSS_WIDTH, height: A4_CSS_HEIGHT }}
               />
             ) : null}
-            {layout
+            {!formOnly && layout
               ? layout.pieces.map((piece) => {
                   const box = pieceToCss(piece, PX_PER_PT, A4_HEIGHT_PT);
                   const text = stampPieceText(piece.id, labels);
@@ -803,7 +798,13 @@ export const EsignStampPlacer = forwardRef<
         <p className="text-[10px] text-emerald-800">{t("formSaved")}</p>
       ) : null}
       {formStatus === "error" ? (
-        <p className="text-[10px] text-destructive">{t("formSaveFailed", { reason: formReason })}</p>
+        <p className="text-[10px] text-destructive">
+          {formReason === "not_signed" || formReason === "document_locked"
+            ? t("formSaveLocked")
+            : formReason === "invalid_sheet"
+              ? t("formSaveInvalid")
+              : t("formSaveFailed", { reason: formReason })}
+        </p>
       ) : null}
       {status === "saving" ? (
         <p className="text-[10px] text-muted-foreground">{t("placeSaving")}</p>

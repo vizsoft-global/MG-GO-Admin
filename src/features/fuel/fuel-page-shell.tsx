@@ -447,14 +447,19 @@ function FuelRow({
                 <button
                   key={mark.id}
                   type="button"
-                  className={`inline-flex flex-col items-start rounded-md px-1.5 py-0.5 text-[11px] font-semibold leading-tight ${FLEET_REQUEST_CHIP_CLASS[mark.type]}`}
+                  title={mark.code}
+                  aria-label={mark.code}
+                  className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold leading-tight ${FLEET_REQUEST_CHIP_CLASS[mark.type]}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     onOpenRequest(mark.id);
                   }}
                 >
-                  <span>{mark.code}</span>
-                  {mark.amountKwd != null ? <span>{formatKwd(mark.amountKwd)}</span> : null}
+                  <span>
+                    {mark.amountKwd != null
+                      ? `${formatKwd(mark.amountKwd)} KWD`
+                      : t(`markType.${mark.type}`)}
+                  </span>
                 </button>
               ))}
               {!cell && marks.length === 0 ? <span className="text-muted-foreground">—</span> : null}

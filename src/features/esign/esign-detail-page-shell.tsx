@@ -10,6 +10,7 @@ import {
   Loader2,
   Paperclip,
   Printer,
+  RefreshCw,
   Shield,
   ShieldOff,
   Trash2,
@@ -35,8 +36,10 @@ import {
 import { esignDocumentHref } from "./esign-storage-key";
 import { EsignSignersEditor } from "./esign-signers-editor";
 import { formatStampInstant } from "./esign-stamp-layout";
+import { regenerateEsignSheet } from "./esign-stamp-actions";
 import { EsignStampPlacer, type EsignStampPlacerHandle } from "./esign-stamp-placer";
 import { useEsignDocumentLinks, useEsignRequestDetail } from "./use-esign";
+import { useAuth } from "@/contexts/auth-context";
 import type { EsignRequestStatus } from "./types";
 
 function statusVariant(
@@ -120,11 +123,17 @@ function Row({ label, value }: { label: string; value: string }) {
 export function EsignDetailPageShell({ requestId }: { requestId: string }) {
   const t = useTranslations("pages.requests.esign.detail");
   const tCommon = useTranslations("pages.requests.esign");
+  const auth = useAuth();
   const placerRef = useRef<EsignStampPlacerHandle>(null);
   const { data, isLoading, refetch } = useEsignRequestDetail(requestId);
-  const { data: links, isLoading: linksLoading } = useEsignDocumentLinks(requestId);
+  const {
+    data: links,
+    isLoading: linksLoading,
+    refetch: refetchLinks,
+  } = useEsignDocumentLinks(requestId);
   const request = data?.request;
   const [busy, setBusy] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const attachmentInputRef = useRef<HTMLInputElement>(null);
@@ -173,6 +182,25 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
     }
     await refetch();
     toast.success(t("attachmentRemoved"));
+  }
+
+  async function regenerate() {
+    setRegenerating(true);
+    try {
+      const result = await regenerateEsignSheet(requestId);
+      if (!result.ok) {
+        toast.error(
+          result.error === "signed_locked"
+            ? t("regenerateSigned")
+            : t("regenerateFailed"),
+        );
+        return;
+      }
+      await Promise.all([refetch(), refetchLinks()]);
+      toast.success(t("regenerated"));
+    } finally {
+      setRegenerating(false);
+    }
   }
 
   async function decide(decision: EsignReviewDecision) {
@@ -237,6 +265,17 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
   const previewIsSignedCopy = Boolean(links?.signedDocumentUrl);
   const canPlace =
     request.status === "signed" && Boolean(links?.documentUrl && links?.signatureUrl);
+  const canManageRequests =
+    auth.isSuperAdmin ||
+    auth.isManager ||
+    auth.can("requests.manage") ||
+    auth.can("employeedesk.manage");
+  const canEditUnsigned =
+    canManageRequests &&
+    ["pending", "draft", "sent", "viewed"].includes(request.status) &&
+    Boolean(links?.documentUrl && request.template_id);
+  const formLocked = !["pending", "draft", "sent", "viewed"].includes(request.status);
+  const signersReadOnly = !["pending", "draft", "sent", "viewed"].includes(request.status);
   const documentRequestId = request.id;
 
   async function openSigned(disposition: "inline" | "attachment") {
@@ -264,6 +303,24 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
         ]}
         actions={
           <div className="flex items-center gap-2">
+            {canManageRequests && request.status !== "signed" && request.template_id ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9"
+                disabled={regenerating}
+                onClick={() => void regenerate()}
+                title={t("regenerateHint")}
+              >
+                {regenerating ? (
+                  <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="me-1.5 h-3.5 w-3.5" />
+                )}
+                {t("regenerate")}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -293,14 +350,16 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
 
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-stretch">
         <AppListCard className="flex min-h-0 flex-col gap-3 bg-muted/30 p-2 lg:h-[calc(100dvh-8rem)]">
-          {canPlace && links?.documentUrl && links.signatureUrl ? (
+          {(canPlace && links?.documentUrl && links.signatureUrl) || canEditUnsigned ? (
             <EsignStampPlacer
               ref={placerRef}
               requestId={request.id}
-              signatureUrl={links.signatureUrl}
+              signatureUrl={links?.signatureUrl ?? ""}
               documentKind={request.document_kind}
               signatureSlots={request.signature_slots}
               stampLayout={request.stamp_layout}
+              formOnly={!canPlace}
+              formLocked={formLocked}
               labels={{
                 name: request.signer_display_name?.trim() || "Signed by driver",
                 date: formatStampInstant(request.signed_at),
@@ -361,6 +420,9 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
                 {tCommon(`status.${request.status}`)}
               </StatusPill>
             </div>
+            {request.awaiting_counter_signature ? (
+              <p className="text-[10px] font-medium text-amber-700">{t("awaitingCounter")}</p>
+            ) : null}
             <ol className="space-y-2">
               <TimelineStep label={t("timelineSent")} at={request.sent_at} />
               <TimelineStep label={t("timelineViewed")} at={request.viewed_at} pendingLabel={t("timelinePending")} />
@@ -380,7 +442,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
             </ol>
           </AppListCard>
 
-          <EsignSignersEditor requestId={request.id} />
+          <EsignSignersEditor requestId={request.id} readOnly={signersReadOnly} />
 
           <AppListCard className="space-y-2 p-4">
             <div className="flex items-center justify-between gap-2">

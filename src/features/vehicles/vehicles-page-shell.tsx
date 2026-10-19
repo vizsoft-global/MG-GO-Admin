@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -73,7 +74,12 @@ import { ClearAllModuleButton } from "@/features/settings/clear-all-module-butto
 import { VehicleBulkBar } from "./vehicle-bulk-bar";
 import { VehicleFormDialog } from "./vehicle-form-dialog";
 import { VehiclesColumnHeader } from "./vehicles-column-header";
-import { useVehicleTypes, useVehicleUseTypes, useVehiclesList } from "./use-vehicles";
+import {
+  useVehicleCompanies,
+  useVehicleTypes,
+  useVehicleUseTypes,
+  useVehiclesList,
+} from "./use-vehicles";
 import type { VehicleListRow } from "./types";
 import {
   countActiveFilters,
@@ -128,6 +134,7 @@ const COLUMN_LABEL_KEYS: Record<VehiclesFixedColumn, string> = {
   carsCompany: "colCarsCompany",
   project: "colProject",
   typeOfUse: "colTypeOfUse",
+  company: "colVehicleCompany",
   location: "colLocation",
   driver: "colDriver",
   empCompany: "colEmpCompany",
@@ -156,6 +163,8 @@ export function VehiclesPageShell({
   const { data: vehicles = [], isLoading, isFetching, refetch } = useVehiclesList();
   const { data: types = [] } = useVehicleTypes();
   const { data: useTypes = [] } = useVehicleUseTypes();
+  const { data: companies = [] } = useVehicleCompanies();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
   const labels = useListControlLabels();
   const { prefs, update: updateListPrefs } = useListViewPrefs("vehicles");
@@ -170,6 +179,12 @@ export function VehiclesPageShell({
   const [sort, setSort] = useState<VehiclesSort>(DEFAULT_VEHICLES_SORT);
   const [importOpen, setImportOpen] = useState(false);
   const activeTab = parseVehicleListTab(tab);
+
+  useEffect(() => {
+    const company = searchParams.get("company");
+    if (!company) return;
+    setColumnFilters((prev) => ({ ...prev, company: { in: [company] } }));
+  }, [searchParams]);
   const filterState = {
     tab: activeTab,
     status: statusFilter,
@@ -188,6 +203,7 @@ export function VehiclesPageShell({
         id,
         label: t(COLUMN_LABEL_KEYS[id] as "colPlate"),
         locked: id === "plate",
+        defaultVisible: id !== "company",
       })),
     [t],
   );
@@ -314,6 +330,13 @@ export function VehiclesPageShell({
         if (isVehicleTypeOfUse(value)) return t(`typeOfUse.${value}`);
         return useTypeLabel(value, useTypes, locale);
       }
+      if (column === "company") {
+        const company = companies.find((item) => item.key === value);
+        if (!company) return value;
+        return locale.startsWith("ar")
+          ? company.label_ar || company.label_en
+          : company.label_en;
+      }
       if (column === "project") {
         if (value === "keeta") return t("projectKeeta");
         if (value === "americana") return t("projectAmericana");
@@ -322,7 +345,7 @@ export function VehiclesPageShell({
       if (column === "replacement") return value === "yes" ? t("replacementBanner") : t("replacementNo");
       return value;
     },
-    [locale, t, useTypes],
+    [companies, locale, t, useTypes],
   );
 
   const tabSelectItems = useMemo(
@@ -792,6 +815,9 @@ function VehicleRow({
             ? t(`typeOfUse.${row.type_of_use}`)
             : row.type_of_use_label || row.type_of_use
           : "—"}
+      </VisibleTableCell>
+      <VisibleTableCell columnId="company" isVisible={isVisible} className="whitespace-nowrap">
+        {row.company_name ?? "—"}
       </VisibleTableCell>
       <VisibleTableCell columnId="location" isVisible={isVisible} className="whitespace-nowrap">
         {row.location_text ?? "—"}

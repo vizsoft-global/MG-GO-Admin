@@ -43,7 +43,7 @@ describe("esign bilingual layout", () => {
     }
   });
 
-  it("prints D2 title and keeps acknowledgement slots empty of the employee stamp", () => {
+  it("prints D2 title and keeps the loan signature slots to employee and HR", () => {
     const layout = buildEsignDocumentLayout({
       kind: "loan",
       headerEn: "Loan Request",
@@ -54,8 +54,9 @@ describe("esign bilingual layout", () => {
     const employee = layout.slots.find((row) => row.role === "employee");
     const ack = layout.slots.filter((row) => row.role.startsWith("ack_"));
     assert.ok(employee);
-    assert.equal(ack.length, 2);
-    assert.ok(ack.every((row) => row.id !== employee?.id));
+    assert.equal(ack.length, 0);
+    assert.equal(layout.slots.filter((row) => row.role === "hr").length, 1);
+    assert.equal(layout.slots.some((row) => row.role === "ceo"), false);
   });
 
   it("seeds the D1 penalty checkbox set", () => {
@@ -227,8 +228,8 @@ describe("payslip sheet", () => {
     assert.equal(sheet.identity.find((row) => row.key === "employee_position")?.value, "Employee A / Rider");
     assert.match(sheet.identity.find((row) => row.key === "pay_bank")?.value ?? "", /KW81…1041/);
     assert.equal(sheet.lines[0]?.key, "actual_working_days");
-    assert.equal(sheet.lines[0]?.rate, "1.00");
-    assert.equal(sheet.lines[0]?.amount, "26 days");
+    assert.equal(sheet.lines[0]?.rate, "");
+    assert.equal(sheet.lines[0]?.amount, "26 Days");
     assert.equal(sheet.lines.find((line) => line.key === "net_salary_kwd")?.code, "NET");
     assert.equal(sheet.lines.find((line) => line.key === "deduction_amount_kwd")?.code, "Ded");
     assert.deepEqual(layout.slots, PAYSLIP_SLOTS);
@@ -281,6 +282,75 @@ describe("fitImageInSlot", () => {
       isTitleEcho({ en: "Please read this notice.", ar: "" }, { en: "Penalty Notice", ar: "إشعار جزاء" }),
       false,
     );
+  });
+});
+
+describe("reference sheet sections", () => {
+  it("prints the loan request, HR verification and management decision in order", () => {
+    const layout = buildEsignDocumentLayout({
+      kind: "loan",
+      employee: sampleEmployee(),
+      fields: [
+        { key: "monthly_salary_kwd", labelEn: "Salary", labelAr: "", value: "260" },
+        { key: "amount", labelEn: "Amount", labelAr: "", value: "500" },
+        { key: "installments", labelEn: "Installments", labelAr: "", value: "5" },
+        { key: "monthly_installment", labelEn: "Monthly", labelAr: "", value: "100" },
+        { key: "years_of_service", labelEn: "Years", labelAr: "", value: "3.4" },
+        { key: "policy_check", labelEn: "Policy", labelAr: "", value: "Eligible" },
+        { key: "hr_manager_name", labelEn: "HR", labelAr: "", value: "Sara" },
+        { key: "management_decision", labelEn: "Decision", labelAr: "", value: "Approved" },
+      ],
+    });
+    assert.deepEqual(
+      layout.sections.map((section) => section.key),
+      ["employee", "loan", "hr_verification", "management_decision", "ack"],
+    );
+    assert.equal(
+      layout.sections.find((section) => section.key === "loan")?.rows
+        .find((row) => row.key === "monthly_salary_kwd")?.value,
+      "260",
+    );
+    assert.equal(
+      layout.sections.find((section) => section.key === "hr_verification")?.rows
+        .find((row) => row.key === "years_of_service")?.value,
+      "3.4",
+    );
+    assert.equal(
+      layout.sections.find((section) => section.key === "management_decision")?.rows
+        .find((row) => row.key === "hr_manager_name")?.value,
+      "Sara",
+    );
+  });
+
+  it("adds the rider declaration and name to the accident tail", () => {
+    const layout = buildEsignDocumentLayout({
+      kind: "general",
+      employee: sampleEmployee({ employee_name: "Ahmed Ali" }),
+      declarationEn: "I declare the report is true.",
+      declarationAr: "أقر بأن التقرير صحيح.",
+      fields: [
+        { key: "request_kind", labelEn: "Kind", labelAr: "", value: "accident" },
+        { key: "rider_name", labelEn: "Rider", labelAr: "", value: "Ahmed Ali" },
+      ],
+    });
+    assert.equal(layout.accident, true);
+    assert.equal(layout.riderName, "Ahmed Ali");
+    const tail = layout.sections.find((section) => section.key === "rider_declaration");
+    assert.equal(tail?.rows.length, 0);
+    assert.equal(tail?.body?.en, "I declare the report is true.");
+  });
+
+  it("prints a payslip verification section", () => {
+    const layout = buildEsignDocumentLayout({
+      kind: "payslip",
+      employee: sampleEmployee(),
+      fields: [
+        { key: "hr_manager_name", labelEn: "HR", labelAr: "", value: "Sara" },
+        { key: "basis", labelEn: "Basis", labelAr: "", value: "26 days" },
+      ],
+    });
+    const verification = layout.sections.find((section) => section.key === "payslip_verification");
+    assert.equal(verification?.rows.find((row) => row.key === "hr_manager_name")?.value, "Sara");
   });
 });
 

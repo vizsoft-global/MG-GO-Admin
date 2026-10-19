@@ -169,6 +169,9 @@ async function readRiderDay(driverId, day) {
       .collection("driver_location_events")
       .where("driver_id", "==", driverId)
       .where("day", "==", day)
+      // startAfter needs an explicit order; without it Firestore can skip rows
+      // whose document IDs sit on either side of the cursor.
+      .orderBy("__name__")
       .limit(PAGE);
     if (cursor) query = query.startAfter(cursor);
     const snap = await query.get();

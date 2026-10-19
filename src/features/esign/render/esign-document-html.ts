@@ -9,6 +9,14 @@ import { renderClientSheetHtml } from "./esign-client-sheet";
 
 export const SIGNATURE_BAND_PT = 140;
 
+/**
+ * Bump when the layout/stylesheet changes shape. Stored `sheet_html` is
+ * otherwise frozen at send time, so an unsigned request would keep printing the
+ * old design forever. `esign_requests.sheet_render_version` records the value
+ * used to build the stored HTML; a miss re-renders an unsigned row once.
+ */
+export const ESIGN_SHEET_RENDER_VERSION = 6;
+
 /** Inline MG mark when Settings has no logo, or `/logo.png` is missing from public/. */
 export const ESIGN_DEFAULT_LOGO_SRC =
   "data:image/svg+xml," +
@@ -138,11 +146,31 @@ export function renderLayoutHtml(
 
 /**
  * Shrink only the overflow band (penalty/loan tail, or payslip/general body).
- * Named signature boxes stay at their unscaled coordinates.
+ * The page body is capped by the A4 content box minus the signature dock — not
+ * by `.page-fit.clientHeight`, which is the content itself once the page is
+ * allowed to grow. Named signature boxes stay at their unscaled coordinates.
+ *
+ * This function is serialized into Chromium by `page.evaluate`, so every
+ * constant and helper must live *inside* it. A module-level reference would
+ * throw in the browser and leave the PDF unscaled.
  */
 export function fitEsignSinglePage(root?: ParentNode): void {
   const scope: ParentNode = root ?? document;
-  const fit = (boxSel: string, innerSel: string) => {
+  const a4PageHeight = (841.89 * 96) / 72;
+  const minFitZoom = 0.72;
+
+  const pageBodyLimit = (page: HTMLElement): number => {
+    const view = page.ownerDocument.defaultView;
+    const style = view?.getComputedStyle(page);
+    const padTop = style ? Number.parseFloat(style.paddingTop) || 0 : 0;
+    const padBottom = style ? Number.parseFloat(style.paddingBottom) || 0 : 0;
+    const dock = page.querySelector(".sheet-dock");
+    const dockHeight =
+      dock && "offsetHeight" in dock ? (dock as HTMLElement).offsetHeight : 0;
+    return Math.max(0, a4PageHeight - padTop - padBottom - dockHeight - 2);
+  };
+
+  const fit = (boxSel: string, innerSel: string, limitOverride?: number) => {
     const box = scope.querySelector(boxSel);
     const inner = scope.querySelector(innerSel);
     if (!box || !inner || !("style" in inner) || !("clientHeight" in box) || !("scrollHeight" in inner)) {
@@ -151,13 +179,21 @@ export function fitEsignSinglePage(root?: ParentNode): void {
     const boxEl = box as HTMLElement;
     const innerEl = inner as HTMLElement;
     innerEl.style.setProperty("zoom", "1");
-    const limit = innerEl.clientHeight > 0 ? innerEl.clientHeight : boxEl.clientHeight;
+    const limit =
+      limitOverride && limitOverride > 0
+        ? limitOverride
+        : innerEl.clientHeight > 0
+          ? innerEl.clientHeight
+          : boxEl.clientHeight;
     const needed = innerEl.scrollHeight;
     if (needed > limit + 1 && limit > 0) {
-      innerEl.style.setProperty("zoom", String(limit / needed));
+      innerEl.style.setProperty("zoom", String(Math.max(minFitZoom, limit / needed)));
     }
   };
-  fit(".page", ".page-fit");
+  const page = scope.querySelector(".page");
+  const pageLimit =
+    page && "clientHeight" in page ? pageBodyLimit(page as HTMLElement) : undefined;
+  fit(".page", ".page-fit", pageLimit);
   fit(".tail", ".tail-fit");
   fit(".sheet-body", ".sheet-body-fit");
 }

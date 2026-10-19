@@ -3,8 +3,13 @@
  *
  * The Worker cannot mint a staff ID token. These three functions are public
  * invokers gated by `WORKER_SHARED_SECRET` (`X-Worker-Secret`), the same value
- * stored as a Wrangler secret. Region, CPU, concurrency and max instances come
- * from `core/init` and are not overridden here.
+ * stored as a Wrangler secret.
+ *
+ * These doors carry the fleet's GPS burst. They intentionally override the
+ * global `cpu: 0.08 / concurrency: 1 / maxInstances: 2` shape: a single-flight
+ * door capped at two instances turns a normal rider reconnect wave into 429s,
+ * and every refused publish falls back to a Firestore write. Cloud Run rejects
+ * concurrent execution below one full CPU, so `cpu: 1` is mandatory here.
  */
 import "../core/init";
 import { timingSafeEqual } from "node:crypto";
@@ -21,6 +26,10 @@ const workerHttp = {
   secrets: [workerSharedSecret],
   invoker: "public" as const,
   timeoutSeconds: 120,
+  cpu: 1,
+  concurrency: 40,
+  maxInstances: 20,
+  minInstances: 1,
 };
 
 type OpsEvent = {

@@ -81,6 +81,11 @@ export type AttendanceRow = {
   gps_is_mocked: boolean;
   live_status: string;
   compliance_score: number | null;
+  check_in_photo_key: string | null;
+  check_in_photo_at: string | null;
+  check_in_restaurant_id: string | null;
+  check_in_restaurant_name: string | null;
+  check_in_distance_m: number | null;
 };
 
 function asDate(value: unknown): Date | null {
@@ -450,5 +455,10 @@ function composeRow(
     gps_is_mocked: gpsMocked,
     live_status: liveStatus,
     compliance_score: complianceScore,
+    check_in_photo_key: asString(raw[ATT.checkInPhotoKey]),
+    check_in_photo_at: iso(asDate(raw[ATT.checkInPhotoAt])),
+    check_in_restaurant_id: asString(raw[ATT.checkInRestaurantId]),
+    check_in_restaurant_name: asString(raw[ATT.checkInRestaurantName]),
+    check_in_distance_m: asNumber(raw[ATT.checkInDistanceM]) ?? null,
   };
 }

@@ -9,7 +9,9 @@ import {
   completeStampLayout,
   cssToPiece,
   defaultStampLayout,
+  layoutAllPieces,
   layoutAroundSignature,
+  layoutSignatureOnly,
   missingStampPieces,
   parseStampLayout,
   pieceFromPageRect,
@@ -39,16 +41,20 @@ describe("stamp layout", () => {
     assert.equal(signature.yPt, employee.yPt);
     assert.equal(signature.wPt, employee.wPt);
     assert.equal(signature.hPt, employee.hPt);
-    assert.equal(defaultStampLayout("general").pieces.length, 9);
+    assert.equal(defaultStampLayout("general").pieces.length, 2);
+    assert.deepEqual(
+      defaultStampLayout("general").pieces.map((piece) => piece.id),
+      ["signature", "name"],
+    );
   });
 
-  it("keeps a saved four-piece layout and fills the extra employee boxes", () => {
+  it("keeps a saved four-piece layout and does not add optional boxes", () => {
     const parsed = parseStampLayout(sample);
     assert.ok(parsed);
     assert.equal(parsed.pieces.length, 4);
     assert.deepEqual(parsed, parseInFunctions(sample));
     const completed = completeStampLayout(parsed);
-    assert.equal(completed.pieces.length, 9);
+    assert.equal(completed.pieces.length, 4);
     assert.equal(completed.pieces.find((piece) => piece.id === "signature")?.xPt, 446);
     const withExtra = {
       pieces: [
@@ -60,7 +66,7 @@ describe("stamp layout", () => {
     assert.deepEqual(parseStampLayout(withExtra), parseInFunctions(withExtra));
     const reopened = parseStampLayout(withExtra);
     assert.ok(reopened);
-    assert.equal(completeStampLayout(reopened).pieces.length, 9);
+    assert.equal(completeStampLayout(reopened).pieces.length, 5);
   });
 
   it("keeps a box an operator deleted and restores it only on request", () => {
@@ -69,11 +75,11 @@ describe("stamp layout", () => {
     assert.ok(parsed);
     assert.deepEqual(parsed, parseInFunctions(raw));
     const completed = completeStampLayout(parsed);
-    assert.equal(completed.pieces.length, 7);
+    assert.equal(completed.pieces.length, 4);
     assert.equal(completed.pieces.some((piece) => piece.id === "zone"), false);
-    assert.deepEqual(completeStampLayout(completed).pieces.length, 7);
+    assert.deepEqual(completeStampLayout(completed).pieces.length, 4);
     const restored = restoreStampPieces(completed);
-    assert.equal(restored.pieces.length, 9);
+    assert.equal(restored.pieces.length, 6);
     assert.equal(restored.pieces.filter((piece) => piece.id === "zone").length, 1);
     assert.equal(restored.removed, undefined);
     assert.ok(stampLayoutKey(completed) !== stampLayoutKey(restored));
@@ -110,14 +116,22 @@ describe("stamp layout", () => {
   });
 
   it("rejects a layout that is missing a piece", () => {
-    assert.equal(parseStampLayout({ pieces: sample.pieces.slice(0, 3) }), null);
-    assert.equal(parseInFunctions({ pieces: sample.pieces.slice(0, 3) }), null);
+    assert.equal(parseStampLayout({ pieces: sample.pieces.slice(1, 2) }), null);
+    assert.equal(parseInFunctions({ pieces: sample.pieces.slice(1, 2) }), null);
   });
 
   it("accepts the same JSON in the panel and in functions", () => {
     const panel = parseStampLayout(sample);
     const functions = parseInFunctions(sample);
     assert.deepEqual(panel, functions);
+  });
+
+  it("accepts a signature-only layout for the reference sheets", () => {
+    const only = layoutSignatureOnly(sample.pieces[0]);
+    assert.deepEqual(only.pieces.map((piece) => piece.id), ["signature"]);
+    assert.equal(parseStampLayout(only)?.pieces.length, 1);
+    assert.equal(parseInFunctions(only)?.pieces.length, 1);
+    assert.equal(completeStampLayout(only).pieces.length, 1);
   });
 
   it("round-trips a box through CSS pixels", () => {
@@ -202,7 +216,7 @@ describe("stamp layout", () => {
     const missing = missingStampPieces(layout);
     assert.equal(missing.includes("employee_id"), true);
     assert.equal(missing.includes("company"), true);
-    assert.equal(missing.includes("position"), false);
+    assert.equal(missing.includes("position"), true);
     assert.equal(missing.includes("signature"), false);
 
     const added = addStampPiece(layout, "employee_id");
@@ -219,7 +233,7 @@ describe("stamp layout", () => {
     });
     const signature = layout.pieces.find((piece) => piece.id === "signature");
     assert.ok(signature);
-    const target = layoutAroundSignature(signature).pieces.find(
+    const target = layoutAllPieces(signature).pieces.find(
       (piece) => piece.id === "employee_id",
     );
     assert.ok(target);

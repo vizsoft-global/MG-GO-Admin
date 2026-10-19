@@ -30,6 +30,9 @@ export const DEFAULT_DRIVER_APP_SETTINGS = {
   driver_app_maintenance_message:
     "The driver app is temporarily unavailable. Please try again later.",
   driver_app_delivery_proximity_meters: 500,
+  driver_app_checkin_photo_required: true,
+  driver_app_early_drop_meters: 50,
+  driver_app_proof_ocr_mode: "block" as "block" | "warn" | "off",
 } as const;
 
 export const MIN_DELIVERY_PROXIMITY_METERS = 0;

@@ -64,6 +64,11 @@ export type AttendanceDailyRow = {
   gps_is_mocked: boolean | null;
   live_status: string;
   compliance_score: number | null;
+  check_in_photo_key: string | null;
+  check_in_photo_at: string | null;
+  check_in_restaurant_id: string | null;
+  check_in_restaurant_name: string | null;
+  check_in_distance_m: number | null;
 };
 
 export type AttendanceReportingKpis = {

@@ -3,8 +3,12 @@ import {
   fitImageInSlot,
   INVALID_SIGNATURE_SLOT,
   isUsableSlot,
+  normalizeDocumentKind,
+  parseSignatureSlots,
   resolveEmployeeStampSlot,
+  slotsForKind,
   type SignSlot,
+  type SignSlotRole,
 } from "./esign-signature-slots";
 
 /**
@@ -150,10 +154,26 @@ function resolveStampSlot(input: {
   });
 }
 
-export const STAMP_CORE_IDS = ["signature", "name", "date", "code"] as const;
-export const STAMP_EXTRA_IDS = ["employee_id", "company", "position", "civil_id", "zone"] as const;
+/**
+ * A saved layout must always carry the signature box. The name caption is
+ * optional: the reference sheets already print the rider's name.
+ */
+export const STAMP_CORE_IDS = ["signature"] as const;
+export const STAMP_EXTRA_IDS = [
+  "name",
+  "date",
+  "code",
+  "employee_id",
+  "company",
+  "position",
+  "civil_id",
+  "zone",
+] as const;
 export const STAMP_PIECE_IDS = [...STAMP_CORE_IDS, ...STAMP_EXTRA_IDS] as const;
 export type StampPieceId = (typeof STAMP_PIECE_IDS)[number];
+
+/** What a fresh layout draws when the sheet has room for a caption. */
+export const STAMP_DEFAULT_IDS = ["signature", "name"] as const;
 
 export type StampTextLabels = {
   name: string;
@@ -189,6 +209,65 @@ export type StampPlacement = {
   signature: SignSlot;
   texts: StampTextPlacement[];
 };
+
+/** One embedded signature image: the rider, or a member of staff countersigning. */
+export type ComposeStamp = {
+  bytes: Uint8Array;
+  kind: "png" | "jpeg";
+  slot: SignSlot;
+  captions: string[];
+  placement?: StampPlacement | null;
+  /** Staff stamps keep one caption line inside the slot (name under ink). */
+  reserveCaption?: boolean;
+};
+
+/**
+ * The staff signature boxes a document kind actually prints, in signing order.
+ * `ack_received` / `ack_not_received` are acknowledgement boxes, not staff
+ * signatures, so they are never in this list.
+ */
+export const STAFF_STAMP_SLOT_ROLES: Record<
+  ReturnType<typeof normalizeDocumentKind>,
+  readonly SignSlotRole[]
+> = {
+  penalty: ["hr", "gm"],
+  loan: ["hr"],
+  payslip: ["hr"],
+  general: ["hr"],
+};
+
+export type StaffStampSigner = { id: string; sortOrder: number };
+
+/**
+ * Deterministic staff → slot mapping: ascending `sort_order`, then id, into the
+ * kind's printed boxes. A signer past the last box is skipped (the caller logs
+ * it) rather than stamped over the rider or the management caption.
+ */
+export function assignStaffStampSlots<T extends StaffStampSigner>(input: {
+  kind?: unknown;
+  persistedSlots?: unknown;
+  signers: readonly T[];
+}): Array<T & { slot: SignSlot }> {
+  const kind = normalizeDocumentKind(input.kind);
+  const parsed = parseSignatureSlots(input.persistedSlots);
+  const slots = parsed ?? slotsForKind(kind);
+  const roles = STAFF_STAMP_SLOT_ROLES[kind];
+  const ordered = [...input.signers].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id),
+  );
+  const out: Array<T & { slot: SignSlot }> = [];
+  for (const signer of ordered) {
+    if (out.length >= roles.length) break;
+    const role = roles[out.length];
+    // The printed sheet decides which boxes exist. A measured sheet without a
+    // manager box (the accident declaration is one) skips the staff stamp
+    // rather than drawing it on a line the rider never saw.
+    const slot = slots.find((row) => row.role === role && isUsableSlot(row));
+    if (!slot) continue;
+    out.push({ ...signer, slot });
+  }
+  return out;
+}
 
 function finiteNumber(value: unknown): number | null {
   const number = typeof value === "number" ? value : Number(value);
@@ -319,25 +398,49 @@ function clampToPage(
   };
 }
 
+/** Smallest gap kept between a caption baseline and the bottom of its slot. */
+export const CAPTION_BOTTOM_GAP = 1;
+
 function drawStampInSlot(
   page: PDFPage,
   signature: PDFImage,
   captions: string[],
   font: PDFFont,
   slot: SignSlot,
+  reserveCaption = false,
 ) {
-  const fitted = fitImageInSlot(signature.width, signature.height, slot);
+  // A staff stamp keeps one caption line (the signer's name) under the ink.
+  // The rider's stamp fills the whole line; the sheet already prints their name.
+  const reserve =
+    reserveCaption && captions.length > 0
+      ? Math.min(Math.max(slot.hPt - 10, 0), CAPTION_LEADING + 2)
+      : 0;
+  const imageBox: SignSlot = {
+    ...slot,
+    yPt: slot.yPt + reserve,
+    hPt: Math.max(8, slot.hPt - reserve),
+  };
+  const fitted = fitImageInSlot(signature.width, signature.height, imageBox);
   page.drawImage(signature, {
     x: fitted.x,
     y: fitted.y,
     width: fitted.w,
     height: fitted.h,
   });
-  const captionTop = fitted.y - 2;
-  captions.forEach((line, index) => {
-    const y = captionTop - (index + 1) * CAPTION_LEADING;
-    if (y < slot.yPt - 4) return;
+  const lowestBaseline = slot.yPt + CAPTION_BOTTOM_GAP;
+  const highestBaseline =
+    reserve > 0 ? slot.yPt + reserve - CAPTION_SIZE : slot.yPt + slot.hPt - CAPTION_SIZE;
+  let y =
+    reserve > 0
+      ? Math.min(highestBaseline, fitted.y - 2)
+      : Math.min(highestBaseline, fitted.y - 2 - CAPTION_LEADING);
+  for (const line of captions) {
+    if (y < lowestBaseline) break;
     const textWidth = font.widthOfTextAtSize(line, CAPTION_SIZE);
+    if (textWidth > slot.wPt) {
+      y -= CAPTION_LEADING;
+      continue;
+    }
     page.drawText(line, {
       x: Math.min(Math.max(slot.xPt, fitted.x), slot.xPt + slot.wPt - textWidth),
       y,
@@ -345,7 +448,8 @@ function drawStampInSlot(
       font,
       color: rgb(0.25, 0.28, 0.32),
     });
-  });
+    y -= CAPTION_LEADING;
+  }
 }
 
 async function loadDocument(bytes: Uint8Array, kind: "pdf" | "png" | "jpeg") {
@@ -373,36 +477,96 @@ async function loadDocument(bytes: Uint8Array, kind: "pdf" | "png" | "jpeg") {
 export async function composeSignedPdf(input: {
   sourceBytes: Uint8Array;
   sourceKind: "pdf" | "png" | "jpeg";
-  signatureBytes: Uint8Array;
-  signatureKind: "png" | "jpeg";
+  /** The rider's signature. Omitted when `stamps` carries every signature. */
+  signatureBytes?: Uint8Array;
+  signatureKind?: "png" | "jpeg";
   captions: string[];
   slot?: SignSlot;
   kind?: unknown;
   persistedSlots?: unknown;
   placement?: StampPlacement | null;
+  /** Rider first, then staff in signer order. Backward compatible when absent. */
+  stamps?: ComposeStamp[];
 }): Promise<{ pdfBytes: Uint8Array; pageCount: number }> {
   const pdf = await loadDocument(input.sourceBytes, input.sourceKind);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const signature =
-    input.signatureKind === "png"
-      ? await pdf.embedPng(input.signatureBytes)
-      : await pdf.embedJpg(input.signatureBytes);
   const pages = pdf.getPages();
   const pageCount = pages.length;
   if (pageCount === 0) {
     throw new Error("empty_document");
   }
-  const placement = input.placement ?? null;
-  const slot = placement ? placement.signature : resolveStampSlot(input);
-  const pageIndex = Math.min(Math.max(slot.page, 1), pageCount) - 1;
-  const page = pages[pageIndex];
-  if (placement) {
-    drawPlacement(page, signature, font, placement);
-  } else {
-    const captions = input.captions.filter((line) => line.length > 0 && canEncodeWinAnsi(font, line));
-    drawStampInSlot(page, signature, captions, font, slot);
+
+  const stamps: ComposeStamp[] = [...(input.stamps ?? [])];
+  if (stamps.length === 0) {
+    if (!input.signatureBytes || !input.signatureKind) {
+      throw new Error(INVALID_SIGNATURE_SLOT);
+    }
+    const placement = input.placement ?? null;
+    stamps.push({
+      bytes: input.signatureBytes,
+      kind: input.signatureKind,
+      slot: placement ? placement.signature : resolveStampSlot(input),
+      captions: input.captions,
+      placement,
+    });
+  }
+
+  for (const stamp of stamps) {
+    if (stamp.kind !== "png" && stamp.kind !== "jpeg") {
+      throw new Error(INVALID_SIGNATURE_SLOT);
+    }
+    const image =
+      stamp.kind === "png" ? await pdf.embedPng(stamp.bytes) : await pdf.embedJpg(stamp.bytes);
+    const pageIndex = Math.min(Math.max(stamp.slot.page, 1), pageCount) - 1;
+    const page = pages[pageIndex];
+    if (stamp.placement) {
+      drawPlacement(page, image, font, stamp.placement);
+      continue;
+    }
+    const captions = stamp.captions.filter(
+      (line) => line.length > 0 && canEncodeWinAnsi(font, line),
+    );
+    drawStampInSlot(page, image, captions, font, stamp.slot, stamp.reserveCaption === true);
   }
   return { pdfBytes: await pdf.save(), pageCount };
+}
+
+/**
+ * Fingerprint of everything that is drawn into the signed copy. Recompose when
+ * it changes — a new signature, a moved stamp, a re-rendered sheet — without
+ * needing `force`. Pure string math so both the Next server action and the
+ * Cloud Function compute the same value.
+ */
+export function signedDocumentSourceHash(input: {
+  documentKey: string;
+  employeeSignatureKey: string;
+  employeeSignedAt?: string | null;
+  stampLayout?: unknown;
+  signatureSlots?: unknown;
+  sheetRenderVersion?: number | null;
+  staff: ReadonlyArray<{ id: string; signatureKey: string; signedAt?: string | null }>;
+}): string {
+  const staff = [...input.staff]
+    .map((row) => [row.id, row.signatureKey, row.signedAt ?? ""].join(":"))
+    .sort();
+  const payload = JSON.stringify({
+    document: input.documentKey,
+    employee: [input.employeeSignatureKey, input.employeeSignedAt ?? ""],
+    layout: input.stampLayout ?? null,
+    slots: input.signatureSlots ?? null,
+    version: input.sheetRenderVersion ?? null,
+    staff,
+  });
+  let a = 0x811c9dc5;
+  let b = 0x01000193;
+  for (let i = 0; i < payload.length; i += 1) {
+    const code = payload.charCodeAt(i);
+    a ^= code;
+    a = Math.imul(a, 0x01000193) >>> 0;
+    b = (b + code) >>> 0;
+    b = Math.imul(b, 0x85ebca6b) >>> 0;
+  }
+  return `${a.toString(16).padStart(8, "0")}${b.toString(16).padStart(8, "0")}`;
 }
 
 function drawPlacement(

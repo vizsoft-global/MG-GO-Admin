@@ -292,11 +292,18 @@ function relName(rel: { name: string } | { name: string }[] | null | undefined):
   return row?.name ?? "—";
 }
 
+export type DeliveryFlagFilter =
+  | "all"
+  | "early_drop"
+  | "outside_zone"
+  | "photo_mismatch";
+
 export type DeliveriesQueryFilter = {
   status?: string;
   zoneId?: string;
   partnerId?: string;
   cancelReason?: string;
+  flags?: DeliveryFlagFilter;
   search?: string;
   searchShape?: DeliverySearchShape;
   dateFrom?: string;
@@ -432,7 +439,23 @@ function matchesCancel(row: Row, code: string): boolean {
 }
 
 function needsMemoryFilter(params: DeliveriesQueryFilter): boolean {
-  return Boolean(params.search?.trim() || (params.cancelReason && params.cancelReason !== "all"));
+  return Boolean(
+    params.search?.trim() ||
+      (params.cancelReason && params.cancelReason !== "all") ||
+      (params.flags && params.flags !== "all"),
+  );
+}
+
+function rowMatchesFlag(row: Row, flags: DeliveryFlagFilter | undefined): boolean {
+  if (!flags || flags === "all") return true;
+  switch (flags) {
+    case "early_drop":
+      return row["is_early_drop"] === true;
+    case "outside_zone":
+      return row["is_out_of_zone"] === true;
+    case "photo_mismatch":
+      return row["order_proof_ocr_matched"] === false;
+  }
 }
 
 function indexedQuery(db: Firestore, params: DeliveriesQueryFilter): Query {
@@ -467,6 +490,7 @@ function rowMatches(row: Row, params: DeliveriesQueryFilter, driverIds: string[]
   if (params.cancelReason && params.cancelReason !== "all" && !matchesCancel(row, params.cancelReason)) {
     return false;
   }
+  if (!rowMatchesFlag(row, params.flags)) return false;
   return true;
 }
 
@@ -840,6 +864,9 @@ function deliveryRoute(
   offset: number,
   limit: number,
 ): DeliveryListRoute {
+  if (params.flags && params.flags !== "all") {
+    return { kind: "scan", reasons: ["integrity_flags"] };
+  }
   return routeDeliveryList({
     search: params.search,
     searchShape: params.searchShape,

@@ -67,7 +67,9 @@ import {
   type FleetTrackingStatus,
 } from "../../../../src/features/live-tracking-v2/fleet-status";
 
-const ROSTER_TTL_MS = 60_000;
+const ROSTER_TTL_MS = 120_000;
+/** `/refresh` is operator-driven; a burst of clicks must not herd the door. */
+const FORCED_ROSTER_MIN_MS = 60_000;
 const TOKEN_CACHE_TTL_MS = 10 * 60_000;
 /**
  * How long a token Firebase refused stays refused without asking again. Long enough to
@@ -238,6 +240,8 @@ export class FleetRoom implements DurableObject {
   private readonly env: Env;
 
   private readonly entities = new Map<string, Entity>();
+  /** Coalesces the targeted reads for a rider whose first fix arrives after the roster. */
+  private readonly driverLoads = new Map<string, Promise<Entity | null>>();
   private readonly idIndex = new Map<number, string>();
   private nextIdIdx = 1;
 
@@ -257,6 +261,7 @@ export class FleetRoom implements DurableObject {
   >();
 
   private rosterLoadedAt = 0;
+  private lastForcedRosterAt = 0;
   private bootstrapping: Promise<void> | null = null;
 
   private seq = 0;
@@ -515,7 +520,13 @@ export class FleetRoom implements DurableObject {
   }
 
   private async loadRoster(force: boolean): Promise<void> {
-    if (!force && Date.now() - this.rosterLoadedAt < ROSTER_TTL_MS) return;
+    const now = Date.now();
+    if (force) {
+      if (now - this.lastForcedRosterAt < FORCED_ROSTER_MIN_MS) return;
+      this.lastForcedRosterAt = now;
+    } else if (now - this.rosterLoadedAt < ROSTER_TTL_MS) {
+      return;
+    }
 
     const snapshot = await callWorkerFunction<{
       settings: Record<string, number> | null;
@@ -1008,11 +1019,27 @@ export class FleetRoom implements DurableObject {
     };
   }
 
-  private async loadSingleDriver(driverId: string): Promise<Entity | null> {
+  private loadSingleDriver(driverId: string): Promise<Entity | null> {
+    const existing = this.driverLoads.get(driverId);
+    if (existing) return existing;
+    const pending = this.fetchSingleDriver(driverId);
+    this.driverLoads.set(driverId, pending);
+    const clear = () => {
+      if (this.driverLoads.get(driverId) === pending) {
+        this.driverLoads.delete(driverId);
+      }
+    };
+    pending.then(clear, clear);
+    return pending;
+  }
+
+  private async fetchSingleDriver(driverId: string): Promise<Entity | null> {
+    // A rider who clocked in after the roster is recent, not a 24-hour ghost.
+    // The old 1440-minute window kept every departed rider in the snapshot read.
     const snapshot = await callWorkerFunction<{
       drivers: SnapshotDriver[];
       settings: Record<string, number> | null;
-    }>(this.env, "workerFleetRead", { op: "snapshot", seen_within_minutes: 1440 });
+    }>(this.env, "workerFleetRead", { op: "snapshot", seen_within_minutes: 60 });
 
     const row = (snapshot.drivers ?? []).find((d) => d.driver_id === driverId);
     if (!row) return null;

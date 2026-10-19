@@ -9,7 +9,11 @@ import {
   kuwaitDayString,
 } from "../core/kuwait";
 import { kuwaitWeekStart } from "../core/money";
-import { loadAppSettings, loadHomeSnapshotFlags } from "../core/settings";
+import {
+  loadAppSettings,
+  loadDriverAppSafetySettings,
+  loadHomeSnapshotFlags,
+} from "../core/settings";
 import { requireRider, riderError } from "../core/rider";
 import { applyAttendanceRollup } from "../core/rollups";
 import { bumpRiderSignal } from "../core/rider-signals";
@@ -22,10 +26,18 @@ import {
   isoTimestamp,
   logDriverOperation,
   numberOrNull,
+  pick,
   pickBoolean,
+  pickText,
   pickTriBool,
   type Dict,
 } from "./_shared";
+import {
+  isCheckInPhotoKeyForKey,
+  loadCheckInCandidates,
+  matchCheckInRestaurant,
+  nearestCheckInRestaurant,
+} from "./check-in-gate";
 import {
   findActiveShift,
   parseShiftTime,
@@ -1997,19 +2009,88 @@ export const driverSetDutyState = measureOnCall("driverSetDutyState", async (req
     }
   }
 
+  const existingAttendance = isOnDuty ? await attendanceLogOn(ctx.uid, today) : null;
+  const freshCheckIn =
+    isOnDuty &&
+    (!existingAttendance || (existingAttendance.data ?? {})["check_in_at"] == null);
+
+  type CheckInStamp = {
+    photoKey: string | null;
+    restaurantId: string | null;
+    restaurantName: string | null;
+    distanceM: number | null;
+  };
+  let checkInStamp: CheckInStamp | null = null;
+
+  if (freshCheckIn) {
+    const safety = await loadDriverAppSafetySettings();
+    const photoKey = pickText(data, "p_check_in_photo_key", "check_in_photo_key", "checkInPhotoKey");
+    const lat = numberOrNull(pick(data, "p_lat", "lat", "check_in_lat", "checkInLat"));
+    const lng = numberOrNull(pick(data, "p_lng", "lng", "check_in_lng", "checkInLng"));
+    const requestedRestaurantId = pickText(
+      data,
+      "p_restaurant_id",
+      "restaurant_id",
+      "checkInRestaurantId",
+    );
+
+    if (safety.checkInPhotoRequired && !photoKey) {
+      throw riderError("failed-precondition", "check_in_photo_required");
+    }
+    if (photoKey && !isCheckInPhotoKeyForKey(ctx.uid, photoKey)) {
+      throw riderError("invalid-argument", "invalid_check_in_photo");
+    }
+    if (lat === null || lng === null) {
+      throw riderError("failed-precondition", "check_in_location_required");
+    }
+
+    const candidates = await loadCheckInCandidates(ctx.uid, driver);
+    const match = matchCheckInRestaurant({
+      candidates,
+      lat,
+      lng,
+      proximityMeters: safety.proximityMeters > 0 ? safety.proximityMeters : 500,
+      requestedId: requestedRestaurantId,
+    });
+    if (!match) {
+      const nearest = nearestCheckInRestaurant({ candidates, lat, lng });
+      throw riderError("failed-precondition", "check_in_outside_restaurant_range", {
+        nearest_restaurant: nearest?.name ?? null,
+        nearest_restaurant_id: nearest?.id ?? null,
+        distance_m: nearest?.distanceM ?? null,
+      });
+    }
+
+    checkInStamp = {
+      photoKey,
+      restaurantId: match.id,
+      restaurantName: match.name,
+      distanceM: match.distanceM,
+    };
+  }
+
   await db.collection(COLLECTIONS.drivers).doc(ctx.uid).set(
     { is_on_duty: isOnDuty, updated_at: stamp },
     { merge: true },
   );
 
   if (isOnDuty) {
-    const existing = await attendanceLogOn(ctx.uid, today);
+    const existing = existingAttendance;
     const payload: Dict = {
       driver_id: ctx.uid,
       log_date: today,
       check_out_at: null,
       check_out_reason: null,
       updated_at: stamp,
+      ...(checkInStamp
+        ? {
+            [ATT.checkInPhotoKey]: checkInStamp.photoKey,
+            [ATT.checkInPhotoAt]: stamp,
+            [ATT.checkInRestaurantId]: checkInStamp.restaurantId,
+            [ATT.checkInRestaurantName]: checkInStamp.restaurantName,
+            [ATT.checkInDistanceM]: checkInStamp.distanceM,
+          }
+        : {}),
     };
     const zoneId = asString(driver["zone_id"]);
     // Identity and the shift window are denormalised at clock-in so the admin
@@ -2174,7 +2255,14 @@ export const driverSetDutyState = measureOnCall("driverSetDutyState", async (req
     success: true,
     recordType: "driver",
     recordId: ctx.uid,
-    detail: { is_on_duty: isOnDuty, is_online: isOnline, duty_changed: isOnDuty !== wasOnDuty },
+    detail: {
+      is_on_duty: isOnDuty,
+      is_online: isOnline,
+      duty_changed: isOnDuty !== wasOnDuty,
+      check_in_restaurant_id: checkInStamp?.restaurantId ?? null,
+      check_in_distance_m: checkInStamp?.distanceM ?? null,
+      check_in_photo: checkInStamp?.photoKey != null,
+    },
   });
 
   const refreshed = await db.collection(COLLECTIONS.drivers).doc(ctx.uid).get();

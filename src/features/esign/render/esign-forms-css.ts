@@ -7,7 +7,7 @@
  */
 export const ESIGN_FORMS_CSS = `/* =====================================================================
    DPD HR Forms — shared stylesheet
-   Page: A4 portrait, 1 page per document. Print backgrounds must be ON.
+   Page: A4 portrait, up to 2 pages per document. Print backgrounds must be ON.
    ===================================================================== */
 
 /* ---------- Design tokens ---------- */
@@ -23,8 +23,6 @@ export const ESIGN_FORMS_CSS = `/* =============================================
   --ok:       #1F7A55;   --ok-tint:   #E3F3EC;
   --warn:     #8A5A00;   --warn-tint: #FFF3DC;
   --dots:     #8A90A0;   /* signature lines         */
-  --sig-box:  #DC2626;   /* employee signature box  */
-  --name-box: #2563EB;   /* employee name box       */
 }
 
 @page { size: A4; margin: 0; }
@@ -40,8 +38,14 @@ html, body { direction: ltr; }
 .ar-start { text-align: left; }           /* Arabic line placed under English, left edge */
 
 /* ---------- Page ---------- */
-.page { width: 210mm; height: 297mm; padding: 10mm 12mm 8mm; display: flex; flex-direction: column; overflow: hidden; }
+.page { width: 210mm; height: 297mm; min-height: 297mm; padding: 10mm 12mm 8mm; display: flex; flex-direction: column; overflow: hidden; }
 @media screen { body { background: #E6E8EC; } .page { background: #fff; margin: 10mm auto; box-shadow: 0 2px 14px rgba(0,0,0,.12); } }
+/* Print: a long payslip becomes a second page instead of pushing the dock over the body. */
+@media print {
+  .page { height: auto; min-height: 297mm; overflow: visible; break-after: page; page-break-after: always; }
+  .page:last-child { break-after: auto; page-break-after: auto; }
+  .box, .sec, .sig, .sheet-dock, .doc-header, .doc-footer, .management, .employee-block, tr { break-inside: avoid; page-break-inside: avoid; }
+}
 
 /* ---------- Header: document type only ---------- */
 .doc-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 3mm; }
@@ -52,7 +56,7 @@ html, body { direction: ltr; }
 
 /* ---------- Boxes & tables ---------- */
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-td, th { border: .5pt solid var(--line); padding: 1.3mm 2.2mm; vertical-align: middle; height: 8.5mm; text-align: left; }
+td, th { border: .5pt solid var(--line); padding: 1.3mm 2.2mm; vertical-align: middle; height: 8.5mm; text-align: left; line-height: 1.2; word-break: break-word; }
 .box { border: .9pt solid var(--navy); margin-top: 4.2mm; background: #fff; }
 .box--flush { margin-top: 0; }
 .box--open { border: 0; }
@@ -71,13 +75,13 @@ td, th { border: .5pt solid var(--line); padding: 1.3mm 2.2mm; vertical-align: m
 
 /* Label cell: English left, Arabic right, same line */
 .lab { background: var(--tint); color: var(--muted); font-size: 7.1pt; font-weight: 500; }
-.lab .row { display: flex; justify-content: space-between; align-items: center; gap: 1.5mm; }
-.lab .row > span { white-space: nowrap; }
+.lab .row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .2mm 1.5mm; min-width: 0; }
+.lab .row > span { min-width: 0; overflow-wrap: anywhere; }
 .lab .ar { font-size: 8pt; color: var(--ar-label); }
 .lab--strong { color: var(--ink); font-weight: 600; }
 
 /* Value cell */
-.val { font-weight: 600; font-size: 8.8pt; }
+.val { font-weight: 600; font-size: 8.8pt; overflow-wrap: anywhere; }
 .val .sub { display: block; font-weight: 500; font-size: 7.6pt; color: var(--muted); }
 .num { font-variant-numeric: tabular-nums; text-align: right; }
 .center { text-align: center; }
@@ -98,8 +102,9 @@ th .ar { text-transform: none; letter-spacing: 0; font-size: 7.6pt; display: blo
 
 /* ---------- Meta strip (doc no / date / status) ---------- */
 .meta td { height: auto; padding: 1.4mm 2.2mm; }
-.meta .l { font-size: 6.8pt; color: var(--muted); display: flex; justify-content: space-between; gap: 2mm; font-weight: 500; }
-.meta .v { font-weight: 600; font-size: 9pt; margin-top: .3mm; }
+.meta .l { font-size: 6.8pt; color: var(--muted); display: flex; flex-wrap: wrap; justify-content: space-between; gap: .2mm 2mm; font-weight: 500; min-width: 0; }
+.meta .l > span { min-width: 0; overflow-wrap: anywhere; }
+.meta .v { font-weight: 600; font-size: 9pt; margin-top: .3mm; overflow-wrap: anywhere; }
 
 /* ---------- Status chips ---------- */
 .chip { display: inline-block; padding: .2mm 2mm; border-radius: 5mm; font-size: 7.4pt; font-weight: 600; }
@@ -192,17 +197,31 @@ th .ar { text-transform: none; letter-spacing: 0; font-size: 7.6pt; display: blo
 .sig--bare + .sig--bare { border-left: .5pt solid var(--line); }
 
 .page-fit{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;}
-.sheet-dock{flex:none;}
+@media print { .page-fit { overflow: visible; } }
+.sheet-dock{flex:none; break-inside: avoid; page-break-inside: avoid;}
 .ln.tall > i[data-slot-role]{flex:none;width:42mm;margin-left:auto;}
 
 /* ---------- Signature slot & name field ---------- */
-/* Employee signature is a red outline; employee name is a blue outline, so a
-   printed sheet makes it obvious which box the signer must fill. */
-.ln.tall > i[data-slot-role]{border:2px solid var(--sig-box);border-radius:1mm;padding:0 1.2mm;background:#FFF5F5;}
-.ln.tall > i[data-slot-role]:not(:empty){background:#fff;}
-.ln.name-box > i{border:2px solid var(--name-box);border-radius:1mm;padding:0 1.2mm;background:#EFF6FF;}
-.ln.name-box > i:not(:empty){background:#fff;}
-.ln.name-box > span{color:#1D4ED8;font-weight:600;}
+/* A printed sheet carries clean baselines only. The filled signature and the
+   manager's stamp are drawn into the PDF; a coloured box on the sheet would
+   print into the signed copy and read as an unfilled field. */
+.ln.tall > i[data-slot-role]{flex:none;width:42mm;margin-left:auto;border-bottom:.6pt dotted var(--dots);}
+.ln.name-box > i{border-bottom:.6pt dotted var(--dots);}
+.ln.name-box > span{font-weight:600;}
+
+/* The loan acknowledgement gives the rider's signature the wider line. */
+.page[data-kind="loan"] .ack .sign{width:100mm;}
+
+/* Management decision: the HR manager's box is the wider one beside the CEO /
+   GM box, and the whole band when there is no second signer. Heights stay at
+   the shared 8mm baseline so the persisted slot geometry keeps matching the
+   printed lines. */
+.mgmt-signs { margin-top: 0; }
+.mgmt-signs--pair { grid-template-columns: 1.45fr 1fr; }
+.mgmt-signs .sig .b { padding: 2mm 2.4mm 2mm; }
+
+/* Accident tail: rider name + signature in one band at the foot of the sheet. */
+.accident-tail .sign{width:96mm;}
 
 /* ---------- Employee information block ---------- */
 .employee-block { border: .9pt solid var(--navy); margin-top: 4.2mm; background: #fff; }

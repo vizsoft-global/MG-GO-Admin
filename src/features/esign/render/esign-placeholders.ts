@@ -28,6 +28,22 @@ export const EMPLOYEE_PLACEHOLDER_KEYS = [
   "bank_number",
 ] as const;
 
+/**
+ * HR / policy keys the send callable adds beside the employee block. They are
+ * not employee-block rows, so they stay out of `EMPLOYEE_PLACEHOLDER_KEYS`, but
+ * they still need to reach the layout and the send form's prefill.
+ */
+export const ESIGN_POLICY_SNAPSHOT_KEYS = [
+  "department",
+  "monthly_salary_kwd",
+  "years_of_service",
+  "max_loan_policy_kwd",
+  "previous_loan_outstanding_kwd",
+  "policy_check",
+] as const;
+export type EsignPolicySnapshotKey = (typeof ESIGN_POLICY_SNAPSHOT_KEYS)[number];
+export type EsignPolicySnapshot = Partial<Record<EsignPolicySnapshotKey, string | null>>;
+
 export type EsignEmployeeSnapshot = {
   company_name: string;
   employee_name: string;
@@ -56,8 +72,10 @@ export function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
-export function snapshotValues(snapshot: EsignEmployeeSnapshot): Record<string, string> {
-  return {
+export function snapshotValues(
+  snapshot: EsignEmployeeSnapshot & EsignPolicySnapshot,
+): Record<string, string> {
+  const out: Record<string, string> = {
     company_name: snapshot.company_name,
     employee_name: snapshot.employee_name,
     employee_id: snapshot.employee_id,
@@ -73,6 +91,10 @@ export function snapshotValues(snapshot: EsignEmployeeSnapshot): Record<string, 
     pay_through: snapshot.pay_through ?? "",
     bank_number: snapshot.bank_number ?? "",
   };
+  for (const key of ESIGN_POLICY_SNAPSHOT_KEYS) {
+    out[key] = snapshot[key]?.trim() ? String(snapshot[key]) : "";
+  }
+  return out;
 }
 
 /** Fill `{{tokens}}`. Values are HTML-escaped. Missing keys become empty. */

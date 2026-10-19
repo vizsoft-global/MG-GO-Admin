@@ -192,6 +192,7 @@ type VehicleDbRow = {
   condition: string | null;
   car_type: string | null;
   type_of_use: string | null;
+  company_id: string | null;
   fuel_type: string | null;
   fuel_company: string | null;
   chip_no: string | null;
@@ -218,6 +219,7 @@ function mapVehicle(row: Row): VehicleDbRow {
     condition: str(row.condition) || null,
     car_type: str(row.car_type) || null,
     type_of_use: str(row.type_of_use) || null,
+    company_id: str(row.company_id) || null,
     fuel_type: str(row.fuel_type) || null,
     fuel_company: str(row.fuel_company) || null,
     chip_no: str(row.chip_no) || null,
@@ -237,7 +239,7 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
   const db = await openDb();
   const today = kuwaitTodayYmd();
   const yesterday = addKuwaitDays(today, -1);
-  const [vehicles, types, drivers, profiles, partners, zones, useTypes, logs, shifts] =
+  const [vehicles, types, drivers, profiles, partners, zones, useTypes, companies, logs, shifts] =
     await Promise.all([
       allRows(db, COLLECTIONS.vehicles),
       allRows(db, COLLECTIONS.vehicleTypes),
@@ -246,6 +248,7 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       allRows(db, COLLECTIONS.partners),
       allRows(db, COLLECTIONS.zones),
       allRows(db, COLLECTIONS.vehicleUseTypes),
+      allRows(db, COLLECTIONS.vehicleCompanies),
       db.collection(COLLECTIONS.attendanceLogs).where("log_date", ">=", yesterday).get(),
       db.collection(COLLECTIONS.driverDailyShifts).where("shift_date", "in", [today, yesterday]).get(),
     ]);
@@ -302,6 +305,13 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       return [str(row.key) || row.id, locale.startsWith("ar") ? labelAr || labelEn : labelEn];
     }),
   );
+  const companyLabels = new Map(
+    companies.map((row) => {
+      const labelEn = str(row.label_en);
+      const labelAr = str(row.label_ar);
+      return [str(row.key) || row.id, locale.startsWith("ar") ? labelAr || labelEn : labelEn];
+    }),
+  );
   const openAttendance = new Set(
     logs.docs
       .map((doc) => asRow(doc.id, doc.data()))
@@ -349,6 +359,8 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       car_type: isVehicleCarType(row.car_type) ? row.car_type : null,
       type_of_use: useKey,
       type_of_use_label: useKey ? useTypeLabels.get(useKey) ?? useKey : null,
+      company_id: row.company_id,
+      company_name: row.company_id ? companyLabels.get(row.company_id) ?? row.company_id : null,
       fuel_type: isVehicleFuelType(row.fuel_type) ? row.fuel_type : null,
       fuel_company: isVehicleFuelCompany(row.fuel_company) ? row.fuel_company : null,
       chip_no: row.chip_no,
@@ -486,6 +498,7 @@ export async function saveVehicle(
     condition,
     car_type: carType,
     type_of_use: typeOfUse,
+    company_id: emptyText(formData.get("companyId")) || null,
     fuel_type: fuelType,
     fuel_company: fuelCompany,
     chip_no: optionalText(formData.get("chipNo")),

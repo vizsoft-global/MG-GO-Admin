@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/auth-context";
+import { useSidebarMenu } from "@/hooks/use-sidebar-menu";
 import { useBranding } from "@/contexts/branding-context";
 import { useNavBadges } from "@/hooks/use-nav-badges";
 import { Link } from "@/i18n/navigation";
@@ -14,11 +15,14 @@ import {
   greetingBucket,
   kuwaitHour,
   LAUNCHER_LABEL_OVERRIDE,
+  launcherTilesFromMenu,
+  mergeLauncherTiles,
+  type LauncherTile,
   type LauncherTileId,
   visibleLauncherTiles,
 } from "@/lib/menu/launcher-modules";
-import { LAUNCHER_GLYPH } from "@/lib/menu/launcher-glyphs";
-import { APP_NAV_KEY_BY_ID } from "@/lib/menu/menu-registry";
+import { launcherGlyphPath } from "@/lib/menu/launcher-glyphs";
+import { APP_NAV_KEY_BY_ID, resolveIcon } from "@/lib/menu/menu-registry";
 import { LAUNCHER_BRAND, launcherTileHex } from "@/lib/menu/module-colors";
 import type { Permission } from "@/lib/auth/permissions";
 import {
@@ -34,6 +38,9 @@ import {
 const TILE_SHADOW =
   "inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -2px 0 rgba(0,0,0,0.10), 0 1px 2px rgba(41,41,63,0.12), 0 8px 18px -6px rgba(41,41,63,0.28)";
 
+const TILE_GRID =
+  "grid w-full grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-x-3 gap-y-5";
+
 function formatAdminRole(slug: string): string {
   if (!slug) return "";
   return slug
@@ -42,22 +49,27 @@ function formatAdminRole(slug: string): string {
     .join(" ");
 }
 
-function LauncherGlyph({ id }: { id: LauncherTileId }) {
-  return (
-    <svg
-      width="27"
-      height="27"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="#ffffff"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d={LAUNCHER_GLYPH[id]} />
-    </svg>
-  );
+function LauncherGlyph({ id, icon }: { id: string; icon: string }) {
+  const path = launcherGlyphPath(id);
+  if (path) {
+    return (
+      <svg
+        width="27"
+        height="27"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#ffffff"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d={path} />
+      </svg>
+    );
+  }
+  const Icon = resolveIcon(icon);
+  return <Icon className="size-[25px] text-white" strokeWidth={1.7} aria-hidden />;
 }
 
 export function AppLauncherShell() {
@@ -68,23 +80,36 @@ export function AppLauncherShell() {
   const branding = useBranding();
   const { fullName, email, permissions, isSuperAdmin, adminRoleSlug } = useAuth();
   const badges = useNavBadges();
+  const { tree } = useSidebarMenu();
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const hour = kuwaitHour();
   const greeting = greetingBucket(hour);
 
   const tiles = useMemo(
-    () => visibleLauncherTiles(permissions as Permission[], isSuperAdmin),
-    [permissions, isSuperAdmin],
+    () =>
+      mergeLauncherTiles(
+        launcherTilesFromMenu(tree),
+        visibleLauncherTiles(permissions as Permission[], isSuperAdmin),
+      ),
+    [tree, permissions, isSuperAdmin],
   );
 
   const labels = useMemo(() => {
     const map = new Map<string, string>();
+    const translate = (key: string): string | null =>
+      tNav.has(key) ? tNav(key) : null;
     for (const item of tiles) {
       const override = LAUNCHER_LABEL_OVERRIDE[item.id as LauncherTileId];
       const navKey = APP_NAV_KEY_BY_ID[item.id];
-      const fromNav = navKey ? tNav(`nav.${navKey}`) : null;
-      map.set(item.id, override ?? fromNav ?? item.defaultLabel);
+      if (override) {
+        map.set(item.id, override);
+        continue;
+      }
+      const fromNav = navKey
+        ? translate(item.id.startsWith("group-") ? `appNavGroups.${navKey}` : `nav.${navKey}`)
+        : null;
+      map.set(item.id, fromNav ?? item.label);
     }
     return map;
   }, [tiles, tNav]);
@@ -93,6 +118,46 @@ export function AppLauncherShell() {
     () => filterLauncherTiles(tiles, query, labels),
     [tiles, query, labels],
   );
+
+  const renderTile = (item: LauncherTile) => {
+    const badge = badges[item.id];
+    return (
+      <Link
+        key={item.id}
+        href={item.href}
+        className="group/hub flex flex-col items-center gap-2.5 text-center"
+      >
+        <span
+          className="relative grid size-[60px] place-items-center overflow-visible rounded-[18px]"
+          style={{
+            backgroundColor: launcherTileHex(item.id),
+            boxShadow: TILE_SHADOW,
+          }}
+        >
+          <span className="inline-grid origin-center transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none motion-reduce:group-hover/hub:scale-100 [@media(hover:hover)_and_(pointer:fine)]:group-hover/hub:scale-[1.4]">
+            <LauncherGlyph id={item.id} icon={item.icon} />
+          </span>
+          {badge ? (
+            <span
+              className="absolute -end-[7px] -top-[7px] z-10 inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[11px] px-[5px] text-[11px] font-bold tabular-nums text-white"
+              style={{
+                backgroundColor: LAUNCHER_BRAND.badge,
+                border: `2px solid ${LAUNCHER_BRAND.badgeBorder}`,
+              }}
+            >
+              {badge > 999 ? "999+" : badge}
+            </span>
+          ) : null}
+        </span>
+        <span
+          className="text-[12px] font-bold leading-[1.3]"
+          style={{ color: LAUNCHER_BRAND.tileLabel }}
+        >
+          {labels.get(item.id) ?? item.label}
+        </span>
+      </Link>
+    );
+  };
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -235,7 +300,7 @@ export function AppLauncherShell() {
         </div>
       </header>
 
-      <main className="relative z-10 flex min-h-0 flex-1 flex-col px-6 pt-6 pb-6 sm:px-12 sm:pt-9 sm:pb-10">
+      <main className="relative z-10 flex min-h-0 flex-1 flex-col px-6 pt-6 pb-6 sm:px-12 sm:pt-7 sm:pb-6">
         <div className="flex flex-col items-start gap-1.5">
           <span
             aria-hidden
@@ -253,54 +318,12 @@ export function AppLauncherShell() {
           </p>
         </div>
 
-        <div className="mx-auto mt-11 flex w-full max-w-[720px] flex-col">
-          <nav
-            aria-label={t("title")}
-            className="grid w-full grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-x-3 gap-y-[30px]"
-          >
-            {visible.map((item) => {
-              const tileId = item.id as LauncherTileId;
-              const badge = badges[item.id];
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href}
-                  className="group/hub flex flex-col items-center gap-2.5 text-center"
-                >
-                  <span
-                    className="relative grid size-[60px] place-items-center overflow-visible rounded-[18px]"
-                    style={{
-                      backgroundColor: launcherTileHex(item.id),
-                      boxShadow: TILE_SHADOW,
-                    }}
-                  >
-                    <span className="inline-grid origin-center transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none motion-reduce:group-hover/hub:scale-100 [@media(hover:hover)_and_(pointer:fine)]:group-hover/hub:scale-[1.4]">
-                      <LauncherGlyph id={tileId} />
-                    </span>
-                    {badge ? (
-                      <span
-                        className="absolute -end-[7px] -top-[7px] z-10 inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[11px] px-[5px] text-[11px] font-bold tabular-nums text-white"
-                        style={{
-                          backgroundColor: LAUNCHER_BRAND.badge,
-                          border: `2px solid ${LAUNCHER_BRAND.badgeBorder}`,
-                        }}
-                      >
-                        {badge > 999 ? "999+" : badge}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span
-                    className="text-[12px] font-bold leading-[1.3]"
-                    style={{ color: LAUNCHER_BRAND.tileLabel }}
-                  >
-                    {labels.get(item.id) ?? item.defaultLabel}
-                  </span>
-                </Link>
-              );
-            })}
+        <div className="mx-auto mt-8 flex w-full max-w-[720px] flex-col">
+          <nav aria-label={t("title")} className="flex w-full flex-col gap-6">
+            <div className={TILE_GRID}>{visible.map(renderTile)}</div>
           </nav>
 
-          <div className="relative mx-auto mt-[60px] pt-[9px] ps-[15px]">
+          <div className="relative mx-auto mt-8 pt-[9px] ps-[15px]">
             <img
               src="/launcher-passion.png"
               alt=""
