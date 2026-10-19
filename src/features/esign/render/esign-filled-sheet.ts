@@ -102,6 +102,27 @@ export function filledEsignDocumentInput(input: FilledSheetInput): EsignDocument
       source: "entry",
     });
   }
+
+  // Accident templates add these date rows at send time, not in the template.
+  // Without them the filled sheet loses the values and drops the whole
+  // Request Details section, even though the request stored both dates.
+  const accidentSpecs = [
+    { key: "accident_date", en: "Accident date", ar: "تاريخ الحادث" },
+    { key: "report_date", en: "Report date", ar: "تاريخ التقرير" },
+  ] as const;
+  for (const spec of accidentSpecs) {
+    const value = fieldValues[spec.key]?.trim() ?? "";
+    if (!value || fields.some((field) => field.key === spec.key)) continue;
+    fields.push({
+      key: spec.key,
+      label: spec.en,
+      labelEn: spec.en,
+      labelAr: spec.ar,
+      value,
+      section: "document",
+      source: "entry",
+    });
+  }
   return {
     language: "en",
     kind: template.document_kind,

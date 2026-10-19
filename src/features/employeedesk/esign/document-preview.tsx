@@ -11,6 +11,10 @@ import {
   useA4Zoom,
 } from "@/features/esign/use-a4-zoom";
 import { resolveFieldSource } from "@/features/esign/template-source";
+import {
+  REQUEST_KIND_KEY,
+  withAccidentFields,
+} from "@/features/esign/esign-accident-fields";
 import { employeeSampleValues } from "@/features/esign/employee-block";
 import { useBrandingOptional } from "@/contexts/branding-context";
 import {
@@ -117,6 +121,15 @@ export function EsignDocumentPreview({
   const resolvedBodyEn = body;
   const resolvedDeclarationEn = declaration;
 
+  const previewFields = useMemo(() => {
+    if (!fields.some((field) => field.field_key === REQUEST_KIND_KEY)) return fields;
+    return withAccidentFields(
+      fields,
+      fields[0]?.template_id ?? "preview",
+      values[REQUEST_KIND_KEY],
+    );
+  }, [fields, values]);
+
   const sheetHtml = useMemo(() => {
     const employee = sampleEmployee({
       company_name: values.company_name?.trim() || company || "Musallam Delivery",
@@ -144,7 +157,7 @@ export function EsignDocumentPreview({
       company,
       logoUrl: branding?.logoUrl,
       fields: (() => {
-        const mapped: EsignRenderField[] = fields.map((field) => ({
+        const mapped: EsignRenderField[] = previewFields.map((field) => ({
           key: field.field_key,
           label: field.label_en,
           labelEn: field.label_en,
@@ -200,8 +213,8 @@ export function EsignDocumentPreview({
     declaration,
     declarationAr,
     documentKind,
-    fields,
     nameAr,
+    previewFields,
     resolvedBodyAr,
     resolvedBodyEn,
     resolvedDeclarationAr,

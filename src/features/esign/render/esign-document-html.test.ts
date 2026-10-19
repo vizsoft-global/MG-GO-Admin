@@ -5,6 +5,7 @@ import {
   sampleEmployee,
 } from "./esign-document-html";
 import { isBottomRightFallback, resolveEmployeeStampSlot } from "./esign-document-layout";
+import { filledEsignDocumentInput } from "./esign-filled-sheet";
 
 const fields = [
   { key: "penalty_date", label: "Penalty date", labelEn: "Penalty date", labelAr: "تاريخ الجزاء", value: "2026-09-01" },
@@ -35,6 +36,43 @@ function employeeBlockOf(html: string): string {
 }
 
 describe("buildEsignDocumentHtml", () => {
+  it("keeps the accident dates stored on the request in the printed sheet", () => {
+    const input = filledEsignDocumentInput({
+      template: {
+        document_kind: "general",
+        header_en: "Accident",
+        header_ar: "حادث",
+        body_en: "Accident report",
+        body_ar: "تقرير حادث",
+        declaration_en: "",
+        declaration_ar: "",
+        fields: [
+          {
+            field_key: "request_kind",
+            label_en: "Request kind",
+            label_ar: "نوع الطلب",
+            section_key: "document",
+            source_kind: "entry",
+            options: ["accident", "sick_leave"],
+          },
+        ],
+      },
+      snapshot: sampleEmployee(),
+      fieldValues: {
+        request_kind: "accident",
+        accident_date: "2026-10-18",
+        report_date: "2026-10-19",
+      },
+      description: "",
+    });
+    const html = buildEsignDocumentHtml(input);
+    assert.match(html, /data-section="request_details"/);
+    assert.match(html, /Accident date/);
+    assert.match(html, /2026-10-18/);
+    assert.match(html, /Report date/);
+    assert.match(html, /2026-10-19/);
+  });
+
   it("prints long sheets across two pages without splitting boxes", () => {
     const html = base("en");
     assert.match(html, /@media print \{/);

@@ -741,6 +741,17 @@ export async function createEsignFromTemplate(input: {
     input.field_values ?? {},
     loaded.template.fields,
   );
+  // Accident templates infer their section from `request_kind`. The send form
+  // shows Accident by default, so persist that default even if the operator
+  // never opens the dropdown.
+  const requestKindField = loaded.template.fields.find(
+    (field) => field.field_key === "request_kind",
+  );
+  if (requestKindField && !fieldValues.request_kind?.trim()) {
+    fieldValues.request_kind =
+      requestKindField.options.map((option) => option.trim()).find(Boolean) ??
+      "accident";
+  }
   if (firstMissingRequiredKey(fieldValues, loaded.template.fields)) {
     return { ok: false, error: "field_required" };
   }

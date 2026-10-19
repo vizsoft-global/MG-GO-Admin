@@ -491,7 +491,14 @@ export function EsignSendShell({
       locale: "en",
       due_at: dueAt || null,
       description: description.trim() || null,
-      field_values: { ...values, ...penaltyValues },
+      field_values: {
+        ...values,
+        // The accident dropdown defaults to Accident before the operator
+        // touches it, but that default only lived in preview state. Without
+        // this write the request rendered the generic document branch.
+        ...(isAccident ? { [REQUEST_KIND_KEY]: accidentKind } : {}),
+        ...penaltyValues,
+      },
       resent_from_id: initialResentFromId ?? null,
     });
     if (!result.ok) {
