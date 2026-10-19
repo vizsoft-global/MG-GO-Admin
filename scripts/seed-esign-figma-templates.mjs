@@ -18,17 +18,41 @@ const DECLARATION_EN =
 const DECLARATION_AR =
   "أقر بأن التفاصيل أعلاه قد تم شرحها لي، وأنني استلمت نسخة من هذا المستند.";
 
+const ACCIDENT_DECLARATION_EN =
+  "I declare that the details in this report are true and complete, that I reported the incident on the date stated, and that I will provide any medical report or supporting document HR asks for.";
+const ACCIDENT_DECLARATION_AR =
+  "أقر بأن التفاصيل الواردة في هذا التقرير صحيحة وكاملة، وأنني أبلغت عن الحادث في التاريخ المذكور، وأنني سأقدم أي تقرير طبي أو مستند داعم تطلبه الموارد البشرية.";
+
 const SYSTEM = [
   ["company_name", "Company", "الشركة"],
   ["employee_name", "Employee name", "اسم الموظف"],
   ["employee_id", "Employee ID", "رقم الموظف"],
 ];
 
-const PAYSLIP_SYSTEM = [
+/**
+ * HR facts that arrive from the rider record. They are seeded as `system` so
+ * the send form pre-fills them, but the Admin screen keeps every one editable —
+ * a wrong salary or policy figure has to be correctable before sending.
+ */
+const HR_SYSTEM = [
+  ["civil_id", "Civil ID", "الرقم المدني"],
+  ["department", "Department", "القسم"],
   ["position", "Position", "المنصب"],
+  ["joined_at", "Joining date", "تاريخ الالتحاق"],
   ["sponsor", "Sponsor", "الكفيل"],
   ["pay_through", "Pay through", "يُصرف حتى"],
   ["bank_number", "Bank number", "رقم البنك"],
+  ["monthly_salary_kwd", "Monthly salary (KD)", "الراتب الشهري (د.ك)"],
+  ["years_of_service", "Years of service", "سنوات الخدمة"],
+];
+
+/** Accident keeps identity and posting only; pay and bank stay off that sheet. */
+const ACCIDENT_SYSTEM = [
+  ["civil_id", "Civil ID", "الرقم المدني"],
+  ["department", "Department", "القسم"],
+  ["position", "Position", "المنصب"],
+  ["joined_at", "Joining date", "تاريخ الالتحاق"],
+  ["sponsor", "Sponsor", "الكفيل"],
 ];
 
 const PAYSLIP_SHEET = [
@@ -39,7 +63,11 @@ const PAYSLIP_SHEET = [
   ["admin_deduction", "Admin deduction", "خصم الإدارة", "number"],
   ["extra_input", "Extra input", "إدخال إضافي", "number"],
   ["basic_salary", "Basic salary", "الراتب الأساسي", "number"],
+  ["deductions_total", "Total deductions", "إجمالي الخصومات", "number"],
   ["net_salary", "Net salary", "صافي الراتب", "number"],
+  ["hr_manager_name", "HR manager", "مدير الموارد البشرية", "text"],
+  ["hr_manager_position", "HR manager position", "منصب مدير الموارد البشرية", "text"],
+  ["computed_by", "Computed by", "احتسب بواسطة", "text"],
 ];
 
 const PENALTY_ACTION_OPTIONS = [
@@ -90,8 +118,36 @@ const LOAN_SHEET = [
   ["payment_method", "Payment method", "طريقة الدفع", "select", LOAN_PAYMENT_METHODS],
   ["amount", "Requested amount", "المبلغ المطلوب", "number"],
   ["installments", "Installments", "الأقساط", "select", LOAN_INSTALLMENTS],
+  ["monthly_installment", "Monthly installment", "القسط الشهري", "number"],
   ["loan_month", "Month", "الشهر", "select", LOAN_MONTHS],
   ["reason", "Reason", "السبب", "textarea"],
+];
+
+const LOAN_HR_VERIFICATION = [
+  ["max_loan_policy_kwd", "Maximum loan policy", "حد السلفة حسب السياسة", "number"],
+  ["previous_loan_outstanding_kwd", "Previous loan outstanding", "رصيد السلفة السابقة", "number"],
+  ["policy_check", "Policy check", "مطابقة السياسة", "text"],
+  ["verified_by", "Verified by", "تحقق بواسطة", "text"],
+  ["verified_date", "Verified on", "تاريخ التحقق", "date"],
+];
+
+const LOAN_MANAGEMENT = [
+  ["hr_manager_name", "HR manager", "مدير الموارد البشرية", "text"],
+  ["hr_manager_position", "HR manager position", "منصب مدير الموارد البشرية", "text"],
+  [
+    "management_decision",
+    "Management decision",
+    "قرار الإدارة",
+    "select",
+    ["Approved", "Rejected", "Deferred"],
+  ],
+  [
+    "amount_received",
+    "Amount received",
+    "المبلغ المستلم",
+    "select",
+    ["Received", "Not received"],
+  ],
 ];
 
 function systemFields(extra = []) {
@@ -100,7 +156,12 @@ function systemFields(extra = []) {
       field_key,
       label_en,
       label_ar,
-      field_type: "text",
+      field_type:
+        field_key === "joined_at"
+          ? "date"
+          : field_key.endsWith("_kwd") || field_key === "years_of_service"
+            ? "number"
+            : "text",
       source_kind: "system",
       section_key: "employee",
       sort_order: index + 1,
@@ -161,8 +222,10 @@ const TEMPLATES = [
     rename: false,
     aliases: [{ name_en: "Loan Request" }],
     fields: [
-      ...systemFields(),
+      ...systemFields(HR_SYSTEM),
       ...sheetFields(LOAN_SHEET, 20),
+      ...sheetFields(LOAN_HR_VERIFICATION, 40),
+      ...sheetFields(LOAN_MANAGEMENT, 50),
       EMPLOYEE_SIGNATURE,
       signature("hr_signature", "HR", "الموارد البشرية", 70),
       signature("ceo_signature", "CEO", "الرئيس التنفيذي", 80),
@@ -181,7 +244,7 @@ const TEMPLATES = [
     rename: true,
     aliases: [{ name_en: "Salary Deduction Acknowledgement", document_kind: "payslip" }],
     fields: [
-      ...systemFields(PAYSLIP_SYSTEM),
+      ...systemFields(HR_SYSTEM),
       ...sheetFields(PAYSLIP_SHEET, 20),
       EMPLOYEE_SIGNATURE,
     ],
@@ -244,10 +307,17 @@ const TEMPLATES = [
     header_ar: "حادث",
     body_en: "Accident report",
     body_ar: "تقرير حادث",
+    declaration_en: ACCIDENT_DECLARATION_EN,
+    declaration_ar: ACCIDENT_DECLARATION_AR,
     fields: [
-      ...systemFields(),
+      ...systemFields(ACCIDENT_SYSTEM),
       ...sheetFields(
-        [["request_kind", "Request kind", "نوع الطلب", "select", ACCIDENT_REQUEST_KINDS]],
+        [
+          ["request_kind", "Request kind", "نوع الطلب", "select", ACCIDENT_REQUEST_KINDS],
+          ["accident_date", "Accident date", "تاريخ الحادث", "date"],
+          ["report_date", "Report date", "تاريخ التقرير", "date"],
+          ["rider_name", "Rider name", "اسم السائق", "text"],
+        ],
         20,
       ),
       EMPLOYEE_SIGNATURE,
@@ -376,6 +446,15 @@ function planOne(spec, match, fieldsByTemplate, categories) {
   if (spec.rename) {
     patch.name_en = spec.name_en;
     patch.name_ar = spec.name_ar;
+  }
+  // Replace the generic acknowledgement only while it is still the generic one;
+  // a declaration HR has edited in the builder is never overwritten by a seed.
+  if (
+    spec.declaration_en &&
+    String(match.doc.data.declaration_en ?? "") === DECLARATION_EN
+  ) {
+    patch.declaration_en = spec.declaration_en;
+    patch.declaration_ar = spec.declaration_ar;
   }
   const templateChanges = Object.keys(patch).filter((key) => !same(match.doc.data[key], patch[key]));
   return {
@@ -528,6 +607,13 @@ async function main() {
       if (spec.rename) {
         patch.name_en = spec.name_en;
         patch.name_ar = spec.name_ar;
+      }
+      if (
+        spec.declaration_en &&
+        String(row.match.doc.data.declaration_en ?? "") === DECLARATION_EN
+      ) {
+        patch.declaration_en = spec.declaration_en;
+        patch.declaration_ar = spec.declaration_ar;
       }
       if (row.plan.template_changes.length > 0 || row.plan.fields_create.length > 0) {
         const version = Number(row.match.doc.data.version ?? 0);

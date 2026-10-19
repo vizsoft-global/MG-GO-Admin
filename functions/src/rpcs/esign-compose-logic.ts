@@ -218,6 +218,8 @@ export type ComposeStamp = {
   slot: SignSlot;
   captions: string[];
   placement?: StampPlacement | null;
+  /** Staff stamps keep one caption line inside the slot (name under ink). */
+  reserveCaption?: boolean;
 };
 
 /**
@@ -404,8 +406,20 @@ function drawStampInSlot(
   captions: string[],
   font: PDFFont,
   slot: SignSlot,
+  reserveCaption = false,
 ) {
-  const fitted = fitImageInSlot(signature.width, signature.height, slot);
+  // A staff stamp keeps one caption line (the signer's name) under the ink.
+  // The rider's stamp fills the whole line; the sheet already prints their name.
+  const reserve =
+    reserveCaption && captions.length > 0
+      ? Math.min(Math.max(slot.hPt - 10, 0), CAPTION_LEADING + 2)
+      : 0;
+  const imageBox: SignSlot = {
+    ...slot,
+    yPt: slot.yPt + reserve,
+    hPt: Math.max(8, slot.hPt - reserve),
+  };
+  const fitted = fitImageInSlot(signature.width, signature.height, imageBox);
   page.drawImage(signature, {
     x: fitted.x,
     y: fitted.y,
@@ -413,12 +427,13 @@ function drawStampInSlot(
     height: fitted.h,
   });
   const lowestBaseline = slot.yPt + CAPTION_BOTTOM_GAP;
-  const highestBaseline = slot.yPt + slot.hPt - CAPTION_SIZE;
-  let y = Math.min(highestBaseline, fitted.y - 2 - CAPTION_LEADING);
+  const highestBaseline =
+    reserve > 0 ? slot.yPt + reserve - CAPTION_SIZE : slot.yPt + slot.hPt - CAPTION_SIZE;
+  let y =
+    reserve > 0
+      ? Math.min(highestBaseline, fitted.y - 2)
+      : Math.min(highestBaseline, fitted.y - 2 - CAPTION_LEADING);
   for (const line of captions) {
-    // A caption stack that would leave the slot is dropped line by line: the
-    // printed lines under a signature belong to the sheet, and a stamp caption
-    // running over them is worse than a stamp without a caption.
     if (y < lowestBaseline) break;
     const textWidth = font.widthOfTextAtSize(line, CAPTION_SIZE);
     if (textWidth > slot.wPt) {
@@ -510,7 +525,7 @@ export async function composeSignedPdf(input: {
     const captions = stamp.captions.filter(
       (line) => line.length > 0 && canEncodeWinAnsi(font, line),
     );
-    drawStampInSlot(page, image, captions, font, stamp.slot);
+    drawStampInSlot(page, image, captions, font, stamp.slot, stamp.reserveCaption === true);
   }
   return { pdfBytes: await pdf.save(), pageCount };
 }

@@ -12,13 +12,17 @@ import { dataOf, isoTimestamp, logAdminActivity, pickId, textOrNull, type Dict }
 import {
   MAX_SIGNATURE_BYTES,
   MAX_SOURCE_BYTES,
+  assignStaffStampSlots,
   composeSignedPdf,
   esignObjectPath,
   parseStampLayout,
   placementFromLayout,
+  signedDocumentSourceHash,
   sniff,
   validateImage,
+  type ComposeStamp,
 } from "./esign-compose-logic";
+import { resolveEmployeeStampSlot } from "./esign-signature-slots";
 
 /**
  * 1GiB cannot run at the fleet `cpu: 0.08` — Cloud Run's minimum for 1GiB is
@@ -61,19 +65,69 @@ export const esignComposeSignedDocument = onCall(
       .collection(COLLECTIONS.esignRequestSigners)
       .where("request_id", "==", requestId)
       .get();
-    const awaitingStaff = signerSnap.docs.some((doc) => {
-      const signer = doc.data();
+    const signerRows = signerSnap.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
+    const awaitingStaff = signerRows.some(({ data: signer }) => {
       const staffId = signer.staff_user_id;
       return typeof staffId === "string" && staffId.trim() !== "" && signer.status === "pending";
     });
-    if (awaitingStaff) return { ok: false, error: "awaiting_counter_signature" };
+    if (awaitingStaff) {
+      await ref.update({
+        signed_document_pending: true,
+        updated_at: Timestamp.now(),
+      });
+      return { ok: false, error: "awaiting_counter_signature" };
+    }
+
+    const signedStaff = signerRows.flatMap(({ id, data: signer }) => {
+      if (signer.status !== "signed") return [];
+      const storageKey = textOrNull(signer.signature_storage_key);
+      if (!storageKey) return [];
+      return [
+        {
+          id,
+          sortOrder: Number.isFinite(Number(signer.sort_order)) ? Number(signer.sort_order) : 0,
+          signatureKey: storageKey,
+          signedAt: isoTimestamp(signer.signed_at),
+          displayName:
+            textOrNull(signer.signer_display_name) ?? textOrNull(signer.staff_contact) ?? "",
+        },
+      ];
+    });
+    const assignments = assignStaffStampSlots({
+      kind: row.document_kind,
+      persistedSlots: row.signature_slots,
+      signers: signedStaff,
+    });
+    if (signedStaff.length > assignments.length) {
+      console.warn("esign compose: staff signatures past the printed slots", {
+        requestId,
+        signed: signedStaff.length,
+        slots: assignments.length,
+      });
+    }
+    const staffBySigner = new Map(signedStaff.map((row) => [row.id, row]));
 
     const requestCode = textOrNull(row.request_code) ?? requestId;
     const outputKey = `signed/${requestId}/${requestCode}-signed.pdf`;
+    const sourceHash = signedDocumentSourceHash({
+      documentKey,
+      employeeSignatureKey: signatureKey,
+      employeeSignedAt: isoTimestamp(row.signed_at),
+      stampLayout: row.stamp_layout ?? null,
+      signatureSlots: row.signature_slots ?? null,
+      sheetRenderVersion:
+        typeof row.sheet_render_version === "number" ? row.sheet_render_version : null,
+      staff: assignments.map((row) => ({
+        id: row.id,
+        signatureKey: row.signatureKey,
+        signedAt: row.signedAt,
+      })),
+    });
 
     async function fail(code: string, extra: Dict = {}) {
       await ref.update({
         signed_document_error: code,
+        signed_document_pending: false,
         updated_at: Timestamp.now(),
       });
       return { ok: false, error: code, request_id: requestId, ...extra };
@@ -85,7 +139,11 @@ export const esignComposeSignedDocument = onCall(
 
     const data = (request.data ?? {}) as Dict;
     const layoutNewer = stampMillis(row.stamp_layout_at) > stampMillis(row.signed_document_generated_at);
-    const force = data.force === true || data.p_force === true || layoutNewer;
+    const force =
+      data.force === true ||
+      data.p_force === true ||
+      layoutNewer ||
+      textOrNull(row.signed_document_source_hash) !== sourceHash;
 
     if (!force && textOrNull(row.signed_document_storage_key) === outputKey) {
       try {
@@ -103,6 +161,24 @@ export const esignComposeSignedDocument = onCall(
         console.error("esign compose storage", error);
         return { ok: false, error: "server_misconfigured" };
       }
+    }
+
+    const staffFiles = await Promise.all(
+      assignments.map(async (assignment) => {
+        const file = await readObject(assignment.signatureKey);
+        if (!file) return { assignment, file: null };
+        if (file.length > MAX_SIGNATURE_BYTES) return { assignment, file: null, tooLarge: true };
+        const kind = sniff(file);
+        if (kind !== "png" && kind !== "jpeg") return { assignment, file: null };
+        if (validateImage(file, kind)) return { assignment, file: null };
+        return { assignment, file, kind };
+      }),
+    );
+    const missingStaff = staffFiles.find((row) => !row.file);
+    if (missingStaff) {
+      return fail("staff_signature_unavailable", {
+        detail: `signature for ${missingStaff.assignment.id} is missing or unreadable`,
+      });
     }
 
     const [sourceFile, signatureFile] = await Promise.all([
@@ -161,6 +237,31 @@ export const esignComposeSignedDocument = onCall(
       civilId: snapshotText("civil_id"),
       zone: snapshotText("zone"),
     });
+    const stamps: ComposeStamp[] = [
+      {
+        bytes: signatureFile,
+        kind: signatureKind,
+        slot:
+          placement?.signature ??
+          resolveEmployeeStampSlot({
+            persisted: row.signature_slots,
+            kind: row.document_kind,
+          }),
+        captions,
+        placement,
+      },
+    ];
+    for (const entry of staffFiles) {
+      if (!entry.file || (entry.kind !== "png" && entry.kind !== "jpeg")) continue;
+      const signer = staffBySigner.get(entry.assignment.id);
+      stamps.push({
+        bytes: entry.file,
+        kind: entry.kind,
+        slot: entry.assignment.slot,
+        captions: [signer?.displayName ?? "", formatSignedAt(entry.assignment.signedAt)],
+        reserveCaption: true,
+      });
+    }
 
     let pdfBytes: Uint8Array;
     let pageCount = 0;
@@ -174,6 +275,7 @@ export const esignComposeSignedDocument = onCall(
         kind: row.document_kind,
         persistedSlots: row.signature_slots,
         placement,
+        stamps,
       });
       pdfBytes = composed.pdfBytes;
       pageCount = composed.pageCount;
@@ -201,6 +303,8 @@ export const esignComposeSignedDocument = onCall(
       await ref.update({
         signed_document_storage_key: outputKey,
         signed_document_generated_at: now,
+        signed_document_source_hash: sourceHash,
+        signed_document_pending: false,
         signed_document_error: null,
         updated_at: now,
       });

@@ -238,6 +238,19 @@ export async function esignEmployeeSnapshotFor(driverId: string): Promise<Dict |
 
   const driverCode = textOrNull(driver[FIELDS.drivers.driverCode]);
   const joinedAt = asDate(driver.joined_at);
+  const extra = readEsignSnapshotExtra(driver, intake);
+
+  // Policy values live on the rider record's custom fields. Nothing is invented:
+  // a rider without a salary stored leaves the cell empty for HR to type, and
+  // `years_of_service` is derived only when a joining date actually exists.
+  const yearsOfService =
+    extra.years_of_service ??
+    (joinedAt
+      ? (() => {
+          const years = (Date.now() - joinedAt.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+          return years > 0 ? years.toFixed(1) : null;
+        })()
+      : null);
 
   return {
     company_name:
@@ -253,7 +266,9 @@ export async function esignEmployeeSnapshotFor(driverId: string): Promise<Dict |
     zone: zone ? textOrNull(zone.name) : null,
     project: textOrNull(driver[FIELDS.drivers.projectKey]),
     nationality: textOrNull(driver.nationality),
-    ...readEsignSnapshotExtra(driver, intake),
+    ...extra,
+    department: extra.department ?? textOrNull(driver[FIELDS.drivers.projectKey]),
+    years_of_service: yearsOfService,
   };
 }
 
