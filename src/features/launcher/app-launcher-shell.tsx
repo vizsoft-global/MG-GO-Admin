@@ -93,11 +93,19 @@ export function AppLauncherShell() {
 
   const labels = useMemo(() => {
     const map = new Map<string, string>();
+    const translate = (key: string): string | null =>
+      tNav.has(key) ? tNav(key) : null;
     for (const item of tiles) {
       const override = LAUNCHER_LABEL_OVERRIDE[item.id as LauncherTileId];
       const navKey = APP_NAV_KEY_BY_ID[item.id];
-      const fromNav = navKey ? tNav(`nav.${navKey}`) : null;
-      map.set(item.id, override ?? fromNav ?? item.label);
+      if (override) {
+        map.set(item.id, override);
+        continue;
+      }
+      const fromNav = navKey
+        ? translate(item.id.startsWith("group-") ? `appNavGroups.${navKey}` : `nav.${navKey}`)
+        : null;
+      map.set(item.id, fromNav ?? item.label);
     }
     return map;
   }, [tiles, tNav]);

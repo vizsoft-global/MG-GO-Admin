@@ -30,6 +30,18 @@ export const LAUNCHER_TILE_IDS = [
 export type LauncherTileId = (typeof LAUNCHER_TILE_IDS)[number];
 
 /**
+ * Launcher-only hide list. These surfaces keep their route, sidebar row and
+ * permission — they just do not get a Home tile. Filtering happens in
+ * `mergeLauncherTiles`, so `LAUNCHER_TILE_IDS` (and the Roles app catalogue)
+ * still describes every real surface.
+ */
+export const LAUNCHER_HIDDEN_TILE_IDS: ReadonlySet<string> = new Set([
+  "dashboard-ops",
+  "payroll",
+  "earnings",
+]);
+
+/**
  * Apps that no longer carry a Home tile (they live inside Operations or
  * Settings) but are still real permission surfaces in Roles & Permissions.
  * They keep an entry in `APP_ACCESS_CATALOG` so a per-user tick can still be
@@ -143,12 +155,14 @@ export function mergeLauncherTiles(
   const hrefs = new Set<string>();
 
   for (const tile of derived) {
+    if (LAUNCHER_HIDDEN_TILE_IDS.has(tile.id)) continue;
     if (ids.has(tile.id) || hrefs.has(tile.href)) continue;
     ids.add(tile.id);
     hrefs.add(tile.href);
     out.push(tile);
   }
   for (const item of curated) {
+    if (LAUNCHER_HIDDEN_TILE_IDS.has(item.id)) continue;
     if (ids.has(item.id) || hrefs.has(item.href)) continue;
     ids.add(item.id);
     hrefs.add(item.href);

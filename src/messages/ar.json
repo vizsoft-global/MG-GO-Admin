@@ -155,7 +155,8 @@
     "fleetHandover": "التسليم",
     "fleetAccident": "حادث",
     "fleetRj": "مرفوض",
-    "orderExceptions": "استثناءات الطلبات"
+    "orderExceptions": "استثناءات الطلبات",
+    "system": "النظام"
   },
   "appNavGroups": {
     "overview": "نظرة عامة",
@@ -6098,6 +6099,11 @@
           "noDocumentBody": "أُرسل هذا الطلب بدون مستند، أو لم يتم رفع الملف بعد.",
           "downloadDocument": "تنزيل المستند الأصلي",
           "downloadSignature": "تنزيل صورة التوقيع",
+          "regenerate": "إعادة الإنشاء من القالب",
+          "regenerateHint": "يعيد بناء الورقة وملف PDF من القالب الحالي. للطلبات غير الموقعة فقط.",
+          "regenerated": "تمت إعادة إنشاء المستند",
+          "regenerateFailed": "تعذر إعادة إنشاء المستند",
+          "regenerateSigned": "لا يمكن إعادة إنشاء مستند موقّع.",
           "proof": {
             "employee_id": "الرقم الوظيفي",
             "phone": "الهاتف",
@@ -6136,6 +6142,8 @@
           "formSaving": "جارٍ حفظ النموذج…",
           "formSaved": "تم حفظ النموذج.",
           "formSaveFailed": "تعذر حفظ النموذج ({reason}).",
+          "formSaveLocked": "هذا الطلب مقفل ولم يعد قابلاً للتحرير.",
+          "formSaveInvalid": "الورقة المحررة غير صالحة. تراجع عن آخر تغيير وحاول مجددًا.",
           "downloadSignedCopy": "تنزيل المستند الموقّع",
           "signedCopyPending": "لا يزال يتم إنشاء النسخة الموقعة — النسخة الأصلية أدناه.",
           "signedCopyFailed": "تعذر إنشاء النسخة الموقعة ({reason}). النسخة الأصلية فقط متاحة.",

@@ -6,6 +6,7 @@ import { LAUNCHER_GLYPH } from "./launcher-glyphs";
 import {
   filterLauncherTiles,
   greetingBucket,
+  LAUNCHER_HIDDEN_TILE_IDS,
   LAUNCHER_LABEL_OVERRIDE,
   LAUNCHER_TILE_IDS,
   launcherRegistryItems,
@@ -104,6 +105,22 @@ describe("launcher modules", () => {
     assert.equal(new Set(ids).size, ids.length);
     assert.equal(new Set(hrefs).size, hrefs.length);
     assert.equal(hrefs.filter((href) => href === "/settings").length, 1);
+  });
+
+  it("drops Dashboard, Payroll and Earnings from the launcher only", () => {
+    const derived = launcherTilesFromMenu(buildInitialTree(() => true, true));
+    const merged = mergeLauncherTiles(derived, launcherRegistryItems());
+    const ids = merged.map((tile) => tile.id);
+
+    for (const hidden of LAUNCHER_HIDDEN_TILE_IDS) {
+      assert.ok(!ids.includes(hidden), hidden);
+    }
+    assert.ok(ids.includes("payroll-hub"));
+
+    const visible = visibleLauncherTiles(new Set(), true).map((tile) => tile.id);
+    for (const hidden of LAUNCHER_HIDDEN_TILE_IDS) {
+      assert.ok(visible.includes(hidden), `${hidden} keeps its permission surface`);
+    }
   });
 
   it("splits the Kuwait day into greeting buckets", () => {    assert.equal(greetingBucket(8), "morning");
