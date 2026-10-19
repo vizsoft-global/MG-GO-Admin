@@ -1,4 +1,9 @@
-export const FLEET_BASE_CACHE_MS = 5_000;
+/**
+ * The raw fleet roster changes at GPS cadence, not at dashboard cadence. Five
+ * seconds meant every open tracking tab rebuilt the whole snapshot; a minute is
+ * still well inside the roster's own freshness window.
+ */
+export const FLEET_BASE_CACHE_MS = 60_000;
 
 /** Fields a caller without contact permission must not receive. */
 export const FLEET_CONTACT_FIELDS = ["phone", "contact", "email", "driver_phone"] as const;

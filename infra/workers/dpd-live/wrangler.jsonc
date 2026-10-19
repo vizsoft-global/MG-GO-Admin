@@ -34,9 +34,11 @@
     // GPS history sink. "r2" + a percent routes that share of riders' history into
     // R2 (FleetRoom SQLite -> minute files -> hourly per-rider objects) instead of
     // driver_location_events. "off" keeps every rider on Firestore.
-    "GPS_SINK": "off",
-    "GPS_SINK_PERCENT": "0",
-    // "1" for the 7-day compare window: archived riders keep Firestore history.
+    "GPS_SINK": "r2",
+    "GPS_SINK_PERCENT": "100",
+    // Keep the Firestore copy during the 24-hour compare window. After
+    // scripts/gps-dual-write-compare.mjs is clean, flip this to "0", redeploy, and
+    // stamp location_gps_r2_since with scripts/gps-r2-cutover.mjs.
     "GPS_DUAL_WRITE": "1"
   },
   "r2_buckets": [

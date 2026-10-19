@@ -2,7 +2,7 @@
  * Two rails, in descending order of quality, chosen automatically.
  *
  * 1. **Edge WebSocket** (`edge`) — the Cloudflare room. 4Hz deltas, sub-second.
- * 2. **Snapshot polling** (`poll`) — `admin_live_fleet_snapshot` every 10s through
+ * 2. **Snapshot polling** (`poll`) — `admin_live_fleet_snapshot` every 30s through
  *    a staff server action. Slow, but it depends on nothing beyond the database,
  *    so it is the rail that is available when the socket is not.
  *
@@ -18,7 +18,7 @@ import type { FleetZone } from "./fleet-types";
 import type { ClientFrame, ServerFrame } from "./fleet-wire";
 import type { FleetSocketTicket } from "./fleet-token";
 
-const SNAPSHOT_POLL_MS = 10_000;
+const SNAPSHOT_POLL_MS = 30_000;
 /** Warm-refresh cadence while a live rail is running: roster facts only. */
 const ROSTER_REFRESH_MS = 120_000;
 const PING_MS = 20_000;
@@ -387,7 +387,7 @@ export class FleetTransport {
    *
    * Status normally arrives attached to a position, so a driver who stops reporting keeps the
    * status of their last frame — a rider whose phone died at speed stayed "Moving" until the
-   * room next re-read the roster (up to 60s) or the next snapshot landed (10s). It runs here
+   * room next re-read the roster (up to 120s) or the next snapshot landed (30s). It runs here
    * rather than in the store so every timer on this page has one owner, and it runs
    * independently of the socket because a dead rail is exactly when it matters.
    */

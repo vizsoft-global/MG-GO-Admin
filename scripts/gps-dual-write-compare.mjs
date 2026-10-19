@@ -62,6 +62,14 @@ function withinTolerance(a, b, tolerance) {
 
 const day = arg("day", kuwaitDay(new Date(Date.now() - 86_400_000)));
 const limit = Number(arg("limit", "25"));
+// Optional ISO instant for a cutover-day comparison: the R2 archive and
+// Firestore both only hold the overlap window, not the whole Kuwait day.
+const since = arg("since", null);
+const sinceMs = since ? Date.parse(since) : null;
+if (since && !Number.isFinite(sinceMs)) {
+  console.error("--since must be an ISO timestamp");
+  process.exit(1);
+}
 
 const account = loadServiceAccount(loadEnv());
 assertProd(account);
@@ -97,6 +105,7 @@ for (const doc of stats.docs) {
       };
     })
     .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng))
+    .filter((r) => sinceMs == null || r.at >= sinceMs)
     .sort((a, b) => a.at - b.at);
 
   const edgePoints = Number(s.points ?? 0);
