@@ -6,12 +6,15 @@ import { LAUNCHER_GLYPH } from "./launcher-glyphs";
 import {
   filterLauncherTiles,
   greetingBucket,
+  groupLauncherTiles,
   LAUNCHER_HIDDEN_TILE_IDS,
   LAUNCHER_LABEL_OVERRIDE,
+  LAUNCHER_SECTIONS,
   LAUNCHER_TILE_IDS,
   launcherRegistryItems,
   launcherTilesFromMenu,
   mergeLauncherTiles,
+  sectionForTile,
   visibleLauncherTiles,
 } from "./launcher-modules";
 
@@ -22,7 +25,7 @@ describe("launcher modules", () => {
     assert.equal(items.find((item) => item.id === "employeedesk")?.defaultLabel, "EmployeeDesk");
     assert.equal(items.find((item) => item.id === "vehicles")?.defaultLabel, "Fleet Hub");
     assert.equal(items.find((item) => item.id === "visit-bookings")?.defaultLabel, "Visit Slots");
-    assert.equal(LAUNCHER_LABEL_OVERRIDE.vehicles, "Vehicles");
+    assert.equal(LAUNCHER_LABEL_OVERRIDE.vehicles, undefined);
     assert.equal(LAUNCHER_LABEL_OVERRIDE["visit-bookings"], "Visit Slots");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.assets, "Assets");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.payroll, "Payroll");
@@ -121,6 +124,25 @@ describe("launcher modules", () => {
     for (const hidden of LAUNCHER_HIDDEN_TILE_IDS) {
       assert.ok(visible.includes(hidden), `${hidden} keeps its permission surface`);
     }
+  });
+
+  it("files each tile under one launcher section, in section order", () => {
+    const derived = launcherTilesFromMenu(buildInitialTree(() => true, true));
+    const merged = mergeLauncherTiles(derived, launcherRegistryItems());
+    const groups = groupLauncherTiles(merged);
+
+    assert.equal(sectionForTile("vehicles"), "fleet");
+    assert.equal(sectionForTile("drivers"), "operations");
+    assert.equal(sectionForTile("profile"), "settings");
+    assert.equal(sectionForTile("unknown-tile"), "operations");
+
+    const order = new Map(LAUNCHER_SECTIONS.map((section, index) => [section.id, index]));
+    const indexes = groups.map((group) => order.get(group.section.id) ?? -1);
+    assert.deepEqual(indexes, [...indexes].sort((a, b) => a - b), "sections render in order");
+    assert.equal(new Set(groups.map((group) => group.section.id)).size, groups.length);
+    assert.equal(groups.flatMap((group) => group.tiles).length, merged.length);
+    assert.ok(groups.every((group) => group.tiles.length > 0), "no empty heading");
+    assert.ok(merged.every((tile) => Boolean(tile.sectionId)));
   });
 
   it("splits the Kuwait day into greeting buckets", () => {    assert.equal(greetingBucket(8), "morning");
