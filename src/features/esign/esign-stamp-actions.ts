@@ -22,6 +22,7 @@ import {
   snapshotFromStored,
   type FilledSheetField,
 } from "./render/esign-filled-sheet";
+import { ESIGN_SHEET_RENDER_VERSION } from "./render/esign-document-html";
 import type { EsignEmployeeSnapshot } from "./render/esign-placeholders";
 import {
   formatStampInstant,
@@ -192,7 +193,10 @@ export async function saveEsignStampLayout(
   return { ok: true };
 }
 
-/** Rewrites the printed sheet, stores a new source PDF, then recomposes the signed copy. */
+/**
+ * Rewrites the printed sheet. A signed request also gets a new source PDF and
+ * a recomposed signed copy; an unsigned request only stores the edited HTML.
+ */
 export async function saveEsignFormSheet(
   requestId: string,
   html: string,
@@ -213,7 +217,31 @@ export async function saveEsignFormSheet(
   const snap = await ref.get();
   if (!snap.exists) return { ok: false, error: "not_found" };
   const row = snap.data() ?? {};
-  if (String(row.status ?? "") !== "signed") return { ok: false, error: "not_signed" };
+  const status = String(row.status ?? "");
+  // Sent / viewed requests are still unsigned. Editing their printed sheet is
+  // allowed; only an archived (declined/expired/cancelled) row is locked.
+  if (!["pending", "draft", "sent", "viewed", "signed"].includes(status)) {
+    return { ok: false, error: "not_signed" };
+  }
+
+  const now = Timestamp.now();
+  if (status !== "signed") {
+    await ref.update({
+      sheet_html: clean,
+      sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
+      updated_at: now,
+    });
+    await logAdminMutation({
+      action: "update",
+      entityType: "esign_requests",
+      entityId: id,
+      routeName: "esign.form-sheet",
+      after: { html_chars: clean.length, unsigned: true },
+    });
+    // The stamp layout only exists once the rider has signed; an unsigned save
+    // must not report the signed-only layout gate as the reason it failed.
+    return { ok: true };
+  }
 
   const formKey = `edited/${id}/form.pdf`;
   let browser: Awaited<ReturnType<typeof launchEsignBrowser>> | null = null;
@@ -228,9 +256,9 @@ export async function saveEsignFormSheet(
     await browser?.close();
   }
 
-  const now = Timestamp.now();
   await ref.update({
     sheet_html: clean,
+    sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
     document_storage_key: formKey,
     updated_at: now,
   });
@@ -292,8 +320,9 @@ function templateFields(
     .map((row) => row.field);
 }
 
-function sheetNeedsRefresh(html: string): boolean {
+function sheetNeedsRefresh(html: string, version: number): boolean {
   if (html.includes("esign-sheet-edited")) return false;
+  if (version !== ESIGN_SHEET_RENDER_VERSION) return true;
   return html.includes("Form Ref:") || html.includes("Page 1 of 1");
 }
 
@@ -314,7 +343,14 @@ export async function loadEsignStampSheet(
   if (!snap.exists) return { ok: false, error: "not_found" };
   const row = snap.data() ?? {};
   const stored = textOrNull(row.sheet_html);
-  if (stored && !sheetNeedsRefresh(stored)) return { ok: true, html: stored };
+  const storedVersion =
+    typeof row.sheet_render_version === "number" ? row.sheet_render_version : 0;
+  const signed = textOrNull(row.status) === "signed";
+  // A signed row's sheet is the evidence attached to the signature. Only an
+  // unsigned row is ever rebuilt from the current layout code.
+  if (stored && (signed || !sheetNeedsRefresh(stored, storedVersion))) {
+    return { ok: true, html: stored };
+  }
 
   const templateId = textOrNull(row.template_id);
   if (!templateId) {
@@ -352,6 +388,105 @@ export async function loadEsignStampSheet(
     requestCode: textOrNull(row.request_code) ?? "",
   });
   if (!html.includes('data-slot-role="employee"')) return { ok: false, error: "template_missing" };
-  await ref.update({ sheet_html: html });
+  await ref.update({
+    sheet_html: html,
+    sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
+  });
   return { ok: true, html };
+}
+
+/**
+ * Rebuilds an unsigned request from its template after a layout change.
+ *
+ * The sent PDF is rebuilt too: the rider downloads `document_storage_key`, so
+ * updating only `sheet_html` would leave the old design in the app inbox.
+ */
+export async function regenerateEsignSheet(
+  requestId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const id = requestId.trim();
+  if (!id) return { ok: false, error: "not_found" };
+  const gate = await requireMutationAuth();
+  if ("error" in gate) return { ok: false, error: gate.error };
+  if (!mayPlace(gate.session)) return { ok: false, error: "not_authorized" };
+
+  const db = await staffDb();
+  if (!db) return { ok: false, error: "not_configured" };
+  const ref = db.collection(COLLECTIONS.esignRequests).doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, error: "not_found" };
+  const row = snap.data() ?? {};
+  const status = String(row.status ?? "");
+  if (status === "signed") return { ok: false, error: "signed_locked" };
+  if (!["pending", "draft", "sent", "viewed"].includes(status)) {
+    return { ok: false, error: "not_editable" };
+  }
+
+  const templateId = textOrNull(row.template_id);
+  if (!templateId) return { ok: false, error: "template_missing" };
+  const templateSnap = await db.collection(COLLECTIONS.esignTemplates).doc(templateId).get();
+  if (!templateSnap.exists) return { ok: false, error: "template_missing" };
+  const template = templateSnap.data() ?? {};
+  const fieldsSnap = await db
+    .collection(COLLECTIONS.esignTemplateFields)
+    .where("template_id", "==", templateId)
+    .get();
+  const snapshot =
+    snapshotFromStored(row.employee_snapshot) ??
+    blankSnapshot(
+      textOrNull(row.signer_display_name) ?? "",
+      textOrNull(row.employee_id) ?? "",
+    );
+  const html = filledEsignSheetHtml({
+    template: {
+      document_kind: row.document_kind ?? template.document_kind,
+      header_en: String(template.header_en ?? ""),
+      header_ar: String(template.header_ar ?? ""),
+      body_en: String(template.body_en ?? ""),
+      body_ar: String(template.body_ar ?? ""),
+      declaration_en: String(template.declaration_en ?? ""),
+      declaration_ar: String(template.declaration_ar ?? ""),
+      fields: templateFields(
+        fieldsSnap.docs.map((doc) => ({
+          data: () => doc.data() as Record<string, unknown>,
+        })),
+      ),
+    },
+    snapshot,
+    fieldValues: fieldValuesOf(row.field_values),
+    description: textOrNull(row.description) ?? "",
+    requestCode: textOrNull(row.request_code) ?? "",
+  });
+  if (!html.includes('data-slot-role="employee"')) {
+    return { ok: false, error: "template_missing" };
+  }
+
+  const storageKey = `regenerated/${id}/document.pdf`;
+  let browser: Awaited<ReturnType<typeof launchEsignBrowser>> | null = null;
+  try {
+    browser = await launchEsignBrowser();
+    const pdf = await renderStoredSheetPdf(html, browser);
+    const stored = await putEsignObject(storageKey, pdf, "application/pdf");
+    if (!stored.ok) return { ok: false, error: stored.error };
+  } catch {
+    return { ok: false, error: "render_failed" };
+  } finally {
+    await browser?.close();
+  }
+
+  const now = Timestamp.now();
+  await ref.update({
+    sheet_html: html,
+    sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
+    document_storage_key: storageKey,
+    updated_at: now,
+  });
+  await logAdminMutation({
+    action: "update",
+    entityType: "esign_requests",
+    entityId: id,
+    routeName: "esign.regenerate-sheet",
+    after: { html_chars: html.length, document_storage_key: storageKey },
+  });
+  return { ok: true };
 }

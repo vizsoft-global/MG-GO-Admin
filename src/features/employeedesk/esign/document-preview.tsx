@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
+import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  A4_CSS_HEIGHT,
+  A4_CSS_WIDTH,
+  useA4Zoom,
+} from "@/features/esign/use-a4-zoom";
 import { resolveFieldSource } from "@/features/esign/template-source";
 import { employeeSampleValues } from "@/features/esign/employee-block";
 import { useBrandingOptional } from "@/contexts/branding-context";
@@ -18,10 +26,10 @@ import {
 } from "@/features/esign/esign-penalty-checks";
 import type { EsignDocumentKind, EsignTemplateFieldRow } from "@/features/esign/types";
 
-/** CSS pixels of an A4 page at 96dpi, scaled to the 620px preview column. */
-const A4_CSS_WIDTH = (595.28 * 96) / 72;
-const A4_CSS_HEIGHT = (841.89 * 96) / 72;
-const FIGMA_PREVIEW_SCALE = 620 / A4_CSS_WIDTH;
+/** The preview column width; the sheet stays contained inside it at 100%. */
+const PREVIEW_COLUMN_WIDTH = 620;
+const PREVIEW_COLUMN_HEIGHT =
+  A4_CSS_HEIGHT * (PREVIEW_COLUMN_WIDTH / A4_CSS_WIDTH);
 
 /**
  * Sample values for the system-filled rows.
@@ -102,6 +110,7 @@ export function EsignDocumentPreview({
   fill?: boolean;
   className?: string;
 }) {
+  const t = useTranslations("pages.requests.esign.detail");
   const branding = useBrandingOptional();
   const resolvedBodyAr = bodyAr ?? "";
   const resolvedDeclarationAr = declarationAr ?? "";
@@ -202,53 +211,114 @@ export function EsignDocumentPreview({
     values,
   ]);
 
-  const fillRef = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState({ w: 0, h: 0 });
-  useEffect(() => {
-    if (!fill) return;
-    const el = fillRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      const next = entries[0]?.contentRect;
-      if (!next) return;
-      setBox({ w: next.width, h: next.height });
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [fill]);
-
-  const scale =
-    fill && box.w > 0 && box.h > 0
-      ? Math.max(box.w / A4_CSS_WIDTH, box.h / A4_CSS_HEIGHT)
-      : FIGMA_PREVIEW_SCALE;
-  const shiftX = fill && box.w > 0 ? (box.w - A4_CSS_WIDTH * scale) / 2 : 0;
-  const shiftY = fill && box.h > 0 ? (box.h - A4_CSS_HEIGHT * scale) / 2 : 0;
+  const stageRef = useRef<HTMLDivElement>(null);
+  const {
+    zoom,
+    viewScale,
+    zoomIn,
+    zoomOut,
+    resetZoom,
+    canZoomIn,
+    canZoomOut,
+  } = useA4Zoom({
+    stageRef,
+    padding: fill ? 8 : 0,
+    minViewportWidth: fill ? 160 : 0,
+    minViewportHeight: fill ? 220 : 0,
+  });
 
   return (
     <div
-      ref={fillRef}
       className={cn(
-        "relative w-full overflow-hidden",
+        "relative w-full",
         fill ? "absolute inset-0 h-full min-h-0 max-w-none" : "mx-auto max-w-[620px]",
         className,
       )}
-      style={fill ? undefined : { height: A4_CSS_HEIGHT * FIGMA_PREVIEW_SCALE }}
+      style={fill ? undefined : { height: PREVIEW_COLUMN_HEIGHT }}
     >
-      <iframe
-        title={templateName || "Document preview"}
-        srcDoc={sheetHtml}
-        className="pointer-events-none absolute start-0 top-0 border-0 bg-white"
-        style={{
-          width: A4_CSS_WIDTH,
-          height: A4_CSS_HEIGHT,
-          transform: `translate(${shiftX}px, ${shiftY}px) scale(${scale})`,
-          transformOrigin: "top left",
-        }}
-        onLoad={(event) => {
-          const doc = event.currentTarget.contentDocument;
-          if (doc) fitEsignSinglePage(doc);
-        }}
-      />
+      <div ref={stageRef} className="absolute inset-0 overflow-auto">
+        <div className="inline-flex min-h-full min-w-full items-center justify-center">
+          <div
+            className="relative shrink-0 bg-white shadow-sm"
+            style={{
+              width: A4_CSS_WIDTH * viewScale,
+              height: A4_CSS_HEIGHT * viewScale,
+            }}
+          >
+            <iframe
+              title={templateName || "Document preview"}
+              srcDoc={sheetHtml}
+              className="pointer-events-none absolute start-0 top-0 border-0 bg-white"
+              style={{
+                width: A4_CSS_WIDTH,
+                height: A4_CSS_HEIGHT,
+                transform: `scale(${viewScale})`,
+                transformOrigin: "top left",
+              }}
+              onLoad={(event) => {
+                const frame = event.currentTarget;
+                void (async () => {
+                  const doc = frame.contentDocument;
+                  if (!doc?.head) return;
+                  const style = doc.createElement("style");
+                  style.textContent =
+                    "@media screen{html,body{background:#fff !important;}.page{margin:0 !important;box-shadow:none !important;}}";
+                  doc.head.appendChild(style);
+                  try {
+                    await doc.fonts?.ready;
+                  } catch {
+                    // A font failure must not leave the sheet unscaled.
+                  }
+                  fitEsignSinglePage(doc);
+                })();
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute end-2 top-2 z-10">
+        <div className="pointer-events-auto flex items-center gap-1 rounded-lg border border-border bg-card p-1 shadow-sm">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-lg"
+            aria-label={t("zoomOut")}
+            disabled={!canZoomOut}
+            onClick={zoomOut}
+          >
+            <ZoomOut />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 min-w-14 px-2 text-xs tabular-nums"
+            aria-label={t("zoomFit")}
+            onClick={resetZoom}
+          >
+            {Math.round(zoom * 100)}%
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-lg"
+            aria-label={t("zoomIn")}
+            disabled={!canZoomIn}
+            onClick={zoomIn}
+          >
+            <ZoomIn />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-lg"
+            aria-label={t("zoomFit")}
+            onClick={resetZoom}
+          >
+            <RotateCcw />
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

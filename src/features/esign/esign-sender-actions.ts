@@ -27,7 +27,10 @@ import {
 import { fetchMyDeskGrants } from "./desk-grants-actions";
 import { CHUNK_SIZE } from "./render/esign-batch-cap";
 import { filledEsignDocumentInput } from "./render/esign-filled-sheet";
-import { buildEsignDocumentHtml } from "./render/esign-document-html";
+import {
+  ESIGN_SHEET_RENDER_VERSION,
+  buildEsignDocumentHtml,
+} from "./render/esign-document-html";
 import { launchEsignBrowser, renderEsignPdf } from "./render/esign-pdf-renderer";
 // Fallback: unsigned template PDFs still compile here via renderEsignPdf (needs Chrome). Signed copies are esignComposeSignedDocument.
 import { snapshotValues, type EsignEmployeeSnapshot } from "./render/esign-placeholders";
@@ -783,7 +786,10 @@ export async function createEsignFromTemplate(input: {
     const id = result.id != null ? String(result.id) : undefined;
     if (id) {
       const sheetHtml = await sheetHtmlForStoredPdf(sheet, result.request_code, upload.key, browser);
-      await patchDoc(COLLECTIONS.esignRequests, id, { sheet_html: sheetHtml });
+      await patchDoc(COLLECTIONS.esignRequests, id, {
+        sheet_html: sheetHtml,
+        sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
+      });
     }
     if (id && input.resent_from_id) {
       const linked = await callAdminFunction("admin_link_esign_resend", {
@@ -1420,7 +1426,10 @@ export async function runEsignBatchChunk(input: {
         const requestId = result.id != null ? String(result.id) : "";
         if (requestId) {
           const sheetHtml = await sheetHtmlForStoredPdf(sheet, result.request_code, upload.key, browser);
-          await patchDoc(COLLECTIONS.esignRequests, requestId, { sheet_html: sheetHtml });
+          await patchDoc(COLLECTIONS.esignRequests, requestId, {
+            sheet_html: sheetHtml,
+            sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
+          });
         }
         created += 1;
       } catch (err) {

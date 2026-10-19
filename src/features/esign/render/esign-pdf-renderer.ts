@@ -76,12 +76,17 @@ export async function renderEsignPdf(
     await page.setJavaScriptEnabled(false);
     const html = buildEsignDocumentHtml({ ...input, fontCss: embeddedFontCss() });
     await page.setContent(html, { waitUntil: "load" });
+    // tsx/esbuild wraps nested helpers with `__name` when it compiles this
+    // function for `page.evaluate`; Chromium does not have that helper.
+    await page.evaluate("globalThis.__name = (value) => value");
     await page.evaluate(fitEsignSinglePage);
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
       preferCSSPageSize: true,
-      pageRanges: "1",
+      // Two pages is the contract. The fit floor keeps text readable and the
+      // print CSS moves the dock; a third page would be a layout regression.
+      pageRanges: "1-2",
     });
     return new Uint8Array(pdf);
   } finally {
@@ -98,12 +103,13 @@ export async function renderStoredSheetPdf(
   try {
     await page.setJavaScriptEnabled(false);
     await page.setContent(html, { waitUntil: "load" });
+    await page.evaluate("globalThis.__name = (value) => value");
     await page.evaluate(fitEsignSinglePage);
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
       preferCSSPageSize: true,
-      pageRanges: "1",
+      pageRanges: "1-2",
     });
     return new Uint8Array(pdf);
   } finally {

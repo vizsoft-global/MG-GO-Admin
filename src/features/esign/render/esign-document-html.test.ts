@@ -35,6 +35,18 @@ function employeeBlockOf(html: string): string {
 }
 
 describe("buildEsignDocumentHtml", () => {
+  it("prints long sheets across two pages without splitting boxes", () => {
+    const html = base("en");
+    assert.match(html, /@media print \{/);
+    assert.match(
+      html,
+      /\.page \{ height: auto; min-height: 297mm; overflow: visible; break-after: page;/,
+    );
+    assert.match(html, /\.page-fit \{ overflow: visible; \}/);
+    assert.match(html, /\.sheet-dock\{flex:none; break-inside: avoid;/);
+    assert.match(html, /tr \{ break-inside: avoid; page-break-inside: avoid; \}/);
+  });
+
   it("never sets html dir=rtl — Arabic is per-span", () => {
     const en = base("en");
     const ar = base("ar");

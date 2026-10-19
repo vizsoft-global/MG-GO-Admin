@@ -86,6 +86,7 @@ const LOAN_MONTHS = [
 ];
 
 const LOAN_SHEET = [
+  ["date_of_request", "Date of request", "تاريخ الطلب", "date"],
   ["payment_method", "Payment method", "طريقة الدفع", "select", LOAN_PAYMENT_METHODS],
   ["amount", "Requested amount", "المبلغ المطلوب", "number"],
   ["installments", "Installments", "الأقساط", "select", LOAN_INSTALLMENTS],
