@@ -34,11 +34,14 @@ export function EsignSignersEditor({
   draft = [],
   onDraftChange,
   onSelectedDisplayNameChange,
+  readOnly = false,
 }: {
   requestId?: string;
   draft?: EsignDraftStaffSigner[];
   onDraftChange?: (next: EsignDraftStaffSigner[]) => void;
   onSelectedDisplayNameChange?: (name: string) => void;
+  /** Signed / declined / cancelled: the signer list is evidence, not a form. */
+  readOnly?: boolean;
 }) {
   const t = useTranslations("pages.requests.esign.signers");
   const persisted = Boolean(requestId);
@@ -109,6 +112,7 @@ export function EsignSignersEditor({
           <p className="text-[10px] text-muted-foreground">{t("subtitle")}</p>
         </div>
       </div>
+      {readOnly ? null : (
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_auto] sm:items-end">
         <div className="space-y-1">
           <Label>{t("staff")}</Label>
@@ -158,6 +162,7 @@ export function EsignSignersEditor({
           {t("add")}
         </Button>
       </div>
+      )}
       {persistedRows.length === 0 && draftRows.length === 0 ? (
         <p className="text-[11px] text-muted-foreground">{t("empty")}</p>
       ) : (
@@ -177,7 +182,7 @@ export function EsignSignersEditor({
               </div>
               {row.status === "signed" ? (
                 <Check className="h-3.5 w-3.5 text-emerald-700" />
-              ) : (
+              ) : readOnly ? null : (
                 <Button
                   type="button"
                   variant="ghost"

@@ -1,11 +1,7 @@
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { firstChildHref } from "@/lib/menu/inline-group-nav";
 import type { ResolvedMenuNode } from "@/lib/menu/menu-merge";
-import {
-  MENU_REGISTRY,
-  OPERATIONS_HUB_GROUP,
-  type MenuRegistryItem,
-} from "@/lib/menu/menu-registry";
+import { MENU_REGISTRY, type MenuRegistryItem } from "@/lib/menu/menu-registry";
 
 /**
  * Module-level tiles on the Home Launcher. Nested EmployeeDesk / Settings
@@ -32,78 +28,6 @@ export const LAUNCHER_TILE_IDS = [
 ] as const;
 
 export type LauncherTileId = (typeof LAUNCHER_TILE_IDS)[number];
-
-/**
- * Launcher sections mirror the sidebar's own groups rather than inventing a
- * second taxonomy: a tile is filed under the group that holds its row, so the
- * launcher and the rail cannot disagree about where a module lives.
- */
-export type LauncherSectionId =
-  | "employeedesk"
-  | "operations"
-  | "fleet"
-  | "settings"
-  | "system";
-
-export interface LauncherSection {
-  id: LauncherSectionId;
-  /** next-intl key under `appNavGroups`. */
-  labelKey: string;
-  /** Name in `ICON_MAP`. */
-  icon: string;
-}
-
-export const LAUNCHER_SECTIONS: readonly LauncherSection[] = [
-  { id: "employeedesk", labelKey: "appNavGroups.employeedesk", icon: "Inbox" },
-  { id: "operations", labelKey: "appNavGroups.operations", icon: "Activity" },
-  { id: "fleet", labelKey: "appNavGroups.fleet", icon: "Truck" },
-  { id: "settings", labelKey: "appNavGroups.settings", icon: "Settings" },
-  { id: "system", labelKey: "appNavGroups.system", icon: "Cog" },
-];
-
-const SECTION_BY_GROUP: Record<string, LauncherSectionId> = {
-  Overview: "operations",
-  EmployeeDesk: "employeedesk",
-  "Visit Bookings": "employeedesk",
-  [OPERATIONS_HUB_GROUP]: "operations",
-  Operations: "operations",
-  Payroll: "operations",
-  Fleet: "fleet",
-  Settings: "settings",
-  System: "system",
-  WIP: "system",
-  Unorganised: "operations",
-};
-
-export function sectionForTile(id: string): LauncherSectionId {
-  const item = MENU_REGISTRY.find((entry) => entry.id === id);
-  return SECTION_BY_GROUP[item?.defaultGroup ?? ""] ?? "operations";
-}
-
-export interface LauncherSectionGroup {
-  section: LauncherSection;
-  tiles: LauncherTile[];
-}
-
-/**
- * Group tiles for rendering, in section order. Empty sections are dropped, so
- * a role that cannot open Fleet does not get a Fleet Hub heading over nothing.
- */
-export function groupLauncherTiles(
-  tiles: readonly LauncherTile[],
-): LauncherSectionGroup[] {
-  const buckets = new Map<LauncherSectionId, LauncherTile[]>();
-  for (const tile of tiles) {
-    const id = tile.sectionId ?? sectionForTile(tile.id);
-    const bucket = buckets.get(id);
-    if (bucket) bucket.push(tile);
-    else buckets.set(id, [tile]);
-  }
-  return LAUNCHER_SECTIONS.flatMap((section) => {
-    const bucket = buckets.get(section.id);
-    return bucket?.length ? [{ section, tiles: bucket }] : [];
-  });
-}
 
 /**
  * Launcher-only hide list. These surfaces keep their route, sidebar row and
@@ -164,8 +88,6 @@ export interface LauncherTile {
   /** The sidebar's resolved label; the shell prefers the `nav.*` translation. */
   label: string;
   icon: string;
-  /** Launcher section the tile is filed under. */
-  sectionId: LauncherSectionId;
 }
 
 /**
@@ -194,7 +116,7 @@ export function launcherTilesFromMenu(
     if (!href || href === LAUNCHER_SELF_HREF) return;
     if (seen.has(id)) return;
     seen.add(id);
-    tiles.push({ id, href, label, icon, sectionId: sectionForTile(id) });
+    tiles.push({ id, href, label, icon });
   };
 
   for (const node of nodes) {
@@ -248,7 +170,6 @@ export function mergeLauncherTiles(
       href: item.href,
       label: item.defaultLabel,
       icon: item.defaultIcon,
-      sectionId: sectionForTile(item.id),
     });
   }
   return out;

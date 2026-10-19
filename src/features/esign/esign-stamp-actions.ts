@@ -9,10 +9,13 @@ import { staffDb } from "@/lib/firebase/staff-db";
 import {
   MAX_SIGNATURE_BYTES,
   MAX_SOURCE_BYTES,
+  assignStaffStampSlots,
   composeSignedPdf,
   placementFromLayout,
+  signedDocumentSourceHash,
   sniff,
   validateImage,
+  type ComposeStamp,
 } from "../../../functions/src/rpcs/esign-compose-logic";
 import { normalizeDocumentKind } from "./document-kind";
 import { sanitizeEditedSheetHtml } from "./esign-sheet-edit";
@@ -132,18 +135,112 @@ export async function saveEsignStampLayout(
   const labels = stampLabelsFromRow(row);
   const placement = placementFromLayout(parsed, labels);
   if (!placement) return { ok: false, error: "invalid_stamp_layout" };
+  const signaturePiece = parsed.pieces.find((piece) => piece.id === "signature");
+  if (!signaturePiece) return { ok: false, error: "invalid_stamp_layout" };
+
+  // The manager boxes on the printed sheet belong to the staff rows that have
+  // signed, in `sort_order`, not to the rider. A recompose that skipped them
+  // would erase every counter-signature already on the document.
+  const signerSnap = await db
+    .collection(COLLECTIONS.esignRequestSigners)
+    .where("request_id", "==", id)
+    .get();
+  const signedStaff = signerSnap.docs.flatMap((doc) => {
+    const signer = doc.data();
+    const key = textOrNull(signer.signature_storage_key);
+    if (signer.status !== "signed" || signer.staff_user_id == null || !key) return [];
+    return [
+      {
+        id: doc.id,
+        sortOrder: Number.isFinite(Number(signer.sort_order)) ? Number(signer.sort_order) : 0,
+        signatureKey: key,
+        signedAt: formatStampInstant(signer.signed_at),
+        displayName: textOrNull(signer.signer_display_name) ?? textOrNull(signer.staff_contact) ?? "",
+      },
+    ];
+  });
+  const assignments = assignStaffStampSlots({
+    kind: row.document_kind,
+    persistedSlots: row.signature_slots,
+    signers: signedStaff,
+  });
+  if (signedStaff.length > assignments.length) {
+    console.warn("esign stamp: staff signatures past the printed slots", {
+      requestId: id,
+      signed: signedStaff.length,
+      slots: assignments.length,
+    });
+  }
+  const staffBySigner = new Map(signedStaff.map((signer) => [signer.id, signer]));
+  const staffFiles: Array<{
+    assignment: (typeof assignments)[number];
+    bytes: Uint8Array | null;
+    kind: "png" | "jpeg" | null;
+  }> = await Promise.all(
+    assignments.map(async (assignment) => {
+      const file = await readEsignObject(assignment.signatureKey);
+      if (!file || file.bytes.byteLength > MAX_SIGNATURE_BYTES) {
+        return { assignment, bytes: null, kind: null };
+      }
+      const kind = sniff(file.bytes);
+      if (kind !== "png" && kind !== "jpeg") {
+        return { assignment, bytes: null, kind: null };
+      }
+      if (validateImage(file.bytes, kind)) {
+        return { assignment, bytes: null, kind: null };
+      }
+      return { assignment, bytes: file.bytes, kind };
+    }),
+  );
+  const missingStaff = staffFiles.find((entry) => !entry.bytes);
+  if (missingStaff) return { ok: false, error: "staff_signature_unavailable" };
+
+  const sourceHash = signedDocumentSourceHash({
+    documentKey,
+    employeeSignatureKey: signatureKey,
+    employeeSignedAt: formatStampInstant(row.signed_at),
+    stampLayout: parsed,
+    signatureSlots: withEmployeeSlot(row.document_kind, row.signature_slots, signaturePiece),
+    sheetRenderVersion:
+      typeof row.sheet_render_version === "number" ? row.sheet_render_version : null,
+    staff: assignments.map((assignment) => ({
+      id: assignment.id,
+      signatureKey: assignment.signatureKey,
+      signedAt: staffBySigner.get(assignment.id)?.signedAt ?? "",
+    })),
+  });
+
+  const stamps: ComposeStamp[] = [
+    {
+      bytes: signatureFile.bytes,
+      kind: signatureKind,
+      slot: placement.signature,
+      captions: [labels.name, labels.date, labels.code],
+      placement,
+    },
+  ];
+  for (const entry of staffFiles) {
+    if (!entry.bytes || !entry.kind) continue;
+    const signer = staffBySigner.get(entry.assignment.id);
+    stamps.push({
+      bytes: entry.bytes,
+      kind: entry.kind,
+      slot: entry.assignment.slot,
+      captions: [signer?.displayName ?? "", signer?.signedAt ?? ""],
+      reserveCaption: true,
+    });
+  }
 
   let pdfBytes: Uint8Array;
   try {
     const composed = await composeSignedPdf({
       sourceBytes: sourceFile.bytes,
       sourceKind,
-      signatureBytes: signatureFile.bytes,
-      signatureKind,
       captions: [labels.name, labels.date, labels.code],
       kind: row.document_kind,
       persistedSlots: row.signature_slots,
       placement,
+      stamps,
     });
     pdfBytes = composed.pdfBytes;
   } catch (error) {
@@ -156,8 +253,7 @@ export async function saveEsignStampLayout(
   const stored = await putEsignObject(outputKey, pdfBytes, "application/pdf");
   if (!stored.ok) return { ok: false, error: stored.error };
 
-  const signature = parsed.pieces.find((piece) => piece.id === "signature");
-  if (!signature) return { ok: false, error: "invalid_stamp_layout" };
+  const signature = signaturePiece;
   const now = Timestamp.now();
   await ref.update({
     stamp_layout:
@@ -168,6 +264,8 @@ export async function saveEsignStampLayout(
     signature_slots: withEmployeeSlot(row.document_kind, row.signature_slots, signature),
     signed_document_storage_key: outputKey,
     signed_document_generated_at: now,
+    signed_document_source_hash: sourceHash,
+    signed_document_pending: false,
     signed_document_error: null,
     updated_at: now,
   });
@@ -200,7 +298,7 @@ export async function saveEsignStampLayout(
 export async function saveEsignFormSheet(
   requestId: string,
   html: string,
-  layout: StampLayout,
+  _layout: StampLayout,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const id = requestId.trim();
   if (!id) return { ok: false, error: "not_found" };
@@ -218,48 +316,16 @@ export async function saveEsignFormSheet(
   if (!snap.exists) return { ok: false, error: "not_found" };
   const row = snap.data() ?? {};
   const status = String(row.status ?? "");
-  // Sent / viewed requests are still unsigned. Editing their printed sheet is
-  // allowed; only an archived (declined/expired/cancelled) row is locked.
-  if (!["pending", "draft", "sent", "viewed", "signed"].includes(status)) {
-    return { ok: false, error: "not_signed" };
+  // A signed sheet is evidence of what the rider agreed to, and a declined or
+  // cancelled one is an archived record. Only an unsigned row may be rewritten.
+  if (!["pending", "draft", "sent", "viewed"].includes(status)) {
+    return { ok: false, error: "document_locked" };
   }
 
   const now = Timestamp.now();
-  if (status !== "signed") {
-    await ref.update({
-      sheet_html: clean,
-      sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
-      updated_at: now,
-    });
-    await logAdminMutation({
-      action: "update",
-      entityType: "esign_requests",
-      entityId: id,
-      routeName: "esign.form-sheet",
-      after: { html_chars: clean.length, unsigned: true },
-    });
-    // The stamp layout only exists once the rider has signed; an unsigned save
-    // must not report the signed-only layout gate as the reason it failed.
-    return { ok: true };
-  }
-
-  const formKey = `edited/${id}/form.pdf`;
-  let browser: Awaited<ReturnType<typeof launchEsignBrowser>> | null = null;
-  try {
-    browser = await launchEsignBrowser();
-    const pdf = await renderStoredSheetPdf(clean, browser);
-    const stored = await putEsignObject(formKey, pdf, "application/pdf");
-    if (!stored.ok) return { ok: false, error: stored.error };
-  } catch {
-    return { ok: false, error: "form_render_failed" };
-  } finally {
-    await browser?.close();
-  }
-
   await ref.update({
     sheet_html: clean,
     sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
-    document_storage_key: formKey,
     updated_at: now,
   });
   await logAdminMutation({
@@ -267,10 +333,11 @@ export async function saveEsignFormSheet(
     entityType: "esign_requests",
     entityId: id,
     routeName: "esign.form-sheet",
-    after: { document_storage_key: formKey, html_chars: clean.length },
+    after: { html_chars: clean.length, unsigned: true },
   });
-
-  return saveEsignStampLayout(id, layout);
+  // The stamp layout only exists once the rider has signed; an unsigned save
+  // must not report the signed-only layout gate as the reason it failed.
+  return { ok: true };
 }
 
 function fieldValuesOf(raw: unknown): Record<string, string> {
@@ -326,7 +393,54 @@ function sheetNeedsRefresh(html: string, version: number): boolean {
   return html.includes("Form Ref:") || html.includes("Page 1 of 1");
 }
 
-/** The filled client sheet frozen on the request. Rebuilds once when an older row has none. */
+type SheetStatusTone = "ok" | "wait" | "red";
+
+/**
+ * The frozen sheet prints a status chip. Its wording has to agree with the
+ * status panel beside it, so the chip is rewritten on read — the stored HTML
+ * itself stays untouched evidence.
+ */
+function withSheetStatus(html: string, label: string, tone: SheetStatusTone): string {
+  return html.replace(
+    /<span class="chip chip--(?:ok|wait|red)">[^<]*<\/span>/,
+    `<span class="chip chip--${tone}">${label}</span>`,
+  );
+}
+
+function sheetStatus(title: string, tone: SheetStatusTone) {
+  return { title, tone };
+}
+
+async function requestSheetStatus(
+  db: NonNullable<Awaited<ReturnType<typeof staffDb>>>,
+  id: string,
+  row: Record<string, unknown>,
+): Promise<{ title: string; tone: SheetStatusTone }> {
+  const status = textOrNull(row.status) ?? "pending";
+  if (status === "signed") {
+    const signerSnap = await db
+      .collection(COLLECTIONS.esignRequestSigners)
+      .where("request_id", "==", id)
+      .get();
+    const awaiting = signerSnap.docs.some((doc) => {
+      const signer = doc.data();
+      return (
+        typeof signer.staff_user_id === "string" &&
+        signer.staff_user_id.trim() !== "" &&
+        signer.status === "pending"
+      );
+    });
+    return awaiting
+      ? sheetStatus("Awaiting counter-signature", "wait")
+      : sheetStatus("Signed", "ok");
+  }
+  if (status === "declined") return sheetStatus("Declined", "red");
+  if (status === "cancelled") return sheetStatus("Cancelled", "red");
+  if (status === "expired") return sheetStatus("Expired", "red");
+  return sheetStatus("Awaiting signature", "wait");
+}
+
+
 export async function loadEsignStampSheet(
   requestId: string,
 ): Promise<{ ok: true; html: string } | { ok: false; error: string }> {
@@ -349,12 +463,16 @@ export async function loadEsignStampSheet(
   // A signed row's sheet is the evidence attached to the signature. Only an
   // unsigned row is ever rebuilt from the current layout code.
   if (stored && (signed || !sheetNeedsRefresh(stored, storedVersion))) {
-    return { ok: true, html: stored };
+    const chip = await requestSheetStatus(db, id, row);
+    return { ok: true, html: withSheetStatus(stored, chip.title, chip.tone) };
   }
 
   const templateId = textOrNull(row.template_id);
   if (!templateId) {
-    if (stored) return { ok: true, html: stored };
+    if (stored) {
+      const chip = await requestSheetStatus(db, id, row);
+      return { ok: true, html: withSheetStatus(stored, chip.title, chip.tone) };
+    }
     return { ok: false, error: "template_missing" };
   }
   const templateSnap = await db.collection(COLLECTIONS.esignTemplates).doc(templateId).get();
@@ -392,7 +510,8 @@ export async function loadEsignStampSheet(
     sheet_html: html,
     sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
   });
-  return { ok: true, html };
+  const chip = await requestSheetStatus(db, id, row);
+  return { ok: true, html: withSheetStatus(html, chip.title, chip.tone) };
 }
 
 /**

@@ -77,6 +77,13 @@ export type LayoutSection = {
   rows: LayoutFieldRow[];
   checkboxes?: LayoutCheckbox[];
   body?: BilingualText;
+  /**
+   * A structural block on the reference form (loan request, HR verification,
+   * management decision, accident dates). It prints its labels even when the
+   * values are still blank, so a preview shows the form the rider will receive
+   * and the PDF keeps the fields HR has to fill.
+   */
+  alwaysPrint?: boolean;
 };
 
 export type PayslipLineTone = "plain" | "days" | "net";
@@ -111,6 +118,10 @@ export type EsignDocumentLayout = {
   declaration: BilingualText;
   slots: SignSlot[];
   payslip?: PayslipSheet;
+  /** An Accident-family request (accident / sick leave / medical report / declaration). */
+  accident?: boolean;
+  /** Rider name printed in the accident tail; the template field wins over the snapshot. */
+  riderName?: string;
 };
 
 export type LayoutFieldInput = {
@@ -465,6 +476,9 @@ export function payslipConsumedKeys(): Set<string> {
     "civil_id",
     "project",
     "slip_month",
+    "hr_manager_name",
+    "hr_manager_position",
+    "computed_by",
   ]);
   for (const spec of PAYSLIP_LINE_SPEC) {
     for (const alias of spec.aliases) keys.add(alias);
@@ -764,17 +778,26 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
   }
 
   const header = fillBoth(input.headerEn ?? "", input.headerAr ?? "", merged);
-  const title: BilingualText =
-    header.en || header.ar
-      ? header
-      : kind === "penalty"
-        ? { en: "Penalty Notice", ar: "إشعار جزاء" }
-        : kind === "loan"
-          ? { en: "Loan Request", ar: "طلب سلفة" }
-          : kind === "payslip"
-            ? { en: "Payslip", ar: "قسيمة الراتب" }
-            : kind === "general" && isAccidentRequest(merged, input.fields ?? [])
-              ? { en: "Accident", ar: "حادث" }
+  const accidentKindTitle = isAccidentRequest(merged, input.fields ?? [])
+    ? accidentKindLabel(normalizeAccidentKind(merged[REQUEST_KIND_KEY]))
+    : null;
+  // The reference payslip is titled "Payslip". Older templates carried the
+  // category label ("Salary Deduction Acknowledgement") as their header, which
+  // is why the sheet looked unchanged; only a genuinely payslip-shaped header
+  // is trusted over the default now.
+  const payslipHeader = /payslip|salary slip|قسيمة/i.test(`${header.en} ${header.ar}`);
+  const title: BilingualText = accidentKindTitle
+    ? accidentKindTitle
+    : kind === "payslip" && !payslipHeader
+      ? { en: "Payslip", ar: "قسيمة الراتب" }
+      : header.en || header.ar
+        ? header
+        : kind === "penalty"
+          ? { en: "Penalty Notice", ar: "إشعار جزاء" }
+          : kind === "loan"
+            ? { en: "Loan Request", ar: "طلب سلفة" }
+            : kind === "payslip"
+              ? { en: "Payslip", ar: "قسيمة الراتب" }
               : { en: "Document", ar: "مستند" };
 
   const body = fillBoth(input.bodyEn ?? "", input.bodyAr ?? "", merged);
@@ -787,6 +810,8 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
   let employeeRows: LayoutFieldRow[];
   const sections: LayoutSection[] = [];
   let payslip: PayslipSheet | undefined;
+  let accident = false;
+  let riderName = "";
   if (kind === "penalty") {
     const position = firstField(allFields, ["position"]) || values.project || "";
     const penaltyText =
@@ -940,18 +965,39 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
       "remarks",
       "notes",
     ]);
+    const monthlySalary = firstField(allFields, [
+      "monthly_salary_kwd",
+      "monthly_salary",
+      "basic_salary_kwd",
+      "basic_salary",
+    ]);
+    const monthlyInstallment = firstField(allFields, [
+      "monthly_installment",
+      "monthly_instalment",
+      "installment_amount",
+    ]);
+    const yearsOfService =
+      firstField(allFields, ["years_of_service", "service_years"]) || values.years_of_service || "";
+    const department =
+      firstField(allFields, ["department"]) || values.department || values.project || "";
+    const policyCheck = firstField(allFields, ["policy_check", "policy_eligibility"]);
+    const verifiedBy = firstField(allFields, ["verified_by", "hr_manager_name"]) || "";
     employeeRows = [
       row("request_date", "Date of Request", "تاريخ الطلب", requestDate, "fixed"),
       row("employee_id", "Employee ID", "رقم الموظف", values.employee_id ?? "", "system"),
       row("employee_name", "Employee Name", "اسم الموظف", values.employee_name ?? "", "system"),
+      row("civil_id", "Civil ID", "الرقم المدني", values.civil_id ?? "", "system"),
       row("sponsor", "Employee's Sponsor", "كفيل الموظف", sponsor, "system"),
       row("joining", "Joining Date", "تاريخ الالتحاق", values.joined_at ?? "", "system"),
       row("position", "Position", "الوظيفة", position, "system"),
+      row("department", "Department", "القسم", department, "system"),
     ];
     const loanRows: LayoutFieldRow[] = [
+      row("monthly_salary_kwd", "Monthly Salary (KD)", "الراتب الشهري (د.ك)", monthlySalary, "system"),
       row("payment_method", "Payment Method", "طريقة الدفع", paymentMethod, "entry"),
-      row("amount", "Requested Amount", "المبلغ المطلوب", firstField(allFields, ["amount", "requested_amount", "loan_amount"]), "entry"),
+      row("amount", "Requested Amount (KD)", "المبلغ المطلوب (د.ك)", firstField(allFields, ["amount", "requested_amount", "loan_amount"]), "entry"),
       row("installments", "Installments", "الأقساط", installments, "entry"),
+      row("monthly_installment", "Monthly Installment (KD)", "القسط الشهري (د.ك)", monthlyInstallment, "entry"),
       row("loan_month", "Month", "الشهر", month, "entry"),
       row("unsettled", "Unsettled Loans if any", "سلف غير مسددة إن وجدت", firstField(allFields, ["unsettled_loans", "unsettled"]), "system"),
     ];
@@ -962,6 +1008,7 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
       "sponsor",
       "employee_sponsor",
       "position",
+      "department",
       "purpose",
       "loan_purpose",
       "purpose_of_loan",
@@ -1000,17 +1047,41 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
       "company_name",
       "joined_at",
       "joining",
+      "civil_id",
+      "monthly_salary_kwd",
+      "monthly_salary",
+      "basic_salary_kwd",
+      "basic_salary",
+      "monthly_installment",
+      "monthly_instalment",
+      "installment_amount",
+      "years_of_service",
+      "service_years",
+      "max_loan_policy_kwd",
+      "max_loan_policy",
+      "previous_loan_outstanding_kwd",
+      "previous_loan_outstanding",
+      "policy_check",
+      "policy_eligibility",
+      "verified_by",
+      "verified_date",
+      "hr_manager_name",
+      "hr_manager_position",
+      "management_decision",
+      "amount_received",
     ]);
     sections.push(
       {
         key: "employee",
-        title: { en: "Employee Details", ar: "بيانات الموظف" },
+        title: { en: "Employee Information", ar: "بيانات الموظف" },
         rows: employeeRows,
+        alwaysPrint: true,
       },
       {
         key: "loan",
-        title: { en: "Loan Details", ar: "تفاصيل السلفة" },
+        title: { en: "Loan Request", ar: "طلب السلفة" },
         rows: loanRows,
+        alwaysPrint: true,
         // A reason can be a paragraph; a single clipped row loses it.
         body:
           reason || description
@@ -1018,10 +1089,27 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
             : undefined,
       },
       {
-        key: "approval",
-        title: { en: "Approval Status", ar: "حالة الموافقة" },
+        key: "hr_verification",
+        title: { en: "HR Verification", ar: "تحقق الموارد البشرية" },
+        alwaysPrint: true,
         rows: [
-          row("hr_decision", "HR Decision", "قرار الموارد البشرية", firstField(allFields, ["hr_decision"]), "signature"),
+          row("years_of_service", "Years of Service", "سنوات الخدمة", yearsOfService, "system"),
+          row("max_loan_policy_kwd", "Maximum Loan Policy (KD)", "حد السلفة حسب السياسة (د.ك)", firstField(allFields, ["max_loan_policy_kwd", "max_loan_policy"]), "entry"),
+          row("previous_loan_outstanding_kwd", "Previous Loan Outstanding (KD)", "رصيد السلفة السابقة (د.ك)", firstField(allFields, ["previous_loan_outstanding_kwd", "previous_loan_outstanding"]), "entry"),
+          row("policy_check", "Policy Check", "مطابقة السياسة", policyCheck, "entry"),
+          row("verified_by", "Verified By", "تحقق بواسطة", verifiedBy, "entry"),
+          row("verified_date", "Verified On", "تاريخ التحقق", firstField(allFields, ["verified_date"]), "entry"),
+        ],
+      },
+      {
+        key: "management_decision",
+        title: { en: "Management Decision", ar: "قرار الإدارة" },
+        alwaysPrint: true,
+        rows: [
+          row("hr_manager_name", "HR Manager", "مدير الموارد البشرية", firstField(allFields, ["hr_manager_name"]) || verifiedBy, "entry"),
+          row("hr_manager_position", "Position", "المنصب", firstField(allFields, ["hr_manager_position"]), "entry"),
+          row("management_decision", "Decision", "القرار", firstField(allFields, ["management_decision", "hr_decision"]), "entry"),
+          row("amount_received", "Amount Received", "المبلغ المستلم", firstField(allFields, ["amount_received"]), "entry"),
           row("ceo_decision", "CEO Decision", "قرار الرئيس التنفيذي", firstField(allFields, ["ceo_decision"]), "signature"),
         ],
       },
@@ -1052,6 +1140,16 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
           "entry",
         ),
       ),
+    });
+    sections.push({
+      key: "payslip_verification",
+      title: { en: "Verification", ar: "التحقق" },
+      alwaysPrint: true,
+      rows: [
+        row("hr_manager_name", "HR Manager", "مدير الموارد البشرية", firstField(allFields, ["hr_manager_name"]), "entry"),
+        row("hr_manager_position", "Position", "المنصب", firstField(allFields, ["hr_manager_position"]), "entry"),
+        row("computed_by", "Computed By", "احتسب بواسطة", firstField(allFields, ["computed_by"]), "entry"),
+      ],
     });
     if ((body.en || body.ar) && !isTitleEcho(body, title)) {
       sections.push({
@@ -1088,6 +1186,7 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
       });
     }
   } else if (isAccidentRequest(merged, allFields)) {
+    accident = true;
     const requestKind = normalizeAccidentKind(merged[REQUEST_KIND_KEY]);
     const kindLabel = accidentKindLabel(requestKind);
     const sickLeave = requestKind === "sick_leave";
@@ -1109,6 +1208,7 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
     sections.push({
       key: "request_details",
       title: kindLabel,
+      alwaysPrint: true,
       rows: sickLeave
         ? [
             row("absence_from", "From", "من", absenceFrom, "entry"),
@@ -1119,9 +1219,23 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
             row("report_date", "Report date", "تاريخ التقرير", reportDate, "entry"),
           ],
     });
+    const riderNameValue = firstField(allFields, ["rider_name"]) || values.employee_name || "";
+    riderName = riderNameValue;
+    const declarationEn = declaration.en.trim();
+    const declarationAr = declaration.ar.trim();
+    sections.push({
+      key: "rider_declaration",
+      title: { en: "Rider Declaration", ar: "إقرار السائق" },
+      rows: [],
+      body:
+        declarationEn || declarationAr
+          ? { en: declarationEn, ar: declarationAr }
+          : undefined,
+    });
     const consumed = new Set<string>([
       ...ACCIDENT_CONSUMED_KEYS,
       ...ACCIDENT_EMPLOYEE_ROW_KEYS,
+      "rider_name",
       // Deliberately off this kind, so a template field cannot reprint them.
       "company_name",
       "joined_at",
@@ -1129,6 +1243,7 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
       "zone",
       "project",
       "nationality",
+      "department",
     ]);
     appendDocumentTail(sections, [...employeeFields, ...documentFields], consumed, body, title);
   } else {
@@ -1185,6 +1300,7 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
     declaration,
     slots: slotsForKind(kind),
     ...(payslip ? { payslip } : {}),
+    ...(accident ? { accident: true, riderName } : {}),
   };
 }
 

@@ -5504,6 +5504,13 @@
           "sourceFixed": "Fixed",
           "sourceSigned": "Signed by a person",
           "sheetInputs": "Sheet inputs",
+          "groups": {
+            "fields": "Sheet inputs",
+            "loanRequest": "Loan request",
+            "hrVerification": "HR verification",
+            "management": "Management decision",
+            "verification": "Verification"
+          },
           "fieldEmployeeId": "Employee ID",
           "sendForSignature": "Send for e-signature",
           "addDocuments": "Add documents",
@@ -6115,6 +6122,7 @@
             "declaration_accepted_at": "Declaration accepted"
           },
           "previewSignedCopy": "Showing the signed copy, with the rider's signature stamped in.",
+          "awaitingCounter": "The rider has signed. Waiting for the staff counter-signature before the final PDF is composed.",
           "placeHint": "Drag a box to move it. Drag a corner to resize it. The delete button on a box removes it. Edit form changes the printed lines and labels. The document saves by itself.",
           "placeSaving": "Saving the signed document…",
           "placeSaved": "Saved. Download uses this placement.",
@@ -6143,6 +6151,7 @@
           "formSaved": "Form saved.",
           "formSaveFailed": "The form could not be saved ({reason}).",
           "formSaveLocked": "This request is locked and can no longer be edited.",
+          "document_locked": "This document is signed, declined or cancelled. Its sheet can no longer be edited.",
           "formSaveInvalid": "The edited sheet is not valid. Undo the last change and try again.",
           "downloadSignedCopy": "Download signed document",
           "signedCopyPending": "The signed copy is still being composed — the original is below.",

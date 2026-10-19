@@ -272,8 +272,10 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
     auth.can("employeedesk.manage");
   const canEditUnsigned =
     canManageRequests &&
-    request.status === "pending" &&
+    ["pending", "draft", "sent", "viewed"].includes(request.status) &&
     Boolean(links?.documentUrl && request.template_id);
+  const formLocked = !["pending", "draft", "sent", "viewed"].includes(request.status);
+  const signersReadOnly = !["pending", "draft", "sent", "viewed"].includes(request.status);
   const documentRequestId = request.id;
 
   async function openSigned(disposition: "inline" | "attachment") {
@@ -357,6 +359,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               signatureSlots={request.signature_slots}
               stampLayout={request.stamp_layout}
               formOnly={!canPlace}
+              formLocked={formLocked}
               labels={{
                 name: request.signer_display_name?.trim() || "Signed by driver",
                 date: formatStampInstant(request.signed_at),
@@ -417,6 +420,9 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
                 {tCommon(`status.${request.status}`)}
               </StatusPill>
             </div>
+            {request.awaiting_counter_signature ? (
+              <p className="text-[10px] font-medium text-amber-700">{t("awaitingCounter")}</p>
+            ) : null}
             <ol className="space-y-2">
               <TimelineStep label={t("timelineSent")} at={request.sent_at} />
               <TimelineStep label={t("timelineViewed")} at={request.viewed_at} pendingLabel={t("timelinePending")} />
@@ -436,7 +442,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
             </ol>
           </AppListCard>
 
-          <EsignSignersEditor requestId={request.id} />
+          <EsignSignersEditor requestId={request.id} readOnly={signersReadOnly} />
 
           <AppListCard className="space-y-2 p-4">
             <div className="flex items-center justify-between gap-2">

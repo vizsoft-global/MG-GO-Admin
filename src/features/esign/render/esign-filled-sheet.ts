@@ -5,7 +5,11 @@ import {
 } from "../esign-penalty-checks";
 import { buildEsignDocumentHtml, type EsignDocumentInput } from "./esign-document-html";
 import type { LayoutSource } from "./esign-document-layout";
-import type { EsignEmployeeSnapshot } from "./esign-placeholders";
+import type {
+  EsignEmployeeSnapshot,
+  EsignPolicySnapshot,
+} from "./esign-placeholders";
+import { ESIGN_POLICY_SNAPSHOT_KEYS } from "./esign-placeholders";
 
 export type FilledSheetField = {
   field_key: string;
@@ -147,11 +151,13 @@ export function filledEsignSheetHtml(input: FilledSheetInput): string {
   return buildEsignDocumentHtml(filledEsignDocumentInput(input));
 }
 
-export function snapshotFromStored(value: unknown): EsignEmployeeSnapshot | null {
+export function snapshotFromStored(
+  value: unknown,
+): (EsignEmployeeSnapshot & EsignPolicySnapshot) | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
   if (!row.employee_id && !row.employee_name) return null;
-  return {
+  const out: EsignEmployeeSnapshot & EsignPolicySnapshot = {
     company_name: String(row.company_name ?? ""),
     employee_name: String(row.employee_name ?? ""),
     employee_id: String(row.employee_id ?? ""),
@@ -167,4 +173,8 @@ export function snapshotFromStored(value: unknown): EsignEmployeeSnapshot | null
     pay_through: row.pay_through != null ? String(row.pay_through) : null,
     bank_number: row.bank_number != null ? String(row.bank_number) : null,
   };
+  for (const key of ESIGN_POLICY_SNAPSHOT_KEYS) {
+    out[key] = row[key] != null ? String(row[key]) : null;
+  }
+  return out;
 }

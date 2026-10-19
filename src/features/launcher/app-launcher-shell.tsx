@@ -13,7 +13,6 @@ import { launcherFontClassName } from "@/lib/fonts/app-fonts";
 import {
   filterLauncherTiles,
   greetingBucket,
-  groupLauncherTiles,
   kuwaitHour,
   LAUNCHER_LABEL_OVERRIDE,
   launcherTilesFromMenu,
@@ -41,31 +40,6 @@ const TILE_SHADOW =
 
 const TILE_GRID =
   "grid w-full grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-x-3 gap-y-5";
-
-function LauncherSectionHeading({ icon, label }: { icon: string; label: string }) {
-  const Icon = resolveIcon(icon);
-  return (
-    <div className="flex items-center gap-2">
-      <Icon
-        className="size-[13px] shrink-0"
-        strokeWidth={2.2}
-        style={{ color: LAUNCHER_BRAND.subText }}
-        aria-hidden
-      />
-      <h2
-        className="m-0 text-[11px] font-bold tracking-[0.14em] uppercase"
-        style={{ color: LAUNCHER_BRAND.subText }}
-      >
-        {label}
-      </h2>
-      <span
-        aria-hidden
-        className="h-px flex-1"
-        style={{ backgroundColor: "rgba(41,41,63,0.14)" }}
-      />
-    </div>
-  );
-}
 
 function formatAdminRole(slug: string): string {
   if (!slug) return "";
@@ -144,9 +118,6 @@ export function AppLauncherShell() {
     () => filterLauncherTiles(tiles, query, labels),
     [tiles, query, labels],
   );
-
-  const searching = query.trim().length > 0;
-  const tilesBySection = useMemo(() => groupLauncherTiles(visible), [visible]);
 
   const renderTile = (item: LauncherTile) => {
     const badge = badges[item.id];
@@ -349,19 +320,7 @@ export function AppLauncherShell() {
 
         <div className="mx-auto mt-8 flex w-full max-w-[720px] flex-col">
           <nav aria-label={t("title")} className="flex w-full flex-col gap-6">
-            {searching ? (
-              <div className={TILE_GRID}>{visible.map(renderTile)}</div>
-            ) : (
-              tilesBySection.map(({ section, tiles: sectionTiles }) => (
-                <section key={section.id} className="flex w-full flex-col gap-3">
-                  <LauncherSectionHeading
-                    icon={section.icon}
-                    label={tNav(section.labelKey)}
-                  />
-                  <div className={TILE_GRID}>{sectionTiles.map(renderTile)}</div>
-                </section>
-              ))
-            )}
+            <div className={TILE_GRID}>{visible.map(renderTile)}</div>
           </nav>
 
           <div className="relative mx-auto mt-8 pt-[9px] ps-[15px]">

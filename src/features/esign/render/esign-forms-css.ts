@@ -23,8 +23,6 @@ export const ESIGN_FORMS_CSS = `/* =============================================
   --ok:       #1F7A55;   --ok-tint:   #E3F3EC;
   --warn:     #8A5A00;   --warn-tint: #FFF3DC;
   --dots:     #8A90A0;   /* signature lines         */
-  --sig-box:  #DC2626;   /* employee signature box  */
-  --name-box: #2563EB;   /* employee name box       */
 }
 
 @page { size: A4; margin: 0; }
@@ -204,13 +202,26 @@ th .ar { text-transform: none; letter-spacing: 0; font-size: 7.6pt; display: blo
 .ln.tall > i[data-slot-role]{flex:none;width:42mm;margin-left:auto;}
 
 /* ---------- Signature slot & name field ---------- */
-/* Employee signature is a red outline; employee name is a blue outline, so a
-   printed sheet makes it obvious which box the signer must fill. */
-.ln.tall > i[data-slot-role]{border:2px solid var(--sig-box);border-radius:1mm;padding:0 1.2mm;background:#FFF5F5;}
-.ln.tall > i[data-slot-role]:not(:empty){background:#fff;}
-.ln.name-box > i{border:2px solid var(--name-box);border-radius:1mm;padding:0 1.2mm;background:#EFF6FF;}
-.ln.name-box > i:not(:empty){background:#fff;}
-.ln.name-box > span{color:#1D4ED8;font-weight:600;}
+/* A printed sheet carries clean baselines only. The filled signature and the
+   manager's stamp are drawn into the PDF; a coloured box on the sheet would
+   print into the signed copy and read as an unfilled field. */
+.ln.tall > i[data-slot-role]{flex:none;width:42mm;margin-left:auto;border-bottom:.6pt dotted var(--dots);}
+.ln.name-box > i{border-bottom:.6pt dotted var(--dots);}
+.ln.name-box > span{font-weight:600;}
+
+/* The loan acknowledgement gives the rider's signature the wider line. */
+.page[data-kind="loan"] .ack .sign{width:100mm;}
+
+/* Management decision: the HR manager's box is the wider one beside the CEO /
+   GM box, and the whole band when there is no second signer. Heights stay at
+   the shared 8mm baseline so the persisted slot geometry keeps matching the
+   printed lines. */
+.mgmt-signs { margin-top: 0; }
+.mgmt-signs--pair { grid-template-columns: 1.45fr 1fr; }
+.mgmt-signs .sig .b { padding: 2mm 2.4mm 2mm; }
+
+/* Accident tail: rider name + signature in one band at the foot of the sheet. */
+.accident-tail .sign{width:96mm;}
 
 /* ---------- Employee information block ---------- */
 .employee-block { border: .9pt solid var(--navy); margin-top: 4.2mm; background: #fff; }

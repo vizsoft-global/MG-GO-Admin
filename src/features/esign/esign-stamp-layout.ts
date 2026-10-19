@@ -7,10 +7,26 @@ import {
   slotsForKind,
 } from "./render/esign-document-layout";
 
-export const STAMP_CORE_IDS = ["signature", "name", "date", "code"] as const;
-export const STAMP_EXTRA_IDS = ["employee_id", "company", "position", "civil_id", "zone"] as const;
+/**
+ * The two boxes a fresh layout always draws. Date, request code, employee id,
+ * company, position, civil id and zone are opt-in, so the default stamp cannot
+ * stack a caption over the pre-printed lines beneath the signature.
+ */
+export const STAMP_CORE_IDS = ["signature", "name"] as const;
+export const STAMP_EXTRA_IDS = [
+  "date",
+  "code",
+  "employee_id",
+  "company",
+  "position",
+  "civil_id",
+  "zone",
+] as const;
 export const STAMP_PIECE_IDS = [...STAMP_CORE_IDS, ...STAMP_EXTRA_IDS] as const;
 export type StampPieceId = (typeof STAMP_PIECE_IDS)[number];
+
+/** What a default layout draws. `STAMP_PIECE_IDS` is the full opt-in catalogue. */
+export const STAMP_DEFAULT_IDS = ["signature", "name"] as const;
 
 export const RESIZE_CORNERS = ["nw", "ne", "sw", "se"] as const;
 export type ResizeCorner = (typeof RESIZE_CORNERS)[number];
@@ -138,7 +154,7 @@ export function addStampPiece(layout: StampLayout, id: StampPieceId): StampLayou
   if (layout.pieces.some((piece) => piece.id === id)) return layout;
   const signature = layout.pieces.find((piece) => piece.id === "signature");
   const template = signature
-    ? layoutAroundSignature(signature).pieces.find((piece) => piece.id === id)
+    ? layoutAllPieces(signature).pieces.find((piece) => piece.id === id)
     : null;
   if (!template) return layout;
   const placed = freeStampPosition(template, layout.pieces);
@@ -166,7 +182,7 @@ export function restoreStampPieces(layout: StampLayout): StampLayout {
   const have = new Set(layout.pieces.map((piece) => piece.id));
   const pieces = [...layout.pieces];
   if (signature) {
-    const defaults = layoutAroundSignature(signature);
+    const defaults = layoutAllPieces(signature);
     for (const id of STAMP_PIECE_IDS) {
       if (!removed.includes(id) || have.has(id)) continue;
       const template = defaults.pieces.find((piece) => piece.id === id);
@@ -244,13 +260,25 @@ export function formatStampInstant(value: unknown): string {
 
 /** Name, date, and request code sit just under a signature box, in PDF points. */
 export function layoutAroundSignature(signature: StampPiece): StampLayout {
+  return layoutWithIds(signature, STAMP_DEFAULT_IDS);
+}
+
+/** Every opt-in box, in print order, anchored under the signature. */
+export function layoutAllPieces(signature: StampPiece): StampLayout {
+  return layoutWithIds(signature, STAMP_PIECE_IDS);
+}
+
+function layoutWithIds(
+  signature: StampPiece,
+  ids: readonly StampPieceId[],
+): StampLayout {
   const employee = clampPiece({ ...signature, id: "signature" });
   const textW = 160;
   const textH = 11;
   const gap = 1;
   let y = employee.yPt - gap - textH;
   const pieces: StampPiece[] = [employee];
-  for (const id of STAMP_PIECE_IDS) {
+  for (const id of ids) {
     if (id === "signature") continue;
     if (y < 8) y = 8;
     pieces.push(

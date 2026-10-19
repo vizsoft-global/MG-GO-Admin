@@ -71,10 +71,17 @@ type Gesture = {
 };
 
 const FORM_EDIT_SELECTOR =
-  ".sec, .l, .v, .h, .ln > span:not([data-slot-role]), .note, .text, th, td.val, td.lab .row > span, .doc-header .en, .doc-header .ar, .opt .en, .opt .ar, .net .amount, .meta .v, .doc-footer .grow, .doc-footer .ref";
-/** Slots and the management/footer bands are structural, never editable text. */
-const FORM_PROTECTED_SELECTOR =
-  "[data-slot-role], [data-management], [data-sheet-foot]";
+  ".sec, .l, .v, .h, .ln > span:not([data-slot-role]), .note, .text, th, td, .doc-header, .doc-header .en, .doc-header .ar, .opt, .opt .en, .opt .ar, .net, .net .amount, .meta, .meta .v, .doc-footer, .doc-footer .grow, .doc-footer .ref, .lab .row > span, .val, .chip, .sub, .ar";
+/**
+ * Only the stamp slot itself is structural. Titles, the management band and the
+ * footer are ordinary text now: every line HR can read, HR can correct.
+ */
+const FORM_PROTECTED_SELECTOR = "[data-slot-role]";
+
+/** True when this node is, or wraps, a protected slot. */
+function holdsProtected(node: Element): boolean {
+  return Boolean(node.closest(FORM_PROTECTED_SELECTOR) ?? node.querySelector(FORM_PROTECTED_SELECTOR));
+}
 
 /**
  * iframe nodes come from another realm, so `node instanceof HTMLElement` is false for every
@@ -123,6 +130,8 @@ export const EsignStampPlacer = forwardRef<
     labels: StampPieceLabels;
     /** Unsigned request: edit the printed sheet only; stamp boxes need a signature. */
     formOnly?: boolean;
+    /** Signed / declined / cancelled: the sheet is evidence and cannot be rewritten. */
+    formLocked?: boolean;
   }
 >(function EsignStampPlacer(
   {
@@ -133,6 +142,7 @@ export const EsignStampPlacer = forwardRef<
     stampLayout,
     labels,
     formOnly = false,
+    formLocked = false,
   },
   ref,
 ) {
@@ -390,7 +400,7 @@ export const EsignStampPlacer = forwardRef<
     });
     doc.querySelectorAll(FORM_EDIT_SELECTOR).forEach((node) => {
       if (!isElement(node)) return;
-      if (node.closest(FORM_PROTECTED_SELECTOR)) return;
+      if (holdsProtected(node)) return;
       if (on) {
         node.setAttribute("contenteditable", "true");
         node.setAttribute("data-form-edit", "1");
@@ -435,6 +445,7 @@ export const EsignStampPlacer = forwardRef<
   saveFormRef.current = saveForm;
 
   async function toggleEdit() {
+    if (formLocked) return;
     if (editing) {
       if (formDirtyRef.current) {
         const ok = await saveForm();
@@ -461,7 +472,7 @@ export const EsignStampPlacer = forwardRef<
       if (key !== "Backspace" && key !== "Delete") return;
       const target = event.target;
       if (!isElement(target) || !target.hasAttribute("data-form-edit")) return;
-      if (target.closest(FORM_PROTECTED_SELECTOR)) {
+      if (target.closest(FORM_PROTECTED_SELECTOR) || holdsProtected(target)) {
         event.preventDefault();
         return;
       }
@@ -629,6 +640,7 @@ export const EsignStampPlacer = forwardRef<
                 {t("restorePieces", { count: layout.removed.length })}
               </Button>
             ) : null}
+            {formLocked ? null : (
             <Button
               type="button"
               variant="outline"
@@ -643,6 +655,7 @@ export const EsignStampPlacer = forwardRef<
             >
               {t("editForm")}
             </Button>
+            )}
             {formDirty ? (
               <Button
                 type="button"
@@ -780,7 +793,7 @@ export const EsignStampPlacer = forwardRef<
       ) : null}
       {formStatus === "error" ? (
         <p className="text-[10px] text-destructive">
-          {formReason === "not_signed"
+          {formReason === "not_signed" || formReason === "document_locked"
             ? t("formSaveLocked")
             : formReason === "invalid_sheet"
               ? t("formSaveInvalid")

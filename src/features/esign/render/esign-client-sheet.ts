@@ -41,8 +41,10 @@ function labelCell(label: BilingualText): string {
   return `<td class="lab"><div class="row"><span>${escapeHtml(label.en)}</span>${ar(label.ar)}</div></td>`;
 }
 
-function gridTable(rows: LayoutFieldRow[]): string {
-  const visible = filled(rows);
+function gridTable(rows: LayoutFieldRow[], alwaysPrint = false): string {
+  const visible = alwaysPrint
+    ? rows
+    : filled(rows);
   if (visible.length === 0) return "";
   const body: string[] = [];
   for (let i = 0; i < visible.length; i += 2) {
@@ -50,11 +52,11 @@ function gridTable(rows: LayoutFieldRow[]): string {
     const right = visible[i + 1];
     if (!left) continue;
     if (!right) {
-      body.push(`<tr>${labelCell(left.label)}<td class="val" colspan="3">${escapeHtml(left.value)}</td></tr>`);
+      body.push(`<tr>${labelCell(left.label)}<td class="val" colspan="3">${escapeHtml(left.value.trim() || "—")}</td></tr>`);
       continue;
     }
     body.push(
-      `<tr>${labelCell(left.label)}<td class="val">${escapeHtml(left.value)}</td>${labelCell(right.label)}<td class="val">${escapeHtml(right.value)}</td></tr>`,
+      `<tr>${labelCell(left.label)}<td class="val">${escapeHtml(left.value.trim() || "—")}</td>${labelCell(right.label)}<td class="val">${escapeHtml(right.value.trim() || "—")}</td></tr>`,
     );
   }
   return `<table class="grid"><colgroup><col class="c-lab"/><col class="c-val"/><col class="c-lab"/><col class="c-val"/></colgroup><tbody>${body.join("")}</tbody></table>`;
@@ -107,6 +109,8 @@ function noteBlock(section: LayoutSection): string {
 
 function declarationNote(layout: EsignDocumentLayout): string {
   if (layout.sections.some((section) => section.key === "declaration")) return "";
+  // The accident tail carries its own declaration under the rider's name.
+  if (layout.sections.some((section) => section.key === "rider_declaration")) return "";
   const en = layout.declaration.en.trim();
   const arText = layout.declaration.ar.trim();
   if (!en && !arText) return "";
@@ -128,9 +132,9 @@ function findRow(layout: EsignDocumentLayout, keys: string[]): string {
   return "";
 }
 
-function loanSchedule(layout: EsignDocumentLayout): string {
+function loanSchedule(layout: EsignDocumentLayout, index: number): string {
   const amount = Number(findRow(layout, ["amount", "requested_amount", "loan_amount"]).replace(/[^\d.]/g, ""));
-  const months = Number(findRow(layout, ["period", "instalments_period", "installments_period", "tenure"]).replace(/[^\d.]/g, ""));
+  const months = Number(findRow(layout, ["installments", "period", "instalments_period", "installments_period", "tenure"]).replace(/[^\d.]/g, ""));
   const count = Number.isFinite(months) && months > 0 ? Math.min(6, Math.round(months)) : 0;
   const each = count > 0 && Number.isFinite(amount) ? amount / count : Number.NaN;
   const heads = Array.from({ length: 6 }, (_, i) => `<th>${i + 1}</th>`).join("");
@@ -138,7 +142,7 @@ function loanSchedule(layout: EsignDocumentLayout): string {
     const value = i < count && Number.isFinite(each) ? each.toFixed(3) : "";
     return `<td class="num">${value}</td>`;
   }).join("");
-  return `<div class="box schedule"><div class="sec"><span class="k">—</span><span>Repayment schedule</span>${ar("جدول السداد")}</div><table><tr>${heads}</tr><tr>${cells}</tr></table></div>`;
+  return `<div class="box schedule"><div class="sec"><span class="k">${String(index).padStart(2, "0")}</span><span>Repayment schedule</span>${ar("جدول السداد")}</div><table><tr>${heads}</tr><tr>${cells}</tr></table></div>`;
 }
 
 function payslipLine(line: PayslipLine | null): string {
@@ -235,18 +239,32 @@ function signatures(layout: EsignDocumentLayout, staffLabel?: string): string {
   }
   const parts: string[] = [];
   if (roles.has("employee")) {
-    parts.push(
-      `<div class="box ack" data-signature-band="1"><div class="text"><b>Employee acknowledgement.</b> I confirm I have received and read this document.<div class="ar ar-start" dir="rtl">أقر باستلام هذا المستند والاطلاع عليه.</div></div><div class="sign"><div class="sig"><div class="b"><div class="lines">${nameLine(findRow(layout, ["employee_name"]))}${signLine("employee", employeeCaption)}${dateLine()}</div></div></div></div></div>`,
-    );
+    if (layout.accident) {
+      parts.push(
+        `<div class="box ack accident-tail" data-signature-band="1" data-accident-tail="1"><div class="text"><b>Rider acknowledgement.</b> I confirm the information above is correct and I have read this document.<div class="ar ar-start" dir="rtl">أقر بأن المعلومات أعلاه صحيحة وأنني اطلعت على هذا المستند.</div></div><div class="sign"><div class="sig"><div class="b"><div class="lines">${nameLine(layout.riderName?.trim() || findRow(layout, ["rider_name", "employee_name"]))}${signLine("employee", employeeCaption)}</div></div></div></div></div>`,
+      );
+    } else {
+      parts.push(
+        `<div class="box ack" data-signature-band="1"><div class="text"><b>Employee acknowledgement.</b> I confirm I have received and read this document.<div class="ar ar-start" dir="rtl">أقر باستلام هذا المستند والاطلاع عليه.</div></div><div class="sign"><div class="sig"><div class="b"><div class="lines">${nameLine(findRow(layout, ["employee_name"]))}${signLine("employee", employeeCaption)}${dateLine()}</div></div></div></div></div>`,
+      );
+    }
   }
   const management: string[] = [];
   if (roles.has("hr")) management.push(sigCard(hrCaption, "hr", staff, false));
   if (roles.has("gm")) management.push(sigCard(captionFor(layout, "gm"), "gm", "", true));
   if (roles.has("ceo")) management.push(sigCard(captionFor(layout, "ceo"), "ceo", "", true));
   if (management.length > 0) {
-    const cols = management.length >= 3 ? "sigs--3" : "sigs--2";
+    // The HR box is the decision line on a loan. It takes the wider column
+    // beside the CEO / GM box, or the whole band when the template asks for no
+    // second signature — the dock height stays one row either way, so the
+    // persisted slot geometry keeps pointing at the printed lines.
+    const [hr, ...rest] = management;
+    const band = rest.length > 0
+      ? `<div class="sigs sigs--2 sigs--joined mgmt-signs mgmt-signs--pair">${hr}${rest.join("")}</div>`
+      : `<div class="sigs sigs--1 sigs--joined mgmt-signs">${hr}</div>`;
+    const serial = "M";
     parts.push(
-      `<div class="box" data-management="1"><div class="sec"><span class="k">04</span><span>Management Use Only</span>${ar("للاستخدام الإداري فقط")}</div><div class="sigs ${cols} sigs--joined mgmt-signs">${management.join("")}</div></div>`,
+      `<div class="box" data-management="1"><div class="sec"><span class="k">${serial}</span><span>Management Use Only</span>${ar("للاستخدام الإداري فقط")}</div>${band}</div>`,
     );
   }
   for (const slot of layout.slots) {
@@ -278,7 +296,7 @@ function metaStrip(layout: EsignDocumentLayout): string {
 }
 
 function sectionBox(section: LayoutSection, index: number): string {
-  const rows = gridTable(section.rows);
+  const rows = gridTable(section.rows, section.alwaysPrint === true);
   const checks = section.checkboxes?.length ? penaltyChecks(section.checkboxes) : "";
   const bodyEn = section.body?.en.trim() ?? "";
   const bodyAr = section.body?.ar.trim() ?? "";
@@ -341,6 +359,9 @@ export function renderClientSheetHtml(
     if (SKIP_KEYS.has(section.key)) continue;
     if (section.key === "payslip" && layout.payslip) {
       blocks.push(payslipTables(layout.payslip.lines));
+      // The payslip tables print their own 03 (earnings) and 04 (deductions)
+      // bands, so the next box continues at 05 instead of reusing 02.
+      boxIndex = Math.max(boxIndex, 5);
       continue;
     }
     if (NOTE_KEYS.has(section.key) && !(section.checkboxes?.length)) {
@@ -353,7 +374,10 @@ export function renderClientSheetHtml(
     if (!box) continue;
     blocks.push(box);
     boxIndex += 1;
-    if (layout.kind === "loan" && section.key === "loan") blocks.push(loanSchedule(layout));
+    if (layout.kind === "loan" && section.key === "loan") {
+      blocks.push(loanSchedule(layout, boxIndex));
+      boxIndex += 1;
+    }
   }
   const titleEn = escapeHtml(layout.title.en);
   const titleAr = escapeHtml(layout.title.ar);
@@ -367,7 +391,7 @@ ${ESIGN_FORMS_CSS}
 </style>
 </head>
 <body>
-<div class="page" data-single-page="1">
+<div class="page" data-single-page="1" data-kind="${escapeHtml(layout.kind)}">
 <div class="page-fit">
 <header class="doc-header"><div class="en">${titleEn}</div><div class="ar" dir="rtl">${titleAr}</div></header>
 <div class="doc-rule"></div>

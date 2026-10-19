@@ -94,15 +94,17 @@ function drawStampInSlot(
     height: fitted.h,
   });
 
-  const captionTop = fitted.y - 2;
-  captions.forEach((line, index) => {
-    const y = captionTop - (index + 1) * CAPTION_LEADING;
-    if (y < slot.yPt - 4) return;
+  const lowestBaseline = slot.yPt + 1;
+  const highestBaseline = slot.yPt + slot.hPt - CAPTION_SIZE;
+  let y = Math.min(highestBaseline, fitted.y - 2 - CAPTION_LEADING);
+  for (const line of captions) {
+    if (y < lowestBaseline) break;
     const textWidth = font.widthOfTextAtSize(line, CAPTION_SIZE);
-    const x = Math.min(
-      Math.max(slot.xPt, fitted.x),
-      slot.xPt + slot.wPt - textWidth,
-    );
+    if (textWidth > slot.wPt) {
+      y -= CAPTION_LEADING;
+      continue;
+    }
+    const x = Math.min(Math.max(slot.xPt, fitted.x), slot.xPt + slot.wPt - textWidth);
     page.drawText(line, {
       x,
       y,
@@ -110,7 +112,8 @@ function drawStampInSlot(
       font,
       color: rgb(0.25, 0.28, 0.32),
     });
-  });
+    y -= CAPTION_LEADING;
+  }
 
   return { ...fitted, page: slot.page };
 }
