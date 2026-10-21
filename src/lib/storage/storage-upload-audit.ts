@@ -1,5 +1,6 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { getFirebaseFirestore } from "@/lib/firebase/admin";
+import { pendingUploadDecision } from "@/lib/storage/pending-upload-decision";
 import { resolveR2Config } from "@/lib/storage/r2-config";
 import { syncDriverAvatarKey } from "@/lib/storage/sync-driver-avatar";
 
@@ -100,12 +101,30 @@ export async function createPendingUpload(params: {
   const bucket = await bucketName();
   const col = await uploads(db);
   const ref = col.doc();
+  let uploadId = ref.id;
 
   try {
     await db.runTransaction(async (tx) => {
       const existing = await tx.get(col.where("object_key", "==", params.objectKey).limit(1));
       if (!existing.empty) {
-        throw new Error("key_conflict");
+        const row = existing.docs[0]!;
+        const decision = pendingUploadDecision(row.data(), { uploadedBy: params.uploadedBy });
+        // A genuine retry of the same presign reuses its pending row instead of
+        // failing the rider with HTTP 409. Any other collision is still a
+        // conflict: a row owned by another rider is never reused.
+        if (decision === "conflict") {
+          throw new Error("key_conflict");
+        }
+        uploadId = row.id;
+        tx.set(
+          row.ref,
+          {
+            content_type: params.contentType,
+            expires_at: asDate(params.expiresAt) ?? params.expiresAt,
+          },
+          { merge: true },
+        );
+        return;
       }
       tx.set(ref, {
         id: ref.id,
@@ -127,7 +146,7 @@ export async function createPendingUpload(params: {
     return { error: "insert_failed" };
   }
 
-  return { id: ref.id };
+  return { id: uploadId };
 }
 
 export async function confirmPendingUpload(

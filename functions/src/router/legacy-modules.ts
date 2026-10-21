@@ -320,7 +320,8 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   ],
   "./rpcs/driver-home": [
     "driverGetHomeDashboard",
-    "driverSetDutyState"
+    "driverSetDutyState",
+    "driverCheckInContext"
   ],
   "./rpcs/driver-shift": [
     "driverGetTodayShift",
