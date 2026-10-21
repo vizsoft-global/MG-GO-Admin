@@ -238,6 +238,79 @@ export const STAFF_STAMP_SLOT_ROLES: Record<
 
 export type StaffStampSigner = { id: string; sortOrder: number };
 
+/** A role with no printed box anywhere cannot be stamped, so it is an error. */
+export const STAFF_SLOT_MISSING = "staff_slot_missing";
+
+/** Which slots the compose actually drew into, for the audit trail. */
+export type StaffSlotSource = "persisted" | "mixed" | "kind_fallback";
+
+function usableSlotsByRole(slots: readonly SignSlot[] | null): Map<SignSlotRole, SignSlot> {
+  const map = new Map<SignSlotRole, SignSlot>();
+  for (const slot of slots ?? []) {
+    if (!isUsableSlot(slot)) continue;
+    if (!map.has(slot.role)) map.set(slot.role, slot);
+  }
+  return map;
+}
+
+/**
+ * Which box each staff role is drawn into, and where those boxes came from.
+ *
+ * A persisted `signature_slots` array that was measured on an older sheet can
+ * be **missing a role** — the loan sheet used to print only the employee line.
+ * Treating that array as the whole truth is what silently dropped the HR
+ * signature: the role had no box to find, the loop skipped the signer, and the
+ * compose still answered `ok: true` with a signed PDF that carried no HR ink.
+ *
+ * So each role resolves independently: the persisted box when it is usable,
+ * otherwise the kind's printed box. A role that exists in neither throws
+ * `staff_slot_missing:<role>` — a compose that cannot stamp a signer must fail
+ * loudly, never succeed quietly.
+ */
+export function resolveStaffStampSlots<T extends StaffStampSigner>(input: {
+  kind?: unknown;
+  persistedSlots?: unknown;
+  signers: readonly T[];
+}): { assignments: Array<T & { slot: SignSlot }>; slotsSource: StaffSlotSource } {
+  const kind = normalizeDocumentKind(input.kind);
+  const roles = STAFF_STAMP_SLOT_ROLES[kind];
+  const persisted = usableSlotsByRole(parseSignatureSlots(input.persistedSlots));
+  const fromKind = usableSlotsByRole(slotsForKind(kind));
+
+  const slots = new Map<SignSlotRole, SignSlot>();
+  let persistedUsed = 0;
+  for (const role of roles) {
+    const hit = persisted.get(role);
+    if (hit) {
+      slots.set(role, hit);
+      persistedUsed += 1;
+      continue;
+    }
+    const fallback = fromKind.get(role);
+    if (!fallback) throw new Error(`${STAFF_SLOT_MISSING}:${role}`);
+    slots.set(role, fallback);
+  }
+
+  const slotsSource: StaffSlotSource =
+    persistedUsed === 0 ? "kind_fallback" : persistedUsed === roles.length ? "persisted" : "mixed";
+
+  const ordered = [...input.signers].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id),
+  );
+  const assignments: Array<T & { slot: SignSlot }> = [];
+  // Role index, not `out.length`: a signer that had to be skipped must not push
+  // the next signer back onto the same role (that is how a two-signer penalty
+  // ended up testing both rows against the HR box only).
+  roles.forEach((role, index) => {
+    const signer = ordered[index];
+    if (!signer) return;
+    const slot = slots.get(role);
+    if (!slot) throw new Error(`${STAFF_SLOT_MISSING}:${role}`);
+    assignments.push({ ...signer, slot });
+  });
+  return { assignments, slotsSource };
+}
+
 /**
  * Deterministic staff → slot mapping: ascending `sort_order`, then id, into the
  * kind's printed boxes. A signer past the last box is skipped (the caller logs
@@ -248,25 +321,7 @@ export function assignStaffStampSlots<T extends StaffStampSigner>(input: {
   persistedSlots?: unknown;
   signers: readonly T[];
 }): Array<T & { slot: SignSlot }> {
-  const kind = normalizeDocumentKind(input.kind);
-  const parsed = parseSignatureSlots(input.persistedSlots);
-  const slots = parsed ?? slotsForKind(kind);
-  const roles = STAFF_STAMP_SLOT_ROLES[kind];
-  const ordered = [...input.signers].sort(
-    (a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id),
-  );
-  const out: Array<T & { slot: SignSlot }> = [];
-  for (const signer of ordered) {
-    if (out.length >= roles.length) break;
-    const role = roles[out.length];
-    // The printed sheet decides which boxes exist. A measured sheet without a
-    // manager box (the accident declaration is one) skips the staff stamp
-    // rather than drawing it on a line the rider never saw.
-    const slot = slots.find((row) => row.role === role && isUsableSlot(row));
-    if (!slot) continue;
-    out.push({ ...signer, slot });
-  }
-  return out;
+  return resolveStaffStampSlots(input).assignments;
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -400,6 +455,28 @@ function clampToPage(
 
 /** Smallest gap kept between a caption baseline and the bottom of its slot. */
 export const CAPTION_BOTTOM_GAP = 1;
+/** Tallest band a staff stamp reserves for its captions, under the ink. */
+export const CAPTION_BAND_MAX = 10;
+/** Below this box height only the signer's name is printed, not the date. */
+export const CAPTION_SINGLE_LINE_BELOW = 16;
+
+/**
+ * Trims a caption to the slot width so a long signer name is still printed.
+ *
+ * The old code skipped a line that did not fit, which meant a wide name pushed
+ * both the name and the date out of a 23pt box and left the ink unlabelled.
+ */
+export function fitCaption(line: string, font: PDFFont, maxWidth: number): string {
+  if (maxWidth <= 0) return "";
+  if (font.widthOfTextAtSize(line, CAPTION_SIZE) <= maxWidth) return line;
+  let text = line.trim();
+  while (text.length > 1) {
+    text = text.slice(0, -1);
+    const candidate = `${text}...`;
+    if (font.widthOfTextAtSize(candidate, CAPTION_SIZE) <= maxWidth) return candidate;
+  }
+  return "";
+}
 
 function drawStampInSlot(
   page: PDFPage,
@@ -409,16 +486,19 @@ function drawStampInSlot(
   slot: SignSlot,
   reserveCaption = false,
 ) {
-  // A staff stamp keeps one caption line (the signer's name) under the ink.
-  // The rider's stamp fills the whole line; the sheet already prints their name.
-  const reserve =
+  // A staff stamp keeps its captions *inside* the printed box, under the ink.
+  // The old reserve was `h - 10`, which for the loan's 14.7pt box left ~2pt of
+  // band: the very first baseline fell below the slot and the name and date were
+  // dropped while the signature still landed. The band is now a share of the
+  // slot, and the ink is fitted into what remains above it.
+  const captionBand =
     reserveCaption && captions.length > 0
-      ? Math.min(Math.max(slot.hPt - 10, 0), CAPTION_LEADING + 2)
+      ? Math.min(CAPTION_BAND_MAX, Math.max(0, slot.hPt * 0.42))
       : 0;
   const imageBox: SignSlot = {
     ...slot,
-    yPt: slot.yPt + reserve,
-    hPt: Math.max(8, slot.hPt - reserve),
+    yPt: slot.yPt + captionBand,
+    hPt: Math.max(8, slot.hPt - captionBand),
   };
   const fitted = fitImageInSlot(signature.width, signature.height, imageBox);
   page.drawImage(signature, {
@@ -427,22 +507,21 @@ function drawStampInSlot(
     width: fitted.w,
     height: fitted.h,
   });
+
+  if (captionBand < CAPTION_SIZE) return;
+  const lines =
+    slot.hPt < CAPTION_SINGLE_LINE_BELOW ? captions.slice(0, 1) : captions;
   const lowestBaseline = slot.yPt + CAPTION_BOTTOM_GAP;
-  const highestBaseline =
-    reserve > 0 ? slot.yPt + reserve - CAPTION_SIZE : slot.yPt + slot.hPt - CAPTION_SIZE;
-  let y =
-    reserve > 0
-      ? Math.min(highestBaseline, fitted.y - 2)
-      : Math.min(highestBaseline, fitted.y - 2 - CAPTION_LEADING);
-  for (const line of captions) {
+  let y = slot.yPt + captionBand - CAPTION_SIZE;
+  for (const line of lines) {
     if (y < lowestBaseline) break;
-    const textWidth = font.widthOfTextAtSize(line, CAPTION_SIZE);
-    if (textWidth > slot.wPt) {
-      y -= CAPTION_LEADING;
-      continue;
-    }
-    page.drawText(line, {
-      x: Math.min(Math.max(slot.xPt, fitted.x), slot.xPt + slot.wPt - textWidth),
+    const text = fitCaption(line, font, slot.wPt);
+    if (text.length === 0) break;
+    const textWidth = font.widthOfTextAtSize(text, CAPTION_SIZE);
+    // Never let a caption start outside its box, whatever the ink did.
+    const x = Math.min(Math.max(slot.xPt, fitted.x), slot.xPt + slot.wPt - textWidth);
+    page.drawText(text, {
+      x: Math.min(Math.max(x, slot.xPt), slot.xPt + slot.wPt - textWidth),
       y,
       size: CAPTION_SIZE,
       font,
@@ -543,6 +622,12 @@ export function signedDocumentSourceHash(input: {
   employeeSignedAt?: string | null;
   stampLayout?: unknown;
   signatureSlots?: unknown;
+  /**
+   * The boxes each staff signer is actually drawn into. Resolved slots are part
+   * of the fingerprint because a compose that moved HR into a different box must
+   * never be mistaken for the stored copy from before the fix.
+   */
+  staffSlots?: unknown;
   sheetRenderVersion?: number | null;
   staff: ReadonlyArray<{ id: string; signatureKey: string; signedAt?: string | null }>;
 }): string {
@@ -554,6 +639,7 @@ export function signedDocumentSourceHash(input: {
     employee: [input.employeeSignatureKey, input.employeeSignedAt ?? ""],
     layout: input.stampLayout ?? null,
     slots: input.signatureSlots ?? null,
+    staffSlots: input.staffSlots ?? null,
     version: input.sheetRenderVersion ?? null,
     staff,
   });

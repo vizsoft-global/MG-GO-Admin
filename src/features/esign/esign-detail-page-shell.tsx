@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
@@ -25,6 +26,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Link } from "@/i18n/navigation";
+import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import {
   addEsignAttachment,
@@ -124,6 +126,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
   const t = useTranslations("pages.requests.esign.detail");
   const tCommon = useTranslations("pages.requests.esign");
   const auth = useAuth();
+  const queryClient = useQueryClient();
   const placerRef = useRef<EsignStampPlacerHandle>(null);
   const { data, isLoading, refetch } = useEsignRequestDetail(requestId);
   const {
@@ -284,11 +287,45 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
       if (!saved) return;
     }
     const kind = links?.signedDocumentUrl || canPlace ? "signed" : "document";
-    window.open(
-      `${esignDocumentHref(documentRequestId, kind, disposition)}&v=${Date.now()}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
+    const href = `${esignDocumentHref(documentRequestId, kind, disposition)}&v=${Date.now()}`;
+    if (kind !== "signed") {
+      window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
+    // The route composes the signed copy on demand. A 409 is not a failure: HR
+    // still has a counter-signature to give, and the rider's copy cannot exist
+    // before it does. Say that instead of opening a tab full of JSON.
+    let response: Response;
+    try {
+      response = await fetch(href, { credentials: "same-origin", cache: "no-store" });
+    } catch {
+      toast.error(t("signedCopyFailed", { reason: "network" }));
+      return;
+    }
+    if (response.status === 409) {
+      toast.warning(t("awaitingCounterDownload"));
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.esign.detail(documentRequestId),
+      });
+      return;
+    }
+    if (!response.ok) {
+      toast.error(t("signedCopyFailed", { reason: String(response.status) }));
+      return;
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    if (disposition === "attachment") {
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${data?.request?.request_code ?? documentRequestId}-signed.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } else {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   return (

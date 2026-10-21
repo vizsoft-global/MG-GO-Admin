@@ -16,6 +16,7 @@ import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireRider, riderError } from "../core/rider";
+import { voidPendingStaffSigners } from "./esign-signer-void";
 import {
   dataOf,
   isoTimestamp,
@@ -534,6 +535,11 @@ export const driverDeclineEsignature = onCall(async (request) => {
     updated_at: nowTs,
   });
 
+  // The request is dead: release every staff signer still waiting on it, or the
+  // counter-signature lock (`awaiting_counter_signature`) holds the signed copy
+  // back forever.
+  const voided = await voidPendingStaffSigners(getFirestore(), id, "request_declined");
+
   await logDriverOperation({
     driverId: ctx.uid,
     module: "esign",
@@ -541,7 +547,7 @@ export const driverDeclineEsignature = onCall(async (request) => {
     actor: "driver_decline_esignature",
     recordType: "esign_request",
     recordId: id,
-    detail: { request_code: row.request_code, declined_reason: reason },
+    detail: { request_code: row.request_code, declined_reason: reason, voided_signers: voided },
   });
 
   return { ok: true, status: "declined" };

@@ -4,14 +4,16 @@ import { Timestamp } from "firebase-admin/firestore";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import {
   MAX_SIGNATURE_BYTES,
   MAX_SOURCE_BYTES,
-  assignStaffStampSlots,
+  STAFF_SLOT_MISSING,
   composeSignedPdf,
   placementFromLayout,
+  resolveStaffStampSlots,
   signedDocumentSourceHash,
   sniff,
   validateImage,
@@ -83,6 +85,23 @@ function withEmployeeSlot(kind: unknown, persisted: unknown, piece: StampPiece):
     hPt: piece.hPt,
   };
   return [next, ...base.filter((slot) => slot.role !== "employee")];
+}
+
+/**
+ * The measured boxes this compose may trust.
+ *
+ * Null means "ignore them": a sheet built before the current render version was
+ * measured against a layout this build no longer draws, so the kind's printed
+ * geometry is the honest fallback — which is also what fills a role the old
+ * array never had (the loan sheet's missing HR line).
+ */
+function sheetSlotsForCompose(
+  version: unknown,
+  persisted: unknown,
+): unknown {
+  const renderVersion = typeof version === "number" ? version : null;
+  if (renderVersion === null || renderVersion < ESIGN_SHEET_RENDER_VERSION) return null;
+  return persisted;
 }
 
 export async function saveEsignStampLayout(
@@ -160,11 +179,26 @@ export async function saveEsignStampLayout(
       },
     ];
   });
-  const assignments = assignStaffStampSlots({
-    kind: row.document_kind,
-    persistedSlots: row.signature_slots,
-    signers: signedStaff,
-  });
+  // Mirrors the Cloud Function: a `signature_slots` array measured on an older
+  // sheet is ignored, and a role with no box at all is a refusal rather than a
+  // silently thinner document.
+  const persistedSlots = sheetSlotsForCompose(row.sheet_render_version, row.signature_slots);
+  let assignments: Array<
+    { id: string; sortOrder: number; signatureKey: string; signedAt: string; displayName: string } & {
+      slot: SignSlot;
+    }
+  > = [];
+  try {
+    assignments = resolveStaffStampSlots({
+      kind: row.document_kind,
+      persistedSlots,
+      signers: signedStaff,
+    }).assignments;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.startsWith(STAFF_SLOT_MISSING)) return { ok: false, error: STAFF_SLOT_MISSING };
+    throw error;
+  }
   if (signedStaff.length > assignments.length) {
     console.warn("esign stamp: staff signatures past the printed slots", {
       requestId: id,
@@ -202,6 +236,15 @@ export async function saveEsignStampLayout(
     employeeSignedAt: formatStampInstant(row.signed_at),
     stampLayout: parsed,
     signatureSlots: withEmployeeSlot(row.document_kind, row.signature_slots, signaturePiece),
+    staffSlots: assignments.map((assignment) => ({
+      id: assignment.id,
+      role: assignment.slot.role,
+      page: assignment.slot.page,
+      xPt: assignment.slot.xPt,
+      yPt: assignment.slot.yPt,
+      wPt: assignment.slot.wPt,
+      hPt: assignment.slot.hPt,
+    })),
     sheetRenderVersion:
       typeof row.sheet_render_version === "number" ? row.sheet_render_version : null,
     staff: assignments.map((assignment) => ({
@@ -239,7 +282,7 @@ export async function saveEsignStampLayout(
       sourceKind,
       captions: [labels.name, labels.date, labels.code],
       kind: row.document_kind,
-      persistedSlots: row.signature_slots,
+      persistedSlots,
       placement,
       stamps,
     });
@@ -324,9 +367,24 @@ export async function saveEsignFormSheet(
   }
 
   const now = Timestamp.now();
+  // The edit reflows the sheet, so the boxes measured on the old one no longer
+  // describe it. Measure the saved HTML before storing it — the same step a
+  // regenerated sheet takes — and keep the previous boxes if that fails.
+  let measuredSlots: SignSlot[] = [];
+  let browser: Awaited<ReturnType<typeof launchEsignBrowser>> | null = null;
+  try {
+    browser = await launchEsignBrowser();
+    measuredSlots = await measureEsignSlots(clean, browser);
+  } catch {
+    measuredSlots = [];
+  } finally {
+    await browser?.close();
+  }
+
   await ref.update({
     sheet_html: clean,
     sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
+    ...(measuredSlots.length > 0 ? { signature_slots: measuredSlots } : {}),
     updated_at: now,
   });
   await logAdminMutation({
@@ -336,6 +394,20 @@ export async function saveEsignFormSheet(
     routeName: "esign.form-sheet",
     after: { html_chars: clean.length, unsigned: true },
   });
+  // A row that somehow already carries a signed copy recomposes, so the archived
+  // PDF and the sheet an operator just corrected cannot disagree. Unsigned rows
+  // (the only ones this action accepts) skip it.
+  if (textOrNull(row.signed_document_storage_key) != null) {
+    try {
+      await callAdminFunction(
+        "esign_compose_signed_document",
+        { p_request_id: id, p_force: true },
+        { timeoutMs: 120_000 },
+      );
+    } catch {
+      // The compose records its own failure on `signed_document_error`.
+    }
+  }
   // The stamp layout only exists once the rider has signed; an unsigned save
   // must not report the signed-only layout gate as the reason it failed.
   return { ok: true };

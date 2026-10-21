@@ -4,6 +4,9 @@ import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { callAdminFunction } from "@/lib/firebase/callable";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
+import { updateRolePermissions } from "@/features/settings/roles-actions";
 import { putEsignObject } from "./esign-r2";
 import { isEsignStaffSignerRole } from "./esign-signers";
 import type {
@@ -122,15 +125,20 @@ export async function fetchEsignSigners(requestId: string): Promise<{
 
 export async function fetchEsignSignerOptions(): Promise<{
   rows: EsignSignerOption[];
+  /** True when the caller may grant the missing `esign.sign` themselves. */
+  can_grant: boolean;
   error?: string;
 }> {
-  await requireEsignManage();
+  const session = await requireEsignManage();
   const { data, error } = await callAdminFunction("admin_esign_signer_options");
-  if (error) return { rows: [], error: error.message };
+  if (error) return { rows: [], can_grant: false, error: error.message };
   const payload = asRecord(data);
-  if (payload.ok === false) return { rows: [], error: String(payload.error ?? "failed") };
+  if (payload.ok === false) {
+    return { rows: [], can_grant: false, error: String(payload.error ?? "failed") };
+  }
   const raw = Array.isArray(payload.rows) ? payload.rows : [];
   return {
+    can_grant: session.isSuperAdmin,
     rows: raw.map((row) => {
       const r = asRecord(row);
       return {
@@ -138,9 +146,63 @@ export async function fetchEsignSignerOptions(): Promise<{
         full_name: r.full_name != null ? String(r.full_name) : null,
         email: r.email != null ? String(r.email) : null,
         phone: r.phone != null ? String(r.phone) : null,
+        role_id: r.role_id != null ? String(r.role_id) : null,
+        // A backend that predates the flag reports nothing: assume it can sign
+        // rather than warning about a permission that may well be granted.
+        can_sign: r.can_sign !== false,
       };
     }),
   };
+}
+
+/**
+ * Adds `esign.sign` to the signer's role, in place.
+ *
+ * Only a super admin may do it, and only for a role — permissions are role
+ * scoped, so this grants the capability to everyone sharing that role. That is
+ * the honest trade: the alternative is an assigned signer whose signing page
+ * never opens.
+ */
+export async function grantEsignSign(
+  staffUserId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionUser();
+  if (!session?.isSuperAdmin) return { ok: false, error: "not_authorized" };
+  const uid = staffUserId.trim();
+  if (!uid) return { ok: false, error: "unknown_signer" };
+
+  const db = await staffDb();
+  if (!db) return { ok: false, error: "not_configured" };
+
+  const profile = await db.collection(COLLECTIONS.profiles).doc(uid).get();
+  const roleId = profile.exists ? profile.get("admin_role_id") : null;
+  if (typeof roleId !== "string" || roleId.trim() === "") {
+    return { ok: false, error: "role_missing" };
+  }
+
+  const permsSnap = await db
+    .collection(COLLECTIONS.adminRolePermissions)
+    .doc(roleId)
+    .get();
+  const current = permsSnap.data()?.permission_slugs;
+  const slugs = Array.isArray(current)
+    ? current.filter((slug): slug is string => typeof slug === "string")
+    : [];
+  if (slugs.includes("esign.sign")) return { ok: true };
+
+  const next = [...slugs, "esign.sign"];
+  const result = await updateRolePermissions(roleId, next);
+  if (result.error) return { ok: false, error: result.error };
+
+  await logAdminMutation({
+    action: "update",
+    entityType: "admin_role",
+    entityId: roleId,
+    routeName: "esign.signers.grant-sign",
+    before: { permissions: slugs },
+    after: { permissions: next },
+  });
+  return { ok: true };
 }
 
 export async function addEsignSigner(input: {

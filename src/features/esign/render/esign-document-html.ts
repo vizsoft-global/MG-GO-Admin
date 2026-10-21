@@ -14,8 +14,12 @@ export const SIGNATURE_BAND_PT = 140;
  * otherwise frozen at send time, so an unsigned request would keep printing the
  * old design forever. `esign_requests.sheet_render_version` records the value
  * used to build the stored HTML; a miss re-renders an unsigned row once.
+ *
+ * 7 — the signature-slot measurement was re-taken so a persisted
+ * `signature_slots` array can no longer be trusted for a sheet built before it.
+ * `functions/src/rpcs/esign-signature-slots.ts` mirrors this number.
  */
-export const ESIGN_SHEET_RENDER_VERSION = 6;
+export const ESIGN_SHEET_RENDER_VERSION = 7;
 
 /** Inline MG mark when Settings has no logo, or `/logo.png` is missing from public/. */
 export const ESIGN_DEFAULT_LOGO_SRC =

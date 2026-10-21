@@ -12,17 +12,23 @@ import { dataOf, isoTimestamp, logAdminActivity, pickId, textOrNull, type Dict }
 import {
   MAX_SIGNATURE_BYTES,
   MAX_SOURCE_BYTES,
-  assignStaffStampSlots,
+  STAFF_SLOT_MISSING,
   composeSignedPdf,
   esignObjectPath,
   parseStampLayout,
   placementFromLayout,
+  resolveStaffStampSlots,
   signedDocumentSourceHash,
   sniff,
   validateImage,
   type ComposeStamp,
+  type StaffSlotSource,
 } from "./esign-compose-logic";
-import { resolveEmployeeStampSlot } from "./esign-signature-slots";
+import {
+  ESIGN_SHEET_RENDER_VERSION,
+  resolveEmployeeStampSlot,
+  type SignSlot,
+} from "./esign-signature-slots";
 
 /**
  * 1GiB cannot run at the fleet `cpu: 0.08` — Cloud Run's minimum for 1GiB is
@@ -93,11 +99,41 @@ export const esignComposeSignedDocument = onCall(
         },
       ];
     });
-    const assignments = assignStaffStampSlots({
-      kind: row.document_kind,
-      persistedSlots: row.signature_slots,
-      signers: signedStaff,
-    });
+    // A `signature_slots` array measured on an older printed sheet describes
+    // boxes this compose no longer draws, so it is ignored in favour of the
+    // kind's printed geometry. That is also what re-measures every pre-fix row
+    // once, and is why the sheet version is part of the source hash.
+    const renderVersion =
+      typeof row.sheet_render_version === "number" ? row.sheet_render_version : null;
+    const slotsStale = renderVersion === null || renderVersion < ESIGN_SHEET_RENDER_VERSION;
+    const persistedSlots = slotsStale ? null : row.signature_slots;
+
+    let assignments: Array<
+      { id: string; sortOrder: number; signatureKey: string; signedAt: string | null; displayName: string } & {
+        slot: SignSlot;
+      }
+    > = [];
+    let slotsSource: StaffSlotSource = "kind_fallback";
+    try {
+      const resolved = resolveStaffStampSlots({
+        kind: row.document_kind,
+        persistedSlots,
+        signers: signedStaff,
+      });
+      assignments = resolved.assignments;
+      slotsSource = resolved.slotsSource;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith(STAFF_SLOT_MISSING)) {
+        // A signer with no printed box is a refusal, not a silently thinner
+        // document: the HR signature must never go missing without a reason.
+        return fail(STAFF_SLOT_MISSING, {
+          detail: message,
+          slots_source: slotsSource,
+        });
+      }
+      throw error;
+    }
     if (signedStaff.length > assignments.length) {
       console.warn("esign compose: staff signatures past the printed slots", {
         requestId,
@@ -114,9 +150,17 @@ export const esignComposeSignedDocument = onCall(
       employeeSignatureKey: signatureKey,
       employeeSignedAt: isoTimestamp(row.signed_at),
       stampLayout: row.stamp_layout ?? null,
-      signatureSlots: row.signature_slots ?? null,
-      sheetRenderVersion:
-        typeof row.sheet_render_version === "number" ? row.sheet_render_version : null,
+      signatureSlots: persistedSlots,
+      staffSlots: assignments.map((row) => ({
+        id: row.id,
+        role: row.slot.role,
+        page: row.slot.page,
+        xPt: row.slot.xPt,
+        yPt: row.slot.yPt,
+        wPt: row.slot.wPt,
+        hPt: row.slot.hPt,
+      })),
+      sheetRenderVersion: renderVersion,
       staff: assignments.map((row) => ({
         id: row.id,
         signatureKey: row.signatureKey,
@@ -273,7 +317,7 @@ export const esignComposeSignedDocument = onCall(
         signatureKind,
         captions,
         kind: row.document_kind,
-        persistedSlots: row.signature_slots,
+        persistedSlots,
         placement,
         stamps,
       });
@@ -329,6 +373,11 @@ export const esignComposeSignedDocument = onCall(
       bytes: pdfBytes.length,
       pages: pageCount,
       source_kind: sourceKind,
+      // Where the staff boxes came from: "persisted" when the measured sheet was
+      // trusted, "mixed" when a missing role was filled from the kind, and
+      // "kind_fallback" when the whole measured array was stale.
+      slots_source: slotsSource,
+      staff_stamped: assignments.length,
     };
   },
 );

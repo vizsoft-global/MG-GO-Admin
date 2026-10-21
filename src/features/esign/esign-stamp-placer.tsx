@@ -10,7 +10,7 @@ import {
   type PointerEvent,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Loader2, PencilLine, Plus, Wand2, X, ZoomIn, ZoomOut } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +24,8 @@ import {
   saveEsignFormSheet,
   saveEsignStampLayout,
 } from "./esign-stamp-actions";
-import { A4_HEIGHT_PT } from "./render/esign-document-layout";
+import { A4_HEIGHT_PT, slotsForKind } from "./render/esign-document-layout";
+import { normalizeDocumentKind } from "./document-kind";
 import { fitEsignSinglePage } from "./render/esign-document-html";
 import {
   A4_CSS_HEIGHT,
@@ -163,6 +164,7 @@ export const EsignStampPlacer = forwardRef<
   const [formDirty, setFormDirty] = useState(false);
   const [formStatus, setFormStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [formReason, setFormReason] = useState("");
+  const [autoStatus, setAutoStatus] = useState<"idle" | "working" | "done" | "fallback">("idle");
   const stageRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const layoutRef = useRef<StampLayout | null>(openedLayout(stampLayout));
@@ -450,6 +452,68 @@ export const EsignStampPlacer = forwardRef<
 
   saveFormRef.current = saveForm;
 
+  /**
+   * Snaps the stamp to the sheet's own signature lines.
+   *
+   * The boxes the compose draws into are measured from the printed sheet, so the
+   * only way to be sure the ink lands on the line the rider saw is to measure
+   * that line back. `[data-slot-role]` is what the renderer marks; when the
+   * iframe cannot be read (a cross-realm failure, or a sheet that predates the
+   * marker) the kind's printed geometry is used instead, and the toolbar says so.
+   */
+  function applyAutoMatch() {
+    if (formOnly) return;
+    const frame = frameRef.current;
+    if (!frame) return;
+    setAutoStatus("working");
+
+    const scale = viewScaleRef.current || 1;
+    let measured: { xPt: number; yPt: number; wPt: number; hPt: number } | null = null;
+    try {
+      const doc = frame.contentDocument;
+      const frameRect = frame.getBoundingClientRect();
+      const node = doc?.querySelector('[data-slot-role="employee"]');
+      const rect = node?.getBoundingClientRect();
+      if (rect && rect.width > 0 && rect.height > 0) {
+        const wPt = rect.width / scale / PX_PER_PT;
+        const hPt = rect.height / scale / PX_PER_PT;
+        measured = {
+          xPt: (rect.left - frameRect.left) / scale / PX_PER_PT,
+          // CSS rects are top-down; PDF slots are measured from the bottom.
+          yPt: A4_HEIGHT_PT - (rect.top - frameRect.top) / scale / PX_PER_PT - hPt,
+          wPt,
+          hPt,
+        };
+      }
+    } catch {
+      measured = null;
+    }
+
+    const fallback = slotsForKind(normalizeDocumentKind(documentKind)).find(
+      (slot) => slot.role === "employee",
+    );
+    const box = measured ?? (fallback ? { ...fallback } : null);
+    if (!box) {
+      setAutoStatus("fallback");
+      return;
+    }
+
+    const next = layoutAroundSignature({
+      id: "signature",
+      page: 1,
+      xPt: box.xPt,
+      yPt: box.yPt,
+      wPt: box.wPt,
+      hPt: box.hPt,
+    });
+    const removed = layoutRef.current?.removed ?? [];
+    const merged = removed.length > 0 ? { ...next, removed } : next;
+    layoutRef.current = merged;
+    setLayout(merged);
+    setAutoStatus(measured ? "done" : "fallback");
+    void enqueue();
+  }
+
   async function toggleEdit() {
     if (formLocked) return;
     if (editing) {
@@ -646,6 +710,23 @@ export const EsignStampPlacer = forwardRef<
                 {t("restorePieces", { count: layout.removed.length })}
               </Button>
             ) : null}
+            {!formOnly && !editing ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 gap-1 px-2 text-xs"
+                disabled={!html || autoStatus === "working"}
+                title={t("autoMatchHint")}
+                onClick={applyAutoMatch}
+              >
+                {autoStatus === "working" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Wand2 className="h-3.5 w-3.5" />
+                )}
+                {t("autoMatch")}
+              </Button>
+            ) : null}
             {formLocked ? null : (
             <Button
               type="button"
@@ -659,6 +740,7 @@ export const EsignStampPlacer = forwardRef<
               }
               onClick={() => void toggleEdit()}
             >
+              <PencilLine className="me-1 h-3.5 w-3.5" />
               {t("editForm")}
             </Button>
             )}
@@ -791,6 +873,12 @@ export const EsignStampPlacer = forwardRef<
       </div>
       <p className="text-[10px] text-muted-foreground">{t("placeHint")}</p>
       {editing ? <p className="text-[10px] text-emerald-800">{t("formDeleteHint")}</p> : null}
+      {autoStatus === "done" ? (
+        <p className="text-[10px] text-emerald-800">{t("autoMatchDone")}</p>
+      ) : null}
+      {autoStatus === "fallback" ? (
+        <p className="text-[10px] text-amber-700">{t("autoMatchFallback")}</p>
+      ) : null}
       {formStatus === "saving" ? (
         <p className="text-[10px] text-muted-foreground">{t("formSaving")}</p>
       ) : null}
@@ -813,7 +901,13 @@ export const EsignStampPlacer = forwardRef<
         <p className="text-[10px] text-emerald-800">{t("placeSaved")}</p>
       ) : null}
       {status === "error" ? (
-        <p className="text-[10px] text-destructive">{t("placeSaveFailed", { reason })}</p>
+        <p className="text-[10px] text-destructive">
+          {reason === "staff_slot_missing"
+            ? t("staffSlotMissing")
+            : reason === "staff_signature_unavailable"
+              ? t("staffSignatureUnavailable")
+              : t("placeSaveFailed", { reason })}
+        </p>
       ) : null}
     </div>
   );
