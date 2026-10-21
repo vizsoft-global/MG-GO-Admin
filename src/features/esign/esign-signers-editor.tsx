@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { Check, Plus, Trash2, Users } from "lucide-react";
+import { Check, Plus, ShieldAlert, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard } from "@/components/app";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { queryKeys } from "@/lib/query/query-keys";
 import { ESIGN_STAFF_SIGNER_ROLES, type EsignStaffSignerRole } from "./types";
+import { grantEsignSign } from "./esign-signer-actions";
 import {
   useAddEsignSigner,
   useEsignSignerOptions,
@@ -44,6 +47,7 @@ export function EsignSignersEditor({
   readOnly?: boolean;
 }) {
   const t = useTranslations("pages.requests.esign.signers");
+  const queryClient = useQueryClient();
   const persisted = Boolean(requestId);
   const { data: optionsData } = useEsignSignerOptions();
   const { data: signersData } = useEsignSigners(requestId ?? "");
@@ -59,6 +63,23 @@ export function EsignSignersEditor({
     hint: row.email ?? row.phone ?? undefined,
     keywords: [row.full_name ?? "", row.email ?? "", row.phone ?? ""],
   }));
+
+  // A signer whose role lacks `esign.sign` never sees the signing page, so the
+  // request stalls on a `pending` row nobody can clear. Say it before the add.
+  const picked = options.find((row) => row.id === staffId) ?? null;
+  const pickedCannotSign = picked != null && !picked.can_sign;
+  const grant = useMutation({
+    mutationFn: (id: string) => grantEsignSign(id),
+    onSuccess: (result) => {
+      if (!result.ok) {
+        toast.error(result.error ?? t("grantFailed"));
+        return;
+      }
+      toast.success(t("grantDone"));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.esign.signerOptions() });
+    },
+    onError: () => toast.error(t("grantFailed")),
+  });
 
   const persistedRows = (signersData?.rows ?? []).filter((row) => row.is_staff_signer);
   const draftRows = persisted ? [] : draft;
@@ -121,8 +142,8 @@ export function EsignSignersEditor({
             value={staffId}
             onChange={(next) => {
               setStaffId(next);
-              const picked = options.find((row) => row.id === next);
-              onSelectedDisplayNameChange?.(picked?.full_name || picked?.email || "");
+              const choice = options.find((row) => row.id === next);
+              onSelectedDisplayNameChange?.(choice?.full_name || choice?.email || "");
             }}
             placeholder={t("staffPlaceholder")}
             searchPlaceholder={t("staffSearch")}
@@ -163,6 +184,25 @@ export function EsignSignersEditor({
         </Button>
       </div>
       )}
+      {readOnly ? null : pickedCannotSign ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5">
+          <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-amber-700" />
+          <p className="min-w-0 flex-1 text-[11px] text-amber-900">
+            {t("missingGrant", { name: picked?.full_name || picked?.email || "" })}
+          </p>
+          {optionsData?.can_grant ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 px-2 text-[11px]"
+              disabled={grant.isPending}
+              onClick={() => staffId && grant.mutate(staffId)}
+            >
+              {t("grantSign")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       {persistedRows.length === 0 && draftRows.length === 0 ? (
         <p className="text-[11px] text-muted-foreground">{t("empty")}</p>
       ) : (

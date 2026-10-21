@@ -248,14 +248,31 @@ export const adminEsignSignerOptions = onCall(async (request) => {
     .get();
   assertWithinCap(snap.size);
 
-  const rows = snap.docs
+  const profiles = snap.docs
     .map((doc) => ({ id: doc.id, row: dataOf(doc) }))
-    .filter(({ row }) => !row[FIELDS.profiles.archivedAt])
+    .filter(({ row }) => !row[FIELDS.profiles.archivedAt]);
+
+  // A staff signer who cannot open the signing page is the other half of "HR did
+  // not sign": the row is assigned, the inbox shows nothing, and nobody is told
+  // why. `can_sign` lets the picker say so before the request is sent.
+  const roleIds = profiles
+    .map(({ row }) => textOf(row.admin_role_id))
+    .filter((id): id is string => id !== null);
+  const rolePerms = await loadDocMap(COLLECTIONS.adminRolePermissions, roleIds);
+  const canSign = (roleId: string | null): boolean => {
+    if (!roleId) return false;
+    const slugs = rolePerms.get(roleId)?.["permission_slugs"];
+    return Array.isArray(slugs) && slugs.includes("esign.sign");
+  };
+
+  const rows = profiles
     .map(({ id, row }) => ({
       id,
       full_name: textOf(row.full_name),
       email: textOf(row.email),
       phone: textOf(row.phone),
+      role_id: textOf(row.admin_role_id),
+      can_sign: canSign(textOf(row.admin_role_id)),
     }))
     .sort((a, b) => {
       if (a.full_name === b.full_name) return 0;

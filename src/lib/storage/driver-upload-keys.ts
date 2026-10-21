@@ -119,7 +119,13 @@ export function buildDriverObjectKey(params: {
     case "check_in_photo": {
       const date = new Date().toISOString().slice(0, 10);
       const ext = extensionFromFilename(params.originalFilename) || "jpg";
-      return `drivers/${params.driverId}/check_in/${date}.${ext}`;
+      // One key per *attempt*, not per rider per day. The old
+      // `check_in/${date}.${ext}` collided with the first photo of the day, and
+      // `createPendingUpload` answered `key_conflict` (HTTP 409) to every retry
+      // — the "Could not upload" a rider saw after a failed first upload. The
+      // prefix is unchanged, so `isCheckInPhotoKeyForKey` still binds the key to
+      // the rider.
+      return `drivers/${params.driverId}/check_in/${date}/${randomUUID()}.${ext}`;
     }
     case "driver_doc":
     case "driver_selfie":

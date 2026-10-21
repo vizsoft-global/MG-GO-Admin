@@ -2,15 +2,22 @@ import { NextResponse } from "next/server";
 import type { DocumentData } from "firebase-admin/firestore";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { contentDispositionAttachment } from "@/lib/storage/order-proof-url";
 import { guessProofContentType } from "@/lib/storage/proof-image-url";
 import { readEsignObject } from "@/features/esign/esign-r2";
+import { signedCopyOutcome } from "@/features/esign/esign-signed-copy-outcome";
 import {
   type EsignDownloadKind,
   normalizeEsignStorageKey,
 } from "@/features/esign/esign-storage-key";
+
+const COMPOSE_TIMEOUT_MS = 120_000;
+
+/** Characters a downloaded file name must never carry. */
+const FILENAME_UNSAFE = new Set(["/", "\\", ":", "*", "?", '"', "<", ">", "|"]);
 
 function parseKind(raw: string | null): EsignDownloadKind | null {
   if (raw === "document" || raw === "signature" || raw === "signed" || raw === "attachment") {
@@ -69,6 +76,41 @@ async function downloadEsignObject(
     bytes: Buffer.from(object.bytes),
     contentType: object.contentType ?? "",
   };
+}
+
+type ComposeOutcome =
+  | { status: "ready" }
+  | { status: "awaiting" }
+  | { status: "failed"; error: string };
+
+/**
+ * Builds the signed copy when the column is still empty.
+ *
+ * The compose is a staff callable that derives the PDF from the rider's already
+ * stored signature, so this is a read-through cache, not a new authority: it can
+ * only produce the artifact the request already earned. `awaiting_counter_signature`
+ * is the one outcome that deserves its own status — HR still has to sign, and a
+ * 404 would read as "this document does not exist".
+ */
+async function composeSignedCopy(id: string): Promise<ComposeOutcome> {
+  const composed = await callAdminFunction<Record<string, unknown>>(
+    "esign_compose_signed_document",
+    { p_request_id: id },
+    { timeoutMs: COMPOSE_TIMEOUT_MS },
+  );
+  return signedCopyOutcome(composed);
+}
+
+function signedFilename(requestCode: unknown): string | null {
+  if (requestCode == null) return null;
+  const code = String(requestCode).trim();
+  if (code.length === 0) return null;
+  // Request codes are free-form enough to contain a path or quote character, so
+  // the download name is built from an allow-list of safe characters.
+  const safe = Array.from(code, (char) =>
+    FILENAME_UNSAFE.has(char) || char === "\r" || char === "\n" ? "-" : char,
+  ).join("");
+  return `${safe}-signed.pdf`;
 }
 
 export async function GET(request: Request) {
@@ -177,7 +219,26 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const rawKey = data[KEY_COLUMN[kind]];
+  let rawKey = data[KEY_COLUMN[kind]];
+  if (kind === "signed" && (rawKey == null || String(rawKey).trim() === "")) {
+    // The rider signed but no admin has opened the detail page since: build the
+    // copy here instead of answering 404 for a document that certainly exists.
+    const outcome = await composeSignedCopy(id);
+    if (outcome.status === "awaiting") {
+      return NextResponse.json(
+        { error: "awaiting_counter_signature" },
+        { status: 409 },
+      );
+    }
+    if (outcome.status === "ready") {
+      try {
+        const refreshed = await db.collection(COLLECTIONS.esignRequests).doc(id).get();
+        rawKey = refreshed.exists ? docFields(refreshed.data())?.[KEY_COLUMN[kind]] : null;
+      } catch {
+        return NextResponse.json({ error: "read_failed" }, { status: 500 });
+      }
+    }
+  }
   if (rawKey == null || String(rawKey).trim() === "") {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -188,7 +249,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "read_failed" }, { status: 500 });
   }
 
-  const filename = filenameFromKey(key, `${kind}.bin`);
+  // A signed copy always downloads under the request code, whatever the object
+  // key happens to be called.
+  const filename =
+    (kind === "signed" ? signedFilename(data.request_code) : null) ??
+    filenameFromKey(key, `${kind}.bin`);
   const contentType = downloaded.contentType || guessProofContentType(key) || "application/octet-stream";
 
   return new NextResponse(new Uint8Array(downloaded.bytes), {

@@ -9,6 +9,18 @@ export const A4_HEIGHT_PT = 841.89;
 export const MISSING_EMPLOYEE_SLOT = "missing_employee_signature_slot";
 export const INVALID_SIGNATURE_SLOT = "invalid_signature_slot";
 
+/**
+ * Printed-sheet version that `signature_slots` belong to.
+ *
+ * Mirrors `src/features/esign/render/esign-document-html.ts`. A row stamped with
+ * an older value was measured against a sheet this compose no longer draws, so
+ * its boxes are ignored in favour of the kind's printed ones.
+ */
+export const ESIGN_SHEET_RENDER_VERSION = 7;
+
+/** A staff box shorter than this cannot hold ink and a caption line. */
+export const MIN_SLOT_HEIGHT = 8;
+
 export type SignSlotRole =
   | "employee"
   | "hr"
@@ -76,7 +88,7 @@ export function slotsForKind(kind: EsignDocumentKind): SignSlot[] {
 }
 
 export function isUsableSlot(value: SignSlot): boolean {
-  if (value.page < 1 || value.wPt < 8 || value.hPt < 8) return false;
+  if (value.page < 1 || value.wPt < MIN_SLOT_HEIGHT || value.hPt < MIN_SLOT_HEIGHT) return false;
   if (value.xPt < 0 || value.yPt < 0) return false;
   if (value.xPt + value.wPt > A4_WIDTH_PT + 2) return false;
   if (value.yPt + value.hPt > A4_HEIGHT_PT + 2) return false;

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { isCheckInPhotoKeyForKey } from "../../../functions/src/rpcs/check-in-gate";
 import {
   buildDriverObjectKey,
   validateDriverUploadRequest,
@@ -56,6 +57,64 @@ describe("buildDriverObjectKey request_attachment", () => {
       key ?? "",
       /^drivers\/rider-1\/request_attachment\/\d{4}-\d{2}-\d{2}\/[0-9a-f-]+\.jpg$/,
     );
+  });
+});
+
+describe("buildDriverObjectKey check_in_photo", () => {
+  it("uses a unique key per attempt instead of one key per rider per day", () => {
+    // Two builds in the same tick — the old `${date}.jpg` shape returned the
+    // identical key for both, which is what made the retry hit key_conflict.
+    const first = buildDriverObjectKey({
+      driverId: "rider-1",
+      entityType: "check_in_photo",
+      originalFilename: "check-in.jpg",
+    });
+    const second = buildDriverObjectKey({
+      driverId: "rider-1",
+      entityType: "check_in_photo",
+      originalFilename: "check-in.jpg",
+    });
+
+    assert.ok(first);
+    assert.ok(second);
+    assert.notEqual(first, second);
+
+    for (const key of [first!, second!]) {
+      assert.match(key, /^drivers\/rider-1\/check_in\/\d{4}-\d{2}-\d{2}\/[0-9a-f-]+\.jpg$/);
+      // The server binds the stored key to the rider prefix, so both attempts
+      // have to satisfy the same gate.
+      assert.equal(isCheckInPhotoKeyForKey("rider-1", key), true);
+      assert.equal(isCheckInPhotoKeyForKey("rider-2", key), false);
+    }
+  });
+
+  it("keeps the extension of the uploaded file", () => {
+    const key = buildDriverObjectKey({
+      driverId: "rider-1",
+      entityType: "check_in_photo",
+      originalFilename: "check-in.HEIC",
+    });
+    assert.match(key ?? "", /\.heic$/);
+  });
+});
+
+describe("validateDriverUploadRequest check_in_photo", () => {
+  it("accepts a JPEG under 5 MB", () => {
+    const result = validateDriverUploadRequest({
+      entityType: "check_in_photo",
+      contentType: "image/jpeg",
+      sizeBytes: 1024,
+    });
+    assert.deepEqual(result, { ok: true, entityType: "check_in_photo" });
+  });
+
+  it("rejects a PDF", () => {
+    const result = validateDriverUploadRequest({
+      entityType: "check_in_photo",
+      contentType: "application/pdf",
+      sizeBytes: 1024,
+    });
+    assert.deepEqual(result, { error: "invalid_content_type" });
   });
 });
 

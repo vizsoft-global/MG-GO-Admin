@@ -317,6 +317,7 @@ export async function expireEsignRequestsNow(): Promise<number> {
 
   const ids = toExpire.map((d) => d.id);
   const signerRefs: DocumentReference[] = [];
+  const staffSignerRefs: DocumentReference[] = [];
   for (const group of chunk(ids, IN_FILTER_LIMIT)) {
     const snap = await db
       .collection(COLLECTIONS.esignRequestSigners)
@@ -326,6 +327,11 @@ export async function expireEsignRequestsNow(): Promise<number> {
       const data = dataOf(doc);
       if (numberOrNull(data.sort_order) === 0 && !textOrNull(data.staff_user_id)) {
         signerRefs.push(doc.ref);
+      } else if (data.status === "pending" && textOrNull(data.staff_user_id)) {
+        // Staff rows are released rather than expired: an expired request can
+        // never be counter-signed, so leaving these `pending` keeps the
+        // counter-signature lock closed on a dead document.
+        staffSignerRefs.push(doc.ref);
       }
     }
   }
@@ -338,6 +344,15 @@ export async function expireEsignRequestsNow(): Promise<number> {
     ...signerRefs.map((ref) => ({
       ref,
       body: { status: "expired", updated_at: FieldValue.serverTimestamp() },
+    })),
+    ...staffSignerRefs.map((ref) => ({
+      ref,
+      body: {
+        status: "void",
+        void_reason: "request_expired",
+        voided_at: FieldValue.serverTimestamp(),
+        updated_at: FieldValue.serverTimestamp(),
+      },
     })),
   ];
   for (const group of chunk(writes, 400)) {

@@ -26,6 +26,18 @@ export function isCheckInPhotoKeyForKey(driverId: string, key: string): boolean 
   return key.length <= 512;
 }
 
+/**
+ * Whether the rider still owes a check-in for `day`.
+ *
+ * This is the exact expression `driverSetDutyState` refuses on
+ * (`!log || log.check_in_at == null`) and the same one `driverCheckInContext`
+ * reports to the phone. Kept pure and shared so the precheck can never tell a
+ * rider "already checked in" while the write still wants a selfie.
+ */
+export function needsCheckIn(log: Dict | null | undefined): boolean {
+  return !log || log["check_in_at"] == null;
+}
+
 function candidateName(candidate: CheckInCandidate): string | null {
   const name = candidate.restaurant["name"];
   return typeof name === "string" && name.trim() !== "" ? name.trim() : null;

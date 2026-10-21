@@ -171,6 +171,10 @@ export type EsignSignerOption = {
   full_name: string | null;
   email: string | null;
   phone: string | null;
+  /** Role row that decides the permissions, when the profile has one. */
+  role_id: string | null;
+  /** The role carries `esign.sign`, so this staff member can actually sign. */
+  can_sign: boolean;
 };
 
 export type EsignMySignatureRow = {

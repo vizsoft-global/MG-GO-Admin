@@ -37,6 +37,7 @@ import {
   loadCheckInCandidates,
   matchCheckInRestaurant,
   nearestCheckInRestaurant,
+  needsCheckIn,
 } from "./check-in-gate";
 import {
   findActiveShift,
@@ -2011,8 +2012,7 @@ export const driverSetDutyState = measureOnCall("driverSetDutyState", async (req
 
   const existingAttendance = isOnDuty ? await attendanceLogOn(ctx.uid, today) : null;
   const freshCheckIn =
-    isOnDuty &&
-    (!existingAttendance || (existingAttendance.data ?? {})["check_in_at"] == null);
+    isOnDuty && needsCheckIn(existingAttendance?.data ?? null);
 
   type CheckInStamp = {
     photoKey: string | null;
@@ -2272,4 +2272,90 @@ export const driverSetDutyState = measureOnCall("driverSetDutyState", async (req
     profile: ctx.profile,
     now,
   });
+});
+
+type CheckInRestaurantSummary = {
+  id: string;
+  name: string | null;
+  distance_m: number | null;
+};
+
+function checkInRestaurantSummary(match: {
+  id: string;
+  name: string | null;
+  distanceM: number | null;
+} | null): CheckInRestaurantSummary | null {
+  if (!match) return null;
+  return { id: match.id, name: match.name, distance_m: match.distanceM };
+}
+
+/**
+ * Clock-in precheck for the rider app.
+ *
+ * `driverSetDutyState` stays the only authority on the write, so a tampered
+ * client still cannot skip the gate. This callable exists so the phone can ask
+ * *before* it opens the camera: out of range is data, not an error, so the rider
+ * learns they are 800 m from Salmiya without spending a selfie on it.
+ *
+ * It also answers the one thing the phone could not know: a rider who clocked
+ * out and back in on the same Kuwait day owes no check-in at all, so
+ * `requires_check_in: false` lets it skip both the photo and the proximity gate
+ * — exactly the condition `freshCheckIn` refuses on.
+ *
+ * It never throws for a refusal, so it is safe to call on every Clock In tap.
+ */
+export const driverCheckInContext = measureOnCall("driverCheckInContext", async (request) => {
+  const ctx = await requireRider(request);
+  const data = (request.data ?? {}) as Dict;
+  const day = kuwaitDayString(new Date());
+  const lat = numberOrNull(pick(data, "p_lat", "lat", "check_in_lat", "checkInLat"));
+  const lng = numberOrNull(pick(data, "p_lng", "lng", "check_in_lng", "checkInLng"));
+
+  const [existingAttendance, safety] = await Promise.all([
+    attendanceLogOn(ctx.uid, day),
+    loadDriverAppSafetySettings(),
+  ]);
+
+  const requiresCheckIn = needsCheckIn(existingAttendance?.data ?? null);
+  const base = {
+    day,
+    requires_check_in: requiresCheckIn,
+    checked_in_today: !requiresCheckIn,
+    photo_required: safety.checkInPhotoRequired,
+    proximity_meters: safety.proximityMeters,
+    candidates: 0,
+    requires_location: false,
+    in_range: false,
+    restaurant: null as CheckInRestaurantSummary | null,
+    nearest: null as CheckInRestaurantSummary | null,
+  };
+
+  if (!requiresCheckIn) {
+    // Already checked in today: the write cannot refuse on the gate, so the
+    // phone must not open the camera — or fail on a missing GPS fix — for it.
+    return { ...base, in_range: true };
+  }
+
+  if (lat === null || lng === null) {
+    // No fix yet is a client-side retry, not a refusal: `in_range` stays false
+    // and `requires_location` tells the phone which copy to show.
+    return { ...base, requires_location: true };
+  }
+
+  const candidates = await loadCheckInCandidates(ctx.uid, ctx.driver);
+  const match = matchCheckInRestaurant({
+    candidates,
+    lat,
+    lng,
+    proximityMeters: safety.proximityMeters,
+  });
+  const nearest = match ? null : nearestCheckInRestaurant({ candidates, lat, lng });
+
+  return {
+    ...base,
+    candidates: candidates.length,
+    in_range: match != null,
+    restaurant: checkInRestaurantSummary(match),
+    nearest: checkInRestaurantSummary(nearest),
+  };
 });
