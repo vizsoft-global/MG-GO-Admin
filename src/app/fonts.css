@@ -1,0 +1,92 @@
+/*
+ * Brand fonts — served from `public/fonts/` so the panel never fetches a
+ * Google Font at runtime or build time.
+ *
+ * Gotham covers Latin; GE SS TWO covers Arabic through `unicode-range`, so a
+ * mixed sentence picks the right face per glyph. The GE SS Two folders contain
+ * spaces, hence the percent-encoded URLs — the binaries stay where they are.
+ */
+
+@font-face {
+  font-family: "Gotham";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/Gotham/Gotham-Light.otf") format("opentype");
+}
+
+@font-face {
+  font-family: "Gotham";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Gotham/Gotham-Book.otf") format("opentype");
+}
+
+@font-face {
+  font-family: "Gotham";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Gotham/Gotham-BookItalic.otf") format("opentype");
+}
+
+@font-face {
+  font-family: "Gotham";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/Gotham/Gotham-Medium.otf") format("opentype");
+}
+
+@font-face {
+  font-family: "Gotham";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/Gotham/Gotham-Bold.otf") format("opentype");
+}
+
+@font-face {
+  font-family: "Gotham";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/Gotham/Gotham-BoldItalic.otf") format("opentype");
+}
+
+@font-face {
+  font-family: "Gotham";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/fonts/Gotham/Gotham-Black.otf") format("opentype");
+}
+
+/* Arabic only — Latin letters keep falling through to Gotham. */
+@font-face {
+  font-family: "GE SS TWO";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+  src: url("/fonts/GE%20SS%20Two%20Light/GE%20SS%20Two%20Light.otf") format("opentype");
+}
+
+@font-face {
+  font-family: "GE SS TWO";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+  src: url("/fonts/GE%20SS%20Two%20Medium/GE%20SS%20Two%20Medium.otf") format("opentype");
+}
+
+@font-face {
+  font-family: "GE SS TWO";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+  src: url("/fonts/GE%20SS%20Two%20Bold/GE%20SS%20Two%20Bold.otf") format("opentype");
+}
