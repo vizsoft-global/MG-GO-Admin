@@ -6,6 +6,8 @@ export const DPD_ERROR_KEYS = [
   "invalid_dates",
   "invalid_scope",
   "invalid_target",
+  "dpd_target_required",
+  "invalid_dpd_period",
   "invalid_base",
   "invalid_tiers",
   "invalid_reward_mode",

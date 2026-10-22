@@ -5,14 +5,18 @@ import { COLLECTIONS } from "../core/collections";
 import { daysInMonth, kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { computeSourceCompanyIncentive, periodStart, roundKwd } from "../core/money";
 import {
-  companyConfigApplies,
+  companySchemeGoverns,
   computeIncentiveAmount,
   deliveryMatchesRules,
   incentiveBandStart,
   partnerDailyDpdTarget,
   restaurantDailyDpdTarget,
+  ruleMatchesScope,
+  ruleScopeRows,
   zoneDailyDpdTarget,
+  type IncentiveRule,
   type IncentiveTier,
+  type RuleScope,
   type SourceCompanyConfig,
 } from "../core/incentive";
 import {
@@ -72,6 +76,25 @@ export function earningsDocId(driverId: string, earnDate: string): string {
 
 export function stripDisplayName(name: string): string {
   return name.trim().replace(TRAILING_ISO_DATE, "");
+}
+
+export type ExtraEarningsPath = "company_scheme" | "rules";
+
+/**
+ * Which pricing path `driverGetExtraEarnings` shows a rider.
+ *
+ * `company_scheme` only when the outsourced company's own scheme is live, enabled
+ * and carries a target (`companySchemeGoverns`). Everything else — in-house, a
+ * staged company, or a company with the incentive flag off — reads the
+ * restaurant/zone/partner rules, so an Active rule can never be silently
+ * swallowed by a company row that prices nothing.
+ */
+export function extraEarningsPath(args: {
+  riderCategory: string | null;
+  company: SourceCompanyConfig | null;
+  onDate: string;
+}): ExtraEarningsPath {
+  return companySchemeGoverns(args) ? "company_scheme" : "rules";
 }
 
 export function elapsedDays(today: string, year: number, month: number): number {
@@ -145,42 +168,46 @@ export function bandFields(args: {
   };
 }
 
+/**
+ * `incentive_rule_matches_driver`: whether a rule names this rider, through the
+ * rider's own zone/partner or through any restaurant they deliver for.
+ *
+ * Delegates to the canonical matcher (`ruleMatchesScope`) so the legacy
+ * single-FK column is honoured exactly as `countEligibleDeliveries` honours it —
+ * an older rule that never got a junction row must still reach the phone.
+ */
 function ruleMatchesDriver(args: {
-  scopeType: string;
-  scopes: Array<{ zone_id: string | null; partner_id: string | null; restaurant_id: string | null }>;
+  rule: IncentiveRule;
+  scopes: readonly RuleScope[];
   zoneId: string | null;
   partnerId: string | null;
   restaurantIds: readonly string[];
 }): boolean {
-  const { scopeType, scopes, zoneId, partnerId, restaurantIds } = args;
-  if (scopeType === "zone") {
-    return scopes.some((scope) => scope.zone_id !== null && scope.zone_id === zoneId);
+  const { rule, scopes, zoneId, partnerId, restaurantIds } = args;
+  if (rule.scope_type === "zone") {
+    return ruleMatchesScope(rule, scopes, {
+      zone_id: zoneId,
+      partner_id: null,
+      restaurant_id: null,
+    });
   }
-  if (scopeType === "partner") {
-    return scopes.some((scope) => scope.partner_id !== null && scope.partner_id === partnerId);
+  if (rule.scope_type === "partner") {
+    return ruleMatchesScope(rule, scopes, {
+      zone_id: null,
+      partner_id: partnerId,
+      restaurant_id: null,
+    });
   }
-  if (scopeType === "restaurant") {
-    return scopes.some(
-      (scope) => scope.restaurant_id !== null && restaurantIds.includes(scope.restaurant_id),
+  if (rule.scope_type === "restaurant") {
+    return restaurantIds.some((id) =>
+      ruleMatchesScope(rule, scopes, {
+        zone_id: null,
+        partner_id: null,
+        restaurant_id: id,
+      }),
     );
   }
   return false;
-}
-
-function matchesRuleScope(
-  scopeType: string,
-  scopes: Array<{ zone_id: string | null; partner_id: string | null; restaurant_id: string | null }>,
-  delivery: { zone_id: string | null; partner_id: string | null; restaurant_id: string | null },
-): boolean {
-  if (scopeType === "zone") {
-    return scopes.some((scope) => scope.zone_id !== null && scope.zone_id === delivery.zone_id);
-  }
-  if (scopeType === "partner") {
-    return scopes.some((scope) => scope.partner_id !== null && scope.partner_id === delivery.partner_id);
-  }
-  return scopes.some(
-    (scope) => scope.restaurant_id !== null && scope.restaurant_id === delivery.restaurant_id,
-  );
 }
 
 function deliveryProgressMatchesRules(args: {
@@ -253,7 +280,7 @@ export function countProgressDeliveries(args: {
     ) {
       return false;
     }
-    return matchesRuleScope(rule.scope_type, scopes, {
+    return ruleMatchesScope(rule, scopes, {
       zone_id: delivery.zone_id,
       partner_id: delivery.partner_id,
       restaurant_id: delivery.restaurant_id,
@@ -524,7 +551,12 @@ function liveIncentiveDetail(args: {
   return { incentive, lines };
 }
 
-function restaurantOwnTarget(
+/**
+ * The store's **own** restaurant-scoped daily target, or null when no
+ * restaurant-scoped rule names it. Used only to tell whether a store card
+ * inherited its target from a zone/partner rule.
+ */
+function restaurantScopeTarget(
   restaurantId: string,
   onDate: string,
   context: IncentiveContext,
@@ -549,6 +581,31 @@ function restaurantOwnTarget(
     return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0;
   });
   return Math.ceil(sorted[0].dpd_target as number);
+}
+
+/**
+ * The daily target a store card shows: the store's own rule, then the zone it
+ * sits in, then its partner.
+ *
+ * This is `restaurantDailyDpdTarget` (the same chain the primary `daily_dpd`
+ * card, the offer gate and Performance DPD read), so a rule written at zone or
+ * partner level reaches the per-store card too. Before, this function only
+ * looked at restaurant-scoped rules and an operator's zone/partner target showed
+ * up as a card with no store name — or not at all.
+ */
+function restaurantOwnTarget(
+  restaurantId: string,
+  onDate: string,
+  context: IncentiveContext,
+): number | null {
+  return restaurantDailyDpdTarget({
+    restaurantId,
+    onDate,
+    restaurantZoneId: context.restaurantZoneById.get(restaurantId) ?? null,
+    restaurantPartnerId: context.restaurantPartnerById.get(restaurantId) ?? null,
+    deliveryRules: context.deliveryRules,
+    deliveryScopesByRule: context.deliveryScopesByRule,
+  });
 }
 
 /**
@@ -643,14 +700,54 @@ async function buildDailyDpdTargets(args: {
     .map((id) => ({ id, name: asString(restaurantMap.get(id)?.["name"]) ?? "" }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  const inheritedZones = new Set<string>();
+  const inheritedPartners = new Set<string>();
+
   for (const restaurant of named) {
     const target = restaurantOwnTarget(restaurant.id, today, context);
     if (target === null || target <= 0) continue;
-    const ofRestaurant = deliveries.filter((delivery) => delivery.restaurant_id === restaurant.id);
-    const completed = ofRestaurant.filter(
+    // A store without its own rule inherits the zone/partner target. Remember
+    // which zone/partner already reaches the phone through a store card so the
+    // aggregate card below is not painted a second time, and count the inherited
+    // target against the scope it was written for — a zone goal shown as "2/21"
+    // for one store would be a lie.
+    const zoneId = context.restaurantZoneById.get(restaurant.id) ?? null;
+    const partnerId = context.restaurantPartnerById.get(restaurant.id) ?? null;
+    const ownTarget = restaurantScopeTarget(restaurant.id, today, context);
+    const inheritedZone =
+      ownTarget === null && zoneId !== null && zoneOwnTarget(zoneId, today, context) === target
+        ? zoneId
+        : null;
+    const inheritedPartner =
+      inheritedZone === null &&
+      ownTarget === null &&
+      partnerId !== null &&
+      partnerOwnTarget(partnerId, today, context) === target
+        ? partnerId
+        : null;
+    if (inheritedZone !== null) inheritedZones.add(inheritedZone);
+    if (inheritedPartner !== null) inheritedPartners.add(inheritedPartner);
+
+    const ofScope =
+      inheritedZone !== null
+        ? deliveries.filter(
+            (delivery) =>
+              (delivery.zone_id ??
+                context.restaurantZoneById.get(delivery.restaurant_id ?? "") ??
+                null) === inheritedZone,
+          )
+        : inheritedPartner !== null
+          ? deliveries.filter(
+              (delivery) =>
+                (delivery.partner_id ??
+                  context.restaurantPartnerById.get(delivery.restaurant_id ?? "") ??
+                  null) === inheritedPartner,
+            )
+          : deliveries.filter((delivery) => delivery.restaurant_id === restaurant.id);
+    const completed = ofScope.filter(
       (delivery) => delivery.status === "verified" && inDriverDay(delivery, today, false),
     ).length;
-    const progress = ofRestaurant.filter(
+    const progress = ofScope.filter(
       (delivery) => PROGRESS_STATUSES.has(delivery.status) && inDriverDay(delivery, today, true),
     ).length;
     cards.push({
@@ -669,7 +766,7 @@ async function buildDailyDpdTargets(args: {
   const zone = firstTarget(zoneCandidates(driver, restaurantIds, context), (id) =>
     zoneOwnTarget(id, today, context),
   );
-  if (zone) {
+  if (zone && !inheritedZones.has(zone.id)) {
     const zoneDoc = (await loadDocMap(COLLECTIONS.zones, [zone.id])).get(zone.id);
     const zoneName = asString(zoneDoc?.["name"]);
     if (zoneName) {
@@ -700,7 +797,7 @@ async function buildDailyDpdTargets(args: {
   const partner = firstTarget(partnerCandidates(driver, restaurantIds, context), (id) =>
     partnerOwnTarget(id, today, context),
   );
-  if (partner) {
+  if (partner && !inheritedPartners.has(partner.id)) {
     const partnerDoc = (await loadDocMap(COLLECTIONS.partners, [partner.id])).get(partner.id);
     const partnerName = asString(partnerDoc?.["name"]);
     if (partnerName) {
@@ -740,13 +837,13 @@ async function buildDailyDpd(args: {
   today: string;
   restaurantIds: readonly string[];
   company: SourceCompanyConfig | null;
-  companyApplies: boolean;
+  companyGoverns: boolean;
   deliveries: readonly RawDelivery[];
   context: IncentiveContext;
 }): Promise<Dict | null> {
-  const { driverId, driver, today, restaurantIds, company, companyApplies, deliveries, context } = args;
+  const { driverId, driver, today, restaurantIds, company, companyGoverns, deliveries, context } = args;
 
-  if (companyApplies) {
+  if (companyGoverns) {
     const target = company?.dpd_target ?? null;
     if (target === null || target <= 0) return null;
     const completed = deliveries.filter(
@@ -778,7 +875,7 @@ async function buildDailyDpd(args: {
         today >= rule.start_date &&
         today <= rule.end_date &&
         ruleMatchesDriver({
-          scopeType: rule.scope_type,
+          rule,
           scopes: context.incentiveScopesByRule.get(rule.id) ?? [],
           zoneId,
           partnerId,
@@ -1040,16 +1137,21 @@ export const driverGetExtraEarnings = onCall(async (request) => {
     loadRiderDeliveriesInRange(ctx.uid, [...PROGRESS_STATUSES], monthStart, today),
   ]);
 
-  const companyApplies = companyConfigApplies({
+  // The company scheme replaces the rules only when it can actually pay:
+  // outsourced, live from today, `incentive_enabled` and carrying a target. A
+  // staged company row with the flag off must not blank the rider's rules — that
+  // is the black hole where an Active incentive rule reached nobody.
+  const extraPath = extraEarningsPath({
     riderCategory: asString(ctx.driver["rider_category"]),
     company,
     onDate: today,
   });
+  const companyGoverns = extraPath === "company_scheme";
 
   let companyScheme: Dict | null = null;
   const offers: Dict[] = [];
 
-  if (companyApplies) {
+  if (companyGoverns) {
     if (company?.incentive_enabled) {
       const completed = deliveries.filter(
         (delivery) => delivery.status === "verified" && inDriverDay(delivery, today, false),
@@ -1085,7 +1187,7 @@ export const driverGetExtraEarnings = onCall(async (request) => {
           today >= rule.start_date &&
           today <= rule.end_date &&
           ruleMatchesDriver({
-            scopeType: rule.scope_type,
+            rule,
             scopes: context.incentiveScopesByRule.get(rule.id) ?? [],
             zoneId,
             partnerId,
@@ -1099,17 +1201,17 @@ export const driverGetExtraEarnings = onCall(async (request) => {
       });
 
     const restaurantScopeIds = matching.flatMap((rule) =>
-      (context.incentiveScopesByRule.get(rule.id) ?? [])
+      ruleScopeRows(rule, context.incentiveScopesByRule.get(rule.id) ?? [])
         .map((scope) => scope.restaurant_id)
         .filter((id): id is string => Boolean(id)),
     );
     const partnerScopeIds = matching.flatMap((rule) =>
-      (context.incentiveScopesByRule.get(rule.id) ?? [])
+      ruleScopeRows(rule, context.incentiveScopesByRule.get(rule.id) ?? [])
         .map((scope) => scope.partner_id)
         .filter((id): id is string => Boolean(id)),
     );
     const zoneScopeIds = matching.flatMap((rule) =>
-      (context.incentiveScopesByRule.get(rule.id) ?? [])
+      ruleScopeRows(rule, context.incentiveScopesByRule.get(rule.id) ?? [])
         .map((scope) => scope.zone_id)
         .filter((id): id is string => Boolean(id)),
     );
@@ -1122,7 +1224,7 @@ export const driverGetExtraEarnings = onCall(async (request) => {
     let overridePriority: number | null = null;
     for (const rule of matching) {
       const tiers = context.tiersByRule.get(rule.id) ?? [];
-      const scopes = context.incentiveScopesByRule.get(rule.id) ?? [];
+      const scopes = ruleScopeRows(rule, context.incentiveScopesByRule.get(rule.id) ?? []);
       const eligible = countEligibleDeliveries({
         driverId: ctx.uid,
         earnDate: today,
@@ -1207,7 +1309,7 @@ export const driverGetExtraEarnings = onCall(async (request) => {
       today,
       restaurantIds,
       company,
-      companyApplies,
+      companyGoverns,
       deliveries,
       context,
     }),

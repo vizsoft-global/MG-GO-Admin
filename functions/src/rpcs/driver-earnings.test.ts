@@ -6,6 +6,7 @@ import {
   deliveryInProgressPeriod,
   earningsDocId,
   elapsedDays,
+  extraEarningsPath,
   offerCompleted,
   offerPendingVerification,
   offerTarget,
@@ -13,6 +14,20 @@ import {
   remainingDeliveries,
   stripDisplayName,
 } from "./driver-earnings";
+import type { SourceCompanyConfig } from "../core/incentive";
+
+const company = (over: Partial<SourceCompanyConfig> = {}): SourceCompanyConfig => ({
+  key: "sadeeq",
+  name: "Sadeeq",
+  incentive_enabled: true,
+  dpd_target: 15,
+  incentive_above_kwd: 0.1,
+  incentive_below_kwd: 0.35,
+  effective_from: "2026-09-30",
+  ...over,
+});
+
+const ON_DATE = "2026-10-16";
 
 const tiers = [
   {
@@ -104,6 +119,47 @@ describe("driver-earnings helpers", () => {
     assert.equal(open["orders_to_next_rate"], 3);
 
     assert.deepEqual(bandFields({ bandStart: null, eligible: 5, tiers }), { band_start: null });
+  });
+
+  it("sends an outsourced rider down the company path only when the scheme can pay", () => {
+    assert.equal(
+      extraEarningsPath({ riderCategory: "outsourced", company: company(), onDate: ON_DATE }),
+      "company_scheme",
+    );
+    // `incentive_enabled = false` used to blank the rules as well: no offers, no
+    // Daily DPD card. It must fall through to the rules instead.
+    assert.equal(
+      extraEarningsPath({
+        riderCategory: "outsourced",
+        company: company({ incentive_enabled: false }),
+        onDate: ON_DATE,
+      }),
+      "rules",
+    );
+    assert.equal(
+      extraEarningsPath({
+        riderCategory: "outsourced",
+        company: company({ dpd_target: 0 }),
+        onDate: ON_DATE,
+      }),
+      "rules",
+    );
+    assert.equal(
+      extraEarningsPath({ riderCategory: "in_house", company: company(), onDate: ON_DATE }),
+      "rules",
+    );
+    assert.equal(
+      extraEarningsPath({ riderCategory: "outsourced", company: null, onDate: ON_DATE }),
+      "rules",
+    );
+    assert.equal(
+      extraEarningsPath({
+        riderCategory: "outsourced",
+        company: company({ effective_from: "2026-11-01" }),
+        onDate: ON_DATE,
+      }),
+      "rules",
+    );
   });
 
   it("attributes progress to shift_date, then delivered_at, then pickup_at", () => {

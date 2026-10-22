@@ -35,6 +35,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { parseSpreadsheetFile } from "@/lib/import/spreadsheet";
@@ -60,6 +68,12 @@ import {
   pickSendableHubTemplate,
 } from "@/features/esign/outgoing-hub-categories";
 import { isEmployeeRowKey } from "@/features/esign/employee-block";
+import {
+  groupSheetFields,
+  isSheetInput,
+  previewFieldValues,
+} from "@/features/esign/esign-sheet-fields";
+import { EsignDocumentPreview } from "@/features/employeedesk/esign/document-preview";
 import { templateFieldLabel } from "@/features/esign/template-source";
 import {
   useEsignCategories,
@@ -309,6 +323,100 @@ export function BulkImportShell({
   const [templateId, setTemplateId] = useState<string | null>(initialTemplateId ?? null);
   const { data: templateData } = useEsignTemplate(templateId ?? "");
   const template = templateData?.template;
+  /**
+   * The rows the operator may type over. A `signature` row is not an input —
+   * its value is the rider's ink — so it stays in the preview and out of the
+   * form, which is also what keeps the two panes describing the same sheet.
+   */
+  const editableFields = useMemo(
+    () => (template?.fields ?? []).filter(isSheetInput),
+    [template?.fields],
+  );
+  const sheetGroups = useMemo(
+    () => groupSheetFields(editableFields, template?.document_kind ?? null),
+    [editableFields, template?.document_kind],
+  );
+  const previewValues = useMemo(
+    () => previewFieldValues(editableFields, templateOverrides, null),
+    [editableFields, templateOverrides],
+  );
+
+  /**
+   * One row of the batch-values form.
+   *
+   * The label is the template's own, in the page language — a raw
+   * `employee_code` is a database column, not a value an operator is being
+   * asked to type. The input follows the field's type, because a date typed
+   * into a free-text box is a date the renderer has to guess at.
+   */
+  function renderOverrideField(field: EsignTemplateFieldRow) {
+    const label = templateFieldLabel(field, labelLocale);
+    const value = templateOverrides[field.field_key] ?? "";
+    const setValue = (next: string) =>
+      setTemplateOverrides((prev) => ({ ...prev, [field.field_key]: next }));
+    const placeholder = field.preview_value ?? undefined;
+    const wide = field.field_type === "textarea";
+
+    return (
+      <div key={field.field_key} className={cn("space-y-1", wide && "sm:col-span-2")}>
+        <Label className="text-xs font-medium text-foreground">
+          {label}
+          {field.is_required ? <span className="text-destructive"> *</span> : null}
+        </Label>
+        {field.field_type === "select" && field.options.length > 0 ? (
+          field.options.length > 30 ? (
+            <SearchSelect
+              items={field.options.map((option) => ({
+                value: option,
+                label: option,
+                keywords: [option],
+              }))}
+              value={value || null}
+              onChange={(next) => setValue(next ?? "")}
+              placeholder={placeholder ?? t("editSelectPlaceholder")}
+              searchPlaceholder={t("editSelectSearch")}
+              recentsKey={`esign-bulk-value-${field.field_key}`}
+              className="w-full"
+            />
+          ) : (
+            <Select value={value || undefined} onValueChange={(next) => setValue(next ?? "")}>
+              <SelectTrigger className="h-9 w-full">
+                <SelectValue placeholder={placeholder ?? t("editSelectPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                {field.options.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )
+        ) : field.field_type === "textarea" ? (
+          <Textarea
+            className="min-h-16"
+            value={value}
+            placeholder={placeholder ?? t("editTextPlaceholder")}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        ) : (
+          <Input
+            className="h-9"
+            type={
+              field.field_type === "number"
+                ? "number"
+                : field.field_type === "date"
+                  ? "date"
+                  : "text"
+            }
+            value={value}
+            placeholder={placeholder ?? t("editTextPlaceholder")}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        )}
+      </div>
+    );
+  }
 
   const [dueAt, setDueAt] = useState("");
   const [title, setTitle] = useState("");
@@ -768,49 +876,80 @@ export function BulkImportShell({
             {t("editValues")}
           </button>
           <Dialog open={editOpen} onOpenChange={setEditOpen}>
-            <DialogContent className="max-w-2xl">
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm font-semibold">{t("editTitle")}</p>
-                  <p className="text-xs text-muted-foreground">{t("editHint")}</p>
+            <DialogContent
+              showCloseButton
+              closeOutside
+              className="w-[min(1200px,96vw)] max-w-none gap-0 overflow-visible p-0 sm:max-w-[min(1200px,96vw)]"
+            >
+              <div className="grid h-[min(84dvh,800px)] min-h-[480px] grid-rows-[minmax(0,1fr)] overflow-hidden rounded-xl lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:items-stretch">
+                <div className="relative hidden h-full min-h-0 border-e border-border bg-muted/40 lg:block">
+                  {template ? (
+                    <EsignDocumentPreview
+                      templateName={title.trim() || template.name_en}
+                      nameAr={template.name_ar}
+                      company={t("previewCompany")}
+                      body={template.body_en}
+                      bodyAr={template.body_ar}
+                      declaration={template.declaration_en}
+                      declarationAr={template.declaration_ar}
+                      fields={template.fields}
+                      values={previewValues}
+                      fill
+                      documentKind={template.document_kind}
+                      signers={{
+                        employeeLabel: t("signerEmployee"),
+                        staffLabel: t("signerStaff"),
+                      }}
+                    />
+                  ) : null}
                 </div>
-                <div className="max-h-[50vh] space-y-2 overflow-y-auto pe-1">
-                  {(template?.fields ?? []).map((field) => (
-                    <label key={field.field_key} className="block space-y-1 text-xs">
-                      <span className="text-muted-foreground">{field.field_key}</span>
-                      <Input
+
+                <div className="flex h-full min-h-0 flex-col">
+                  <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+                    {sheetGroups.length === 0 ? (
+                      <p className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                        {t("noEditableFields")}
+                      </p>
+                    ) : (
+                      sheetGroups.map((group) => (
+                        <div key={group.key} className="space-y-1.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">
+                            {t(`valueGroups.${group.key}`)}
+                          </p>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {group.fields.map((field) => renderOverrideField(field))}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="shrink-0 border-t border-border px-5 py-3">
+                    <AppModalFooter title={t("editTitle")} subtitle={t("editHint")}>
+                      <Button
+                        type="button"
+                        variant="outline"
                         className="h-9"
-                        value={templateOverrides[field.field_key] ?? ""}
-                        onChange={(event) =>
-                          setTemplateOverrides((prev) => ({ ...prev, [field.field_key]: event.target.value }))
-                        }
-                      />
-                    </label>
-                  ))}
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9"
-                    onClick={() => {
-                      setTemplateOverrides({});
-                      setEditOpen(false);
-                      setStep(2);
-                    }}
-                  >
-                    {t("useAsIs")}
-                  </Button>
-                  <Button
-                    type="button"
-                    className="h-9 bg-zinc-950 text-white hover:bg-zinc-800"
-                    onClick={() => {
-                      setEditOpen(false);
-                      setStep(2);
-                    }}
-                  >
-                    {t("continue")}
-                  </Button>
+                        onClick={() => {
+                          setTemplateOverrides({});
+                          setEditOpen(false);
+                          setStep(2);
+                        }}
+                      >
+                        {t("useAsIs")}
+                      </Button>
+                      <Button
+                        type="button"
+                        className="h-9"
+                        onClick={() => {
+                          setEditOpen(false);
+                          setStep(2);
+                        }}
+                      >
+                        {t("continue")}
+                      </Button>
+                    </AppModalFooter>
+                  </div>
                 </div>
               </div>
             </DialogContent>

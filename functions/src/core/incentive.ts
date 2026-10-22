@@ -83,6 +83,72 @@ export function ruleRestaurantIds(rule: IncentiveRule, scopes: readonly RuleScop
 }
 
 /**
+ * The scope ids a rule carries, as rows: its legacy single-FK column plus every
+ * junction row.
+ *
+ * The schema carried two places for one fact while the junction table was being
+ * introduced, so a rule can name its scope in the legacy column, in
+ * `*_rule_scopes`, or in both. Reading only the junction silently drops every
+ * rule written before the split — the Admin form and the incentive import both
+ * keep writing the legacy column — so every scope decision reads the union.
+ */
+export function ruleScopeRows(rule: ScopedRule, scopes: readonly RuleScope[]): RuleScope[] {
+  const rows: RuleScope[] = [...scopes];
+  if (rule.scope_type === "zone" && rule.zone_id) {
+    rows.push({ zone_id: rule.zone_id, partner_id: null, restaurant_id: null });
+  } else if (rule.scope_type === "partner" && rule.partner_id) {
+    rows.push({ zone_id: null, partner_id: rule.partner_id, restaurant_id: null });
+  } else if (rule.scope_type === "restaurant" && rule.restaurant_id) {
+    rows.push({ zone_id: null, partner_id: null, restaurant_id: rule.restaurant_id });
+  }
+  return rows;
+}
+
+/** The three fields that decide a rule's scope, whichever table wrote them. */
+export type ScopedRule = {
+  scope_type: RuleScopeType;
+  zone_id?: string | null;
+  partner_id?: string | null;
+  restaurant_id?: string | null;
+};
+
+/** One rider, delivery or restaurant the rule is tested against. */
+export type RuleScopeTarget = {
+  zone_id: string | null;
+  partner_id: string | null;
+  restaurant_id: string | null;
+};
+
+/**
+ * `incentive_rule_matches_driver` / `matches_rule_scope`: whether a rule's scope
+ * names one target.
+ *
+ * This is the single scope predicate in the functions: the earnings RPC, the
+ * eligible-delivery count and the Home matcher all call it, so a rule cannot be
+ * visible in one place and invisible in another. Scope is the legacy column
+ * **or** a junction row (`ruleScopeRows`); a blank id on either side never
+ * matches.
+ */
+export function ruleMatchesScope(
+  rule: ScopedRule,
+  scopes: readonly RuleScope[],
+  target: RuleScopeTarget,
+): boolean {
+  const idOf = (row: RuleScope): string | null => {
+    if (rule.scope_type === "zone") return row.zone_id;
+    if (rule.scope_type === "partner") return row.partner_id;
+    if (rule.scope_type === "restaurant") return row.restaurant_id;
+    return null;
+  };
+  const wanted = idOf(target);
+  if (!wanted) return false;
+  return ruleScopeRows(rule, scopes).some((row) => {
+    const id = idOf(row);
+    return id !== null && id === wanted;
+  });
+}
+
+/**
  * `incentive_rules_share_restaurant`: whether two rules overlap on any
  * restaurant. An empty id list never intersects.
  */
@@ -517,15 +583,18 @@ export type SourceCompanyConfig = {
 };
 
 /**
- * `company_config_applies`: whether the outsourced company's own scheme — flat
- * above/below per order — replaces the restaurant incentive rules on a date.
+ * `company_config_applies`: whether the outsourced company row is staged for a
+ * date — outsourced rider, a company row and a start date on or before the date.
+ *
+ * This is the **staging** test only. Whether the company's scheme actually
+ * replaces the restaurant rules is `companySchemeGoverns` below: a staged company
+ * with `incentive_enabled = false` (or no target) prices nothing, and treating it
+ * as governing would hide every active rule from the rider.
  *
  * The predicate is deliberately strict about `source_company` and
- * `effective_from`, because it selects the **whole** pricing path: a rider whose
- * company has no start date keeps restaurant rules, which is the SOP's own
- * staging ("DPD only" before Ops enables rates). An outsourced rider resolves
- * their order count across every restaurant, so treating a half-configured
- * company as governing would price a day against a target nobody set.
+ * `effective_from`, because a rider whose company has no start date keeps
+ * restaurant rules, which is the SOP's own staging ("DPD only" before Ops enables
+ * rates).
  */
 export function companyConfigApplies(args: {
   riderCategory: string | null;
@@ -537,4 +606,26 @@ export function companyConfigApplies(args: {
   if (company === null) return false;
   if (company.effective_from === null) return false;
   return onDate >= company.effective_from;
+}
+
+/**
+ * Whether the company's own scheme **replaces** the restaurant/zone/partner
+ * rules on a date.
+ *
+ * `companyConfigApplies` only says the rider is outsourced and the company row is
+ * staged. A company with `incentive_enabled = false`, or with no daily target,
+ * prices nothing — so treating it as governing would hand the rider an empty
+ * Extra Earnings screen and no Daily DPD card, even while an active incentive
+ * rule names their store. The scheme therefore governs only when it can actually
+ * pay: live, enabled and carrying a target.
+ */
+export function companySchemeGoverns(args: {
+  riderCategory: string | null;
+  company: SourceCompanyConfig | null;
+  onDate: string;
+}): boolean {
+  if (!companyConfigApplies(args)) return false;
+  const company = args.company;
+  if (company === null) return false;
+  return company.incentive_enabled === true && (company.dpd_target ?? 0) > 0;
 }

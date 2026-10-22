@@ -639,17 +639,25 @@ describe("buildEsignDocumentHtml", () => {
     assert.match(html, /Sara Ahmed/);
   });
 
-  it("never prints a company logo on any document kind", () => {
+  it("prints the branding logo on every document kind and nothing when unset", () => {
     for (const kind of ["penalty", "loan", "payslip", "general"] as const) {
-      const html = buildEsignDocumentHtml({
+      const branded = buildEsignDocumentHtml({
         language: "en",
         kind,
         logoUrl: "https://cdn.example/brand.png",
         employee: sampleEmployee(),
       });
-      assert.doesNotMatch(html, /cdn\.example\/brand\.png/, kind);
-      assert.doesNotMatch(html, /data-logo="1"/, kind);
-      assert.doesNotMatch(html, /class="logo-img"/, kind);
+      // Each reference masthead prints the company mark, so a branded sheet has
+      // to carry it — the old "no logo anywhere" rule predates the redesign.
+      assert.match(branded, /cdn\.example\/brand\.png/, kind);
+      assert.doesNotMatch(branded, /data-logo="1"/, kind);
+      assert.doesNotMatch(branded, /class="logo-img"/, kind);
+      const unbranded = buildEsignDocumentHtml({
+        language: "en",
+        kind,
+        employee: sampleEmployee(),
+      });
+      assert.doesNotMatch(unbranded, /cdn\.example\/brand\.png/, kind);
     }
   });
 });

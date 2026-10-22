@@ -1,5 +1,5 @@
 import type { DpdErrorKey } from "./dpd-errors";
-import type { RuleScopeType } from "./types";
+import type { IncentivePeriod, RuleScopeType, RuleStatus } from "./types";
 
 export type DeliveryRuleFormField =
   | "name"
@@ -7,6 +7,7 @@ export type DeliveryRuleFormField =
   | "startDate"
   | "endDate"
   | "dpdTarget"
+  | "dpdPeriod"
   | "priority";
 
 export type DeliveryRuleFormErrors = Partial<
@@ -15,6 +16,7 @@ export type DeliveryRuleFormErrors = Partial<
 
 export type ValidateDeliveryRuleFormInput = {
   name: string;
+  status: RuleStatus;
   scopeType: RuleScopeType;
   zoneIds: string[];
   partnerIds: string[];
@@ -22,6 +24,7 @@ export type ValidateDeliveryRuleFormInput = {
   startDate: string;
   endDate: string;
   dpdTarget: string;
+  dpdPeriod: IncentivePeriod | "";
   priority: string;
 };
 
@@ -63,6 +66,18 @@ export function validateDeliveryRuleForm(
     }
   }
 
+  // An Active rule is what a rider is paid against, so it must carry a target,
+  // and that target has to be daily: the rider app's Daily DPD card reads a
+  // daily target only. Both are rejected rather than saved as a rule the phone
+  // will not show.
+  if (input.status === "active") {
+    if (!input.dpdTarget.trim()) {
+      errors.dpdTarget = "dpd_target_required";
+    } else if (!errors.dpdTarget && input.dpdPeriod && input.dpdPeriod !== "daily") {
+      errors.dpdPeriod = "invalid_dpd_period";
+    }
+  }
+
   if (input.priority.trim() && !Number.isFinite(Number(input.priority))) {
     errors.priority = "invalid_priority";
   }
@@ -94,6 +109,10 @@ export function deliveryRuleFieldForError(
       return "endDate";
     case "invalid_target":
       return "dpdTarget";
+    case "dpd_target_required":
+      return "dpdTarget";
+    case "invalid_dpd_period":
+      return "dpdPeriod";
     case "invalid_priority":
       return "priority";
     default:

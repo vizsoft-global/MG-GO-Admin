@@ -26,6 +26,7 @@ import {
   type DeliveryRuleFormErrors,
   type DeliveryRuleFormField,
 } from "./delivery-rule-form-validation";
+import { defaultDeliveryRuleWindow } from "./delivery-rule-defaults";
 import { isDpdErrorKey, saveDeliveryRule } from "./dpd-actions";
 import type { DpdErrorKey } from "./dpd-errors";
 import { ScopePicker } from "./scope-picker";
@@ -74,6 +75,10 @@ export function RuleFormSheet({
     key: DpdErrorKey;
   } | null>(null);
   const isEdit = Boolean(rule);
+  // A brand-new rule opens on "today → same day next year", so the operator does
+  // not have to retype the window they already intend and cannot save last
+  // month's start date by accident. An edit always keeps the stored window.
+  const [defaultWindow] = useState(() => defaultDeliveryRuleWindow());
 
   const [name, setName] = useState(rule?.name ?? "");
   const [status, setStatus] = useState<RuleStatus>(rule?.status ?? "draft");
@@ -83,14 +88,14 @@ export function RuleFormSheet({
   const [restaurantIds, setRestaurantIds] = useState<string[]>(
     rule?.restaurant_ids ?? [],
   );
-  const [startDate, setStartDate] = useState(rule?.start_date ?? "");
-  const [endDate, setEndDate] = useState(rule?.end_date ?? "");
+  const [startDate, setStartDate] = useState(rule?.start_date ?? defaultWindow.startDate);
+  const [endDate, setEndDate] = useState(rule?.end_date ?? defaultWindow.endDate);
   const [priority, setPriority] = useState(String(rule?.priority ?? ""));
   const [dpdTarget, setDpdTarget] = useState(
     rule?.dpd_target != null ? String(rule.dpd_target) : "",
   );
   const [dpdPeriod, setDpdPeriod] = useState<IncentivePeriod | "">(
-    rule?.dpd_period ?? "",
+    rule?.dpd_period ?? (rule ? "" : "daily"),
   );
 
   useEffect(() => {
@@ -104,12 +109,12 @@ export function RuleFormSheet({
     setZoneIds(rule?.zone_ids ?? []);
     setPartnerIds(rule?.partner_ids ?? []);
     setRestaurantIds(rule?.restaurant_ids ?? []);
-    setStartDate(rule?.start_date ?? "");
-    setEndDate(rule?.end_date ?? "");
+    setStartDate(rule?.start_date ?? defaultWindow.startDate);
+    setEndDate(rule?.end_date ?? defaultWindow.endDate);
     setPriority(String(rule?.priority ?? ""));
     setDpdTarget(rule?.dpd_target != null ? String(rule.dpd_target) : "");
-    setDpdPeriod(rule?.dpd_period ?? "");
-  }, [open, rule]);
+    setDpdPeriod(rule?.dpd_period ?? (rule ? "" : "daily"));
+  }, [open, rule, defaultWindow]);
 
   const errorMessage = (key?: DpdErrorKey) => (key ? t(`errors.${key}`) : undefined);
 
@@ -143,6 +148,7 @@ export function RuleFormSheet({
   const handleSave = () => {
     const validation = validateDeliveryRuleForm({
       name,
+      status,
       scopeType,
       zoneIds,
       partnerIds,
@@ -150,6 +156,7 @@ export function RuleFormSheet({
       startDate,
       endDate,
       dpdTarget,
+      dpdPeriod,
       priority,
     });
     setShowErrors(true);
@@ -197,7 +204,13 @@ export function RuleFormSheet({
       }
       setFieldErrors({});
       setServerError(null);
-      toast.success(isEdit ? t("deliveryRuleUpdated") : t("deliveryRuleCreated"));
+      const savedTarget = status === "active" ? Math.ceil(Number(dpdTarget)) : 0;
+      toast.success(isEdit ? t("deliveryRuleUpdated") : t("deliveryRuleCreated"), {
+        description:
+          savedTarget > 0
+            ? t("deliveryRuleTargetLive", { target: String(savedTarget) })
+            : undefined,
+      });
 
       void queryClient.invalidateQueries({ queryKey: queryKeys.dpd.all() });
       onOpenChange(false);
@@ -339,11 +352,12 @@ export function RuleFormSheet({
                   })),
                 ]}
                 value={dpdPeriod || "none"}
-                onValueChange={(v) =>
+                onValueChange={(v) => {
                   setDpdPeriod(
                     v === "daily" || v === "weekly" || v === "monthly" ? v : "",
-                  )
-                }
+                  );
+                  clearFieldError("dpdPeriod");
+                }}
               >
                 <SelectTrigger className="h-9 w-full cursor-pointer rounded-lg">
                   <SelectValue />
@@ -359,6 +373,10 @@ export function RuleFormSheet({
                   ))}
                 </SelectContent>
               </Select>
+              <FieldError message={showFieldError("dpdPeriod")} />
+              {status === "active" && Number(dpdTarget) > 0 ? (
+                <p className="text-[11px] text-muted-foreground">{t("hints.dpdPeriod")}</p>
+              ) : null}
             </div>
           </div>
           <div className="space-y-1.5">
