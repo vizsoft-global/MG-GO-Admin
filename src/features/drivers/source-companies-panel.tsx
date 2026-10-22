@@ -402,6 +402,10 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                       </div>
                     ) : null}
 
+                    {draft.incentiveEnabled && schemeError ? (
+                      <p className="text-[10px] text-destructive">{t(`errors.${schemeError}`)}</p>
+                    ) : null}
+
                     <p className="text-[10px] text-muted-foreground">{t("companyConfigNote")}</p>
 
                     <div className="space-y-1.5">
