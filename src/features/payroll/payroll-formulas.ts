@@ -1049,6 +1049,9 @@ export function dayStatusLabel(status: DayStatus): string {
  * Actual / custom still print their credited hours, never ACT / CUS, at one
  * decimal so a cell, a filter value and the Excel sheet agree on the string.
  */
+/** Past a full day the grid prints the SOP `12h` word, never 23.5h. */
+export const FULL_DAY_HOURS = 23.5;
+
 export function dayGridLabel(status: DayStatus, hours: number): string {
   switch (status) {
     case "work":
@@ -1069,7 +1072,7 @@ export function dayGridLabel(status: DayStatus, hours: number): string {
       return "6h";
     case "actual":
     case "custom":
-      return `${formatHoursToken(hours)}h`;
+      return `${formatHoursToken(hours >= FULL_DAY_HOURS ? 12 : hours)}h`;
     case "abs_lh":
       return "Abs·LH";
     case "abs_lo":

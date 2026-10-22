@@ -41,7 +41,8 @@ describe("payroll particulars catalog", () => {
     assert.equal(particularForAdjustment("abs_lo"), "Abs·LO");
     assert.equal(particularForAdjustment("custom", 4), "4h");
     assert.equal(particularForAdjustment("custom", 0), "0h");
-    assert.equal(particularForAdjustment("custom", 24), "24h");
+    // Past a full day the cell prints the SOP 12h word, never 24h/23.5h.
+    assert.equal(particularForAdjustment("custom", 24), "12h");
   });
 
   it("parses cell tokens and the named particulars back to the same statuses", () => {
