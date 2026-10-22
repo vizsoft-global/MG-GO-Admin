@@ -7,6 +7,7 @@ import {
   needsCheckIn,
   type CheckInCandidate,
 } from "./check-in-gate";
+import { restaurantReachableForPartner } from "../core/restaurant-proximity";
 
 const PIN = { latitude: 29.375, longitude: 47.978, name: "Salmiya" };
 const FAR = { latitude: 29.5, longitude: 47.978, name: "Far" };
@@ -36,8 +37,7 @@ const SQUARE = {
 };
 
 describe("check-in gate", () => {
-  it("accepts a rider inside the restaurant geofence", () => {
-    const match = matchCheckInRestaurant({
+  it("accepts a rider inside the restaurant geofence", () => {    const match = matchCheckInRestaurant({
       candidates: [candidate("r1", PIN, [SQUARE])],
       lat: 29.375,
       lng: 47.978,
@@ -132,5 +132,36 @@ describe("needsCheckIn", () => {
       }),
       false,
     );
+  });
+});
+
+/**
+ * A restaurant without a partner is shared fleet catalogue, not a restaurant
+ * the rider cannot reach. The regression this guards: a rider with a partner
+ * got `candidates: 0` for a published, active restaurant that carried no
+ * partner, and the app told them no restaurant was assigned.
+ */
+describe("restaurantReachableForPartner", () => {
+  const PARTNER_A = "partner-a";
+  const PARTNER_B = "partner-b";
+
+  it("keeps an unowned restaurant reachable for a rider who has a partner", () => {
+    assert.equal(restaurantReachableForPartner({ partner_id: null }, PARTNER_A), true);
+    assert.equal(restaurantReachableForPartner({}, PARTNER_A), true);
+    assert.equal(restaurantReachableForPartner({ partner_id: "" }, PARTNER_A), true);
+    assert.equal(restaurantReachableForPartner({ partner_id: "   " }, PARTNER_A), true);
+  });
+
+  it("keeps the rider's own partner restaurants reachable", () => {
+    assert.equal(restaurantReachableForPartner({ partner_id: PARTNER_A }, PARTNER_A), true);
+  });
+
+  it("refuses another partner's restaurant", () => {
+    assert.equal(restaurantReachableForPartner({ partner_id: PARTNER_B }, PARTNER_A), false);
+  });
+
+  it("lets a rider without a partner reach every restaurant", () => {
+    assert.equal(restaurantReachableForPartner({ partner_id: PARTNER_A }, null), true);
+    assert.equal(restaurantReachableForPartner({ partner_id: null }, null), true);
   });
 });

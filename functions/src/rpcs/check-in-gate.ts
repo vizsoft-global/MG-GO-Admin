@@ -4,6 +4,7 @@ import {
   nearestRestaurant,
   restaurantAllowed,
   restaurantDistanceMeters,
+  restaurantReachableForPartner,
   type RestaurantCandidate,
 } from "../core/restaurant-proximity";
 import { chunk, IN_FILTER_LIMIT, loadDocMap, type Dict } from "./_shared";
@@ -103,8 +104,8 @@ export function nearestCheckInRestaurant(input: {
 }
 
 /**
- * Published restaurants assigned to the rider. Partner-scoped riders only see
- * the restaurants of their own partner, matching pickup creation.
+ * Published restaurants assigned to the rider. A partner-scoped rider reaches
+ * the restaurants of their own partner plus the unowned shared ones.
  */
 export async function loadCheckInCandidates(
   driverId: string,
@@ -137,8 +138,7 @@ export async function loadCheckInCandidates(
       const row = restaurants.get(id);
       if (!row) return false;
       if (row["status"] !== "published" || row["is_active"] !== true) return false;
-      if (partnerId === null) return true;
-      return row["partner_id"] === partnerId;
+      return restaurantReachableForPartner(row, partnerId);
     })
     .map((id) => ({ id, data: restaurants.get(id) as Dict }));
   if (published.length === 0) return [];

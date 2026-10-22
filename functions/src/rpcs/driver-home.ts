@@ -2347,7 +2347,9 @@ export const driverCheckInContext = measureOnCall("driverCheckInContext", async 
     candidates,
     lat,
     lng,
-    proximityMeters: safety.proximityMeters,
+    // Same allowance the duty write applies, so a precheck can never refuse a
+    // clock-in the write would have accepted.
+    proximityMeters: safety.proximityMeters > 0 ? safety.proximityMeters : 500,
   });
   const nearest = match ? null : nearestCheckInRestaurant({ candidates, lat, lng });
 

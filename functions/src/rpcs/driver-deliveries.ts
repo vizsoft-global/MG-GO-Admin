@@ -11,7 +11,7 @@ import {
   pointWithinZoneProximity,
   type ZoneFeature,
 } from "../core/geo";
-import { restaurantAllowed, zoneTypeOf } from "../core/restaurant-proximity";
+import { restaurantAllowed, restaurantReachableForPartner, zoneTypeOf } from "../core/restaurant-proximity";
 import {
   evaluateDeliveryZone,
   flagLabelsFor,
@@ -486,8 +486,9 @@ function publishedCandidates(
   return assigned
     .filter((row) => {
       if (row.data["status"] !== "published" || row.data["is_active"] !== true) return false;
-      if (partnerId === null) return true;
-      return asString(row.data["partner_id"]) === partnerId;
+      // Shared helper with the clock-in gate: a restaurant with no partner is
+      // fleet-wide catalogue and stays reachable for a partner-scoped rider.
+      return restaurantReachableForPartner(row.data, partnerId);
     })
     .map((row) => ({ id: row.id, restaurant: row.data, geofences: row.geofences }));
 }
