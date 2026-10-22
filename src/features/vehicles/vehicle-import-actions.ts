@@ -440,15 +440,23 @@ export async function applyVehicleImport(input: {
           const claimed = await claimPlate(db, snapshot.reg_number, id);
           if (!claimed) throw new Error("duplicate_plate");
         }
-        await db
-          .collection(COLLECTIONS.vehicles)
-          .doc(id)
-          .set({
-            id,
-            ...writePayload(snapshot),
-            created_by: auth.session.id,
-            created_at: new Date(),
-          });
+        try {
+          await db
+            .collection(COLLECTIONS.vehicles)
+            .doc(id)
+            .set({
+              id,
+              ...writePayload(snapshot),
+              created_by: auth.session.id,
+              created_at: new Date(),
+            });
+        } catch (error) {
+          // Do not leave a plate claimed by a vehicle that was never written.
+          if (snapshot.reg_number) {
+            await releasePlate(db, snapshot.reg_number, id).catch(() => undefined);
+          }
+          throw error;
+        }
         logged.push({
           row,
           outcome: "create",
