@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Building2, Eye, Lock, Pencil, Plus } from "lucide-react";
+import { Building2, Eye, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppFormSection } from "@/components/app";
@@ -101,7 +101,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
   const draftKey = draft ? (draft.isNew ? companyKeyFromName(draft.name) : draft.key) : "";
 
   const schemeError = useMemo(() => {
-    if (!draft || draft.isSystem) return null;
+    if (!draft) return null;
     return validateSourceCompanyScheme({
       dpdTarget: draft.dpdTarget,
       incentiveEnabled: draft.incentiveEnabled,
@@ -112,7 +112,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
   }, [draft]);
 
   const previewRows = useMemo(() => {
-    if (!draft || !draft.incentiveEnabled || draft.isSystem) return [];
+    if (!draft || !draft.incentiveEnabled) return [];
     const target = parseDpdTarget(draft.dpdTarget);
     const above = parseRateKwd(draft.aboveKwd);
     const below = parseRateKwd(draft.belowKwd);
@@ -190,9 +190,6 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                   <span className="inline-flex items-center gap-1.5">
                     <Building2 className="size-3.5 text-muted-foreground" aria-hidden />
                     {c.name}
-                    {c.is_system ? (
-                      <Lock className="size-3 text-muted-foreground" aria-label={t("system")} />
-                    ) : null}
                   </span>
                 </TableCell>
                 <TableCell>
@@ -207,29 +204,23 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                   )}
                 </TableCell>
                 <TableCell>
-                  {c.is_system ? (
-                    <Badge variant="outline" className="text-muted-foreground">
-                      —
-                    </Badge>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5">
-                      {c.dpd_target != null ? (
-                        <Badge variant="outline" className="border-primary/20 bg-primary/10 font-mono text-primary">
-                          {t("dpdBadge", { target: c.dpd_target })}
-                        </Badge>
-                      ) : null}
-                      {c.incentive_enabled ? (
-                        <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                          {t("scheme")}
-                        </Badge>
-                      ) : null}
-                      {!c.incentive_enabled && c.dpd_target == null ? (
-                        <Badge variant="outline" className="text-muted-foreground">
-                          —
-                        </Badge>
-                      ) : null}
-                    </span>
-                  )}
+                  <span className="inline-flex items-center gap-1.5">
+                    {c.dpd_target != null ? (
+                      <Badge variant="outline" className="border-primary/20 bg-primary/10 font-mono text-primary">
+                        {t("dpdBadge", { target: c.dpd_target })}
+                      </Badge>
+                    ) : null}
+                    {c.incentive_enabled ? (
+                      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                        {t("scheme")}
+                      </Badge>
+                    ) : null}
+                    {!c.incentive_enabled && c.dpd_target == null ? (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        —
+                      </Badge>
+                    ) : null}
+                  </span>
                 </TableCell>
                 <TableCell>
                   {c.is_active ? (
@@ -311,7 +302,6 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                         className="h-9"
                         value={draft.name}
                         maxLength={120}
-                        disabled={draft.isSystem}
                         onChange={(event) => setDraft({ ...draft, name: event.target.value })}
                       />
                       {draft.isNew && draftKey ? (
@@ -328,7 +318,6 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                         value={draft.clientCode}
                         maxLength={32}
                         placeholder="CL-0002"
-                        disabled={draft.isSystem}
                         onChange={(event) =>
                           setDraft({ ...draft, clientCode: event.target.value.toUpperCase() })
                         }
@@ -336,88 +325,84 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                       <p className="text-[10px] text-muted-foreground">{t("clientIdHint")}</p>
                     </div>
 
-                    {!draft.isSystem ? (
-                      <>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="space-y-1.5">
-                            <Label htmlFor="source-company-dpd">{t("dpdTarget")}</Label>
-                            <Input
-                              id="source-company-dpd"
-                              className="h-9 font-mono"
-                              inputMode="numeric"
-                              value={draft.dpdTarget}
-                              placeholder={t("dpdTargetPlaceholder")}
-                              onChange={(event) =>
-                                setDraft({ ...draft, dpdTarget: event.target.value.replace(/\D/g, "") })
-                              }
-                            />
-                            <p className="text-[10px] text-muted-foreground">{t("dpdTargetHint")}</p>
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label htmlFor="source-company-effective">{t("effectiveFrom")}</Label>
-                            <Input
-                              id="source-company-effective"
-                              type="date"
-                              className="h-9"
-                              openPickerOnFocus={false}
-                              value={draft.effectiveFrom}
-                              onChange={(event) =>
-                                setDraft({ ...draft, effectiveFrom: event.target.value })
-                              }
-                            />
-                            <p className="text-[10px] text-muted-foreground">{t("effectiveFromHint")}</p>
-                          </div>
-                        </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="source-company-dpd">{t("dpdTarget")}</Label>
+                        <Input
+                          id="source-company-dpd"
+                          className="h-9 font-mono"
+                          inputMode="numeric"
+                          value={draft.dpdTarget}
+                          placeholder={t("dpdTargetPlaceholder")}
+                          onChange={(event) =>
+                            setDraft({ ...draft, dpdTarget: event.target.value.replace(/\D/g, "") })
+                          }
+                        />
+                        <p className="text-[10px] text-muted-foreground">{t("dpdTargetHint")}</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="source-company-effective">{t("effectiveFrom")}</Label>
+                        <Input
+                          id="source-company-effective"
+                          type="date"
+                          className="h-9"
+                          openPickerOnFocus={false}
+                          value={draft.effectiveFrom}
+                          onChange={(event) =>
+                            setDraft({ ...draft, effectiveFrom: event.target.value })
+                          }
+                        />
+                        <p className="text-[10px] text-muted-foreground">{t("effectiveFromHint")}</p>
+                      </div>
+                    </div>
 
+                    <div className="space-y-1.5">
+                      <Label>{t("incentiveScheme")}</Label>
+                      <div className="flex items-center gap-2">
+                        <ToggleChip
+                          selected={draft.incentiveEnabled}
+                          onClick={() =>
+                            setDraft({ ...draft, incentiveEnabled: !draft.incentiveEnabled })
+                          }
+                        >
+                          {t("incentiveSchemeOn")}
+                        </ToggleChip>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">{t("incentiveSchemeHint")}</p>
+                    </div>
+
+                    {draft.incentiveEnabled ? (
+                      <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-1.5">
-                          <Label>{t("incentiveScheme")}</Label>
-                          <div className="flex items-center gap-2">
-                            <ToggleChip
-                              selected={draft.incentiveEnabled}
-                              onClick={() =>
-                                setDraft({ ...draft, incentiveEnabled: !draft.incentiveEnabled })
-                              }
-                            >
-                              {t("incentiveSchemeOn")}
-                            </ToggleChip>
-                          </div>
-                          <p className="text-[10px] text-muted-foreground">{t("incentiveSchemeHint")}</p>
+                          <Label htmlFor="source-company-above">{t("aboveKwd")}</Label>
+                          <Input
+                            id="source-company-above"
+                            className="h-9 font-mono"
+                            inputMode="decimal"
+                            value={draft.aboveKwd}
+                            placeholder="0.100"
+                            onChange={(event) =>
+                              setDraft({ ...draft, aboveKwd: event.target.value })
+                            }
+                          />
                         </div>
-
-                        {draft.incentiveEnabled ? (
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="space-y-1.5">
-                              <Label htmlFor="source-company-above">{t("aboveKwd")}</Label>
-                              <Input
-                                id="source-company-above"
-                                className="h-9 font-mono"
-                                inputMode="decimal"
-                                value={draft.aboveKwd}
-                                placeholder="0.100"
-                                onChange={(event) =>
-                                  setDraft({ ...draft, aboveKwd: event.target.value })
-                                }
-                              />
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label htmlFor="source-company-below">{t("belowKwd")}</Label>
-                              <Input
-                                id="source-company-below"
-                                className="h-9 font-mono"
-                                inputMode="decimal"
-                                value={draft.belowKwd}
-                                placeholder="0.350"
-                                onChange={(event) =>
-                                  setDraft({ ...draft, belowKwd: event.target.value })
-                                }
-                              />
-                            </div>
-                          </div>
-                        ) : null}
-
-                        <p className="text-[10px] text-muted-foreground">{t("companyConfigNote")}</p>
-                      </>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="source-company-below">{t("belowKwd")}</Label>
+                          <Input
+                            id="source-company-below"
+                            className="h-9 font-mono"
+                            inputMode="decimal"
+                            value={draft.belowKwd}
+                            placeholder="0.350"
+                            onChange={(event) =>
+                              setDraft({ ...draft, belowKwd: event.target.value })
+                            }
+                          />
+                        </div>
+                      </div>
                     ) : null}
+
+                    <p className="text-[10px] text-muted-foreground">{t("companyConfigNote")}</p>
 
                     <div className="space-y-1.5">
                       <Label>{t("colStatus")}</Label>
@@ -425,14 +410,12 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                         <SegmentOption
                           selected={draft.isActive}
                           variant={draft.isActive ? "success" : "default"}
-                          disabled={draft.isSystem}
                           onClick={() => setDraft({ ...draft, isActive: true })}
                         >
                           {t("active")}
                         </SegmentOption>
                         <SegmentOption
                           selected={!draft.isActive}
-                          disabled={draft.isSystem}
                           onClick={() => setDraft({ ...draft, isActive: false })}
                         >
                           {t("inactive")}
@@ -442,9 +425,6 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                         <p className="text-[10px] text-muted-foreground">
                           {t("inUseHint", { count: draft.driverCount })}
                         </p>
-                      ) : null}
-                      {draft.isSystem ? (
-                        <p className="text-[10px] text-muted-foreground">{t("systemHint")}</p>
                       ) : null}
                     </div>
                   </div>
@@ -493,7 +473,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                       </div>
                     ) : (
                       <p className="text-[10px] text-muted-foreground">
-                        {draft.isSystem ? t("systemHint") : t("incentiveSchemeHint")}
+                        {t("incentiveSchemeHint")}
                       </p>
                     )}
                   </div>
@@ -511,7 +491,6 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                   className="h-9"
                   disabled={
                     pending ||
-                    draft.isSystem ||
                     !draft.name.trim() ||
                     !draftKey ||
                     schemeError !== null
