@@ -3840,6 +3840,12 @@
       "sectionOwnership": "Ownership",
       "sectionFuel": "Fuel",
       "sectionOperations": "Operations",
+      "sectionDocuments": "Documents",
+      "fieldRegistrationIssued": "Registration issued",
+      "fieldRegistrationExpires": "Registration expiry",
+      "fieldInsuranceIssued": "Insurance issued",
+      "fieldInsuranceExpires": "Insurance expiry",
+      "documentsHint": "Document dates live on the vehicle. Upload the scanned file in the Documents tab.",
       "sectionVehicleDetails": "Vehicle details",
       "sectionDriver": "Driver & assignment",
       "carTypeHint": "Ownership category — not the same as operational status.",
@@ -3925,7 +3931,11 @@
         "previousImports": "Previous imports",
         "requiredLabel": "Required.",
         "requiredCopy": "Vehicle ID is the Kuwait plate (e.g. 5/6767). Plate is the same identity.",
-        "optionalCopy": "Optional: chassis, kind, make, model, year, condition, chip, fuel type, fuel company, car type, type of use, location, status, monthly fuel limit. A blank optional cell clears that field. A new row with no kind becomes a bike.",
+        "optionalCopy": "Optional: chassis, kind, make, model, year, condition, chip, fuel type, fuel company, car type, type of use, location, status, monthly fuel limit, MG ID, vehicle company, partner, registration/insurance dates, replacement plate and since. A blank cell keeps the current value; a dash (-) clears it. A new row with no kind becomes a bike.",
+        "colMgId": "MG ID",
+        "colCompany": "Vehicle Company",
+        "colRegExpiry": "Reg. expiry",
+        "colInsExpiry": "Ins. expiry",
         "downloadTemplate": "Download sample template",
         "templateColumns": "Columns",
         "templateColumnsTitle": "Template columns",
@@ -3993,9 +4003,16 @@
         "invalid_car_type": "Car type must be company, rent, or maintenance.",
         "invalid_type_of_use": "Type of use must be a catalog key from Settings → Vehicle uses.",
         "empty_sheet": "The sheet has no Vehicle ID rows.",
-        "too_many_rows": "A sheet can have at most 1000 rows.",
+        "too_many_rows": "A sheet can have at most 2000 rows.",
         "nothing_to_undo": "There is no import to undo.",
-        "nothing_to_redo": "There is no import to redo."
+        "nothing_to_redo": "There is no import to redo.",
+        "unknown_driver": "That MG ID was not found among employees.",
+        "ambiguous_driver": "More than one employee holds this MG ID.",
+        "unknown_company": "That vehicle company is not in Settings → Vehicle companies.",
+        "unknown_partner": "That partner is not in the partner list.",
+        "unknown_replacement": "The replacement plate does not exist.",
+        "invalid_document_date": "Dates must be YYYY-MM-DD.",
+        "expiry_before_issue": "The expiry date is before the issue date."
       }
     },
     "vehicleDetail": {
@@ -4021,6 +4038,11 @@
       "emptyHandover": "No handover records yet",
       "emptyAccident": "No accident records yet",
       "emptyDocuments": "No vehicle documents yet",
+      "docsOnRecordHint": "Dates on the vehicle record. Uploaded files are listed below.",
+      "docRegistrationIssued": "Registration issued",
+      "docRegistrationExpires": "Registration expiry",
+      "docInsuranceIssued": "Insurance issued",
+      "docInsuranceExpires": "Insurance expiry",
       "emptyService": "No service records yet",
       "emptyAssets": "This rider has no assigned assets",
       "emptyAssetsNoDriver": "Assign a rider to see their assets",
@@ -10855,6 +10877,10 @@
           "zones": {
             "title": "Zones",
             "body": "Delivery areas, geofences and the drivers assigned to them."
+          },
+          "driverGroups": {
+            "title": "Driver groups",
+            "body": "Rider crews and the members assigned to each group."
           },
           "deliveryRules": {
             "title": "Delivery rules",

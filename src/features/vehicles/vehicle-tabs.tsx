@@ -31,6 +31,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
 import { getSignedStorageUrl } from "@/lib/storage/storage-actions";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
+import { toKuwaitYmd } from "@/features/fleet/fleet-labels";
 import { AssetFormSheet } from "@/features/assets/asset-form-sheet";
 import type { VehicleListRow } from "./types";
 import {
@@ -70,7 +71,7 @@ export function VehicleDetailTabs({
 }) {
   if (tab === "handover") return <HandoverTab vehicleId={vehicle.id} canManage={canManage} />;
   if (tab === "accident") return <AccidentTab vehicleId={vehicle.id} canManage={canManage} />;
-  if (tab === "documents") return <DocumentsTab vehicleId={vehicle.id} canManage={canManage} />;
+  if (tab === "documents") return <DocumentsTab vehicle={vehicle} canManage={canManage} />;
   if (tab === "service") return <ServiceTab vehicleId={vehicle.id} canManage={canManage} />;
   return <AssetsTab vehicle={vehicle} />;
 }
@@ -248,10 +249,38 @@ function AccidentTab({ vehicleId, canManage }: { vehicleId: string; canManage: b
   );
 }
 
-function DocumentsTab({ vehicleId, canManage }: { vehicleId: string; canManage: boolean }) {
+function DocumentsTab({ vehicle, canManage }: { vehicle: VehicleListRow; canManage: boolean }) {
   const t = useTranslations("pages.vehicleDetail");
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const vehicleId = vehicle.id;
+  const today = kuwaitTodayYmd();
+  const onRecord = [
+    {
+      key: "registrationIssued",
+      label: t("docRegistrationIssued"),
+      ymd: toKuwaitYmd(vehicle.registration_issued_at),
+      expiring: false,
+    },
+    {
+      key: "registrationExpires",
+      label: t("docRegistrationExpires"),
+      ymd: toKuwaitYmd(vehicle.registration_expires_at),
+      expiring: true,
+    },
+    {
+      key: "insuranceIssued",
+      label: t("docInsuranceIssued"),
+      ymd: toKuwaitYmd(vehicle.insurance_issued_at),
+      expiring: false,
+    },
+    {
+      key: "insuranceExpires",
+      label: t("docInsuranceExpires"),
+      ymd: toKuwaitYmd(vehicle.insurance_expires_at),
+      expiring: true,
+    },
+  ].map((row) => ({ ...row, expired: row.expiring && Boolean(row.ymd) && row.ymd < today }));
   const list = useQuery({
     queryKey: queryKeys.vehicles.tabs(vehicleId, "documents"),
     queryFn: () => listVehicleDocuments(vehicleId),
@@ -270,6 +299,23 @@ function DocumentsTab({ vehicleId, canManage }: { vehicleId: string; canManage: 
   };
   return (
     <div className="space-y-3">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {onRecord.map((row) => (
+          <div key={row.key} className="rounded-xl border border-border bg-card px-3 py-2">
+            <p className="text-[10px] font-medium text-muted-foreground">{row.label}</p>
+            <p
+              className={
+                row.expired
+                  ? "mt-0.5 text-xs font-semibold text-destructive"
+                  : "mt-0.5 text-xs font-semibold text-foreground"
+              }
+            >
+              {row.ymd || "—"}
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-muted-foreground">{t("docsOnRecordHint")}</p>
       {canManage ? <AddButton onClick={() => setOpen(true)} label={t("addDocument")} /> : null}
       {rows.length === 0 ? (
         <AppEmptyState title={t("emptyDocuments")} />

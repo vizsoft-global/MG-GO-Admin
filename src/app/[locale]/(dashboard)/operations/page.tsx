@@ -11,6 +11,7 @@ import {
   Layers,
   ListTree,
   MapPin,
+  UsersRound,
   UtensilsCrossed,
   Wallet,
 } from "lucide-react";
@@ -44,6 +45,12 @@ const CARDS: ReadonlyArray<{
   { key: "partners", href: "/partners", icon: Handshake, permission: "partners.view" },
   { key: "restaurants", href: "/restaurants", icon: UtensilsCrossed, permission: "restaurants.view" },
   { key: "zones", href: "/zones", icon: MapPin, permission: "zones.view" },
+  {
+    key: "driverGroups",
+    href: "/drivers/groups",
+    icon: UsersRound,
+    permission: "driver_groups.view",
+  },
   { key: "deliveryRules", href: "/delivery-rules", icon: ListTree, permission: "earnings.view" },
   { key: "incentiveRules", href: "/incentive-rules", icon: Wallet, permission: "earnings.view" },
   { key: "driverFields", href: "/settings/driver-fields", icon: FormInput, permission: "drivers.manage" },

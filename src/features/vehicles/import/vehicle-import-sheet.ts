@@ -1,23 +1,21 @@
 import type { VehicleListRow } from "../types";
-import { formatReplacementSince } from "@/features/fleet/fleet-labels";
+import { toKuwaitYmd } from "@/features/fleet/fleet-labels";
 import { downloadAoaXlsx, downloadWorkbookXlsx } from "@/features/drivers/import/export-xlsx";
 import {
   VEHICLE_IMPORT_COLUMNS,
   type VehicleImportField,
 } from "./vehicle-import-columns";
 
+/**
+ * Read-only annotations. Every column the sheet can **write** lives in
+ * `VEHICLE_IMPORT_COLUMNS`; these four are context for the operator and are
+ * ignored by the import.
+ */
 const EXPORT_READONLY: Array<{ header: string; value: (row: VehicleListRow) => string }> = [
   { header: "Driver", value: (row) => row.assigned_driver_name ?? "" },
   { header: "Employee Company", value: (row) => row.assigned_partner_name ?? "" },
-  { header: "Vehicle Company", value: (row) => row.company_name ?? "" },
-  { header: "Partner", value: (row) => row.owner_partner_name ?? "" },
   { header: "Project", value: (row) => row.assigned_project_key ?? "" },
   { header: "Replacement", value: (row) => (row.replaces_vehicle_id ? "Yes" : "No") },
-  { header: "Rep. Plate", value: (row) => row.replaces_plate ?? "" },
-  {
-    header: "Since",
-    value: (row) => formatReplacementSince(row.replacement_started_at) ?? "",
-  },
 ];
 
 function writableValue(row: VehicleListRow, field: VehicleImportField): string | number {
@@ -54,6 +52,26 @@ function writableValue(row: VehicleListRow, field: VehicleImportField): string |
       return row.status;
     case "fuelMonthlyLimitKwd":
       return row.fuel_monthly_limit_kwd ?? "";
+    case "driverEmployeeId":
+      return row.assigned_employee_id ?? "";
+    case "companyKey":
+      // The import resolves the key *or* either label, so the printed label
+      // round-trips without leaking a bare id into the sheet.
+      return row.company_name ?? "";
+    case "ownerPartnerName":
+      return row.owner_partner_name ?? "";
+    case "registrationIssuedAt":
+      return toKuwaitYmd(row.registration_issued_at);
+    case "registrationExpiresAt":
+      return toKuwaitYmd(row.registration_expires_at);
+    case "insuranceIssuedAt":
+      return toKuwaitYmd(row.insurance_issued_at);
+    case "insuranceExpiresAt":
+      return toKuwaitYmd(row.insurance_expires_at);
+    case "replacesPlate":
+      return row.replaces_plate ?? "";
+    case "replacementStartedAt":
+      return toKuwaitYmd(row.replacement_started_at);
     default:
       return "";
   }
@@ -88,6 +106,22 @@ export function downloadVehicleTemplate(selected: ReadonlySet<string>) {
       column.allowed,
       column.example,
     ]),
+    [],
+    ["Rule", "Meaning"],
+    [
+      "Blank cell",
+      "Keeps the value the vehicle already has. On a new row it uses the default (bike, active, fuel limit 30/60).",
+    ],
+    [
+      "-",
+      "Clears the field: unassigns the rider, removes a document date, partner, company or replacement.",
+    ],
+    [
+      "MG ID",
+      "The rider must already exist in Employees. An unknown MG ID blocks the row.",
+    ],
+    ["Dates", "YYYY-MM-DD. An expiry date must be on or after its issue date."],
+    ["Undo", "Undo restores the vehicle fields and the rider assignment of that batch."],
   ];
   downloadWorkbookXlsx("vehicle-import-template.xlsx", [
     { name: "Vehicles", aoa: [columns.map((column) => column.header), sample] },

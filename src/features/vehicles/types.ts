@@ -43,6 +43,11 @@ export type VehicleListRow = {
   fuel_monthly_limit_kwd: number | null;
   owner_partner_id: string | null;
   owner_partner_name: string | null;
+  /** Document dates on the vehicle doc (ISO, Kuwait midnight). Null = not on record. */
+  registration_issued_at: string | null;
+  registration_expires_at: string | null;
+  insurance_issued_at: string | null;
+  insurance_expires_at: string | null;
   replaces_vehicle_id: string | null;
   replacement_started_at: string | null;
   replaces_plate: string | null;

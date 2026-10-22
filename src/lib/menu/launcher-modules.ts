@@ -34,11 +34,18 @@ export type LauncherTileId = (typeof LAUNCHER_TILE_IDS)[number];
  * permission — they just do not get a Home tile. Filtering happens in
  * `mergeLauncherTiles`, so `LAUNCHER_TILE_IDS` (and the Roles app catalogue)
  * still describes every real surface.
+ *
+ * `dpd-verification`, `assets` and `driver-groups` are here because each is
+ * reached through its own hub card; the Home grid is the module picker, not a
+ * second sidebar, so those three do not need a door of their own.
  */
 export const LAUNCHER_HIDDEN_TILE_IDS: ReadonlySet<string> = new Set([
   "dashboard-ops",
   "payroll",
   "earnings",
+  "dpd-verification",
+  "assets",
+  "driver-groups",
 ]);
 
 /**
@@ -139,8 +146,9 @@ export function launcherTilesFromMenu(
 
 /**
  * The sidebar's rows first, then any launcher-only door the sidebar does not
- * paint (`assets`, `dpd-verification`, `earnings` are `hidden: true` in the
- * registry — they are launcher surfaces, not sidebar ones).
+ * paint (nested hub children, and the `hidden: true` registry rows). Both
+ * passes drop `LAUNCHER_HIDDEN_TILE_IDS`, so a hidden id can never come back
+ * through the curated list.
  *
  * Dedupe is by id **and** href: an inline group and its first child both point
  * at the same page, and a dashboard with two Settings tiles is worse than one.

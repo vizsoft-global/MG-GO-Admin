@@ -215,6 +215,7 @@ export const OPERATIONS_HUB_PERMISSIONS = [
   "zones.view",
   "earnings.view",
   "drivers.manage",
+  "driver_groups.view",
   "vehicles.manage",
   "attendance.manage",
   "companies.view",
@@ -379,9 +380,16 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Driver groups",
     defaultIcon: "UsersRound",
     href: "/drivers/groups",
-    defaultGroup: "Operations",
-    defaultOrder: 0.5,
+    /**
+     * A hub card, not a sidebar row: the door is the OperationsHub page, the
+     * same as Partners / Restaurants / Zones. It keeps `driver_groups.view`, the
+     * route guard and its Roles & Permissions entry, and it is still listed in
+     * `LAUNCHER_TILE_IDS` so the dashboard can decide about the tile separately.
+     */
+    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultOrder: 1.5,
     permission: "driver_groups.view",
+    hidden: true,
   },
   {
     id: "driver-devices",

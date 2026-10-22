@@ -80,6 +80,8 @@ export type VehicleDriverOption = {
   label: string;
   keywords: string[];
   projectKey: string | null;
+  /** MG ID (`drivers.employee_id`) — the key the bulk-import sheet matches on. */
+  employeeId: string;
 };
 
 const HANDOVERS = "vehicle_handovers";
@@ -223,6 +225,7 @@ export async function listVehicleTabDrivers(): Promise<VehicleDriverOption[]> {
         label: [name, employeeId || driverCode].filter(Boolean).join(" · "),
         keywords: [name, employeeId, driverCode].filter(Boolean),
         projectKey: str(row.project_key) || null,
+        employeeId,
       };
     });
 }
