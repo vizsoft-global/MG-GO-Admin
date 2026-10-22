@@ -99,19 +99,40 @@ function applySnapshots(
   rows: EsignResolveRow[],
   drafts: EsignBulkDraftRow[],
   fields: EsignTemplateFieldRow[],
+  overrides: Record<string, string> = {},
 ): EsignBulkDraftRow[] {
   return drafts.map((draft, index) => {
     const row = rows[index];
-    if (!row?.ok || !row.snapshot) return draft;
+    if (!row?.ok || !row.snapshot) return { ...draft, field_values: withOverrides(draft.field_values, fields, overrides) };
     return {
       ...draft,
-      field_values: mergeFieldValuesForSend(
-        snapshotValues(row.snapshot),
-        draft.field_values,
+      field_values: withOverrides(
+        mergeFieldValuesForSend(
+          snapshotValues(row.snapshot),
+          draft.field_values,
+          fields,
+        ),
         fields,
+        overrides,
       ),
     };
   });
+}
+
+/** Batch-only template values: applied to every row, never saved to the template. */
+function withOverrides(
+  values: Record<string, string>,
+  fields: EsignTemplateFieldRow[],
+  overrides: Record<string, string>,
+): Record<string, string> {
+  const keys = new Set(fields.map((field) => field.field_key));
+  const next = { ...values };
+  for (const [key, raw] of Object.entries(overrides)) {
+    if (!keys.has(key)) continue;
+    const typed = raw.trim();
+    if (typed) next[key] = typed;
+  }
+  return next;
 }
 
 function requiredSheetKeys(fields: EsignTemplateFieldRow[]): string[] {
@@ -282,6 +303,9 @@ export function BulkImportShell({
   }
 
   const [step, setStep] = useState<Step>(initialTemplateId ? 2 : 1);
+  /** Batch-only template values: applied at compose time, never saved to the template. */
+  const [templateOverrides, setTemplateOverrides] = useState<Record<string, string>>({});
+  const [editOpen, setEditOpen] = useState(false);
   const [templateId, setTemplateId] = useState<string | null>(initialTemplateId ?? null);
   const { data: templateData } = useEsignTemplate(templateId ?? "");
   const template = templateData?.template;
@@ -349,7 +373,7 @@ export function BulkImportShell({
         return;
       }
       const fields = template?.fields ?? [];
-      const merged = applySnapshots(result.rows, restored, fields);
+      const merged = applySnapshots(result.rows, restored, fields, templateOverrides);
       setDrafts(merged);
       setResolved(result.rows);
       setChecked(readyIndexSet(result.rows, merged, fields));
@@ -359,7 +383,7 @@ export function BulkImportShell({
     };
     // Once per draft. Template fields that arrive later reclassify via keysKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appliedDraftId, resolveRows]);
+  }, [appliedDraftId, resolveRows, templateOverrides]);
 
   const templateItems = useMemo(
     () =>
@@ -735,6 +759,62 @@ export function BulkImportShell({
           >
             {t("downloadExample")}
           </button>
+          <button
+            type="button"
+            className="inline-flex h-8 items-center text-xs font-semibold text-[#EA580C] hover:underline disabled:opacity-50"
+            disabled={!template}
+            onClick={() => setEditOpen(true)}
+          >
+            {t("editValues")}
+          </button>
+          <Dialog open={editOpen} onOpenChange={setEditOpen}>
+            <DialogContent className="max-w-2xl">
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-semibold">{t("editTitle")}</p>
+                  <p className="text-xs text-muted-foreground">{t("editHint")}</p>
+                </div>
+                <div className="max-h-[50vh] space-y-2 overflow-y-auto pe-1">
+                  {(template?.fields ?? []).map((field) => (
+                    <label key={field.field_key} className="block space-y-1 text-xs">
+                      <span className="text-muted-foreground">{field.field_key}</span>
+                      <Input
+                        className="h-9"
+                        value={templateOverrides[field.field_key] ?? ""}
+                        onChange={(event) =>
+                          setTemplateOverrides((prev) => ({ ...prev, [field.field_key]: event.target.value }))
+                        }
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9"
+                    onClick={() => {
+                      setTemplateOverrides({});
+                      setEditOpen(false);
+                      setStep(2);
+                    }}
+                  >
+                    {t("useAsIs")}
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-9 bg-zinc-950 text-white hover:bg-zinc-800"
+                    onClick={() => {
+                      setEditOpen(false);
+                      setStep(2);
+                    }}
+                  >
+                    {t("continue")}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
           {step === 3 && fileName ? (
             <div className="rounded-lg border border-border bg-background p-3">
               <p className="flex items-center gap-1.5 text-xs font-semibold">
@@ -1015,7 +1095,7 @@ export function BulkImportShell({
                 <Button
                   className="h-9 bg-zinc-950 text-white hover:bg-zinc-800 disabled:bg-zinc-200 disabled:text-zinc-500 disabled:opacity-100"
                   disabled={!templateId}
-                  onClick={() => setStep(2)}
+                  onClick={() => setEditOpen(true)}
                 >
                   {t("continue")}
                   <ArrowRight className="size-3.5" aria-hidden />
