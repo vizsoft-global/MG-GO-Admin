@@ -27,7 +27,7 @@ describe("launcher modules", () => {
     assert.equal(LAUNCHER_LABEL_OVERRIDE["visit-bookings"], "Visit Slots");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.assets, "Assets");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.payroll, "Payroll");
-    assert.equal(items.find((item) => item.id === "visit-bookings")?.href, "/visit-bookings/slots");
+    assert.equal(items.find((item) => item.id === "visit-bookings")?.href, "/visit-bookings");
     assert.equal(items.find((item) => item.id === "assets")?.href, "/assets");
     assert.equal(
       LAUNCHER_TILE_IDS[LAUNCHER_TILE_IDS.indexOf("assets") + 1],

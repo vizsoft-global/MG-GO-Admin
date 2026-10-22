@@ -639,7 +639,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     id: "visit-bookings",
     defaultLabel: "Visit Slots",
     defaultIcon: "Table2",
-    href: "/visit-bookings/slots",
+    href: "/visit-bookings",
     defaultGroup: "Visit Bookings",
     defaultOrder: 0,
     permission: "visits.view",
