@@ -483,16 +483,19 @@ export async function createDriverIntake(
   const hasAvatarUpload = avatarFile instanceof File && avatarFile.size > 0;
   const needsR2 = docsToUpload.length > 0 || hasAvatarUpload;
 
-  const [phoneTaken, civilTaken, passportTaken, restaurantCheck, r2Configured] = await Promise.all([
-    phone ? phoneExists(phone) : Promise.resolve(false),
-    civilIdNormalized ? civilIdExists(civilIdNormalized) : Promise.resolve(false),
-    hr.passport ? passportExists(hr.passport) : Promise.resolve(false),
-    validateRestaurantsPublished(db, restaurantIds),
-    needsR2 ? isR2Configured() : Promise.resolve(true),
-  ]);
+  const [phoneTaken, civilTaken, passportTaken, employeeTaken, restaurantCheck, r2Configured] =
+    await Promise.all([
+      phone ? phoneExists(phone) : Promise.resolve(false),
+      civilIdNormalized ? civilIdExists(civilIdNormalized) : Promise.resolve(false),
+      hr.passport ? passportExists(hr.passport) : Promise.resolve(false),
+      employeeId ? employeeIdExists(employeeId) : Promise.resolve(false),
+      validateRestaurantsPublished(db, restaurantIds),
+      needsR2 ? isR2Configured() : Promise.resolve(true),
+    ]);
 
   if (phoneTaken) return { error: "phone_exists" };
   if (civilTaken) return { error: "civil_id_exists" };
+  if (employeeTaken) return { error: "employee_id_exists" };
   if (passportTaken) return { error: "passport_exists" };
   if (restaurantCheck.error) return { error: restaurantCheck.error };
   if (needsR2 && !r2Configured) return { error: "r2_not_configured" };
