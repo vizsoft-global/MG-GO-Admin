@@ -882,7 +882,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/settings/roles",
     defaultGroup: "Settings",
     defaultOrder: 2,
-    superAdminOnly: true,
+    permission: "roles.manage",
   },
   {
     id: "access-requests",
@@ -918,7 +918,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/settings/menu-editor",
     defaultGroup: "Settings",
     defaultOrder: 6,
-    superAdminOnly: true,
+    permission: "settings.manage",
   },
   {
     id: "languages",

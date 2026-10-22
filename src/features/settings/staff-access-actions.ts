@@ -8,6 +8,7 @@ import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { revokeStaffAccess } from "@/lib/firebase/staff-auth";
 import { getSessionUser } from "@/lib/auth/get-session";
+import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { CATALOG_SLUG_SET } from "@/lib/auth/permission-catalog";
 import {
   expandRoleSlugsToUserTicks,
@@ -101,7 +102,10 @@ function slugsOf(data: DocumentData | undefined): string[] {
 
 async function requireSuperAdmin() {
   const session = await getSessionUser();
-  if (!session?.isSuperAdmin) {
+  if (
+    !session ||
+    !hasPermissionInSet(session.permissions, "roles.manage", session.isSuperAdmin)
+  ) {
     return { error: "not_authorized" as const };
   }
   return { session };
@@ -110,7 +114,7 @@ async function requireSuperAdmin() {
 async function requireStaffMutation() {
   const auth = await requireMutationAuth();
   if ("error" in auth) return auth;
-  if (!auth.session.isSuperAdmin) {
+  if (!hasPermissionInSet(auth.session.permissions, "roles.manage", auth.session.isSuperAdmin)) {
     return { error: "not_authorized" as const };
   }
   return { session: auth.session };
