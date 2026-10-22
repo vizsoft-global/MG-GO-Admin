@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Building2, Eye, Lock, Pencil, Plus } from "lucide-react";
+import { Building2, Eye, Lock, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppFormSection } from "@/components/app";
@@ -48,6 +48,8 @@ type Draft = {
   aboveKwd: string;
   belowKwd: string;
   effectiveFrom: string;
+  logoFile: File | null;
+  removeLogo: boolean;
 };
 
 const PREVIEW_ORDERS = [30, 21, 15, 10, 5, 0];
@@ -65,8 +67,11 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [viewing, setViewing] = useState<SourceCompanyWithUsage | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
 
-  const openNew = () =>
+  const openNew = () => {
+    setLogoPreview(null);
     setDraft({
       key: "",
       name: "",
@@ -80,9 +85,13 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
       aboveKwd: "",
       belowKwd: "",
       effectiveFrom: "",
+      logoFile: null,
+      removeLogo: false,
     });
+  };
 
-  const openEdit = (c: SourceCompanyWithUsage) =>
+  const openEdit = (c: SourceCompanyWithUsage) => {
+    setLogoPreview(c.logo_display_url ?? null);
     setDraft({
       key: c.key,
       name: c.name,
@@ -96,7 +105,34 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
       aboveKwd: toRateStr(c.incentive_above_kwd),
       belowKwd: toRateStr(c.incentive_below_kwd),
       effectiveFrom: c.effective_from ?? "",
+      logoFile: null,
+      removeLogo: false,
     });
+  };
+
+  const pickLogo = (file: File | null) => {
+    if (!draft) return;
+    if (!file) return;
+    if (!/^image\/(png|jpeg|webp|svg\+xml)$/.test(file.type)) {
+      toast.error(t("errors.logo_invalid_type"));
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error(t("errors.logo_file_too_large"));
+      return;
+    }
+    if (logoPreview?.startsWith("blob:")) URL.revokeObjectURL(logoPreview);
+    setLogoPreview(URL.createObjectURL(file));
+    setDraft({ ...draft, logoFile: file, removeLogo: false });
+  };
+
+  const clearLogo = () => {
+    if (!draft) return;
+    if (logoPreview?.startsWith("blob:")) URL.revokeObjectURL(logoPreview);
+    setLogoPreview(null);
+    setDraft({ ...draft, logoFile: null, removeLogo: true });
+    if (logoInputRef.current) logoInputRef.current.value = "";
+  };
 
   const draftKey = draft ? (draft.isNew ? companyKeyFromName(draft.name) : draft.key) : "";
 
@@ -141,6 +177,8 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
         incentiveAboveKwd: parseRateKwd(draft.aboveKwd),
         incentiveBelowKwd: parseRateKwd(draft.belowKwd),
         effectiveFrom: draft.effectiveFrom.trim() || null,
+        logoFile: draft.logoFile,
+        removeLogo: draft.removeLogo && !draft.logoFile,
       });
       if ("error" in result) {
         toast.error(t(`errors.${result.error}`));
@@ -187,8 +225,17 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                 className="cursor-pointer"
               >
                 <TableCell className="font-medium">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Building2 className="size-3.5 text-muted-foreground" aria-hidden />
+                  <span className="inline-flex items-center gap-2">
+                    {c.logo_display_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={c.logo_display_url}
+                        alt=""
+                        className="size-6 shrink-0 rounded border border-border bg-white object-contain"
+                      />
+                    ) : (
+                      <Building2 className="size-3.5 text-muted-foreground" aria-hidden />
+                    )}
                     {c.name}
                     {c.is_system ? (
                       <Lock className="size-3 text-muted-foreground" aria-label={t("system")} />
@@ -298,6 +345,52 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
               <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                 <div className="grid items-start gap-4 lg:grid-cols-2 lg:items-stretch">
                   <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30">
+                        {logoPreview ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={logoPreview} alt="" className="max-h-full max-w-full object-contain" />
+                        ) : (
+                          <Building2 className="size-5 text-muted-foreground" aria-hidden />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <Label htmlFor="source-company-logo">{t("logo")}</Label>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => logoInputRef.current?.click()}
+                          >
+                            <Upload className="size-3.5" aria-hidden />
+                            {logoPreview ? t("logoReplace") : t("logoUpload")}
+                          </Button>
+                          {logoPreview ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 text-destructive hover:bg-destructive/10"
+                              onClick={clearLogo}
+                            >
+                              <Trash2 className="size-3.5" aria-hidden />
+                              {t("logoRemove")}
+                            </Button>
+                          ) : null}
+                        </div>
+                        <input
+                          ref={logoInputRef}
+                          id="source-company-logo"
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                          className="hidden"
+                          onChange={(event) => pickLogo(event.target.files?.[0] ?? null)}
+                        />
+                        <p className="text-[10px] text-muted-foreground">{t("logoHint")}</p>
+                      </div>
+                    </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="source-company-name">
                         {t("colName")}
@@ -535,7 +628,16 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
             <>
               <div className="space-y-3 px-5 py-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Building2 className="size-4 text-muted-foreground" aria-hidden />
+                  {viewing.logo_display_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={viewing.logo_display_url}
+                      alt=""
+                      className="size-9 shrink-0 rounded border border-border bg-white object-contain p-0.5"
+                    />
+                  ) : (
+                    <Building2 className="size-4 text-muted-foreground" aria-hidden />
+                  )}
                   <DialogTitle className="text-base font-semibold">{viewing.name}</DialogTitle>
                   {viewing.is_system ? (
                     <Badge variant="outline" className="border-primary/20 bg-primary/10 text-primary">

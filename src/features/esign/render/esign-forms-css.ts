@@ -47,8 +47,10 @@ html, body { direction: ltr; }
   .box, .sec, .sig, .sheet-dock, .doc-header, .doc-footer, .management, .employee-block, tr { break-inside: avoid; page-break-inside: avoid; }
 }
 
-/* ---------- Header: document type only ---------- */
-.doc-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 3mm; }
+/* ---------- Header: document type + optional company logo ---------- */
+.doc-header { display: flex; align-items: center; justify-content: space-between; gap: 6mm; padding-bottom: 3mm; }
+.doc-header .doc-header-text { min-width: 0; }
+.doc-logo { height: 13mm; width: auto; max-width: 36mm; object-fit: contain; display: block; }
 .doc-header .en { font-size: 18pt; font-weight: 700; letter-spacing: -.2pt; line-height: 1.1; }
 .doc-header .ar { font-size: 16pt; font-weight: 700; line-height: 1.3; }
 .doc-rule { height: 1.2mm; border-radius: 1mm; margin-bottom: 3mm;

@@ -133,7 +133,7 @@ export function launcherTilesFromMenu(
       continue;
     }
     if (node.displayMode === "inline") {
-      add(node.id, firstChildHref(node), node.label, node.icon);
+      add(node.id, node.href ?? firstChildHref(node), node.label, node.icon);
       continue;
     }
     for (const child of node.children ?? []) {

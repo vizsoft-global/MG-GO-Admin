@@ -9,6 +9,7 @@ import { staffDb } from "@/lib/firebase/staff-db";
 import { resolveOrderProofUrl } from "@/lib/storage/order-proof-resolve";
 import { isHttpUrl } from "@/lib/storage/order-proof-url";
 import {
+  ORDER_EXCEPTION_EXPORT_MAX_ROWS,
   ORDER_EXCEPTION_MAX_PROOF_KEYS,
   ORDER_EXCEPTION_PAGE_SIZE,
   isOrderExceptionKind,
@@ -18,6 +19,7 @@ import {
   type OrderExceptionCounts,
   type OrderExceptionDateRange,
   type OrderExceptionErrorCode,
+  type OrderExceptionExportResult,
   type OrderExceptionListFilters,
   type OrderExceptionListResult,
   type OrderExceptionProof,
@@ -169,19 +171,20 @@ async function readAllowed(): Promise<boolean> {
   return hasPermissionInSet(session.permissions, READ_PERMISSION, session.isSuperAdmin);
 }
 
-/** Rows for the review queue. Proof keys are stripped from the wire shape. */
-export async function listOrderExceptions(
+/**
+ * One place that turns filters into the callable payload, so the queue and the
+ * export cannot ask the server two different questions from one set of controls.
+ */
+function buildListPayload(
   filters: OrderExceptionListFilters,
-): Promise<OrderExceptionActionResult<OrderExceptionListResult>> {
-  if (!(await readAllowed())) return { data: null, error: "not_authorized" };
-
-  const requestedLimit = Math.floor(Number(filters?.limit ?? ORDER_EXCEPTION_PAGE_SIZE));
-  const limit = Number.isFinite(requestedLimit)
-    ? Math.min(Math.max(requestedLimit, 1), MAX_LIMIT)
-    : ORDER_EXCEPTION_PAGE_SIZE;
-  const requestedOffset = Math.floor(Number(filters?.offset ?? 0));
-  const offset = Number.isFinite(requestedOffset) ? Math.max(requestedOffset, 0) : 0;
-
+  limit: number,
+  offset: number,
+): {
+  payload: Record<string, unknown>;
+  from?: string;
+  to?: string;
+  search: string | null;
+} {
   const payload: Record<string, unknown> = { limit, offset };
   if (filters?.status && filters.status !== "all") payload.status = filters.status;
   if (filters?.kind && filters.kind !== "all") payload.kind = filters.kind;
@@ -197,6 +200,24 @@ export async function listOrderExceptions(
 
   const search = textOrNull(filters?.search);
   if (search) payload.search = search.slice(0, 120);
+
+  return { payload, from, to, search };
+}
+
+/** Rows for the review queue. Proof keys are stripped from the wire shape. */
+export async function listOrderExceptions(
+  filters: OrderExceptionListFilters,
+): Promise<OrderExceptionActionResult<OrderExceptionListResult>> {
+  if (!(await readAllowed())) return { data: null, error: "not_authorized" };
+
+  const requestedLimit = Math.floor(Number(filters?.limit ?? ORDER_EXCEPTION_PAGE_SIZE));
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(requestedLimit, 1), MAX_LIMIT)
+    : ORDER_EXCEPTION_PAGE_SIZE;
+  const requestedOffset = Math.floor(Number(filters?.offset ?? 0));
+  const offset = Number.isFinite(requestedOffset) ? Math.max(requestedOffset, 0) : 0;
+
+  const { payload, from, to, search } = buildListPayload(filters, limit, offset);
 
   const { data, error } = await callAdminFunction<unknown>("adminListOrderExceptions", payload);
   if (error) return { data: null, error: mapListError(error.message) };
@@ -224,6 +245,63 @@ export async function listOrderExceptions(
       counts,
       offset: Number.isFinite(Number(body.offset)) ? Math.max(Number(body.offset), 0) : offset,
       limit: Number.isFinite(Number(body.limit)) ? Math.max(Number(body.limit), 1) : limit,
+    },
+    error: null,
+  };
+}
+
+/**
+ * Every row matching the current filters, for the Excel export.
+ *
+ * The queue is paged at 50, but a spreadsheet has to carry the whole answer, so
+ * this asks the callable for its widest window and reports the match count back:
+ * the sheet stamps "exported N of M" rather than looking complete when it is not.
+ * Proofs are deliberately not signed here — a 1,000-row sheet of signed URLs
+ * would be both slow and useless in an offline file.
+ */
+export async function exportOrderExceptions(
+  filters: OrderExceptionListFilters,
+): Promise<OrderExceptionActionResult<OrderExceptionExportResult>> {
+  if (!(await readAllowed())) return { data: null, error: "not_authorized" };
+
+  const { payload, from, to, search } = buildListPayload(
+    filters,
+    0,
+    0,
+  );
+  payload.limit = ORDER_EXCEPTION_EXPORT_MAX_ROWS;
+  payload.offset = 0;
+  payload.export = true;
+
+  const { data, error } = await callAdminFunction<unknown>("adminListOrderExceptions", payload);
+  if (error) return { data: null, error: mapListError(error.message) };
+
+  const body = asRecord(data);
+  const parsed = Array.isArray(body.rows) ? body.rows.map(parseRow) : [];
+  const rows: OrderExceptionRow[] = parsed.map(({ row, proofKeys }) => ({
+    ...row,
+    proof_count: proofKeys.length,
+    proofs: [],
+  }));
+  const matched = Math.max(countOrZero(body.total), rows.length);
+
+  await logAdminRead("order_exceptions", `${ROUTE_NAME}.export`, {
+    status: filters?.status ?? "all",
+    kind: filters?.kind ?? "all",
+    source: filters?.source ?? "all",
+    from: from ?? null,
+    to: to ?? null,
+    hasSearch: Boolean(search),
+    exported: rows.length,
+    matched,
+  });
+
+  return {
+    data: {
+      rows,
+      matched,
+      capped: matched > rows.length,
+      limit: ORDER_EXCEPTION_EXPORT_MAX_ROWS,
     },
     error: null,
   };

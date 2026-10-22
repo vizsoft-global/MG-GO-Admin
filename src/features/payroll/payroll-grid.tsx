@@ -11,14 +11,21 @@ import {
   Copy,
   Download,
   Eraser,
+  GraduationCap,
   HeartPulse,
   Hourglass,
+  IdCard,
   PencilLine,
+  PlaneTakeoff,
+  ShieldOff,
   Siren,
+  Smartphone,
   Timer,
   Truck,
   UserMinus,
+  UserPlus,
   UserX,
+  XCircle,
 } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { ToggleChip } from "@/components/app/toggle-chip";
@@ -96,6 +103,20 @@ export function dayClass(status: DayStatus): string {
       return "bg-fuchsia-100 text-fuchsia-800";
     case "abs_lo":
       return "bg-rose-100 text-rose-800 ring-1 ring-inset ring-rose-300";
+    case "cancelled":
+      return "bg-slate-200 text-slate-700";
+    case "leave":
+      return "bg-sky-100 text-sky-800";
+    case "terminated":
+      return "bg-neutral-200 text-neutral-700";
+    case "phone_issue":
+      return "bg-teal-100 text-teal-800";
+    case "id_suspended":
+      return "bg-violet-100 text-violet-800";
+    case "new_hire":
+      return "bg-blue-100 text-blue-800";
+    case "training":
+      return "bg-yellow-100 text-yellow-800";
     case "custom":
       return "bg-purple-100 text-purple-800";
     case "blank":
@@ -123,6 +144,13 @@ export const PAYROLL_STATUS_ICONS = {
   absent: UserX,
   abs_lh: UserMinus,
   abs_lo: Ban,
+  cancelled: XCircle,
+  leave: PlaneTakeoff,
+  terminated: ShieldOff,
+  phone_issue: Smartphone,
+  id_suspended: IdCard,
+  new_hire: UserPlus,
+  training: GraduationCap,
   custom: PencilLine,
 } as const;
 

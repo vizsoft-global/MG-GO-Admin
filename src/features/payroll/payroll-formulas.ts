@@ -34,6 +34,13 @@ export const DAY_STATUSES = [
   "abs_lh",
   "abs_lo",
   "custom",
+  "cancelled",
+  "leave",
+  "terminated",
+  "phone_issue",
+  "id_suspended",
+  "new_hire",
+  "training",
   "blank",
 ] as const;
 
@@ -90,15 +97,18 @@ export const PAYROLL_STATUS_FILTERS = [
   "work",
   "reduced3",
   "half",
-  "actual",
-  "off",
   "sick",
+  "off",
   "accident",
-  "vehicle",
   "absent",
-  "abs_lh",
-  "abs_lo",
-  "custom",
+  "cancelled",
+  "leave",
+  "terminated",
+  "phone_issue",
+  "id_suspended",
+  "vehicle",
+  "new_hire",
+  "training",
 ] as const;
 export type PayrollStatusFilter = (typeof PAYROLL_STATUS_FILTERS)[number];
 
@@ -108,15 +118,18 @@ export const PAYROLL_STATUS_CHIP: Record<PayrollStatusFilter, { hex: string }> =
   work: { hex: "#9aa4ad" },
   reduced3: { hex: "#fbbf24" },
   half: { hex: "#22d3ee" },
-  actual: { hex: "#86efac" },
-  off: { hex: "#34d399" },
   sick: { hex: "#f59e0b" },
+  off: { hex: "#34d399" },
   accident: { hex: "#a3e635" },
-  vehicle: { hex: "#a5b4fc" },
   absent: { hex: "#ef4444" },
-  abs_lh: { hex: "#f472b6" },
-  abs_lo: { hex: "#fda4af" },
-  custom: { hex: "#c084fc" },
+  cancelled: { hex: "#94a3b8" },
+  leave: { hex: "#60a5fa" },
+  terminated: { hex: "#b91c1c" },
+  phone_issue: { hex: "#f97316" },
+  id_suspended: { hex: "#7c3aed" },
+  vehicle: { hex: "#a5b4fc" },
+  new_hire: { hex: "#10b981" },
+  training: { hex: "#eab308" },
 };
 
 export function riderHasDayStatus(
@@ -695,6 +708,13 @@ export function isUnjustifiedDay(
     case "abs_lh":
     case "abs_lo":
     case "custom":
+    case "cancelled":
+    case "leave":
+    case "terminated":
+    case "phone_issue":
+    case "id_suspended":
+    case "new_hire":
+    case "training":
     case "blank":
       return false;
     default: {
@@ -890,6 +910,13 @@ export function classifyRiderMonth(input: {
       case "abs_lh":
       case "abs_lo":
       case "custom":
+      case "cancelled":
+      case "leave":
+      case "terminated":
+      case "phone_issue":
+      case "id_suspended":
+      case "new_hire":
+      case "training":
       case "blank":
         break;
       default: {
@@ -1034,6 +1061,20 @@ export function dayStatusLabel(status: DayStatus): string {
       return "Abs·LO";
     case "custom":
       return "CUS";
+    case "cancelled":
+      return "Cancelled";
+    case "leave":
+      return "Leave";
+    case "terminated":
+      return "Terminated";
+    case "phone_issue":
+      return "Phone";
+    case "id_suspended":
+      return "ID Susp";
+    case "new_hire":
+      return "New Hire";
+    case "training":
+      return "Training";
     case "blank":
       return "";
     default: {
@@ -1077,6 +1118,20 @@ export function dayGridLabel(status: DayStatus, hours: number): string {
       return "Abs·LH";
     case "abs_lo":
       return "Abs·LO";
+    case "cancelled":
+      return "Cancel";
+    case "leave":
+      return "Leave";
+    case "terminated":
+      return "Term";
+    case "phone_issue":
+      return "Phone";
+    case "id_suspended":
+      return "ID Susp";
+    case "new_hire":
+      return "New Hire";
+    case "training":
+      return "Training";
     case "blank":
       return "";
     default: {

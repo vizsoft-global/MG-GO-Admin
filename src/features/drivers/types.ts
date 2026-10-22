@@ -288,6 +288,7 @@ export const DRIVER_IMPORT_FIELDS = [
   "phone",
   "civil_id",
   "employee_id",
+  "passport_number",
   "restaurant_ids",
   "partner_id",
   "zone_id",
@@ -300,6 +301,24 @@ export const DRIVER_IMPORT_FIELDS = [
   "client_name",
   "active",
   "off_days",
+  "employee_status_key",
+  "section_keys",
+  "nationality_category_keys",
+  "project_key",
+  "accommodation",
+  "joined_at",
+  "screenshots_allowed",
+  "login_verification_exempt",
+  "bank_code",
+  "account_number",
+  "iban",
+  "beneficiary_civil_id",
+  "license_expiry",
+  "civil_id_expiry",
+  "work_permit_expiry",
+  "passport_expiry",
+  "health_card_expiry",
+  "operations_card_expiry",
 ] as const;
 
 /**
@@ -325,9 +344,21 @@ export type DriverImportPreviewStatus =
   | "duplicate_phone"
   | "duplicate_civil_id"
   | "duplicate_employee_id"
+  | "duplicate_passport"
   | "invalid_phone"
   | "invalid_civil_id"
   | "invalid_employee_id"
+  | "invalid_passport"
+  | "invalid_date"
+  | "invalid_yes_no"
+  | "invalid_employee_status"
+  | "invalid_section"
+  | "invalid_nationality_category"
+  | "invalid_bank_code"
+  | "invalid_account_number"
+  | "invalid_iban"
+  | "invalid_beneficiary_civil_id"
+  | "invalid_project"
   | "invalid_nationality"
   | "invalid_rider_category"
   | "invalid_source_company"
@@ -353,6 +384,7 @@ export type DriverImportMappedRow = {
   phone: string | null;
   civil_id: string | null;
   employee_id: string | null;
+  passport_number: string | null;
   custom_fields: Record<string, string | null>;
   /** Optional partner UUID or unique name from the spreadsheet. */
   partner_id: string | null;
@@ -372,11 +404,75 @@ export type DriverImportMappedRow = {
   active: string | null;
   /** Raw Number of OFFs cell. Blank means leave the month default. */
   off_days: string | null;
+  employee_status_key: string | null;
+  /** Comma list of employee-section keys or names. */
+  section_keys: string | null;
+  /** Comma list of nationality-category keys or names. */
+  nationality_category_keys: string | null;
+  project_key: string | null;
+  accommodation: string | null;
+  joined_at: string | null;
+  screenshots_allowed: string | null;
+  login_verification_exempt: string | null;
+  bank_code: string | null;
+  account_number: string | null;
+  iban: string | null;
+  beneficiary_civil_id: string | null;
+  license_expiry: string | null;
+  civil_id_expiry: string | null;
+  work_permit_expiry: string | null;
+  passport_expiry: string | null;
+  health_card_expiry: string | null;
+  operations_card_expiry: string | null;
+  /**
+   * Which target fields the sheet actually carries a column for. A field that is
+   * absent is never written — that is what stops a partial sheet from nulling
+   * the columns it does not mention.
+   */
+  present: Partial<Record<DriverImportTargetField, boolean>>;
+};
+
+export const DRIVER_IMPORT_EXPIRY_FIELDS = [
+  "license_expiry",
+  "civil_id_expiry",
+  "work_permit_expiry",
+  "passport_expiry",
+  "health_card_expiry",
+  "operations_card_expiry",
+] as const;
+
+export type DriverImportExpiryField = (typeof DRIVER_IMPORT_EXPIRY_FIELDS)[number];
+
+/** Which compliance slot each expiry column feeds. */
+export const DRIVER_IMPORT_EXPIRY_DOC_TYPE: Record<
+  DriverImportExpiryField,
+  DriverDocumentType
+> = {
+  license_expiry: "license",
+  civil_id_expiry: "civil_id",
+  work_permit_expiry: "work_permit",
+  passport_expiry: "passport",
+  health_card_expiry: "health_card",
+  operations_card_expiry: "operations_card",
 };
 
 export type DriverImportPreviewRow = Omit<
   DriverImportMappedRow,
-  "partner_id" | "zone_id" | "restaurant_ids" | "active" | "off_days"
+  | "partner_id"
+  | "zone_id"
+  | "restaurant_ids"
+  | "active"
+  | "off_days"
+  | "section_keys"
+  | "nationality_category_keys"
+  | "screenshots_allowed"
+  | "login_verification_exempt"
+  | "license_expiry"
+  | "civil_id_expiry"
+  | "work_permit_expiry"
+  | "passport_expiry"
+  | "health_card_expiry"
+  | "operations_card_expiry"
 > & {
   status: DriverImportPreviewStatus;
   partner_id: string | null;
@@ -398,6 +494,27 @@ export type DriverImportPreviewRow = Omit<
   active: boolean | null;
   /** Parsed OFF days for the current Kuwait month. `null` = do not write. */
   off_days: number | null;
+  /** Normalised passport number, or `-` handling through `present`. */
+  passport_number: string | null;
+  employee_status_key: string | null;
+  employee_status_name: string | null;
+  section_keys: string[];
+  section_names: string[];
+  nationality_category_keys: string[];
+  nationality_category_names: string[];
+  project_key: DriverProjectKey | null;
+  accommodation: string | null;
+  /** `YYYY-MM-DD` (Kuwait) for the join date. */
+  joined_at: string | null;
+  screenshots_allowed: boolean | null;
+  login_verification_exempt: boolean | null;
+  bank_code: string | null;
+  bank_code_name: string | null;
+  account_number: string | null;
+  iban: string | null;
+  beneficiary_civil_id: string | null;
+  /** ISO expiry per slot; `null` = clear with `-`, absent key = untouched. */
+  expiries: Partial<Record<DriverImportExpiryField, string | null>>;
   skip?: boolean;
   /** True when this employee ID already exists in the fleet (not a second sheet row). */
   existingByEmployeeId?: boolean;

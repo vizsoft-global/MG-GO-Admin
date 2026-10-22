@@ -11,6 +11,8 @@ export type OrderExceptionSourceFilter = "all" | OrderExceptionSource;
 /** Mirrors MAX_PROOFS in functions/src/rpcs/order-exceptions.ts. */
 export const ORDER_EXCEPTION_MAX_PROOF_KEYS = 5;
 export const ORDER_EXCEPTION_PAGE_SIZE = 50;
+/** One export may carry this many rows; the sheet reports anything it could not. */
+export const ORDER_EXCEPTION_EXPORT_MAX_ROWS = 1000;
 
 export const ORDER_EXCEPTION_KINDS: readonly OrderExceptionKind[] = ["rejected", "cancelled"];
 export const ORDER_EXCEPTION_SOURCES: readonly OrderExceptionSource[] = [
@@ -106,6 +108,19 @@ export type OrderExceptionListResult = {
   total: number;
   counts: OrderExceptionCounts;
   offset: number;
+  limit: number;
+};
+
+/**
+ * The export asks the server for a large window and reports what it could not
+ * include, so a capped sheet says so instead of looking like the whole queue.
+ */
+export type OrderExceptionExportResult = {
+  rows: OrderExceptionRow[];
+  /** Rows that matched the filters on the server, before the export cap. */
+  matched: number;
+  /** True when `matched` exceeds the rows returned. */
+  capped: boolean;
   limit: number;
 };
 

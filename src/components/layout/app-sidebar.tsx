@@ -254,7 +254,7 @@ function NavGroup({
   const hasActiveChild = groupContainsLeaf(node, activeLeafId);
 
   if (isInline) {
-    const href = firstChildHref(node);
+    const href = node.href ?? firstChildHref(node);
     if (!href) return null;
 
     const isActive = hasActiveChild;

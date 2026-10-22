@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Ban, CheckCircle2, ClipboardList, Clock, Loader2, Search } from "lucide-react";
+import { Ban, CheckCircle2, ClipboardList, Clock, Download, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
@@ -23,9 +23,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { OrderExceptionReviewDialog } from "./order-exception-review-dialog";
+import { downloadOrderExceptionsXlsx } from "./order-exceptions-xlsx";
 import {
   orderExceptionErrorMessage,
+  useExportOrderExceptions,
   useOrderExceptionProofs,
   useOrderExceptionSummary,
   useOrderExceptionsList,
@@ -96,6 +99,7 @@ export function OrderExceptionsPageShell() {
     Boolean(selected && selected.proof_count > 0 && selected.proofs.length === 0),
   );
   const review = useReviewOrderException();
+  const exportRows = useExportOrderExceptions();
 
   const proofs = reSignProofs.data ?? selected?.proofs ?? [];
   const proofsLoading =
@@ -122,6 +126,84 @@ export function OrderExceptionsPageShell() {
   ];
 
   const errorCode = list.error ? orderExceptionErrorMessage(list.error) : null;
+
+  /**
+   * The sheet is written from the same controls the list is showing, so an export
+   * can never cover a different window than the one on screen. Columns come from the
+   * `col*` keys the table already uses — a header cannot drift from its column.
+   */
+  function handleExport() {
+    exportRows.mutate(filters, {
+      onSuccess: (result) => {
+        if (result.rows.length === 0) {
+          toast.error(t("exportEmpty"));
+          return;
+        }
+        downloadOrderExceptionsXlsx({
+          filename: `order-exceptions-${kuwaitTodayYmd()}.xlsx`,
+          rows: result.rows,
+          filters: {
+            status: tab,
+            kind,
+            source,
+            from: range.from,
+            to: range.to,
+            search: debouncedSearch || undefined,
+          },
+          matchedRows: result.matched,
+          labels: {
+            sheetRows: t("exportSheetRows"),
+            sheetSummary: t("exportSheetSummary"),
+            columns: [
+              t("colDay"),
+              t("colRider"),
+              t("colDriverCode"),
+              t("colOrder"),
+              t("colKind"),
+              t("colSource"),
+              t("colReason"),
+              t("colProof"),
+              t("colStatus"),
+              t("colReviewed"),
+              t("colReviewedAt"),
+              t("colNote"),
+              t("colCreated"),
+              t("colCounted"),
+            ],
+            kind: { rejected: t("kindRejected"), cancelled: t("kindCancelled") },
+            source: { driver_declined: t("sourceDriver"), store_or_customer: t("sourceStore") },
+            status: {
+              pending: t("statusPending"),
+              approved: t("statusApproved"),
+              rejected: t("statusRejected"),
+            },
+            counted: { yes: t("countedYes"), no: t("countedNo") },
+            summary: {
+              filters: t("summaryFilters"),
+              status: t("summaryStatus"),
+              kind: t("summaryKind"),
+              source: t("summarySource"),
+              from: t("summaryFrom"),
+              to: t("summaryTo"),
+              search: t("summarySearch"),
+              all: t("summaryAll"),
+              exportedRows: t("summaryExported"),
+              matchedRows: t("summaryMatched"),
+              capped: t("summaryCapped"),
+            },
+          },
+        });
+        if (result.capped) {
+          toast.warning(
+            t("exportCapped", { exported: result.rows.length, matched: result.matched }),
+          );
+        } else {
+          toast.success(t("exportDone", { count: result.rows.length }));
+        }
+      },
+      onError: () => toast.error(t("exportFailed")),
+    });
+  }
 
   return (
     <AppPage className="space-y-3">
@@ -230,6 +312,20 @@ export function OrderExceptionsPageShell() {
               }}
               className="h-9 w-[140px]"
             />
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9"
+              disabled={exportRows.isPending}
+              onClick={handleExport}
+            >
+              {exportRows.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              {exportRows.isPending ? t("exporting") : t("export")}
+            </Button>
           </div>
         }
       >

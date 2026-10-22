@@ -28,6 +28,7 @@ export interface MenuNode {
   icon: string;
   hidden?: boolean;
   displayMode?: "inline" | "panel";
+  href?: string;
   children?: MenuNode[];
 }
 

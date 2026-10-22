@@ -11,6 +11,7 @@ import {
 } from "./esign-document-layout";
 import type { EsignDocumentKind } from "../types";
 import { ESIGN_FORMS_CSS } from "./esign-forms-css";
+import { logoImageHtml } from "./esign-logo";
 import { escapeHtml } from "./esign-placeholders";
 import {
   renderAccidentReferenceSheet,
@@ -340,16 +341,18 @@ function payslipIdentity(layout: EsignDocumentLayout): string {
 
 /**
  * Client HR sheet (penalty, loan, salary slip, and every other kind).
- * No company logo. `logoUrl` is ignored on purpose.
+ * `logoUrl` prints the employee's source-company mark in the header; it is
+ * omitted when the caller could not resolve one.
  */
 export function renderClientSheetHtml(
   layout: EsignDocumentLayout,
   fontCss?: string,
   staffLabel?: string,
+  logoUrl?: string | null,
 ): string {
-  if (layout.kind === "loan") return renderLoanReferenceSheet(layout, fontCss);
-  if (layout.kind === "payslip") return renderPayslipReferenceSheet(layout, fontCss);
-  if (layout.accident) return renderAccidentReferenceSheet(layout, fontCss);
+  if (layout.kind === "loan") return renderLoanReferenceSheet(layout, fontCss, logoUrl);
+  if (layout.kind === "payslip") return renderPayslipReferenceSheet(layout, fontCss, logoUrl);
+  if (layout.accident) return renderAccidentReferenceSheet(layout, fontCss, logoUrl);
   // The three reference kinds returned above; the generic grid still carries
   // the payslip/loan branches for callers that pass a layout without a kind.
   const genericKind = layout.kind as EsignDocumentKind;
@@ -404,7 +407,7 @@ ${ESIGN_FORMS_CSS}
 <body>
 <div class="page" data-single-page="1" data-kind="${escapeHtml(layout.kind)}">
 <div class="page-fit">
-<header class="doc-header"><div class="en">${titleEn}</div><div class="ar" dir="rtl">${titleAr}</div></header>
+<header class="doc-header">${logoImageHtml(logoUrl)}<div class="doc-header-text"><div class="en">${titleEn}</div><div class="ar" dir="rtl">${titleAr}</div></div></header>
 <div class="doc-rule"></div>
 ${metaStrip(layout)}
 ${blocks.join("")}

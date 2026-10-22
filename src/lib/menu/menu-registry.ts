@@ -238,13 +238,13 @@ export const DEFAULT_GROUPS = [
 
 export const DEFAULT_GROUP_META: Record<
   string,
-  { icon: string; displayMode?: "inline" | "panel" }
+  { icon: string; displayMode?: "inline" | "panel"; href?: string }
 > = {
   Overview: { icon: "Folder" },
   EmployeeDesk: { icon: "Inbox" },
   OperationsHub: { icon: "Building2" },
   Operations: { icon: "Folder" },
-  Settings: { icon: "Settings", displayMode: "inline" },
+  Settings: { icon: "Settings", displayMode: "inline", href: "/settings" },
   System: { icon: "Cog", displayMode: "inline" },
   WIP: { icon: "AlertTriangle" },
   Unorganised: { icon: "Folder" },
@@ -741,11 +741,11 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   },
   {
     id: "profile",
-    defaultLabel: "Profile",
+    defaultLabel: "Settings",
     defaultIcon: "User",
     href: "/settings",
     defaultGroup: "Settings",
-    defaultOrder: 0,
+    defaultOrder: 2.5,
     permission: "settings.view",
   },
   {
@@ -1024,7 +1024,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   payouts: "payouts",
   notifications: "notifications",
   support: "support",
-  profile: "profile",
+  profile: "settings",
   branding: "branding",
   "driver-app": "driverApp",
   "vehicle-types": "vehicleTypes",

@@ -13,6 +13,11 @@ import {
   type SourceCompany,
   type SourceCompanyWithUsage,
 } from "./source-companies";
+import {
+  deleteSourceCompanyLogoFiles,
+  resolveSourceCompanyLogoUrls,
+  uploadSourceCompanyLogoFile,
+} from "./source-company-logo";
 
 export type SourceCompanyError =
   | "not_authorized"
@@ -26,6 +31,9 @@ export type SourceCompanyError =
   | "invalid_dpd_target"
   | "invalid_incentive_rate"
   | "incentive_effective_from_required"
+  | "logo_file_too_large"
+  | "logo_invalid_type"
+  | "logo_upload_failed"
   | "save_failed";
 
 const KNOWN_ERRORS = new Set<string>([
@@ -40,13 +48,21 @@ const KNOWN_ERRORS = new Set<string>([
   "invalid_dpd_target",
   "invalid_incentive_rate",
   "incentive_effective_from_required",
+  "invalid_logo_key",
 ]);
+
+const LOGO_ERRORS: Record<string, SourceCompanyError> = {
+  file_too_large: "logo_file_too_large",
+  invalid_type: "logo_invalid_type",
+  upload_failed: "logo_upload_failed",
+};
 
 async function requirePermission(slug: Permission) {
   const session = await getSessionUser();
   if (!session || !hasPermissionInSet(session.permissions, slug, session.isSuperAdmin)) {
     throw new Error("not_authorized");
   }
+  return session;
 }
 
 async function loadCompanies(
@@ -55,7 +71,7 @@ async function loadCompanies(
   const { data, error } = await db
     .from("source_companies")
     .select(
-      "key, name, client_code, is_active, is_system, sort_order, dpd_target, incentive_enabled, incentive_above_kwd, incentive_below_kwd, effective_from",
+      "key, name, client_code, is_active, is_system, logo_url, sort_order, dpd_target, incentive_enabled, incentive_above_kwd, incentive_below_kwd, effective_from",
     )
     .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
@@ -87,7 +103,9 @@ export async function listSourceCompaniesWithUsage(): Promise<SourceCompanyWithU
       (row.rider_category ?? "in_house") === "in_house" ? system : row.source_company;
     if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  return companies.map((c) => ({ ...c, driver_count: counts.get(c.key) ?? 0 }));
+  return resolveSourceCompanyLogoUrls(
+    companies.map((c) => ({ ...c, driver_count: counts.get(c.key) ?? 0 })),
+  );
 }
 
 export async function upsertSourceCompany(input: {
@@ -101,9 +119,14 @@ export async function upsertSourceCompany(input: {
   incentiveAboveKwd: number | null;
   incentiveBelowKwd: number | null;
   effectiveFrom: string | null;
+  /** New logo picked in the modal; uploaded before the row is saved. */
+  logoFile?: File | null;
+  /** Clear the stored logo and delete its R2 object. */
+  removeLogo?: boolean;
 }): Promise<{ ok: true } | { error: SourceCompanyError }> {
+  let session;
   try {
-    await requirePermission(input.isNew ? "companies.create" : "companies.edit");
+    session = await requirePermission(input.isNew ? "companies.create" : "companies.edit");
   } catch {
     return { error: "not_authorized" };
   }
@@ -118,11 +141,25 @@ export async function upsertSourceCompany(input: {
   const { data: before } = await db
     .from("source_companies")
     .select(
-      "key, name, client_code, is_active, dpd_target, incentive_enabled, incentive_above_kwd, incentive_below_kwd, effective_from",
+      "key, name, client_code, is_active, logo_url, dpd_target, incentive_enabled, incentive_above_kwd, incentive_below_kwd, effective_from",
     )
     .eq("key", key)
     .maybeSingle();
   if (input.isNew && before) return { error: "company_key_taken" };
+
+  // A picked file wins over the stored key; `removeLogo` clears it. Absent both
+  // we send nothing, so a name-only save cannot wipe an existing logo.
+  let logoUrl: string | null | undefined;
+  const beforeLogo = (before as { logo_url?: string | null } | null)?.logo_url ?? null;
+  if (input.removeLogo) {
+    await deleteSourceCompanyLogoFiles(key);
+    logoUrl = null;
+  } else if (input.logoFile && input.logoFile.size > 0) {
+    await deleteSourceCompanyLogoFiles(key);
+    const upload = await uploadSourceCompanyLogoFile(key, input.logoFile, session.id);
+    if (upload.error) return { error: LOGO_ERRORS[upload.error] ?? "logo_upload_failed" };
+    logoUrl = upload.logoUrl ?? null;
+  }
 
   // `adminUpsertSourceCompany` (functions/src/rpcs/rules.ts) reads the camelCase
   // names, not the `p_*` SQL spelling — sending `p_key` left `key` empty and
@@ -137,8 +174,11 @@ export async function upsertSourceCompany(input: {
     incentiveAboveKwd: input.incentiveAboveKwd ?? undefined,
     incentiveBelowKwd: input.incentiveBelowKwd ?? undefined,
     effectiveFrom: input.effectiveFrom ?? undefined,
+    logoUrl,
   });
   if (error) {
+    // The row never moved, so a freshly uploaded object would be orphaned.
+    if (logoUrl !== undefined) await deleteSourceCompanyLogoFiles(key);
     const code = KNOWN_ERRORS.has(error.message) ? error.message : "save_failed";
     return { error: code as SourceCompanyError };
   }
@@ -154,6 +194,7 @@ export async function upsertSourceCompany(input: {
       name,
       client_code: clientCode,
       is_active: input.isActive,
+      logo_url: logoUrl !== undefined ? logoUrl : beforeLogo,
       dpd_target: input.dpdTarget,
       incentive_enabled: input.incentiveEnabled,
       incentive_above_kwd: input.incentiveAboveKwd,

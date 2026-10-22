@@ -14,6 +14,7 @@ import {
   type ImportIdentitySeen,
 } from "./import/import-identity";
 import { getFirebaseAuth } from "@/lib/firebase/admin";
+import type { Auth } from "firebase-admin/auth";
 import type { Json } from "@/types/database";
 import { civilIdExists, staffClient, type StaffClient } from "./driver-uniqueness";
 import { intakeMissingApprovalFields } from "./driver-approve-validation";
@@ -47,10 +48,23 @@ import {
   parseImportOffDays,
 } from "./import/import-off-days";
 import {
+  isClearToken,
+  isValidImportIban,
+  isValidImportPassport,
+  normalizeImportAccountNumber,
+  normalizeImportIban,
+  normalizeImportPassport,
   parseImportActive,
+  parseImportDate,
   parseImportVehicleType,
+  parseImportYesNo,
   parseRiderCategory,
 } from "./import/parse";
+import { isDriverProjectKey, type DriverProjectKey } from "@/features/fleet/fleet-labels";
+import {
+  DRIVER_IMPORT_EXPIRY_FIELDS,
+  type DriverImportExpiryField,
+} from "./types";
 import { kuwaitToday } from "@/features/performance/performance-formulas";
 import {
   companyMatchesCategory,
@@ -58,9 +72,12 @@ import {
   type SourceCompany,
 } from "./source-companies";
 import {
+  buildEmployeeCatalogIndex,
   buildPartnerIndex,
   buildRestaurantIndex,
   buildZoneIndex,
+  resolveEmployeeCatalogToken,
+  resolveEmployeeCatalogTokens,
   resolvePartnerToken,
   resolveRestaurantTokens,
   resolveZoneToken,
@@ -130,6 +147,61 @@ function syntheticDriverEmail(driverCode: string): string {
   return `${driverCode.trim().toLowerCase()}@driver.dpd.local`;
 }
 
+function authErrorCode(error: unknown): string {
+  if (typeof error === "object" && error && "code" in error) {
+    return String((error as { code: unknown }).code).toLowerCase();
+  }
+  return "";
+}
+
+/**
+ * The login an approval runs on.
+ *
+ * `admin_approve_driver` re-adopts a live driver row when the intake is the same
+ * rider, and in that case the id it returns is the *existing* driver — so a login
+ * this call minted would be an orphan holding the rider's phone number, and the
+ * next attempt would fail on that number instead of finishing the approval. A
+ * retried approval can also find the synthetic address already taken by the
+ * previous attempt, which must be reused rather than reported as a phone clash.
+ */
+async function resolveDriverAuthUser(
+  authAdmin: Auth,
+  email: string,
+  displayName: string,
+  phone: string | undefined,
+): Promise<{ userId: string; created: boolean } | null> {
+  const existing = await authAdmin.getUserByEmail(email).catch(() => null);
+  if (existing) return { userId: existing.uid, created: false };
+
+  try {
+    const user = await authAdmin.createUser({
+      email,
+      emailVerified: true,
+      displayName,
+      ...(phone ? { phoneNumber: phone } : {}),
+    });
+    return { userId: user.uid, created: true };
+  } catch (error) {
+    const code = authErrorCode(error);
+    if (code.includes("email-already-exists")) {
+      const raced = await authAdmin.getUserByEmail(email).catch(() => null);
+      return raced ? { userId: raced.uid, created: false } : null;
+    }
+    if (!code.includes("phone")) return null;
+  }
+
+  // The number is already on another login. The profile still carries it, so the
+  // address alone is enough to finish the approval.
+  try {
+    const user = await authAdmin.createUser({ email, emailVerified: true, displayName });
+    return { userId: user.uid, created: true };
+  } catch (error) {
+    if (!authErrorCode(error).includes("email-already-exists")) return null;
+    const raced = await authAdmin.getUserByEmail(email).catch(() => null);
+    return raced ? { userId: raced.uid, created: false } : null;
+  }
+}
+
 export async function approveDriverIntake(
   intakeId: string,
 ): Promise<ApproveDriverResult> {
@@ -164,7 +236,7 @@ export async function approveDriverIntake(
   }
 
   const civilIdNormalized = normalizeCivilId(intake.civil_id ?? "");
-  if (civilIdNormalized && (await civilIdExists(civilIdNormalized, intakeId))) {
+  if (civilIdNormalized && (await civilIdExists(civilIdNormalized, intakeId, intake.employee_id))) {
     return { error: "civil_id_exists" };
   }
 
@@ -173,26 +245,9 @@ export async function approveDriverIntake(
   if (!authAdmin) return { error: "save_failed" };
 
   const intakePhone = intake.phone?.trim() ? intake.phone.trim() : undefined;
-  let userId: string;
-  try {
-    const user = await authAdmin.createUser({
-      email,
-      emailVerified: true,
-      displayName: intake.full_name,
-      ...(intakePhone ? { phoneNumber: intakePhone } : {}),
-    });
-    userId = user.uid;
-  } catch (error) {
-    const code =
-      typeof error === "object" && error && "code" in error
-        ? String((error as { code: unknown }).code)
-        : "";
-    const msg = error instanceof Error ? error.message.toLowerCase() : "";
-    if (code.includes("phone") || msg.includes("phone") || msg.includes("already")) {
-      return { error: "phone_exists" };
-    }
-    return { error: "save_failed" };
-  }
+  const resolved = await resolveDriverAuthUser(authAdmin, email, intake.full_name, intakePhone);
+  if (!resolved) return { error: "save_failed" };
+  const { userId, created: createdAuthUser } = resolved;
 
   const { data: rpcRaw, error: rpcError } = await db.rpc("admin_approve_driver", {
     p_intake_id: intakeId,
@@ -201,10 +256,12 @@ export async function approveDriverIntake(
   });
 
   if (rpcError) {
-    try {
-      await authAdmin.deleteUser(userId);
-    } catch {
-      /* rollback */
+    if (createdAuthUser) {
+      try {
+        await authAdmin.deleteUser(userId);
+      } catch {
+        /* rollback */
+      }
     }
     return { error: "save_failed" };
   }
@@ -217,10 +274,12 @@ export async function approveDriverIntake(
   };
 
   if (!payload.ok) {
-    try {
-      await authAdmin.deleteUser(userId);
-    } catch {
-      /* rollback */
+    if (createdAuthUser) {
+      try {
+        await authAdmin.deleteUser(userId);
+      } catch {
+        /* rollback */
+      }
     }
     const err = payload.error ?? "save_failed";
     if (err === "driver_missing_active_restaurant" || err === "driver_missing_assignment") {
@@ -234,6 +293,16 @@ export async function approveDriverIntake(
     if (err === "not_authorized") return { error: "not_authorized" };
     if (err === "missing_fields") return { error: "missing_fields" };
     return { error: err };
+  }
+
+  if (createdAuthUser && payload.driver_id && payload.driver_id !== userId) {
+    // The intake was re-adopted onto a driver that already existed, so the login
+    // minted here belongs to nobody and would hold the rider's number hostage.
+    try {
+      await authAdmin.deleteUser(userId);
+    } catch {
+      /* orphan login */
+    }
   }
 
   void logAdminMutation({
@@ -276,6 +345,10 @@ export async function resolveDriverImportPreview(
     { data: drivers },
     { data: profiles },
     { data: companyRows },
+    { data: statusRows },
+    { data: sectionRows },
+    { data: nationalityCategoryRows },
+    { data: bankRows },
   ] = await Promise.all([
     db.from("partners").select("id, name"),
     db.from("zones").select("id, name, code"),
@@ -296,8 +369,22 @@ export async function resolveDriverImportPreview(
       .select(
         "key, name, client_code, is_active, is_system, sort_order, dpd_target, incentive_enabled, incentive_above_kwd, incentive_below_kwd, effective_from",
       ),
+    db.from("employee_statuses").select("key, label_en, label_ar, is_active"),
+    db.from("employee_sections").select("key, label_en, label_ar, is_active"),
+    db.from("nationality_categories").select("key, label_en, label_ar, is_active"),
+    db.from("bank_codes").select("key, label_en, label_ar, is_active"),
   ]);
   const companies: SourceCompany[] = companyRows ?? [];
+  const catalog = (rows: Array<{ key: string; label_en: string; label_ar: string }> | null) =>
+    (rows ?? []).map((row) => ({
+      key: row.key,
+      name: row.label_en,
+      name_ar: row.label_ar,
+    }));
+  const statusIndex = buildEmployeeCatalogIndex(catalog(statusRows));
+  const sectionIndex = buildEmployeeCatalogIndex(catalog(sectionRows));
+  const nationalityCategoryIndex = buildEmployeeCatalogIndex(catalog(nationalityCategoryRows));
+  const bankIndex = buildEmployeeCatalogIndex(catalog(bankRows));
 
   const partnerIndex = buildPartnerIndex(
     (partners ?? []).map((p) => ({ id: p.id, name: p.name })),
@@ -365,6 +452,7 @@ export async function resolveDriverImportPreview(
     civils: new Map(),
   };
   const monthDays = kuwaitCalendarMonthDays(kuwaitToday());
+  const passportSeen = new Map<string, number>();
 
   return rows.map((row) => {
     let partner_id: string | null = null;
@@ -382,6 +470,24 @@ export async function resolveDriverImportPreview(
     let client_name: string | null = null;
     let active: boolean | null = null;
     let off_days: number | null = null;
+    let passport_number: string | null = null;
+    let employee_status_key: string | null = null;
+    let employee_status_name: string | null = null;
+    let section_keys: string[] = [];
+    let section_names: string[] = [];
+    let nationality_category_keys: string[] = [];
+    let nationality_category_names: string[] = [];
+    let project_key: DriverProjectKey | null = null;
+    let accommodation: string | null = null;
+    let joined_at: string | null = null;
+    let screenshots_allowed: boolean | null = null;
+    let login_verification_exempt: boolean | null = null;
+    let bank_code: string | null = null;
+    let bank_code_name: string | null = null;
+    let account_number: string | null = null;
+    let iban: string | null = null;
+    let beneficiary_civil_id: string | null = null;
+    const expiries: Partial<Record<DriverImportExpiryField, string | null>> = {};
 
     const identity = evaluateImportIdentity(row, roster, seen);
     let status: DriverImportPreviewStatus = identity.status;
@@ -432,7 +538,7 @@ export async function resolveDriverImportPreview(
       }
     }
 
-    if (lookupStillOpen() && !hasOpsAssignment(zone_id, restaurant_ids)) {
+    if (lookupStillOpen() && !existingByEmployeeId && !hasOpsAssignment(zone_id, restaurant_ids)) {
       status = "missing_assignment";
     }
 
@@ -484,6 +590,172 @@ export async function resolveDriverImportPreview(
       else off_days = parsedOff.offDays;
     }
 
+    if (lookupStillOpen() && row.present.passport_number) {
+      if (isClearToken(row.passport_number)) {
+        passport_number = null;
+      } else {
+        const normalized = normalizeImportPassport(row.passport_number);
+        if (normalized && !isValidImportPassport(normalized)) status = "invalid_passport";
+        else if (normalized && passportSeen.has(normalized)) status = "duplicate_passport";
+        else {
+          passport_number = normalized;
+          if (normalized) passportSeen.set(normalized, row.rowIndex);
+        }
+      }
+    }
+
+    if (lookupStillOpen() && row.present.employee_status_key) {
+      if (isClearToken(row.employee_status_key)) {
+        employee_status_key = null;
+      } else {
+        const hit = resolveEmployeeCatalogToken(row.employee_status_key, statusIndex);
+        if (hit.status === "ok") {
+          employee_status_key = hit.key;
+          employee_status_name = hit.name;
+        } else {
+          status = "invalid_employee_status";
+        }
+      }
+    }
+
+    if (lookupStillOpen() && row.present.section_keys) {
+      if (isClearToken(row.section_keys)) {
+        section_keys = [];
+      } else {
+        const hit = resolveEmployeeCatalogTokens(row.section_keys, sectionIndex);
+        if (hit.status === "ok") {
+          section_keys = hit.keys;
+          section_names = hit.names;
+        } else {
+          status = "invalid_section";
+        }
+      }
+    }
+
+    if (lookupStillOpen() && row.present.nationality_category_keys) {
+      if (isClearToken(row.nationality_category_keys)) {
+        nationality_category_keys = [];
+      } else {
+        const hit = resolveEmployeeCatalogTokens(
+          row.nationality_category_keys,
+          nationalityCategoryIndex,
+        );
+        if (hit.status === "ok") {
+          nationality_category_keys = hit.keys;
+          nationality_category_names = hit.names;
+        } else {
+          status = "invalid_nationality_category";
+        }
+      }
+    }
+
+    if (lookupStillOpen() && row.present.project_key) {
+      if (isClearToken(row.project_key)) {
+        project_key = null;
+      } else {
+        const normalized = (row.project_key ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+        if (isDriverProjectKey(normalized)) project_key = normalized;
+        else status = "invalid_project";
+      }
+    }
+
+    if (lookupStillOpen() && row.present.accommodation) {
+      accommodation = isClearToken(row.accommodation)
+        ? null
+        : (row.accommodation ?? "").trim() || null;
+    }
+
+    if (lookupStillOpen() && row.present.joined_at) {
+      if (isClearToken(row.joined_at)) {
+        joined_at = null;
+      } else {
+        joined_at = parseImportDate(row.joined_at);
+        if (!joined_at) status = "invalid_date";
+      }
+    }
+
+    if (lookupStillOpen() && row.present.screenshots_allowed) {
+      if (isClearToken(row.screenshots_allowed)) {
+        screenshots_allowed = null;
+      } else {
+        const parsed = parseImportYesNo(row.screenshots_allowed);
+        if (parsed === "invalid") status = "invalid_yes_no";
+        else screenshots_allowed = parsed;
+      }
+    }
+
+    if (lookupStillOpen() && row.present.login_verification_exempt) {
+      if (isClearToken(row.login_verification_exempt)) {
+        login_verification_exempt = null;
+      } else {
+        const parsed = parseImportYesNo(row.login_verification_exempt);
+        if (parsed === "invalid") status = "invalid_yes_no";
+        else login_verification_exempt = parsed;
+      }
+    }
+
+    if (lookupStillOpen() && row.present.bank_code) {
+      if (isClearToken(row.bank_code)) {
+        bank_code = null;
+      } else {
+        const hit = resolveEmployeeCatalogToken(row.bank_code, bankIndex);
+        if (hit.status === "ok") {
+          bank_code = hit.key;
+          bank_code_name = hit.name;
+        } else {
+          status = "invalid_bank_code";
+        }
+      }
+    }
+
+    if (lookupStillOpen() && row.present.account_number) {
+      if (isClearToken(row.account_number)) {
+        account_number = null;
+      } else {
+        account_number = normalizeImportAccountNumber(row.account_number);
+        if (!account_number || !/^\d{6,20}$/.test(account_number)) {
+          status = "invalid_account_number";
+        }
+      }
+    }
+
+    if (lookupStillOpen() && row.present.iban) {
+      if (isClearToken(row.iban)) {
+        iban = null;
+      } else {
+        iban = normalizeImportIban(row.iban);
+        if (!iban || !isValidImportIban(iban)) status = "invalid_iban";
+      }
+    }
+
+    if (lookupStillOpen() && row.present.beneficiary_civil_id) {
+      if (isClearToken(row.beneficiary_civil_id)) {
+        beneficiary_civil_id = null;
+      } else {
+        const rawCivil = (row.beneficiary_civil_id ?? "").trim();
+        beneficiary_civil_id = normalizeCivilId(rawCivil) ?? rawCivil;
+        if (!/^\d{12}$/.test(beneficiary_civil_id)) status = "invalid_beneficiary_civil_id";
+      }
+    }
+
+    if (lookupStillOpen()) {
+      for (const field of DRIVER_IMPORT_EXPIRY_FIELDS) {
+        if (!row.present[field]) continue;
+        const raw = row[field];
+        if (isClearToken(raw)) {
+          expiries[field] = null;
+          continue;
+        }
+        if (!raw?.trim()) continue;
+        const ymd = parseImportDate(raw);
+        if (!ymd) {
+          status = "invalid_date";
+          break;
+        }
+        expiries[field] = `${ymd}T00:00:00+03:00`;
+      }
+    }
+
     if (lookupStillOpen() && existingByEmployeeId) {
       status = "duplicate_employee_id";
     }
@@ -507,6 +779,24 @@ export async function resolveDriverImportPreview(
       client_name,
       active,
       off_days,
+      passport_number,
+      employee_status_key,
+      employee_status_name,
+      section_keys,
+      section_names,
+      nationality_category_keys,
+      nationality_category_names,
+      project_key,
+      accommodation,
+      joined_at,
+      screenshots_allowed,
+      login_verification_exempt,
+      bank_code,
+      bank_code_name,
+      account_number,
+      iban,
+      beneficiary_civil_id,
+      expiries,
     };
   });
 }
@@ -558,7 +848,13 @@ export async function applyOneImportRow(
   const civilId = row.civil_id?.trim() ? normalizeCivilId(row.civil_id) : null;
   const employeeId = normalizeEmployeeId(row.employee_id!);
   if (!employeeId) return fail("missing_fields");
-  if (!hasOpsAssignment(row.zone_id, row.restaurant_ids)) {
+  // A partial sheet that updates an existing rider does not have to repeat the
+  // zone / restaurant columns; a brand-new rider still needs an assignment.
+  const carriesAssignment = Boolean(row.present.zone_id || row.present.restaurant_ids);
+  if (
+    carriesAssignment &&
+    !hasOpsAssignment(row.zone_id, row.restaurant_ids)
+  ) {
     return fail("missing_assignment");
   }
 
@@ -601,68 +897,78 @@ export async function applyOneImportRow(
       alreadyLinked = Boolean(existing.linked || existing.linked_profile_id);
       const prior = await loadIntakeProfileSnapshot(ctx.db, existing.id);
       beforeSnap = prior?.snapshot ?? {};
+      // Only the columns the sheet actually carries are written. A blank cell
+      // (or an unmapped column) leaves the stored value alone; `-` arrives as
+      // null and clears it on purpose.
+      const intakePatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      const put = (field: keyof typeof row.present, column: string, value: unknown) => {
+        if (row.present[field]) intakePatch[column] = value;
+      };
+      put("phone", "phone", phone);
+      put("full_name", "full_name", row.full_name?.trim() ?? null);
+      put("civil_id", "civil_id", civilId);
+      intakePatch.employee_id = employeeId;
+      put("partner_id", "partner_id", row.partner_id);
+      put("zone_id", "zone_id", row.zone_id);
+      put("vehicle_label", "vehicle_id", row.vehicle_id);
+      put("vehicle_type", "vehicle_type_key", row.vehicle_type_key ?? "bike");
+      put("nationality", "nationality", row.nationality);
+      put("rider_category", "rider_category", row.rider_category);
+      put("source_company", "source_company", row.source_company);
+      put("client_id", "client_id", row.client_id);
+      put("client_name", "client_name", row.client_name);
       const { error: updErr } = await ctx.db
         .from("driver_intakes")
-        .update({
-          phone,
-          full_name: row.full_name!.trim(),
-          civil_id: civilId,
-          employee_id: employeeId,
-          partner_id: row.partner_id,
-          zone_id: row.zone_id,
-          vehicle_id: row.vehicle_id,
-          vehicle_type_key: row.vehicle_type_key ?? "bike",
-          nationality: row.nationality,
-          rider_category: row.rider_category,
-          source_company: row.source_company,
-          client_id: row.client_id,
-          client_name: row.client_name,
-          updated_at: new Date().toISOString(),
-        })
+        .update(intakePatch)
         .eq("id", existing.id);
 
       if (updErr) return fail(updErr.message);
       intakeId = existing.id;
       driverCode = existing.driver_code;
       updated = true;
-      await ctx.db
-        .from("driver_intake_restaurants")
-        .delete()
-        .eq("intake_id", intakeId);
+      if (row.present.restaurant_ids) {
+        await ctx.db
+          .from("driver_intake_restaurants")
+          .delete()
+          .eq("intake_id", intakeId);
+      }
 
       if (existing.linked_profile_id) {
         const linkedId = existing.linked_profile_id;
         linkedDriverId = linkedId;
+        const driverPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        const putDriver = (field: keyof typeof row.present, column: string, value: unknown) => {
+          if (row.present[field]) driverPatch[column] = value;
+        };
+        putDriver("partner_id", "partner_id", row.partner_id);
+        putDriver("zone_id", "zone_id", row.zone_id);
+        putDriver("vehicle_label", "vehicle_id", row.vehicle_id);
+        putDriver("vehicle_type", "vehicle_type_key", row.vehicle_type_key ?? "bike");
+        putDriver("civil_id", "civil_id", civilId);
+        driverPatch.employee_id = employeeId;
+        putDriver("nationality", "nationality", row.nationality);
+        putDriver("rider_category", "rider_category", row.rider_category);
+        putDriver("source_company", "source_company", row.source_company);
+        putDriver("client_id", "client_id", row.client_id);
+        putDriver("client_name", "client_name", row.client_name);
         const { error: driverErr } = await ctx.db
           .from("drivers")
-          .update({
-            partner_id: row.partner_id,
-            zone_id: row.zone_id,
-            vehicle_id: row.vehicle_id,
-            vehicle_type_key: row.vehicle_type_key ?? "bike",
-            civil_id: civilId,
-            employee_id: employeeId,
-            nationality: row.nationality,
-            rider_category: row.rider_category,
-            source_company: row.source_company,
-            client_id: row.client_id,
-            client_name: row.client_name,
-            updated_at: new Date().toISOString(),
-          })
+          .update(driverPatch)
           .eq("id", linkedId);
         if (driverErr) return fail(driverErr.message);
-        await ctx.db
+        const profilePatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (row.present.full_name) profilePatch.full_name = row.full_name?.trim() ?? null;
+        if (row.present.phone) profilePatch.phone = phone;
+        const { error: profileErr } = await ctx.db
           .from("profiles")
-          .update({
-            full_name: row.full_name!.trim(),
-            phone,
-            updated_at: new Date().toISOString(),
-          })
+          .update(profilePatch)
           .eq("id", linkedId);
-        const { data: existingLinks } = await ctx.db
-          .from("driver_restaurants")
-          .select("restaurant_id")
-          .eq("driver_id", linkedId);
+        if (profileErr) return fail(profileErr.message);
+        if (row.present.restaurant_ids) {
+          const { data: existingLinks } = await ctx.db
+            .from("driver_restaurants")
+            .select("restaurant_id")
+            .eq("driver_id", linkedId);
         const have = new Set((existingLinks ?? []).map((r) => r.restaurant_id));
         const want = new Set(row.restaurant_ids);
         const toAdd = row.restaurant_ids.filter((id) => !have.has(id));
@@ -679,6 +985,7 @@ export async function applyOneImportRow(
             .delete()
             .eq("driver_id", linkedId)
             .in("restaurant_id", toRemove);
+        }
         }
       }
     }
@@ -745,7 +1052,7 @@ export async function applyOneImportRow(
     driverCode = String(code);
   }
 
-  if (row.restaurant_ids.length > 0) {
+  if (row.present.restaurant_ids && row.restaurant_ids.length > 0) {
     const { error: linkErr } = await ctx.db.from("driver_intake_restaurants").insert(
       row.restaurant_ids.map((restaurant_id) => ({
         intake_id: intakeId!,

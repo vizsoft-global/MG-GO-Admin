@@ -60,6 +60,13 @@ export const ADJUSTMENT_STATUSES = [
   "accident",
   "vehicle",
   "custom",
+  "cancelled",
+  "leave",
+  "terminated",
+  "phone_issue",
+  "id_suspended",
+  "new_hire",
+  "training",
 ] as const;
 export type AdjustmentStatus = (typeof ADJUSTMENT_STATUSES)[number];
 
@@ -131,6 +138,13 @@ export const ADJUSTMENT_STATUS_TO_DAY: Record<Exclude<AdjustmentStatus, "auto">,
   accident: "accident",
   vehicle: "vehicle",
   custom: "custom",
+  cancelled: "cancelled",
+  leave: "leave",
+  terminated: "terminated",
+  phone_issue: "phone_issue",
+  id_suspended: "id_suspended",
+  new_hire: "new_hire",
+  training: "training",
 };
 
 /* ------------------------------------------------------------------ */
@@ -473,6 +487,13 @@ export function hoursForStatus(
     case "absent":
     case "abs_lh":
     case "abs_lo":
+    case "cancelled":
+    case "leave":
+    case "terminated":
+    case "phone_issue":
+    case "id_suspended":
+    case "new_hire":
+    case "training":
     case "blank":
       return 0;
     default: {

@@ -55,6 +55,8 @@ const REASON_MIN = 8;
 const REASON_MAX = 500;
 const LIST_DEFAULT = 50;
 const LIST_MAX = 200;
+/** An explicit export may read a wider window than one page of the queue. */
+const EXPORT_MAX = 1000;
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
@@ -348,7 +350,14 @@ export const adminListOrderExceptions = onCall(async (request) => {
   const fromDay = pickText(data, "from", "p_from");
   const toDay = pickText(data, "to", "p_to");
   const search = (pickText(data, "search", "p_search") ?? "").toLowerCase();
-  const limit = Math.min(Math.max(pickCount(data, LIST_DEFAULT, "limit", "p_limit"), 1), LIST_MAX);
+  /**
+   * An export asks for a wider window than a page can hold, and says so with
+   * `export: true`. Without it the queue keeps its 200-row ceiling, so a stray
+   * client cannot turn one list call into a full-collection scan.
+   */
+  const exportMode = data["export"] === true;
+  const maxLimit = exportMode ? EXPORT_MAX : LIST_MAX;
+  const limit = Math.min(Math.max(pickCount(data, LIST_DEFAULT, "limit", "p_limit"), 1), maxLimit);
   const offset = Math.max(pickCount(data, 0, "offset", "p_offset"), 0);
 
   const db = getFirestore();
@@ -360,7 +369,7 @@ export const adminListOrderExceptions = onCall(async (request) => {
     query = query.where("source", "==", source);
   }
 
-  const snap = await query.orderBy("created_at", "desc").limit(LIST_MAX * 4).get();
+  const snap = await query.orderBy("created_at", "desc").limit(maxLimit * 2).get();
   const all = snap.docs.map((doc) => serialiseException(doc.id, doc.data() as Dict));
 
   const windowed = all.filter((row) => {

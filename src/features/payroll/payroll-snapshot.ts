@@ -1217,6 +1217,27 @@ export function parseAdjustmentCellText(
   if (["vehicle", "vehicle issue", "vehicle_issue", "veh"].includes(lower)) {
     return { status: "vehicle", hours: null };
   }
+  if (["cancelled", "canceled", "cancel", "cancelled order"].includes(lower)) {
+    return { status: "cancelled", hours: null };
+  }
+  if (["leave", "leaves"].includes(lower)) {
+    return { status: "leave", hours: null };
+  }
+  if (["terminated", "terminate", "term"].includes(lower)) {
+    return { status: "terminated", hours: null };
+  }
+  if (["phone", "phone issue", "phone_issue", "phoneissues"].includes(lower)) {
+    return { status: "phone_issue", hours: null };
+  }
+  if (["id suspended", "id_suspended", "id susp", "id suspension", "suspended"].includes(lower)) {
+    return { status: "id_suspended", hours: null };
+  }
+  if (["new hire", "new_hire", "newhire"].includes(lower)) {
+    return { status: "new_hire", hours: null };
+  }
+  if (["training", "train", "trained"].includes(lower)) {
+    return { status: "training", hours: null };
+  }
   if (lower === "act" || lower === "actual" || lower === "actual hours") {
     return { status: "actual", hours: null };
   }

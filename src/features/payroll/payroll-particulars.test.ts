@@ -16,8 +16,30 @@ import {
 } from "./payroll-snapshot";
 
 describe("payroll particulars catalog", () => {
-  it("keeps every existing adjustment status, including half as 6 Hours / Half Day", () => {
-    assert.deepEqual([...EDITOR_ADJUSTMENT_STATUSES], [...ADJUSTMENT_STATUSES]);
+  it("keeps every SOP particular, including half as 6 Hours / Half Day", () => {
+    assert.deepEqual([...EDITOR_ADJUSTMENT_STATUSES], [
+      "12",
+      "3h",
+      "half",
+      "sick",
+      "off",
+      "accident",
+      "absent",
+      "cancelled",
+      "leave",
+      "terminated",
+      "phone_issue",
+      "id_suspended",
+      "vehicle",
+      "new_hire",
+      "training",
+    ]);
+    // Every SOP particular must be a real adjustment status, or a saved cell could not be reopened.
+    assert.ok(
+      EDITOR_ADJUSTMENT_STATUSES.every((status) =>
+        (ADJUSTMENT_STATUSES as readonly string[]).includes(status),
+      ),
+    );
     assert.equal(ADJUSTMENT_STATUS_TO_DAY.half, "half");
     assert.equal(particularForAdjustment("half"), "6h");
     assert.equal(dayGridLabel("half", 6), "6h");

@@ -43,6 +43,7 @@ import {
   type Dict,
 } from "./_shared";
 import { intakeAssigned, restaurantIdsFromEdges } from "./drivers-assignment";
+import { pickReusableDriver, type LiveDriverClash } from "./driver-approval-reuse";
 
 const DRIVER_CODE_COUNTER = "driver_code_seq";
 const DRIVER_CODE_FLOOR = 10000;
@@ -123,6 +124,101 @@ function lockValues(intake: Dict): Array<{ field: LockField; value: string }> {
   return out;
 }
 
+/**
+ * Ids among `ids` that no longer hold an identity, because the record behind them
+ * cannot be signed in as or has been archived.
+ *
+ * The SQL schema this replaces was a *partial* unique index —
+ * `WHERE archived_at IS NULL` — so an archived intake or an archived driver never
+ * blocked the identity, and identity locks were released on archive. Two shapes
+ * still hold a lock they should not:
+ *
+ * - an archived driver or intake whose lock was never deleted (the archive path is
+ *   the only place that releases them, so a row archived by any other route keeps it);
+ * - a live driver row with no `profiles/{id}` document, which sign-in reads, so it is
+ *   the debris a refused approval leaves when the driver row landed but the profile
+ *   write did not.
+ *
+ * Both would otherwise keep a rider in Verify & Approve for an identity nobody holds.
+ *
+ * `liveDriverRows` is the second half of the answer: the *live* driver documents among
+ * those ids. They are what has to be retired when the identity is reclaimed, because a
+ * row that cannot sign in still lists in the roster beside the rider who now owns the
+ * number.
+ */
+type ReleasableHolders = {
+  ids: Set<string>;
+  liveDriverRows: DocumentSnapshot[];
+};
+
+async function releasableIdentityHolders(
+  db: Firestore,
+  reader: Reader,
+  ids: readonly string[],
+): Promise<ReleasableHolders> {
+  if (ids.length === 0) return { ids: new Set(), liveDriverRows: [] };
+  const [driverSnaps, profileSnaps, intakeSnaps] = await Promise.all([
+    reader.getAll(ids.map((id) => db.collection(COLLECTIONS.drivers).doc(id))),
+    reader.getAll(ids.map((id) => db.collection(COLLECTIONS.profiles).doc(id))),
+    reader.getAll(ids.map((id) => db.collection(COLLECTIONS.driverIntakes).doc(id))),
+  ]);
+  const releasable = new Set<string>();
+  const liveDriverRows: DocumentSnapshot[] = [];
+  ids.forEach((id, index) => {
+    const driver = driverSnaps[index];
+    if (driver?.exists === true) {
+      const archived = dataOf(driver)["archived_at"] != null;
+      const hasProfile = profileSnaps[index]?.exists === true;
+      if (archived || !hasProfile) releasable.add(id);
+      // Live *and* unusable — the rows that hold the identity without being able to use
+      // it, so the approval has to retire them rather than list them twice.
+      if (!archived && !hasProfile) liveDriverRows.push(driver);
+      return;
+    }
+    const intake = intakeSnaps[index];
+    if (intake?.exists === true && dataOf(intake)["archived_at"] != null) releasable.add(id);
+  });
+  return { ids: releasable, liveDriverRows };
+}
+
+/**
+ * Retire the driver rows whose identity this approval reclaimed.
+ *
+ * Only a row that could not sign in is archived here, so nothing a rider can open is
+ * taken away — the row is the debris of a refused approval, and leaving it live is what
+ * shows one MG ID twice in the roster. The record itself is kept: `archived_at` moves it
+ * to the Archived tab, and the intake Restore path can bring it back.
+ */
+function archiveReclaimedDriverRows(
+  tx: Transaction,
+  rows: readonly DocumentSnapshot[],
+  uid: string,
+  now: Timestamp,
+): void {
+  const seen = new Set<string>([uid]);
+  for (const row of rows) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    tx.set(
+      row.ref,
+      {
+        archived_at: now,
+        archive_reason: "MG ID reclaimed by a newer approval",
+        updated_at: now,
+      },
+      { merge: true },
+    );
+  }
+}
+
+/** Every id a lock document names as its holder. */
+function lockHolderIds(snap: DocumentSnapshot): string[] {
+  const data = dataOf(snap);
+  return ["owner_id", "intake_id", "driver_id"]
+    .map((key) => textOrNull(data[key]))
+    .filter((value): value is string => value !== null);
+}
+
 function randomPasscode(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }
@@ -175,6 +271,67 @@ async function intakeOpsAssignment(
 type IntakeCheck =
   | { ok: false; error: string }
   | { ok: true; intake: Dict; restaurantIds: string[] };
+
+/**
+ * A live driver row created by an intake that has since been archived still
+ * holds this employee id, so `admin_approve_driver` would refuse with
+ * `employee_id_exists` for a rider who is simply being added again. When the
+ * row is provably the same rider it is re-adopted instead of blocking.
+ */
+async function reusableDriverId(
+  db: Firestore,
+  reader: Reader,
+  intake: Dict,
+): Promise<string | null> {
+  const employeeId = textOrNull(intake["employee_id"]);
+  if (!employeeId) return null;
+
+  const clashSnaps = await reader.query(
+    db.collection(COLLECTIONS.drivers).where("employee_id", "==", employeeId).limit(10),
+  );
+  const liveRows = clashSnaps.docs.filter((doc) => dataOf(doc)["archived_at"] == null);
+  if (liveRows.length === 0) return null;
+
+  const intakeIds = liveRows
+    .map((doc) => textOrNull(dataOf(doc)["intake_id"]))
+    .filter((id): id is string => id !== null);
+  const [intakeSnaps, profileSnaps] = await Promise.all([
+    intakeIds.length === 0
+      ? Promise.resolve([])
+      : reader.getAll(
+          intakeIds.map((id) => db.collection(COLLECTIONS.driverIntakes).doc(id)),
+        ),
+    reader.getAll(liveRows.map((doc) => db.collection(COLLECTIONS.profiles).doc(doc.id))),
+  ]);
+  const archivedById = new Map<string, boolean>();
+  for (const snap of intakeSnaps) {
+    archivedById.set(snap.id, snap.exists && dataOf(snap)["archived_at"] != null);
+  }
+  const profileById = new Map<string, boolean>();
+  for (const snap of profileSnaps) profileById.set(snap.id, snap.exists);
+
+  const clashes: LiveDriverClash[] = liveRows.map((doc) => {
+    const row = dataOf(doc);
+    const previousIntakeId = textOrNull(row["intake_id"]);
+    const previousArchived = previousIntakeId ? archivedById.get(previousIntakeId) : undefined;
+    return {
+      id: doc.id,
+      archivedAt: row["archived_at"],
+      fullName: row["full_name"] ?? row["name"],
+      phone: row["phone"],
+      previousIntake:
+        previousArchived === undefined ? "unknown" : previousArchived ? "archived" : "live",
+      hasProfile: profileById.get(doc.id) === true,
+    };
+  });
+
+  const decision = pickReusableDriver({
+    intakeName: intake["full_name"],
+    intakePhone: intake["phone"],
+    clashes,
+  });
+  return decision.kind === "reuse" ? decision.driverId : null;
+}
 
 /** The intake-only half of `admin_approve_driver`'s validation. */
 async function checkIntakeForApproval(
@@ -238,18 +395,20 @@ export const adminApproveDriver = onCall(async (request) => {
   const email = emailRaw.toLowerCase();
 
   const db = getFirestore();
-  const precheck = await checkIntakeForApproval(db, directReader(db), intakeId);
+  const precheckReader = directReader(db);
+  const precheck = await checkIntakeForApproval(db, precheckReader, intakeId);
   if (!precheck.ok) return { ok: false, error: precheck.error };
 
-  const { uid, created } = await resolveAuthUser(
-    requestedUserId,
-    email,
-    textOrNull(precheck.intake["full_name"]),
-  );
+  const adoptedId = await reusableDriverId(db, precheckReader, precheck.intake);
+  const { uid, created } = adoptedId
+    ? { uid: adoptedId, created: false }
+    : await resolveAuthUser(requestedUserId, email, textOrNull(precheck.intake["full_name"]));
 
   let result: Dict;
   try {
-    result = await db.runTransaction(async (tx) => approveInTransaction(db, tx, intakeId, uid, email));
+    result = await db.runTransaction(async (tx) =>
+      approveInTransaction(db, tx, intakeId, uid, email, adoptedId !== null),
+    );
   } catch (error) {
     if (created) await getAuth().deleteUser(uid).catch(() => undefined);
     throw error;
@@ -275,6 +434,7 @@ async function approveInTransaction(
   intakeId: string,
   uid: string,
   email: string,
+  adoptExisting: boolean,
 ): Promise<Dict> {
   const reader = txReader(tx);
   const check = await checkIntakeForApproval(db, reader, intakeId);
@@ -295,27 +455,69 @@ async function approveInTransaction(
     const clash = await reader.query(
       db.collection(COLLECTIONS.drivers).where("civil_id", "==", civilId).limit(5),
     );
-    if (clash.docs.some((doc) => doc.id !== uid)) return { ok: false, error: "civil_id_exists" };
+    // An archived rider released this identity when they were archived, so they cannot
+    // keep blocking it here — the Intake panel applies the same rule. A live row with no
+    // profile is the debris of a refused approval and cannot sign in either.
+    const liveClash = clash.docs.filter(
+      (doc) => doc.id !== uid && dataOf(doc)["archived_at"] == null,
+    );
+    if (liveClash.length > 0) {
+      const released = await releasableIdentityHolders(
+        db,
+        reader,
+        liveClash.map((doc) => doc.id),
+      );
+      if (liveClash.some((doc) => !released.ids.has(doc.id))) {
+        return { ok: false, error: "civil_id_exists" };
+      }
+    }
   }
 
   const driverRef = db.collection(COLLECTIONS.drivers).doc(uid);
   const driverSnap = await reader.get(driverRef);
-  if (driverSnap.exists) return { ok: false, error: "intake_already_linked" };
+  const adopt = adoptExisting && driverSnap.exists;
+  if (driverSnap.exists && !adopt) return { ok: false, error: "intake_already_linked" };
+  const previousDriver = adopt ? dataOf(driverSnap) : {};
+  const previousPasscode = adopt ? textOrNull(previousDriver["app_passcode"]) : null;
 
   const employeeClash = await reader.query(
     db.collection(COLLECTIONS.drivers).where("employee_id", "==", employeeId).limit(10),
   );
-  if (employeeClash.docs.some((doc) => doc.id !== uid && dataOf(doc)["archived_at"] == null)) {
-    return { ok: false, error: "employee_id_exists" };
+  const employeeClashDocs = employeeClash.docs.filter(
+    (doc) => doc.id !== uid && dataOf(doc)["archived_at"] == null,
+  );
+  /** Driver rows this approval is allowed to retire, because they cannot sign in. */
+  const reclaimedRows: DocumentSnapshot[] = [];
+  if (employeeClashDocs.length > 0) {
+    const released = await releasableIdentityHolders(
+      db,
+      reader,
+      employeeClashDocs.map((doc) => doc.id),
+    );
+    // A live row that can sign in is the rider who holds this id; a live row without a
+    // profile is the debris of a refused approval and is reclaimed below instead.
+    if (employeeClashDocs.some((doc) => !released.ids.has(doc.id))) {
+      return { ok: false, error: "employee_id_exists" };
+    }
+    reclaimedRows.push(...released.liveDriverRows);
   }
 
   const owners = new Set([intakeId, uid]);
   const locks = lockValues(intake);
   const lockSnaps = await reader.getAll(locks.map((lock) => lockRef(db, lock.field, lock.value)));
   for (let index = 0; index < locks.length; index += 1) {
-    if (!lockIsOurs(lockSnaps[index], owners)) {
-      return { ok: false, error: LOCK_ERRORS[locks[index].field] };
+    const snap = lockSnaps[index];
+    if (lockIsOurs(snap, owners)) continue;
+    // A lock held only by records that can no longer hold an identity — a profile-less
+    // driver row, or an archived driver / intake — is reclaimed: the lock is rewritten to
+    // this intake and driver further down.
+    const holders = lockHolderIds(snap);
+    const released = await releasableIdentityHolders(db, reader, holders);
+    if (holders.length > 0 && holders.every((id) => released.ids.has(id))) {
+      reclaimedRows.push(...released.liveDriverRows);
+      continue;
     }
+    return { ok: false, error: LOCK_ERRORS[locks[index].field] };
   }
 
   const profileRef = db.collection(COLLECTIONS.profiles).doc(uid);
@@ -327,9 +529,21 @@ async function approveInTransaction(
     reader.query(db.collection(COLLECTIONS.driverDocuments).where("driver_id", "==", uid)),
   ]);
 
-  const passcode = await pickFreePasscode(db, reader);
+  const previousPasscodeLock = previousPasscode
+    ? await reader.get(passcodeLockRef(db, previousPasscode))
+    : null;
+  const keepPasscode =
+    previousPasscode !== null &&
+    (previousPasscodeLock === null ||
+      !previousPasscodeLock.exists ||
+      lockIsOurs(previousPasscodeLock, new Set([uid, intakeId])));
+  const passcode = keepPasscode
+    ? (previousPasscode as string)
+    : await pickFreePasscode(db, reader);
 
   const now = Timestamp.now();
+  // Before the new row is written, so the two cannot both sit live in the roster.
+  archiveReclaimedDriverRows(tx, reclaimedRows, uid, now);
   const avatar = textOrNull(intake["avatar_url"]);
   const fullName = textOrNull(intake["full_name"]) as string;
   const driverCode = textOrNull(intake["driver_code"]);
@@ -360,40 +574,52 @@ async function approveInTransaction(
     { merge: true },
   );
 
-  tx.create(driverRef, {
-    id: uid,
-    name: fullName,
-    full_name: fullName,
-    driver_code: driverCode,
-    partner_id: intake["partner_id"] ?? null,
-    zone_id: intake["zone_id"] ?? null,
-    zone_name: intake["zone_name"] ?? null,
-    vehicle_id: intake["vehicle_id"] ?? null,
-    vehicle_type_key: intake["vehicle_type_key"] ?? null,
-    civil_id: civilId,
-    employee_id: employeeId,
-    nationality: intake["nationality"] ?? null,
-    rider_category: intake["rider_category"] ?? null,
-    client_id: intake["client_id"] ?? null,
-    client_name: intake["client_name"] ?? null,
-    project_key: intake["project_key"] ?? null,
-    accommodation: intake["accommodation"] ?? null,
-    source_company: intake["source_company"] ?? null,
-    custom_fields: intake["custom_fields"] ?? {},
-    restaurant_ids: restaurantIds,
-    intake_id: intakeId,
-    status: "active",
-    is_on_duty: false,
-    app_passcode: passcode,
-    avatar_object_key: avatar,
-    avatar_updated_at: avatar ? now : null,
-    archived_at: null,
-    created_at: now,
-    updated_at: now,
-    ...searchStamp,
-  });
+  const driverRow = {
+      id: uid,
+      name: fullName,
+      full_name: fullName,
+      driver_code: driverCode,
+      partner_id: intake["partner_id"] ?? null,
+      zone_id: intake["zone_id"] ?? null,
+      zone_name: intake["zone_name"] ?? null,
+      vehicle_id: intake["vehicle_id"] ?? null,
+      vehicle_type_key: intake["vehicle_type_key"] ?? null,
+      civil_id: civilId,
+      employee_id: employeeId,
+      nationality: intake["nationality"] ?? null,
+      rider_category: intake["rider_category"] ?? null,
+      client_id: intake["client_id"] ?? null,
+      client_name: intake["client_name"] ?? null,
+      project_key: intake["project_key"] ?? null,
+      accommodation: intake["accommodation"] ?? null,
+      source_company: intake["source_company"] ?? null,
+      custom_fields: intake["custom_fields"] ?? {},
+      restaurant_ids: restaurantIds,
+      intake_id: intakeId,
+      status: "active",
+      ...(adopt && previousDriver["is_on_duty"] !== undefined
+        ? { is_on_duty: previousDriver["is_on_duty"] }
+        : { is_on_duty: false }),
+      app_passcode: passcode,
+      avatar_object_key: avatar,
+      avatar_updated_at: avatar ? now : null,
+      archived_at: null,
+      created_at: previousDriver["created_at"] ?? now,
+      updated_at: now,
+      ...searchStamp,
+  };
+  if (adopt) tx.set(driverRef, driverRow, { merge: true });
+  else tx.create(driverRef, driverRow);
 
   tx.set(passcodeLockRef(db, passcode), { owner_id: uid, driver_id: uid, created_at: now });
+
+  if (previousPasscode && previousPasscode !== passcode) {
+    const previousLockRef = passcodeLockRef(db, previousPasscode);
+    const previousLockSnap = await reader.get(previousLockRef);
+    if (lockIsOurs(previousLockSnap, new Set([uid, intakeId]))) {
+      tx.delete(previousLockRef);
+    }
+  }
 
   for (const lock of locks) {
     tx.set(

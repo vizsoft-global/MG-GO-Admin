@@ -84,7 +84,8 @@ describe("relocateOrderReconItem", () => {
     const opsIds = (tree.find((node) => node.id === "group-operations")?.children ?? []).map(
       (child) => child.id,
     );
-    assert.deepEqual(opsIds.slice(0, 2), ["deliveries", "dpd-verification"]);
+    assert.equal(opsIds[0], "deliveries");
+    assert.equal(findNode(tree, "dpd-verification"), null);
     assert.equal(findNode(tree, "order-reconciliation"), null);
   });
 });
@@ -308,16 +309,18 @@ describe("sidebar hides retired Requests and EmployeeDesk visits", () => {
     assert.equal(tree[employeeAt + 1]?.id, "group-operations");
     const systemAt = tree.findIndex((node) => node.id === "group-system");
     assert.equal(tree[systemAt + 1]?.id, "operations-hub");
-    assert.equal(tree[systemAt + 2]?.id, "attendance");
-    assert.equal(tree[systemAt + 3]?.id, "visit-bookings");
+    assert.equal(tree[systemAt + 2]?.id, "visit-bookings");
+    assert.equal(findNode(tree, "attendance"), null);
     const opsIds = (tree.find((node) => node.id === "group-operations")?.children ?? []).map(
       (child) => child.id,
     );
     const deliveriesAt = opsIds.indexOf("deliveries");
     assert.equal(opsIds[deliveriesAt + 1], "vehicles");
-    assert.equal(opsIds[deliveriesAt + 2], "dpd-verification");
-    const payoutsAt = opsIds.indexOf("payouts");
-    assert.equal(opsIds[payoutsAt + 1], "payroll");
+    assert.equal(findNode(tree, "dpd-verification"), null);
+    const payrollHubAt = opsIds.indexOf("payroll-hub");
+    assert.ok(payrollHubAt >= 0);
+    assert.ok(opsIds.indexOf("payroll") > payrollHubAt);
+    assert.equal(opsIds.includes("payouts"), false);
     assert.equal(opsIds.includes("attendance"), false);
     assert.equal(opsIds.includes("performance"), false);
     assert.equal(opsIds.includes("order-reconciliation"), false);

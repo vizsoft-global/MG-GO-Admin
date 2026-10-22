@@ -28,6 +28,13 @@ const STATUS_HEX: Record<AdjustmentStatus, string> = {
   sick: "#f59e0b",
   accident: "#a3e635",
   vehicle: "#a5b4fc",
+  cancelled: "#94a3b8",
+  leave: "#7dd3fc",
+  terminated: "#a1a1aa",
+  phone_issue: "#5eead4",
+  id_suspended: "#c4b5fd",
+  new_hire: "#93c5fd",
+  training: "#fde047",
   custom: "#c084fc",
 };
 

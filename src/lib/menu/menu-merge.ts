@@ -43,6 +43,7 @@ export function buildDefaultTree(): MenuNode[] {
       label: g,
       icon: meta?.icon ?? "Folder",
       displayMode: meta?.displayMode,
+      href: meta?.href,
       children: [],
     });
   }
@@ -543,6 +544,7 @@ function groupNodeFor(groupId: string): MenuNode {
     label,
     icon: meta?.icon ?? "Folder",
     displayMode: meta?.displayMode,
+    href: meta?.href,
     children: [],
   };
 }
@@ -748,7 +750,29 @@ function remapClientIaSavedMenu(tree: MenuNode[]): MenuNode[] {
   next = flattenHubGroup(next, FLEET_GROUP_ID, FLEET_HUB_ID);
   next = dropUnorganisedGroup(next);
   next = stripPanelDisplayMode(next);
+  next = moveItemAfter(next, "profile", "roles");
   return remapClientIaLabelsAndIcons(next);
+}
+
+/**
+ * Places `id` directly after `anchor` inside whichever list holds both. A saved
+ * Menu Editor config stores its own order, so a registry `defaultOrder` alone
+ * moves the row for new accounts and for nobody else.
+ */
+function moveItemAfter(tree: MenuNode[], id: string, anchor: string): MenuNode[] {
+  const walk = (nodes: MenuNode[]): MenuNode[] => {
+    const ids = new Set(nodes.map((node) => node.id));
+    if (ids.has(id) && ids.has(anchor)) {
+      const item = nodes.find((node) => node.id === id);
+      if (!item) return nodes;
+      const rest = nodes.filter((node) => node.id !== id);
+      const anchorIdx = rest.findIndex((node) => node.id === anchor);
+      rest.splice(anchorIdx + 1, 0, item);
+      return rest.map((node) => (node.children?.length ? { ...node, children: walk(node.children) } : node));
+    }
+    return nodes.map((node) => (node.children?.length ? { ...node, children: walk(node.children) } : node));
+  };
+  return walk(tree);
 }
 
 function remapItemsToGroup(
@@ -866,6 +890,7 @@ export function resolveForSidebar(
           label: n.label,
           icon: n.icon,
           displayMode: n.displayMode,
+          href: n.href,
           children,
         });
       }
