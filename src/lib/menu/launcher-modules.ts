@@ -46,6 +46,7 @@ export const LAUNCHER_HIDDEN_TILE_IDS: ReadonlySet<string> = new Set([
   "dpd-verification",
   "assets",
   "driver-groups",
+  "attendance",
 ]);
 
 /**

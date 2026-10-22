@@ -80,7 +80,7 @@ describe("launcher modules", () => {
 
     assert.ok(ids.includes("vehicles"), "Fleet Hub");
     assert.ok(ids.includes("payroll-hub"), "Payroll Hub");
-    assert.ok(ids.includes("attendance"));
+    assert.ok(!ids.includes("attendance"), "Attendance is an OperationsHub card");
     assert.ok(ids.includes("payroll"));
     assert.ok(!ids.includes("driver-groups"), "Driver groups is an OperationsHub card, not a row");
     assert.ok(!ids.includes("dashboard"), "the launcher is not its own tile");

@@ -9191,8 +9191,8 @@
         "amId": "MG ID",
         "mgId": "Driver ID",
         "name": "Name",
-        "restaurant": "Restaurant",
-        "restaurantId": "Restaurant ID",
+        "restaurant": "Client Name",
+        "restaurantId": "Client ID",
         "zone": "Zone",
         "partner": "Partner",
         "nationality": "Nationality",
@@ -10881,6 +10881,14 @@
           "driverGroups": {
             "title": "Driver groups",
             "body": "Rider crews and the members assigned to each group."
+          },
+          "attendance": {
+            "title": "Attendance",
+            "body": "Daily check-ins, shifts and the exceptions behind them."
+          },
+          "orderExceptions": {
+            "title": "Order exceptions",
+            "body": "Rejected or cancelled orders with the rider's proof attached."
           },
           "deliveryRules": {
             "title": "Delivery rules",

@@ -184,7 +184,7 @@ describe("relocateOperationsHubItems", () => {
   it("does not move a saved root order down between System and Unorganised", () => {
     const { tree } = mergeMenu([
       { id: "visit-bookings", type: "item", label: "Visit Bookings", icon: "Calendar" },
-      { id: "attendance", type: "item", label: "Attendance", icon: "ClipboardCheck" },
+      { id: "payroll", type: "item", label: "Payroll", icon: "Banknote" },
       { id: "operations-hub", type: "item", label: "OperationsHub", icon: "Building2" },
       {
         id: "group-system",
@@ -195,7 +195,7 @@ describe("relocateOperationsHubItems", () => {
       },
     ]);
     assert.equal(tree[0]?.id, "visit-bookings");
-    assert.equal(tree[1]?.id, "attendance");
+    assert.equal(tree[1]?.id, "payroll");
     assert.equal(tree[2]?.id, "operations-hub");
     assert.equal(tree.some((node) => node.id === "group-operationshub"), false);
     assert.equal(findNode(tree, "earnings"), null);
