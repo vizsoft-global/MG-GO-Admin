@@ -914,7 +914,7 @@ export function EsignSendShell({
         <LegendDot color="bg-[#0A0A0A]" label={t("sourceFixed")} />
         <LegendDot color={isV2 ? "bg-[#7C3AED]" : "bg-[#EA580C]"} label={t("sourceSigned")} />
       </div>
-      <div className={isV2 ? "relative min-h-0 flex-1 overflow-hidden" : undefined}>
+      <div className={isV2 ? "relative min-h-0 flex-1 overflow-y-auto" : undefined}>
         {renderPreview(isV2)}
       </div>
     </AppListCard>
