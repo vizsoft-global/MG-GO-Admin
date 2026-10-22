@@ -9,8 +9,10 @@ import {
   Handshake,
   Landmark,
   Layers,
+  LayoutGrid,
   ListTree,
   MapPin,
+  UsersRound,
   UtensilsCrossed,
   Wallet,
 } from "lucide-react";
@@ -21,6 +23,7 @@ import { Link } from "@/i18n/navigation";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { requireAnyPermission } from "@/lib/auth/require-permission";
 import { OPERATIONS_HUB_PERMISSIONS } from "@/lib/menu/menu-registry";
+import { launcherTileVisual } from "@/lib/menu/tile-visual";
 
 /**
  * OperationsHub — the home of the operational rule tables.
@@ -38,12 +41,32 @@ import { OPERATIONS_HUB_PERMISSIONS } from "@/lib/menu/menu-registry";
 const CARDS: ReadonlyArray<{
   key: string;
   href: string;
-  icon: typeof Handshake;
+  /** Registry id when the card mirrors a sidebar module — icon + tint come from it. */
+  itemId?: string;
+  icon?: typeof Handshake;
   permission: Permission;
 }> = [
   { key: "partners", href: "/partners", icon: Handshake, permission: "partners.view" },
   { key: "restaurants", href: "/restaurants", icon: UtensilsCrossed, permission: "restaurants.view" },
   { key: "zones", href: "/zones", icon: MapPin, permission: "zones.view" },
+  {
+    key: "driverGroups",
+    href: "/drivers/groups",
+    icon: UsersRound,
+    permission: "driver_groups.view",
+  },
+  {
+    key: "attendance",
+    href: "/attendance",
+    itemId: "attendance",
+    permission: "attendance.view",
+  },
+  {
+    key: "orderExceptions",
+    href: "/order-exceptions",
+    itemId: "order-exceptions",
+    permission: "deliveries.view",
+  },
   { key: "deliveryRules", href: "/delivery-rules", icon: ListTree, permission: "earnings.view" },
   { key: "incentiveRules", href: "/incentive-rules", icon: Wallet, permission: "earnings.view" },
   { key: "driverFields", href: "/settings/driver-fields", icon: FormInput, permission: "drivers.manage" },
@@ -115,12 +138,18 @@ export default async function OperationsHubPage({
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => {
-          const Icon = card.icon;
+          const visual = card.itemId ? launcherTileVisual(card.itemId) : null;
+          const Icon = visual?.icon ?? card.icon ?? LayoutGrid;
           return (
             <Link key={card.key} href={card.href} className="group">
               <Card className="h-full rounded-xl border-border bg-card shadow-sm transition-colors group-hover:border-primary/40">
                 <CardContent className="flex items-start gap-3 p-4">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                  <span
+                    className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"
+                    style={
+                      visual ? { backgroundColor: `${visual.tint}1a`, color: visual.tint } : undefined
+                    }
+                  >
                     <Icon className="size-4" aria-hidden />
                   </span>
                   <div className="min-w-0">

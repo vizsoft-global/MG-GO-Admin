@@ -25,6 +25,29 @@ export type RestaurantCandidate = {
 };
 
 /**
+ * Whether a rider may use a restaurant, given the rider's partner.
+ *
+ * A restaurant's `partner_id` is optional: the shared fleet catalogue (KFC,
+ * Hardee's, and anything an operator saved without picking a partner) carries
+ * none. Only a restaurant owned by a *different* partner is out of reach.
+ *
+ * Comparing `null` against the rider's partner instead dropped every unowned
+ * restaurant, so a rider with a partner was told they had no restaurant
+ * assigned while the admin page listed one. Both the check-in gate and pickup
+ * creation answer through this one rule.
+ */
+export function restaurantReachableForPartner(
+  restaurant: Record<string, unknown>,
+  partnerId: string | null,
+): boolean {
+  if (partnerId === null) return true;
+  const owner = restaurant["partner_id"];
+  const ownerId = typeof owner === "string" ? owner.trim() : "";
+  if (ownerId === "") return true;
+  return ownerId === partnerId;
+}
+
+/**
  * Inclusion/exclusion fences first; a restaurant with no fences falls back to
  * its pin and the fleet proximity allowance. This is the one rule both pickup
  * creation and the check-in gate use.

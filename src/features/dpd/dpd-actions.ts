@@ -61,6 +61,7 @@ import {
   isOnRewardStep,
   PER_DELIVERY_REWARD_STEP_KWD,
 } from "./incentive-rule-form-validation";
+import { ruleScopeWrite, type RuleScopeWriteRow } from "./rule-scope-write";
 
 export type {
   DpdTargetImportInputRow,
@@ -341,8 +342,7 @@ async function replaceRuleScopes(
   collection: string,
   foreignKey: string,
   ruleId: string,
-  scopeType: RuleScopeType,
-  ids: string[],
+  rows: readonly RuleScopeWriteRow[],
 ): Promise<PgLikeError | null> {
   try {
     const db = await dpdDb();
@@ -350,11 +350,11 @@ async function replaceRuleScopes(
     await insertRows(
       db,
       collection,
-      ids.map((id) => ({
+      rows.map((row) => ({
         [foreignKey]: ruleId,
-        zone_id: scopeType === "zone" ? id : null,
-        partner_id: scopeType === "partner" ? id : null,
-        restaurant_id: scopeType === "restaurant" ? id : null,
+        zone_id: row.zone_id,
+        partner_id: row.partner_id,
+        restaurant_id: row.restaurant_id,
       })),
     );
     return null;
@@ -367,29 +367,25 @@ async function replaceRuleScopes(
 
 async function replaceIncentiveRuleScopes(
   ruleId: string,
-  scopeType: RuleScopeType,
-  ids: string[],
+  rows: readonly RuleScopeWriteRow[],
 ) {
   return replaceRuleScopes(
     COLLECTIONS.incentiveRuleScopes,
     "incentive_rule_id",
     ruleId,
-    scopeType,
-    ids,
+    rows,
   );
 }
 
 async function replaceDeliveryRuleScopes(
   ruleId: string,
-  scopeType: RuleScopeType,
-  ids: string[],
+  rows: readonly RuleScopeWriteRow[],
 ) {
   return replaceRuleScopes(
     COLLECTIONS.deliveryRuleScopes,
     "delivery_rule_id",
     ruleId,
-    scopeType,
-    ids,
+    rows,
   );
 }
 
@@ -953,38 +949,49 @@ export async function saveDeliveryRule(formData: FormData): Promise<DpdMutationR
 
   const priority = priorityRaw ? Number(priorityRaw) : defaultPriority(scope.scopeType);
 
-  // Populate the legacy single-FK column with the first selected scope id.
-  // The new `delivery_rule_scopes` junction table is the source of truth, but
-  // older databases still have the `delivery_rules_scope_check` CHECK
-  // constraint that requires the legacy column to be set when the matching
-  // scope_type is used. Setting the first id keeps inserts compatible with
-  // both the old and new schema versions.
-  const legacyScopeId = scope.ids[0] ?? null;
+  const dpdTarget = (() => {
+    if (!dpdTargetRaw) return null;
+    const n = Number(dpdTargetRaw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })();
+  const dpdPeriod = (() => {
+    const raw = String(formData.get("dpdPeriod") ?? "").trim();
+    if (raw === "daily" || raw === "weekly" || raw === "monthly") {
+      return raw as IncentivePeriod;
+    }
+    return null;
+  })();
+
+  // An Active rule that a rider is paid against has to carry a target, and the
+  // rider app only reads a **daily** target (a weekly/monthly one is invisible on
+  // the Daily DPD card). Rejecting both here keeps a rule from being saved
+  // "Active" while the phone shows nothing.
+  if (status === "active" && dpdTarget === null) return { error: "dpd_target_required" };
+  if (
+    status === "active" &&
+    dpdTarget !== null &&
+    dpdPeriod !== null &&
+    dpdPeriod !== "daily"
+  ) {
+    return { error: "invalid_dpd_period" };
+  }
+
+  // Populate the legacy single-FK column with the first selected scope id and
+  // write one junction row per selected id. `ruleScopeWrite` is the single rule
+  // both save paths use; see its own note for why both are written.
+  const scopeWrite = ruleScopeWrite(scope.scopeType, scope.ids);
   const payload = {
     name,
     status,
     scope_type: scope.scopeType,
-    zone_id: scope.scopeType === "zone" ? legacyScopeId : null,
-    partner_id: scope.scopeType === "partner" ? legacyScopeId : null,
-    restaurant_id: scope.scopeType === "restaurant" ? legacyScopeId : null,
+    ...scopeWrite.legacyColumns,
     start_date: dates.startDate,
     end_date: dates.endDate,
     priority,
     require_verified: true,
     updated_at: new Date().toISOString(),
-    dpd_target: (() => {
-      const raw = String(formData.get("dpdTarget") ?? "").trim();
-      if (!raw) return null;
-      const n = Number(raw);
-      return Number.isFinite(n) && n > 0 ? n : null;
-    })(),
-    dpd_period: (() => {
-      const raw = String(formData.get("dpdPeriod") ?? "").trim();
-      if (raw === "daily" || raw === "weekly" || raw === "monthly") {
-        return raw as IncentivePeriod;
-      }
-      return null;
-    })(),
+    dpd_target: dpdTarget,
+    dpd_period: dpdPeriod,
   };
 
   let ruleId = id;
@@ -996,11 +1003,7 @@ export async function saveDeliveryRule(formData: FormData): Promise<DpdMutationR
     return { error: "save_failed", errorDetail: formatPgErrorDetail(error) };
   }
 
-  const scopeErr = await replaceDeliveryRuleScopes(
-    ruleId,
-    scope.scopeType,
-    scope.ids,
-  );
+  const scopeErr = await replaceDeliveryRuleScopes(ruleId, scopeWrite.rows);
   if (scopeErr) {
     return {
       error: "save_failed",
@@ -1191,17 +1194,15 @@ export async function saveIncentiveRule(formData: FormData): Promise<DpdMutation
     if (tiers[0].threshold_deliveries <= baseMinimum) return { error: "invalid_tiers" };
   }
 
-  // Same backwards-compat shim as saveDeliveryRule — keep the legacy single-FK
-  // column populated with the first selected scope id so inserts pass even on
-  // older databases that still enforce `incentive_rules_scope_check`.
-  const legacyScopeId = scope.ids[0] ?? null;
+  // Same backwards-compat shim as saveDeliveryRule — `ruleScopeWrite` keeps the
+  // legacy single-FK column populated (older databases still enforce
+  // `incentive_rules_scope_check`) and writes one junction row per selected id.
+  const scopeWrite = ruleScopeWrite(scope.scopeType, scope.ids);
   const payload = {
     name,
     status,
     scope_type: scope.scopeType,
-    zone_id: scope.scopeType === "zone" ? legacyScopeId : null,
-    partner_id: scope.scopeType === "partner" ? legacyScopeId : null,
-    restaurant_id: scope.scopeType === "restaurant" ? legacyScopeId : null,
+    ...scopeWrite.legacyColumns,
     period,
     target_mode: targetMode,
     base_minimum_deliveries: baseMinimum,
@@ -1246,11 +1247,7 @@ export async function saveIncentiveRule(formData: FormData): Promise<DpdMutation
     return { error: "save_failed", errorDetail: formatPgErrorDetail(error) };
   }
 
-  const scopeErr = await replaceIncentiveRuleScopes(
-    ruleId,
-    scope.scopeType,
-    scope.ids,
-  );
+  const scopeErr = await replaceIncentiveRuleScopes(ruleId, scopeWrite.rows);
   if (scopeErr) {
     return {
       error: "save_failed",
@@ -1615,8 +1612,7 @@ export async function applyIncentiveRuleImport(
 
     const scopeErr = await replaceIncentiveRuleScopes(
       ruleId,
-      "restaurant",
-      [row.restaurant_id],
+      ruleScopeWrite("restaurant", [row.restaurant_id]).rows,
     );
     if (scopeErr) return { error: "save_failed" };
     applied += 1;

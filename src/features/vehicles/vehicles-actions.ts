@@ -114,6 +114,21 @@ function optionalText(value: FormDataEntryValue | null): string | null {
   return text || null;
 }
 
+/** `YYYY-MM-DD` from a date input → the ISO string the vehicle doc stores. */
+function readDocumentDate(
+  raw: string,
+): { iso: string | null } | { error: "invalid_document_date" } {
+  const text = raw.trim();
+  if (!text) return { iso: null };
+  const iso = kuwaitYmdToIso(text);
+  return iso ? { iso } : { error: "invalid_document_date" };
+}
+
+function expiryBefore(issued: string | null, expiry: string | null): boolean {
+  if (!issued || !expiry) return false;
+  return Date.parse(expiry) < Date.parse(issued);
+}
+
 async function identityTaken(
   db: Firestore,
   regNumber: string,
@@ -198,6 +213,10 @@ type VehicleDbRow = {
   chip_no: string | null;
   fuel_monthly_limit_kwd: number | null;
   owner_partner_id: string | null;
+  registration_issued_at: string | null;
+  registration_expires_at: string | null;
+  insurance_issued_at: string | null;
+  insurance_expires_at: string | null;
   replaces_vehicle_id: string | null;
   replacement_started_at: string | null;
   created_at: string;
@@ -225,6 +244,10 @@ function mapVehicle(row: Row): VehicleDbRow {
     chip_no: str(row.chip_no) || null,
     fuel_monthly_limit_kwd: numOrNull(row.fuel_monthly_limit_kwd),
     owner_partner_id: str(row.owner_partner_id) || null,
+    registration_issued_at: str(row.registration_issued_at) || null,
+    registration_expires_at: str(row.registration_expires_at) || null,
+    insurance_issued_at: str(row.insurance_issued_at) || null,
+    insurance_expires_at: str(row.insurance_expires_at) || null,
     replaces_vehicle_id: str(row.replaces_vehicle_id) || null,
     replacement_started_at: str(row.replacement_started_at) || null,
     created_at: str(row.created_at),
@@ -367,6 +390,10 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
       fuel_monthly_limit_kwd: row.fuel_monthly_limit_kwd,
       owner_partner_id: row.owner_partner_id,
       owner_partner_name: row.owner_partner_id ? partnerNames.get(row.owner_partner_id) ?? null : null,
+      registration_issued_at: row.registration_issued_at,
+      registration_expires_at: row.registration_expires_at,
+      insurance_issued_at: row.insurance_issued_at,
+      insurance_expires_at: row.insurance_expires_at,
       replaces_vehicle_id: row.replaces_vehicle_id,
       replacement_started_at: row.replacement_started_at,
       replaces_plate: row.replaces_vehicle_id ? plateById.get(row.replaces_vehicle_id) ?? null : null,
@@ -442,6 +469,20 @@ export async function saveVehicle(
   const limitRaw = emptyText(formData.get("fuelMonthlyLimitKwd"));
   const replacesVehicleId = optionalText(formData.get("replacesVehicleId"));
   const replacementStartedRaw = emptyText(formData.get("replacementStartedAt"));
+  const registrationIssued = readDocumentDate(emptyText(formData.get("registrationIssuedAt")));
+  const registrationExpires = readDocumentDate(emptyText(formData.get("registrationExpiresAt")));
+  const insuranceIssued = readDocumentDate(emptyText(formData.get("insuranceIssuedAt")));
+  const insuranceExpires = readDocumentDate(emptyText(formData.get("insuranceExpiresAt")));
+  if ("error" in registrationIssued) return registrationIssued;
+  if ("error" in registrationExpires) return registrationExpires;
+  if ("error" in insuranceIssued) return insuranceIssued;
+  if ("error" in insuranceExpires) return insuranceExpires;
+  if (expiryBefore(registrationIssued.iso, registrationExpires.iso)) {
+    return { error: "expiry_before_issue" };
+  }
+  if (expiryBefore(insuranceIssued.iso, insuranceExpires.iso)) {
+    return { error: "expiry_before_issue" };
+  }
 
   if (!regNumber) return { error: "missing_fields" };
   const formError = validateVehicleForm({
@@ -504,6 +545,10 @@ export async function saveVehicle(
     chip_no: optionalText(formData.get("chipNo")),
     fuel_monthly_limit_kwd: fuelMonthlyLimit,
     owner_partner_id: optionalText(formData.get("ownerPartnerId")),
+    registration_issued_at: registrationIssued.iso,
+    registration_expires_at: registrationExpires.iso,
+    insurance_issued_at: insuranceIssued.iso,
+    insurance_expires_at: insuranceExpires.iso,
     replaces_vehicle_id: replacesVehicleId,
     replacement_started_at: replacementStartedAt,
     updated_at: new Date(),

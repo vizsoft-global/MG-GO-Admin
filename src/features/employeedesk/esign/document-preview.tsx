@@ -250,9 +250,9 @@ export function EsignDocumentPreview({
       style={fill ? undefined : { height: PREVIEW_COLUMN_HEIGHT }}
     >
       <div ref={stageRef} className="absolute inset-0 overflow-auto">
-        <div className="inline-flex min-h-full min-w-full items-center justify-center">
+        <div className="flex min-h-full min-w-full justify-center">
           <div
-            className="relative shrink-0 bg-white shadow-sm"
+            className="relative m-auto shrink-0 bg-white shadow-sm"
             style={{
               width: A4_CSS_WIDTH * viewScale,
               height: A4_CSS_HEIGHT * viewScale,

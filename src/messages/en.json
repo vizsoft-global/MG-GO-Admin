@@ -3840,6 +3840,12 @@
       "sectionOwnership": "Ownership",
       "sectionFuel": "Fuel",
       "sectionOperations": "Operations",
+      "sectionDocuments": "Documents",
+      "fieldRegistrationIssued": "Registration issued",
+      "fieldRegistrationExpires": "Registration expiry",
+      "fieldInsuranceIssued": "Insurance issued",
+      "fieldInsuranceExpires": "Insurance expiry",
+      "documentsHint": "Document dates live on the vehicle. Upload the scanned file in the Documents tab.",
       "sectionVehicleDetails": "Vehicle details",
       "sectionDriver": "Driver & assignment",
       "carTypeHint": "Ownership category — not the same as operational status.",
@@ -3925,7 +3931,11 @@
         "previousImports": "Previous imports",
         "requiredLabel": "Required.",
         "requiredCopy": "Vehicle ID is the Kuwait plate (e.g. 5/6767). Plate is the same identity.",
-        "optionalCopy": "Optional: chassis, kind, make, model, year, condition, chip, fuel type, fuel company, car type, type of use, location, status, monthly fuel limit. A blank optional cell clears that field. A new row with no kind becomes a bike.",
+        "optionalCopy": "Optional: chassis, kind, make, model, year, condition, chip, fuel type, fuel company, car type, type of use, location, status, monthly fuel limit, MG ID, vehicle company, partner, registration/insurance dates, replacement plate and since. A blank cell keeps the current value; a dash (-) clears it. A new row with no kind becomes a bike.",
+        "colMgId": "MG ID",
+        "colCompany": "Vehicle Company",
+        "colRegExpiry": "Reg. expiry",
+        "colInsExpiry": "Ins. expiry",
         "downloadTemplate": "Download sample template",
         "templateColumns": "Columns",
         "templateColumnsTitle": "Template columns",
@@ -3993,9 +4003,16 @@
         "invalid_car_type": "Car type must be company, rent, or maintenance.",
         "invalid_type_of_use": "Type of use must be a catalog key from Settings → Vehicle uses.",
         "empty_sheet": "The sheet has no Vehicle ID rows.",
-        "too_many_rows": "A sheet can have at most 1000 rows.",
+        "too_many_rows": "A sheet can have at most 2000 rows.",
         "nothing_to_undo": "There is no import to undo.",
-        "nothing_to_redo": "There is no import to redo."
+        "nothing_to_redo": "There is no import to redo.",
+        "unknown_driver": "That MG ID was not found among employees.",
+        "ambiguous_driver": "More than one employee holds this MG ID.",
+        "unknown_company": "That vehicle company is not in Settings → Vehicle companies.",
+        "unknown_partner": "That partner is not in the partner list.",
+        "unknown_replacement": "The replacement plate does not exist.",
+        "invalid_document_date": "Dates must be YYYY-MM-DD.",
+        "expiry_before_issue": "The expiry date is before the issue date."
       }
     },
     "vehicleDetail": {
@@ -4021,6 +4038,11 @@
       "emptyHandover": "No handover records yet",
       "emptyAccident": "No accident records yet",
       "emptyDocuments": "No vehicle documents yet",
+      "docsOnRecordHint": "Dates on the vehicle record. Uploaded files are listed below.",
+      "docRegistrationIssued": "Registration issued",
+      "docRegistrationExpires": "Registration expiry",
+      "docInsuranceIssued": "Insurance issued",
+      "docInsuranceExpires": "Insurance expiry",
       "emptyService": "No service records yet",
       "emptyAssets": "This rider has no assigned assets",
       "emptyAssetsNoDriver": "Assign a rider to see their assets",
@@ -7055,6 +7077,7 @@
       "restaurantUpdated": "Restaurant updated",
       "deliveryRuleCreated": "Delivery rule created",
       "deliveryRuleUpdated": "Delivery rule updated",
+      "deliveryRuleTargetLive": "Target {target} live from today",
       "deliveryRuleDeleted": "Delivery rule deleted",
       "deleteDeliveryRuleTitle": "Delete delivery rule",
       "incentiveCreated": "Incentive rule created",
@@ -7087,6 +7110,7 @@
       },
       "hints": {
         "baseMinimum": "Driver must reach this count before any payout from this rule.",
+        "dpdPeriod": "The rider app's Daily DPD card reads a daily target only, so an active rule with a target must stay on Daily.",
         "cumulativeTiers": "Each tier pays when eligible deliveries reach its threshold; amounts add together.",
         "cumulativePayout": "Pay for every delivery above the base immediately, without waiting for the target/tier to be reached.",
         "overridesOthers": "When on, this rule's payout replaces all other incentive rules for the period."
@@ -7233,6 +7257,8 @@
         "invalid_dates": "End date must be on or after start date",
         "invalid_scope": "Select at least one option for the chosen scope",
         "invalid_target": "Target must be greater than base minimum",
+        "dpd_target_required": "An active rule needs a DPD target above 0",
+        "invalid_dpd_period": "A DPD target must use the Daily period — the rider app only reads a daily target",
         "invalid_base": "Base minimum must be zero or greater",
         "invalid_tiers": "Add at least one tier with increasing thresholds above base",
         "invalid_reward_mode": "Select a valid reward type",
@@ -8824,6 +8850,11 @@
         "cancel": "Cancel",
         "save": "Save",
         "saved": "Company saved",
+        "logo": "Company logo",
+        "logoUpload": "Upload logo",
+        "logoReplace": "Replace",
+        "logoRemove": "Remove",
+        "logoHint": "PNG, JPG, WEBP or SVG up to 2 MB. Printed on this company's workforce documents.",
         "errors": {
           "not_authorized": "You do not have permission to manage companies.",
           "invalid_company_key": "Enter a company name that produces a valid key (letters and digits).",
@@ -8836,7 +8867,10 @@
           "save_failed": "Could not save the company.",
           "invalid_dpd_target": "DPD target must be a whole number of 1 or more.",
           "invalid_incentive_rate": "Enter above-target and below-target rates greater than 0.",
-          "incentive_effective_from_required": "Set an effective-from date when the scheme is on."
+          "incentive_effective_from_required": "Set an effective-from date when the scheme is on.",
+          "logo_file_too_large": "The logo must be 2 MB or smaller.",
+          "logo_invalid_type": "The logo must be a PNG, JPG, WEBP or SVG image.",
+          "logo_upload_failed": "Could not upload the logo. Try again."
         },
         "colDpd": "DPD",
         "dpdBadge": "T {target}",
@@ -9169,8 +9203,8 @@
         "amId": "MG ID",
         "mgId": "Driver ID",
         "name": "Name",
-        "restaurant": "Restaurant",
-        "restaurantId": "Restaurant ID",
+        "restaurant": "Client Name",
+        "restaurantId": "Client ID",
         "zone": "Zone",
         "partner": "Partner",
         "nationality": "Nationality",
@@ -9244,7 +9278,14 @@
         "vehicle": "Vehicle issue",
         "abs_lh": "Absent LH",
         "abs_lo": "Absent LO",
-        "custom": "Custom"
+        "custom": "Custom",
+        "cancelled": "Cancelled",
+        "leave": "Leave",
+        "terminated": "Terminated",
+        "phone_issue": "Phone issue",
+        "id_suspended": "ID suspended",
+        "new_hire": "New hire",
+        "training": "Training"
       },
       "tileDept": {
         "operations": "Operations",
@@ -10537,6 +10578,24 @@
           "fieldTitle": "Batch title",
           "fieldDue": "Due date",
           "downloadExample": "Download the example sheet",
+          "editValues": "Edit template values",
+          "editTitle": "Edit template values for this batch",
+          "editHint": "Changes apply to this batch only - the template itself stays unchanged.",
+          "useAsIs": "Use as it is",
+          "editSelectPlaceholder": "Select a value",
+          "editSelectSearch": "Search values",
+          "editTextPlaceholder": "Type a value",
+          "signerEmployee": "Employee signature",
+          "signerStaff": "Management signature",
+          "noEditableFields": "This template asks for nothing but a signature, so there is no value to edit.",
+          "previewCompany": "Musallam Delivery",
+          "valueGroups": {
+            "fields": "Sheet inputs",
+            "loanRequest": "Loan request",
+            "hrVerification": "HR verification",
+            "management": "Management decision",
+            "verification": "Verification"
+          },
           "exampleDownloaded": "Example sheet downloaded",
           "uploadTitle": "Upload your sheet",
           "dropHere": "Drop your Excel sheet here or click to browse",
@@ -10856,6 +10915,18 @@
             "title": "Zones",
             "body": "Delivery areas, geofences and the drivers assigned to them."
           },
+          "driverGroups": {
+            "title": "Driver groups",
+            "body": "Rider crews and the members assigned to each group."
+          },
+          "attendance": {
+            "title": "Attendance",
+            "body": "Daily check-ins, shifts and the exceptions behind them."
+          },
+          "orderExceptions": {
+            "title": "Order exceptions",
+            "body": "Rejected or cancelled orders with the rider's proof attached."
+          },
           "deliveryRules": {
             "title": "Delivery rules",
             "body": "Per-restaurant and per-zone DPD targets and order rules."
@@ -10963,7 +11034,33 @@
       "errorNotAuthorized": "You do not have permission to view order exceptions.",
       "errorGeneric": "Order exceptions could not be loaded.",
       "pagePrev": "Previous",
-      "pageNext": "Next"
+      "pageNext": "Next",
+      "export": "Export",
+      "exporting": "Exporting",
+      "exportDone": "{count} exceptions exported",
+      "exportCapped": "Exported {exported} of {matched} — narrow the filters to get the rest",
+      "exportEmpty": "Nothing to export for these filters",
+      "exportFailed": "The export could not be created.",
+      "exportSheetRows": "Order exceptions",
+      "exportSheetSummary": "Summary",
+      "colDriverCode": "Driver code",
+      "colReviewedAt": "Reviewed at",
+      "colNote": "Review note",
+      "colCreated": "Created",
+      "colCounted": "Counted as exception",
+      "countedYes": "Yes",
+      "countedNo": "No",
+      "summaryFilters": "Filters",
+      "summaryStatus": "Status",
+      "summaryKind": "Kind",
+      "summarySource": "Source",
+      "summaryFrom": "From",
+      "summaryTo": "To",
+      "summarySearch": "Search",
+      "summaryAll": "All",
+      "summaryExported": "Exported rows",
+      "summaryMatched": "Matching rows",
+      "summaryCapped": "Not exported"
     }
   }
 }

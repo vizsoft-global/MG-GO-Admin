@@ -97,7 +97,7 @@ export function DriversColumnHeader({
 
   return (
     <span className="inline-flex items-center gap-0.5">
-      <span className={cn("truncate", active && "text-emerald-800")}>{label}</span>
+      <span className={cn("truncate", active && "text-primary")}>{label}</span>
       <OpsSortButton
         active={sort.key === column}
         dir={sort.key === column ? sort.dir : null}
@@ -116,7 +116,7 @@ export function DriversColumnHeader({
           className={cn(
             "inline-flex size-6 items-center justify-center rounded-md transition-colors",
             active
-              ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-400/50 hover:bg-emerald-100"
+              ? "bg-primary/10 text-primary ring-1 ring-primary/40 hover:bg-primary/15"
               : "text-muted-foreground hover:bg-muted/40",
           )}
         >
@@ -179,7 +179,7 @@ export function DriversColumnHeader({
                   />
                   <span className="min-w-0 flex-1 font-medium">{labels.all}</span>
                   {draftValues.length === 0 ? (
-                    <Check className="size-3 shrink-0 text-emerald-700" />
+                    <Check className="size-3 shrink-0 text-primary" />
                   ) : null}
                 </label>
                 <div className="max-h-56 overflow-y-auto">
@@ -197,7 +197,7 @@ export function DriversColumnHeader({
                           key={o.value || "(blank)"}
                           className={cn(
                             "flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40",
-                            on && "font-semibold text-emerald-900",
+                            on && "font-semibold text-primary",
                           )}
                         >
                           <Checkbox

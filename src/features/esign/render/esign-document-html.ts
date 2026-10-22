@@ -137,15 +137,14 @@ export function buildEsignDocumentHtml(input: EsignDocumentInput): string {
   return renderLayoutHtml(layout, input.fontCss, input.logoUrl, input.staffLabel);
 }
 
-/** Client HR sheet for every kind. logoUrl is accepted and never printed. */
+/** Client HR sheet for every kind. `logoUrl` prints the source-company mark. */
 export function renderLayoutHtml(
   layout: EsignDocumentLayout,
   fontCss?: string,
   logoUrl?: string | null,
   staffLabel?: string,
 ): string {
-  void logoUrl;
-  return renderClientSheetHtml(layout, fontCss, staffLabel);
+  return renderClientSheetHtml(layout, fontCss, staffLabel, logoUrl);
 }
 
 /**

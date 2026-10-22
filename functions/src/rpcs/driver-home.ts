@@ -17,7 +17,15 @@ import {
 import { requireRider, riderError } from "../core/rider";
 import { applyAttendanceRollup } from "../core/rollups";
 import { bumpRiderSignal } from "../core/rider-signals";
-import { computeIncentiveAmount, type IncentiveRule, type IncentiveTier } from "../core/incentive";
+import {
+  computeIncentiveAmount,
+  ruleMatchesScope,
+  type IncentiveRule,
+  type IncentiveTier,
+  type RuleScope,
+  type RuleScopeType,
+  type ScopedRule,
+} from "../core/incentive";
 import { driverRestaurantIds } from "./deliveries-shared";
 import { sendDriverHomeRefresh } from "./driver-refresh";
 import { logger } from "firebase-functions";
@@ -194,26 +202,53 @@ async function companyHidesWeeklyIncentive(driver: Dict, configEpoch: number): P
   return company["incentive_enabled"] === true;
 }
 
+/**
+ * A rule's scope as the canonical matcher wants it: the legacy single-FK column
+ * plus the junction rows. The Home card and the earnings RPC have to agree, so
+ * both delegate to `ruleMatchesScope`.
+ */
+function scopedRuleOf(scopeType: string, raw: Dict): ScopedRule {
+  const known: RuleScopeType =
+    scopeType === "zone" || scopeType === "partner" || scopeType === "restaurant"
+      ? scopeType
+      : "restaurant";
+  return {
+    scope_type: known,
+    zone_id: asString(raw["zone_id"]),
+    partner_id: asString(raw["partner_id"]),
+    restaurant_id: asString(raw["restaurant_id"]),
+  };
+}
+
 function ruleMatchesDriver(args: {
-  scopeType: string;
-  scopes: Array<{ zone_id: string | null; partner_id: string | null; restaurant_id: string | null }>;
+  rule: ScopedRule;
+  scopes: readonly RuleScope[];
   zoneId: string | null;
   partnerId: string | null;
   restaurantIds: readonly string[];
 }): boolean {
-  const { scopeType, scopes, zoneId, partnerId, restaurantIds } = args;
-  if (scopeType === "zone") {
-    return scopes.some((scope) => scope.zone_id !== null && scope.zone_id === zoneId);
+  const { rule, scopes, zoneId, partnerId, restaurantIds } = args;
+  if (rule.scope_type === "zone") {
+    return ruleMatchesScope(rule, scopes, {
+      zone_id: zoneId,
+      partner_id: null,
+      restaurant_id: null,
+    });
   }
-  if (scopeType === "partner") {
-    return scopes.some((scope) => scope.partner_id !== null && scope.partner_id === partnerId);
+  if (rule.scope_type === "partner") {
+    return ruleMatchesScope(rule, scopes, {
+      zone_id: null,
+      partner_id: partnerId,
+      restaurant_id: null,
+    });
   }
-  if (scopeType === "restaurant") {
-    return scopes.some(
-      (scope) => scope.restaurant_id !== null && restaurantIds.includes(scope.restaurant_id),
-    );
-  }
-  return false;
+  return restaurantIds.some((id) =>
+    ruleMatchesScope(rule, scopes, {
+      zone_id: null,
+      partner_id: null,
+      restaurant_id: id,
+    }),
+  );
 }
 
 /**
@@ -598,12 +633,6 @@ function deliveryRuleSummary(scopeType: string, name: string, restaurantName: st
   return name;
 }
 
-type RuleScope = {
-  zone_id: string | null;
-  partner_id: string | null;
-  restaurant_id: string | null;
-};
-
 type DeliveryRuleConfig = {
   rules: Array<{ id: string; raw: Dict; priority: number; name: string }>;
   scopesByRule: Map<string, RuleScope[]>;
@@ -695,7 +724,7 @@ function matchingDeliveryRules(
     const scopes = scopesByRule.get(rule.id) ?? [];
     if (
       !ruleMatchesDriver({
-        scopeType,
+        rule: scopedRuleOf(scopeType, rule.raw),
         scopes,
         zoneId: args.zoneId,
         partnerId: args.partnerId,
@@ -704,7 +733,10 @@ function matchingDeliveryRules(
     ) {
       continue;
     }
-    const restaurantId = scopes.find((scope) => scope.restaurant_id)?.restaurant_id ?? null;
+    const restaurantId =
+      scopes.find((scope) => scope.restaurant_id)?.restaurant_id ??
+      asString(rule.raw["restaurant_id"]) ??
+      null;
     const restaurantName = restaurantId ? restaurantMap.get(restaurantId) ?? null : null;
     rows.push({
       id: rule.id,
@@ -830,7 +862,7 @@ function primaryWeeklyIncentive(
 
   const matching = candidates.filter((rule) =>
     ruleMatchesDriver({
-      scopeType: rule.scopeType,
+      rule: scopedRuleOf(rule.scopeType, rule.raw),
       scopes: scopesByRule.get(rule.id) ?? [],
       zoneId: args.zoneId,
       partnerId: args.partnerId,
@@ -2347,7 +2379,9 @@ export const driverCheckInContext = measureOnCall("driverCheckInContext", async 
     candidates,
     lat,
     lng,
-    proximityMeters: safety.proximityMeters,
+    // Same allowance the duty write applies, so a precheck can never refuse a
+    // clock-in the write would have accepted.
+    proximityMeters: safety.proximityMeters > 0 ? safety.proximityMeters : 500,
   });
   const nearest = match ? null : nearestCheckInRestaurant({ candidates, lat, lng });
 

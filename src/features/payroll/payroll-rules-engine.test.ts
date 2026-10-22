@@ -699,7 +699,7 @@ describe("describe helpers feed the Settings table and the simulator", () => {
 describe("adjustment statuses map onto the grid's day types", () => {
   it("covers every status except Auto", () => {
     const mapped = Object.entries(ADJUSTMENT_STATUS_TO_DAY);
-    assert.equal(mapped.length, 12);
+    assert.equal(mapped.length, 19);
     assert.equal(ADJUSTMENT_STATUS_TO_DAY["12"], "work");
     assert.equal(ADJUSTMENT_STATUS_TO_DAY["3h"], "reduced3");
     assert.equal(ADJUSTMENT_STATUS_TO_DAY.half, "half");
@@ -708,6 +708,13 @@ describe("adjustment statuses map onto the grid's day types", () => {
     assert.equal(ADJUSTMENT_STATUS_TO_DAY.abs_lo, "abs_lo");
     assert.equal(ADJUSTMENT_STATUS_TO_DAY.vehicle, "vehicle");
     assert.equal(ADJUSTMENT_STATUS_TO_DAY.custom, "custom");
+    assert.equal(ADJUSTMENT_STATUS_TO_DAY.cancelled, "cancelled");
+    assert.equal(ADJUSTMENT_STATUS_TO_DAY.leave, "leave");
+    assert.equal(ADJUSTMENT_STATUS_TO_DAY.terminated, "terminated");
+    assert.equal(ADJUSTMENT_STATUS_TO_DAY.phone_issue, "phone_issue");
+    assert.equal(ADJUSTMENT_STATUS_TO_DAY.id_suspended, "id_suspended");
+    assert.equal(ADJUSTMENT_STATUS_TO_DAY.new_hire, "new_hire");
+    assert.equal(ADJUSTMENT_STATUS_TO_DAY.training, "training");
   });
 
   it("exposes the SOP hour band a rule would need for a given day", () => {

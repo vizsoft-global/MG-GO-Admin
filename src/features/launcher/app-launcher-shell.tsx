@@ -180,7 +180,7 @@ export function AppLauncherShell() {
       style={{
         backgroundColor: LAUNCHER_BRAND.canvas,
         color: LAUNCHER_BRAND.text,
-        fontFamily: 'var(--font-launcher), "Noto Sans Arabic", "Segoe UI", sans-serif',
+        fontFamily: '"Gotham", "GE SS TWO", "Noto Sans Arabic", sans-serif',
       }}
     >
       <img

@@ -621,7 +621,7 @@ export function PayrollAttendanceOrdersTab({
                       const status = row.days[i] ?? "blank";
                       const info = row.dayInfo[i];
                       const adjusted = Boolean(info?.adjusted);
-                      const orders = aoShownOrders(info);
+                      const orders = aoShownOrders(info, status);
                       const selected = isSelected(rowIndex, i);
                       return (
                         <Fragment key={`${row.driverId}-${date}`}>

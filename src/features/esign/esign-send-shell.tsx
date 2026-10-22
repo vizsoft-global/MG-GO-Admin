@@ -80,85 +80,12 @@ import {
   type EsignEmployeeSnapshot,
 } from "./render/esign-placeholders";
 import type { EsignTemplateFieldRow } from "./types";
-
-const LOAN_HR_KEYS = new Set([
-  "years_of_service",
-  "max_loan_policy_kwd",
-  "previous_loan_outstanding_kwd",
-  "policy_check",
-  "verified_by",
-  "verified_date",
-]);
-
-const LOAN_MANAGEMENT_KEYS = new Set([
-  "hr_manager_name",
-  "hr_manager_position",
-  "management_decision",
-  "amount_received",
-]);
-
-const PAYSLIP_VERIFICATION_KEYS = new Set(["hr_manager_name", "hr_manager_position", "computed_by"]);
-
-type SheetGroupKey = "loanRequest" | "hrVerification" | "management" | "verification" | "fields";
-
-const SHEET_GROUP_ORDER: SheetGroupKey[] = [
-  "fields",
-  "loanRequest",
-  "hrVerification",
-  "management",
-  "verification",
-];
-
-function sheetGroupKey(field: EsignTemplateFieldRow, kind: string | null): SheetGroupKey {
-  if (kind === "payslip") {
-    return PAYSLIP_VERIFICATION_KEYS.has(field.field_key) ? "verification" : "fields";
-  }
-  if (kind !== "loan") return "fields";
-  if (LOAN_HR_KEYS.has(field.field_key)) return "hrVerification";
-  if (LOAN_MANAGEMENT_KEYS.has(field.field_key)) return "management";
-  return "loanRequest";
-}
-
-function groupSheetFields(fields: EsignTemplateFieldRow[], kind: string | null) {
-  const groups = new Map<SheetGroupKey, EsignTemplateFieldRow[]>();
-  for (const field of fields) {
-    const key = sheetGroupKey(field, kind);
-    const list = groups.get(key) ?? [];
-    list.push(field);
-    groups.set(key, list);
-  }
-  return SHEET_GROUP_ORDER.filter((key) => groups.has(key)).map((key) => ({
-    key,
-    fields: groups.get(key) ?? [],
-  }));
-}
-
-function shown(value: string | null | undefined): string {
-  const trimmed = value?.trim() ?? "";
-  return trimmed || "—";
-}
-
-/**
- * Every value on the sheet is Admin-controlled. A `system` field arrives
- * pre-filled from the rider's snapshot and a `fixed` field from the template,
- * but both stay editable here; only a `signature` field is not an input,
- * because its value is the rider's ink, not text. Hiding a system row was the
- * reason HR could not correct a salary or a policy figure before sending.
- */
-function isSheetInput(field: EsignTemplateFieldRow): boolean {
-  switch (field.source_kind) {
-    case "system":
-    case "entry":
-    case "fixed":
-      return true;
-    case "signature":
-      return false;
-    default: {
-      const exhaustive: never = field.source_kind;
-      return exhaustive;
-    }
-  }
-}
+import {
+  groupSheetFields,
+  isSheetInput,
+  previewFieldValues,
+  shown,
+} from "./esign-sheet-fields";
 
 const PAYSLIP_PERIOD_ORDER = [
   "slip_month",
@@ -214,20 +141,6 @@ function partitionPayslipFields(fields: EsignTemplateFieldRow[]) {
     else rest.push(field);
   }
   return { period, money, rest };
-}
-
-function previewFieldValues(
-  fields: EsignTemplateFieldRow[],
-  values: Record<string, string>,
-  snapshot: EsignEmployeeSnapshot | null,
-) {
-  const next = snapshot ? snapshotValues(snapshot) : {};
-  for (const field of fields) {
-    const typed = values[field.field_key]?.trim();
-    if (typed) next[field.field_key] = typed;
-    else if (field.preview_value?.trim()) next[field.field_key] = field.preview_value;
-  }
-  return next;
 }
 
 export function EsignSendShell({
@@ -914,7 +827,7 @@ export function EsignSendShell({
         <LegendDot color="bg-[#0A0A0A]" label={t("sourceFixed")} />
         <LegendDot color={isV2 ? "bg-[#7C3AED]" : "bg-[#EA580C]"} label={t("sourceSigned")} />
       </div>
-      <div className={isV2 ? "relative min-h-0 flex-1 overflow-hidden" : undefined}>
+      <div className={isV2 ? "relative min-h-0 flex-1 overflow-y-auto" : undefined}>
         {renderPreview(isV2)}
       </div>
     </AppListCard>
@@ -1221,13 +1134,11 @@ export function EsignSendShell({
           </div>
           ) : null}
 
-          {isV2 ? null : (
-            <EsignSignersEditor
-              draft={staffSigners}
-              onDraftChange={setStaffSigners}
-              onSelectedDisplayNameChange={setPickedStaffName}
-            />
-          )}
+          <EsignSignersEditor
+            draft={staffSigners}
+            onDraftChange={setStaffSigners}
+            onSelectedDisplayNameChange={setPickedStaffName}
+          />
 
           <div className="space-y-2 rounded-lg border border-dashed border-border px-3 py-2">
             <div className="flex items-center justify-between gap-2">

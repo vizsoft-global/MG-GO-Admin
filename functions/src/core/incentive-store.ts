@@ -19,6 +19,7 @@ import {
   deliveryMatchesRules,
   incentiveRuleDpdTarget,
   restaurantDailyDpdTarget,
+  ruleMatchesScope,
   ruleRestaurantIds,
   type DeliveryRule,
   type IncentiveRule,
@@ -283,7 +284,7 @@ export function countEligibleDeliveries(args: {
       return false;
     }
 
-    return matchesRuleScope(rule, context.incentiveScopesByRule.get(ruleId) ?? [], {
+    return ruleMatchesScope(rule, context.incentiveScopesByRule.get(ruleId) ?? [], {
       zone_id: delivery.zone_id,
       partner_id: delivery.partner_id,
       restaurant_id: scopeRestaurantId,
@@ -335,24 +336,6 @@ function deliveryInPeriod(delivery: RawDelivery, startDay: string, endDay: strin
   if (!delivery.delivered_at) return false;
   const at = delivery.delivered_at.getTime();
   return at >= kuwaitDayStart(startDay).getTime() && at < kuwaitDayEnd(endDay).getTime();
-}
-
-function matchesRuleScope(
-  rule: IncentiveRule,
-  scopes: readonly RuleScope[],
-  delivery: { zone_id: string | null; partner_id: string | null; restaurant_id: string | null },
-): boolean {
-  if (rule.scope_type === "zone") {
-    return scopes.some((scope) => scope.zone_id === delivery.zone_id && scope.zone_id !== null);
-  }
-  if (rule.scope_type === "partner") {
-    return scopes.some(
-      (scope) => scope.partner_id === delivery.partner_id && scope.partner_id !== null,
-    );
-  }
-  return scopes.some(
-    (scope) => scope.restaurant_id === delivery.restaurant_id && scope.restaurant_id !== null,
-  );
 }
 
 /**

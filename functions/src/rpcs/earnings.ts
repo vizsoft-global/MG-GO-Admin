@@ -5,7 +5,7 @@ import { requireStaff, requireStaffFresh } from "../core/staff";
 import { kuwaitDayRange, kuwaitDayString } from "../core/kuwait";
 import { computeSourceCompanyIncentive, incentiveAccruesOnDate, roundKwd } from "../core/money";
 import {
-  companyConfigApplies,
+  companySchemeGoverns,
   compareRulesForLoop,
   computeIncentiveAmount,
   deliveryMatchesRules,
@@ -543,7 +543,12 @@ export async function recalculateDriverEarningsCore(args: {
     companyCache.set(companyKey, await loadSourceCompanyConfig(companyKey));
   }
   const company = companyKey ? (companyCache.get(companyKey) ?? null) : null;
-  const outsourced = companyConfigApplies({
+  // Same gate the rider screen uses (`companySchemeGoverns`): the company scheme
+  // only replaces the restaurant rules when it is live, enabled and carries a
+  // target. An outsourced rider on a staged/disabled company still earns from the
+  // rules — otherwise the app could show an offer that the recalculation prices
+  // at zero.
+  const companyGoverns = companySchemeGoverns({
     riderCategory: trimmedOrNull(driver["rider_category"]),
     company,
     onDate: earnDate,
@@ -555,7 +560,7 @@ export async function recalculateDriverEarningsCore(args: {
   let incentive = 0;
   let breakdown: Record<string, unknown>[] = [];
 
-  if (outsourced && company) {
+  if (companyGoverns && company) {
     // The company scheme prices **every** verified delivery for the day, across
     // all restaurants: an outsourced rider is contracted to the company, and
     // restaurant rules are not theirs to earn on.

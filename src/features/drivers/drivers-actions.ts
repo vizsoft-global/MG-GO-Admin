@@ -483,16 +483,19 @@ export async function createDriverIntake(
   const hasAvatarUpload = avatarFile instanceof File && avatarFile.size > 0;
   const needsR2 = docsToUpload.length > 0 || hasAvatarUpload;
 
-  const [phoneTaken, civilTaken, passportTaken, restaurantCheck, r2Configured] = await Promise.all([
-    phone ? phoneExists(phone) : Promise.resolve(false),
-    civilIdNormalized ? civilIdExists(civilIdNormalized) : Promise.resolve(false),
-    hr.passport ? passportExists(hr.passport) : Promise.resolve(false),
-    validateRestaurantsPublished(db, restaurantIds),
-    needsR2 ? isR2Configured() : Promise.resolve(true),
-  ]);
+  const [phoneTaken, civilTaken, passportTaken, employeeTaken, restaurantCheck, r2Configured] =
+    await Promise.all([
+      phone ? phoneExists(phone) : Promise.resolve(false),
+      civilIdNormalized ? civilIdExists(civilIdNormalized, undefined, employeeId) : Promise.resolve(false),
+      hr.passport ? passportExists(hr.passport, undefined, employeeId) : Promise.resolve(false),
+      employeeId ? employeeIdExists(employeeId) : Promise.resolve(false),
+      validateRestaurantsPublished(db, restaurantIds),
+      needsR2 ? isR2Configured() : Promise.resolve(true),
+    ]);
 
   if (phoneTaken) return { error: "phone_exists" };
   if (civilTaken) return { error: "civil_id_exists" };
+  if (employeeTaken) return { error: "employee_id_exists" };
   if (passportTaken) return { error: "passport_exists" };
   if (restaurantCheck.error) return { error: restaurantCheck.error };
   if (needsR2 && !r2Configured) return { error: "r2_not_configured" };
@@ -1156,9 +1159,9 @@ export async function restoreDriverIntake(
 
   const [phoneTaken, civilTaken, employeeTaken, passportTaken] = await Promise.all([
     phone ? phoneExists(phone, intakeId) : Promise.resolve(false),
-    civilId ? civilIdExists(civilId, intakeId) : Promise.resolve(false),
+    civilId ? civilIdExists(civilId, intakeId, employeeId) : Promise.resolve(false),
     employeeId ? employeeIdExists(employeeId, intakeId) : Promise.resolve(false),
-    passport ? passportExists(passport, intakeId) : Promise.resolve(false),
+    passport ? passportExists(passport, intakeId, employeeId) : Promise.resolve(false),
   ]);
 
   if (phoneTaken) return { error: "phone_exists" };
@@ -1318,8 +1321,8 @@ async function updateDriverIntakeInner(
   const [phoneTaken, civilTaken, passportTaken, existingResp, restaurantCheck, r2Configured] =
     await Promise.all([
     phone ? phoneExists(phone, intakeId) : Promise.resolve(false),
-    civilIdNormalized ? civilIdExists(civilIdNormalized, intakeId) : Promise.resolve(false),
-    hr.passport ? passportExists(hr.passport, intakeId) : Promise.resolve(false),
+    civilIdNormalized ? civilIdExists(civilIdNormalized, intakeId, employeeId) : Promise.resolve(false),
+    hr.passport ? passportExists(hr.passport, intakeId, employeeId) : Promise.resolve(false),
     db
       .from("driver_intakes")
       .select("id, linked_profile_id, driver_code, avatar_url")

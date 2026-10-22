@@ -123,7 +123,7 @@ export function EsignSignersEditor({
   }
 
   return (
-    <AppListCard className="space-y-3 p-4">
+    <AppListCard className="h-auto min-h-fit self-start space-y-3 overflow-visible p-4">
       <div className="flex items-center gap-2">
         <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
           <Users className="size-4" />

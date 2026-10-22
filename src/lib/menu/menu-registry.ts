@@ -215,6 +215,9 @@ export const OPERATIONS_HUB_PERMISSIONS = [
   "zones.view",
   "earnings.view",
   "drivers.manage",
+  "driver_groups.view",
+  "attendance.view",
+  "deliveries.view",
   "vehicles.manage",
   "attendance.manage",
   "companies.view",
@@ -235,13 +238,13 @@ export const DEFAULT_GROUPS = [
 
 export const DEFAULT_GROUP_META: Record<
   string,
-  { icon: string; displayMode?: "inline" | "panel" }
+  { icon: string; displayMode?: "inline" | "panel"; href?: string }
 > = {
   Overview: { icon: "Folder" },
   EmployeeDesk: { icon: "Inbox" },
   OperationsHub: { icon: "Building2" },
   Operations: { icon: "Folder" },
-  Settings: { icon: "Settings", displayMode: "inline" },
+  Settings: { icon: "Settings", displayMode: "inline", href: "/settings" },
   System: { icon: "Cog", displayMode: "inline" },
   WIP: { icon: "AlertTriangle" },
   Unorganised: { icon: "Folder" },
@@ -379,9 +382,16 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Driver groups",
     defaultIcon: "UsersRound",
     href: "/drivers/groups",
-    defaultGroup: "Operations",
-    defaultOrder: 0.5,
+    /**
+     * A hub card, not a sidebar row: the door is the OperationsHub page, the
+     * same as Partners / Restaurants / Zones. It keeps `driver_groups.view`, the
+     * route guard and its Roles & Permissions entry, and it is still listed in
+     * `LAUNCHER_TILE_IDS` so the dashboard can decide about the tile separately.
+     */
+    defaultGroup: OPERATIONS_HUB_GROUP,
+    defaultOrder: 1.5,
     permission: "driver_groups.view",
+    hidden: true,
   },
   {
     id: "driver-devices",
@@ -563,9 +573,10 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Attendance",
     defaultIcon: "CalendarDays",
     href: "/attendance",
-    defaultGroup: "Operations",
+    defaultGroup: OPERATIONS_HUB_GROUP,
     defaultOrder: 7,
     permission: "attendance.view",
+    hidden: true,
   },
   {
     id: "performance",
@@ -628,7 +639,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     id: "visit-bookings",
     defaultLabel: "Visit Slots",
     defaultIcon: "Table2",
-    href: "/visit-bookings/slots",
+    href: "/visit-bookings",
     defaultGroup: "Visit Bookings",
     defaultOrder: 0,
     permission: "visits.view",
@@ -647,9 +658,10 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Order exceptions",
     defaultIcon: "PackageX",
     href: "/order-exceptions",
-    defaultGroup: "Operations",
+    defaultGroup: OPERATIONS_HUB_GROUP,
     defaultOrder: 7.2,
     permission: "deliveries.view",
+    hidden: true,
   },
   {
     id: "compliance",
@@ -729,11 +741,11 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   },
   {
     id: "profile",
-    defaultLabel: "Profile",
+    defaultLabel: "Settings",
     defaultIcon: "User",
     href: "/settings",
     defaultGroup: "Settings",
-    defaultOrder: 0,
+    defaultOrder: 2.5,
     permission: "settings.view",
   },
   {
@@ -870,7 +882,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/settings/roles",
     defaultGroup: "Settings",
     defaultOrder: 2,
-    superAdminOnly: true,
+    permission: "roles.manage",
   },
   {
     id: "access-requests",
@@ -906,7 +918,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/settings/menu-editor",
     defaultGroup: "Settings",
     defaultOrder: 6,
-    superAdminOnly: true,
+    permission: "settings.manage",
   },
   {
     id: "languages",
@@ -1012,7 +1024,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   payouts: "payouts",
   notifications: "notifications",
   support: "support",
-  profile: "profile",
+  profile: "settings",
   branding: "branding",
   "driver-app": "driverApp",
   "vehicle-types": "vehicleTypes",

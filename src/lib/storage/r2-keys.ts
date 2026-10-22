@@ -9,6 +9,7 @@ const ALLOWED_PREFIXES = [
   "assets/",
   "releases/",
   "vehicles/",
+  "source_companies/",
 ] as const;
 
 export function isAllowedStorageKey(key: string): boolean {
@@ -29,7 +30,28 @@ export function isR2ObjectKey(value: string | null | undefined): boolean {
     v.startsWith("notifications/") ||
     v.startsWith("assets/") ||
     v.startsWith("releases/") ||
-    v.startsWith("vehicles/")
+    v.startsWith("vehicles/") ||
+    v.startsWith("source_companies/")
+  );
+}
+
+/** `source_companies/{key}/logo.{ext}` — printed on that company's HR sheets. */
+export const SOURCE_COMPANY_LOGO_PREFIX = "source_companies/";
+
+export function isSourceCompanyLogoKey(key: string | null | undefined): boolean {
+  if (!key) return false;
+  const normalized = key.trim().replace(/^\/+/, "");
+  if (normalized.includes("..")) return false;
+  return normalized.startsWith(SOURCE_COMPANY_LOGO_PREFIX);
+}
+
+export function buildSourceCompanyLogoKey(companyKey: string, ext: string): string {
+  return `${SOURCE_COMPANY_LOGO_PREFIX}${companyKey}/logo.${ext}`;
+}
+
+export function allSourceCompanyLogoKeys(companyKey: string): string[] {
+  return ["png", "jpg", "jpeg", "webp", "svg"].map((ext) =>
+    buildSourceCompanyLogoKey(companyKey, ext),
   );
 }
 

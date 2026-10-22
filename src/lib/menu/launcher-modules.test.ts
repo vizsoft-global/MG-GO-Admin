@@ -13,6 +13,7 @@ import {
   launcherTilesFromMenu,
   mergeLauncherTiles,
   visibleLauncherTiles,
+  type LauncherTileId,
 } from "./launcher-modules";
 
 describe("launcher modules", () => {
@@ -26,7 +27,7 @@ describe("launcher modules", () => {
     assert.equal(LAUNCHER_LABEL_OVERRIDE["visit-bookings"], "Visit Slots");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.assets, "Assets");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.payroll, "Payroll");
-    assert.equal(items.find((item) => item.id === "visit-bookings")?.href, "/visit-bookings/slots");
+    assert.equal(items.find((item) => item.id === "visit-bookings")?.href, "/visit-bookings");
     assert.equal(items.find((item) => item.id === "assets")?.href, "/assets");
     assert.equal(
       LAUNCHER_TILE_IDS[LAUNCHER_TILE_IDS.indexOf("assets") + 1],
@@ -79,8 +80,9 @@ describe("launcher modules", () => {
 
     assert.ok(ids.includes("vehicles"), "Fleet Hub");
     assert.ok(ids.includes("payroll-hub"), "Payroll Hub");
-    assert.ok(ids.includes("attendance"));
+    assert.ok(!ids.includes("attendance"), "Attendance is an OperationsHub card");
     assert.ok(ids.includes("payroll"));
+    assert.ok(!ids.includes("driver-groups"), "Driver groups is an OperationsHub card, not a row");
     assert.ok(!ids.includes("dashboard"), "the launcher is not its own tile");
     assert.equal(new Set(ids).size, ids.length);
 
@@ -101,13 +103,13 @@ describe("launcher modules", () => {
 
     assert.ok(ids.includes("vehicles"));
     assert.ok(ids.includes("payroll-hub"));
-    assert.ok(ids.includes("assets"), "Assets is hidden in the sidebar");
+    assert.ok(ids.includes("assistant"), "Staff Assistant is a launcher-only door");
     assert.equal(new Set(ids).size, ids.length);
     assert.equal(new Set(hrefs).size, hrefs.length);
     assert.equal(hrefs.filter((href) => href === "/settings").length, 1);
   });
 
-  it("drops Dashboard, Payroll and Earnings from the launcher only", () => {
+  it("drops Dashboard, Payroll, Earnings, Verification, Assets and Driver groups from the launcher only", () => {
     const derived = launcherTilesFromMenu(buildInitialTree(() => true, true));
     const merged = mergeLauncherTiles(derived, launcherRegistryItems());
     const ids = merged.map((tile) => tile.id);
@@ -116,6 +118,14 @@ describe("launcher modules", () => {
       assert.ok(!ids.includes(hidden), hidden);
     }
     assert.ok(ids.includes("payroll-hub"));
+
+    for (const id of ["dpd-verification", "assets", "driver-groups"]) {
+      assert.ok(LAUNCHER_HIDDEN_TILE_IDS.has(id), id);
+      assert.ok(LAUNCHER_TILE_IDS.includes(id as LauncherTileId), `${id} keeps its tile slot`);
+    }
+
+    assert.ok(ids.includes("visit-bookings"), "Visit Slots stays a Home tile");
+    assert.ok(!LAUNCHER_HIDDEN_TILE_IDS.has("visit-bookings"));
 
     const visible = visibleLauncherTiles(new Set(), true).map((tile) => tile.id);
     for (const hidden of LAUNCHER_HIDDEN_TILE_IDS) {

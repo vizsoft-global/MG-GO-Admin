@@ -1,5 +1,5 @@
 import { setRequestLocale } from "next-intl/server";
-import { requireSuperAdmin } from "@/lib/auth/require-super-admin";
+import { requirePermission } from "@/lib/auth/require-permission";
 import { getAllAdminRoles } from "@/lib/auth/get-role-permissions";
 import { MenuEditorPanel } from "@/features/menu-editor/menu-editor-panel";
 
@@ -10,7 +10,7 @@ export default async function MenuEditorPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  await requireSuperAdmin(locale);
+  await requirePermission(locale, "settings.manage");
   const roles = await getAllAdminRoles();
 
   return <MenuEditorPanel roles={roles} />;

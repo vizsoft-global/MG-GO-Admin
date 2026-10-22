@@ -25,7 +25,7 @@ export type AppDefinition = {
 export const APP_REGISTRY: readonly AppDefinition[] = [
   {
     id: "visits",
-    href: "/visit-bookings/slots",
+    href: "/visit-bookings",
     icon: "Table2",
     prefixes: ["/visit-bookings", "/employeedesk/visits"],
     groups: [],

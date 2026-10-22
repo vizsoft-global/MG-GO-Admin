@@ -22,15 +22,16 @@ describe("moduleTint", () => {
     assert.equal(moduleTint("employeedesk").tile, "#E11D48");
   });
 
-  it("matches the Odoo Classic cream chrome", () => {
-    assert.equal(LAUNCHER_BRAND.canvas, "#f9f1eb");
-    assert.equal(LAUNCHER_BRAND.topBar, "#29293f");
+  it("matches the brand canvas chrome", () => {
+    assert.equal(LAUNCHER_BRAND.canvas, "#d9d2cf");
+    assert.equal(LAUNCHER_BRAND.topBar, "#27273f");
     assert.equal(LAUNCHER_BRAND.logoChip, "#dad2cf");
-    assert.equal(LAUNCHER_BRAND.badge, "#29293f");
-    assert.equal(LAUNCHER_BRAND.badgeBorder, "#f9f1eb");
+    assert.equal(LAUNCHER_BRAND.badge, "#27273f");
+    assert.equal(LAUNCHER_BRAND.badgeBorder, "#d9d2cf");
     assert.equal(LAUNCHER_BRAND.tileLabel, "#3a3a52");
     assert.equal(LAUNCHER_BRAND.footer, "#5a5a6e");
     assert.equal(LAUNCHER_BRAND.muted, "#dad2cf");
+    assert.equal(LAUNCHER_BRAND.accent, "#a73c24");
   });
 
   it("gives every launcher tile its own artifact fill", () => {

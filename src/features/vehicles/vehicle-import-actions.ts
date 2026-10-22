@@ -4,14 +4,17 @@ import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
-import { COLLECTIONS } from "@/lib/firebase/db";
+import { COLLECTIONS, UNIQ_COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import type { Json } from "@/types/database";
-import type { DocumentData, Firestore } from "firebase-admin/firestore";
+import type { DocumentData, DocumentReference, Firestore } from "firebase-admin/firestore";
 import {
   previewVehicleImport,
+  type VehicleCompanyRef,
+  type VehicleDriverRef,
   type VehicleImportExisting,
   type VehicleImportPreviewRow,
+  type VehiclePartnerRef,
   type VehicleSheetSnapshot,
 } from "./import/vehicle-import-preview";
 import {
@@ -25,7 +28,9 @@ import {
 
 const BATCHES = "vehicle_import_batches";
 const IMPORT_ROWS = "vehicle_import_rows";
-const MAX_ROWS = 1000;
+/** A sheet may hold up to 2000 vehicle rows; writes are batched 400 at a time. */
+const MAX_ROWS = 2000;
+const WRITE_CHUNK = 400;
 
 export type VehicleImportBatchRow = {
   id: string;
@@ -76,12 +81,56 @@ async function openDb(): Promise<Firestore> {
   return db;
 }
 
-async function requireCreate() {
+/**
+ * Writes rider assignment + document dates as well as the vehicle row, so the
+ * gate is `vehicles.manage` — not `vehicles.create`.
+ */
+async function requireManage() {
   const session = await getSessionUser();
-  if (!session || !hasPermissionInSet(session.permissions, "vehicles.create", session.isSuperAdmin)) {
+  if (!session || !hasPermissionInSet(session.permissions, "vehicles.manage", session.isSuperAdmin)) {
     return { error: "not_authorized" as const };
   }
   return { session };
+}
+
+/** Claims the plate in `uniq_plate`; `false` means another vehicle owns it. */
+async function claimPlate(db: Firestore, plate: string, ownerId: string): Promise<boolean> {
+  const ref = db.collection(UNIQ_COLLECTIONS.plate).doc(encodeURIComponent(plate));
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const owner = snap.exists ? str(snap.data()?.owner_id) : "";
+    if (snap.exists && owner && owner !== ownerId) return false;
+    tx.set(ref, { owner_id: ownerId });
+    return true;
+  });
+}
+
+async function releasePlate(db: Firestore, plate: string, ownerId: string) {
+  const ref = db.collection(UNIQ_COLLECTIONS.plate).doc(encodeURIComponent(plate));
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (snap.exists && str(snap.data()?.owner_id) === ownerId) tx.delete(ref);
+  });
+}
+
+/**
+ * Identity check against the snapshot this import already loaded. A plate that
+ * another vehicle holds is never re-created; the cross-session race is covered
+ * by the `uniq_plate` claim, so the loop stays query-free for 2000-row sheets.
+ */
+function identityTaken(
+  existing: readonly VehicleImportExisting[],
+  regNumber: string,
+  bikeId: string,
+  exceptId: string,
+): "duplicate_plate" | "duplicate_bike_id" | null {
+  if (existing.some((row) => row.id !== exceptId && row.reg_number === regNumber)) {
+    return "duplicate_plate";
+  }
+  if (existing.some((row) => row.id !== exceptId && row.bike_id === bikeId)) {
+    return "duplicate_bike_id";
+  }
+  return null;
 }
 
 function asSnapshot(row: {
@@ -103,6 +152,14 @@ function asSnapshot(row: {
   fuel_company: string | null;
   chip_no: string | null;
   fuel_monthly_limit_kwd: number | null;
+  company_id?: string | null;
+  owner_partner_id?: string | null;
+  registration_issued_at?: string | null;
+  registration_expires_at?: string | null;
+  insurance_issued_at?: string | null;
+  insurance_expires_at?: string | null;
+  replaces_vehicle_id?: string | null;
+  replacement_started_at?: string | null;
 }): VehicleImportExisting {
   return {
     id: row.id,
@@ -124,39 +181,72 @@ function asSnapshot(row: {
     fuel_company: row.fuel_company,
     chip_no: row.chip_no,
     fuel_monthly_limit_kwd: row.fuel_monthly_limit_kwd,
+    company_id: row.company_id ?? null,
+    owner_partner_id: row.owner_partner_id ?? null,
+    registration_issued_at: row.registration_issued_at ?? null,
+    registration_expires_at: row.registration_expires_at ?? null,
+    insurance_issued_at: row.insurance_issued_at ?? null,
+    insurance_expires_at: row.insurance_expires_at ?? null,
+    replaces_vehicle_id: row.replaces_vehicle_id ?? null,
+    replacement_started_at: row.replacement_started_at ?? null,
   };
 }
 
-function fromVehicle(row: Row): VehicleImportExisting {
-  return asSnapshot({
-    id: row.id,
-    bike_id: str(row.bike_id),
-    reg_number: str(row.reg_number) || null,
-    chassis_no: str(row.chassis_no) || null,
-    make: str(row.make) || null,
-    model: str(row.model) || null,
-    model_year: row.model_year == null ? null : Number(row.model_year),
-    vehicle_type_key: str(row.vehicle_type_key),
-    project_type: str(row.project_type),
-    status: str(row.status),
-    location_text: str(row.location_text) || null,
-    condition: str(row.condition) || null,
-    car_type: str(row.car_type) || null,
-    type_of_use: str(row.type_of_use) || null,
-    fuel_type: str(row.fuel_type) || null,
-    fuel_company: str(row.fuel_company) || null,
-    chip_no: str(row.chip_no) || null,
-    fuel_monthly_limit_kwd: row.fuel_monthly_limit_kwd == null ? null : Number(row.fuel_monthly_limit_kwd),
-  });
+function fromVehicle(row: Row, assignedDriverId: string | null = null): VehicleImportExisting {
+  return {
+    ...asSnapshot({
+      id: row.id,
+      bike_id: str(row.bike_id),
+      reg_number: str(row.reg_number) || null,
+      chassis_no: str(row.chassis_no) || null,
+      make: str(row.make) || null,
+      model: str(row.model) || null,
+      model_year: row.model_year == null ? null : Number(row.model_year),
+      vehicle_type_key: str(row.vehicle_type_key),
+      project_type: str(row.project_type),
+      status: str(row.status),
+      location_text: str(row.location_text) || null,
+      condition: str(row.condition) || null,
+      car_type: str(row.car_type) || null,
+      type_of_use: str(row.type_of_use) || null,
+      fuel_type: str(row.fuel_type) || null,
+      fuel_company: str(row.fuel_company) || null,
+      chip_no: str(row.chip_no) || null,
+      fuel_monthly_limit_kwd:
+        row.fuel_monthly_limit_kwd == null ? null : Number(row.fuel_monthly_limit_kwd),
+      company_id: str(row.company_id) || null,
+      owner_partner_id: str(row.owner_partner_id) || null,
+      registration_issued_at: str(row.registration_issued_at) || null,
+      registration_expires_at: str(row.registration_expires_at) || null,
+      insurance_issued_at: str(row.insurance_issued_at) || null,
+      insurance_expires_at: str(row.insurance_expires_at) || null,
+      replaces_vehicle_id: str(row.replaces_vehicle_id) || null,
+      replacement_started_at: str(row.replacement_started_at) || null,
+    }),
+    assigned_driver_id: assignedDriverId,
+  };
 }
 
 function writePayload(snapshot: VehicleSheetSnapshot) {
   return {
     ...snapshot,
-    project_type: snapshot.project_type,
-    status: snapshot.status,
     updated_at: new Date().toISOString(),
   };
+}
+
+/** Only the fields that actually changed — a blank cell never rewrites a column. */
+function changedPayload(
+  before: VehicleSheetSnapshot | null,
+  after: VehicleSheetSnapshot,
+): Record<string, unknown> {
+  if (!before) return writePayload(after);
+  const patch: Record<string, unknown> = {};
+  for (const key of Object.keys(after) as (keyof VehicleSheetSnapshot)[]) {
+    if (before[key] === after[key]) continue;
+    patch[key] = after[key];
+  }
+  if (Object.keys(patch).length === 0) return {};
+  return { ...patch, updated_at: new Date().toISOString() };
 }
 
 export type VehicleImportBatchesResult =
@@ -164,7 +254,7 @@ export type VehicleImportBatchesResult =
   | { ok: false; error: string };
 
 export async function listVehicleImportBatches(): Promise<VehicleImportBatchesResult> {
-  const auth = await requireCreate();
+  const auth = await requireManage();
   if ("error" in auth) return { ok: false, error: auth.error ?? "not_authorized" };
   try {
     const db = await openDb();
@@ -192,7 +282,7 @@ export async function listVehicleImportBatches(): Promise<VehicleImportBatchesRe
 }
 
 export async function listVehicleImportRows(batchId: string): Promise<VehicleImportLogRow[]> {
-  const auth = await requireCreate();
+  const auth = await requireManage();
   if ("error" in auth) return [];
   try {
     const db = await openDb();
@@ -218,7 +308,7 @@ export async function applyVehicleImport(input: {
 }): Promise<{ error?: string; applied?: number; failed?: number }> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
-  const auth = await requireCreate();
+  const auth = await requireManage();
   if ("error" in auth) return { error: auth.error };
   if (input.rows.length > MAX_ROWS) return { error: "too_many_rows" };
 
@@ -231,13 +321,44 @@ export async function applyVehicleImport(input: {
 
   let existing: VehicleImportExisting[];
   let allowedUseTypes: string[];
+  let drivers: VehicleDriverRef[];
+  let companies: VehicleCompanyRef[];
+  let partners: VehiclePartnerRef[];
+  const driversByVehicle = new Map<string, string[]>();
   try {
-    const [vehicles, uses] = await Promise.all([
+    const [vehicles, uses, driverSnap, companySnap, partnerSnap] = await Promise.all([
       db.collection(COLLECTIONS.vehicles).get(),
       db.collection(COLLECTIONS.vehicleUseTypes).where("is_active", "==", true).get(),
+      db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get(),
+      db.collection(COLLECTIONS.vehicleCompanies).get(),
+      db.collection(COLLECTIONS.partners).get(),
     ]);
-    existing = vehicles.docs.map((doc) => fromVehicle(asRow(doc.id, doc.data())));
+    drivers = driverSnap.docs
+      .map((doc) => ({ id: doc.id, employee_id: str(doc.data().employee_id) }))
+      .filter((driver) => driver.employee_id);
+    for (const doc of driverSnap.docs) {
+      const vehicleId = str(doc.data().vehicle_id);
+      if (!vehicleId) continue;
+      const list = driversByVehicle.get(vehicleId);
+      if (list) list.push(doc.id);
+      else driversByVehicle.set(vehicleId, [doc.id]);
+    }
+    existing = vehicles.docs.map((doc) =>
+      fromVehicle(asRow(doc.id, doc.data()), driversByVehicle.get(doc.id)?.[0] ?? null),
+    );
     allowedUseTypes = uses.docs.map((doc) => str(doc.data().key) || doc.id).filter(Boolean);
+    companies = companySnap.docs.map((doc) => {
+      const row = asRow(doc.id, doc.data());
+      return {
+        key: str(row.key) || doc.id,
+        label_en: str(row.label_en),
+        label_ar: str(row.label_ar),
+      };
+    });
+    partners = partnerSnap.docs.map((doc) => {
+      const row = asRow(doc.id, doc.data());
+      return { id: doc.id, name: str(row.name) };
+    });
   } catch (error) {
     return { error: error instanceof Error ? error.message : "save_failed" };
   }
@@ -247,6 +368,9 @@ export async function applyVehicleImport(input: {
     rows: input.rows,
     existing,
     allowedUseTypes,
+    drivers,
+    companies,
+    partners,
   });
   if (preview.error) return { error: preview.error };
   if (!preview.rows.length) return { error: "empty_sheet" };
@@ -256,46 +380,147 @@ export async function applyVehicleImport(input: {
     outcome: "create" | "update" | "failed";
     message: string | null;
     vehicleId: string | null;
+    driverBefore: string | null;
+    driverAfter: string | null;
   }> = [];
 
+  const pending: Array<{ ref: DocumentReference; patch: Record<string, unknown> }> = [];
+  const flush = async () => {
+    for (let i = 0; i < pending.length; i += WRITE_CHUNK) {
+      const slice = db.batch();
+      for (const write of pending.slice(i, i + WRITE_CHUNK)) {
+        slice.set(write.ref, write.patch, { merge: true });
+      }
+      await slice.commit();
+    }
+    pending.length = 0;
+  };
+  const queueDriver = (driverId: string, vehicleId: string | null) => {
+    pending.push({
+      ref: db.collection(COLLECTIONS.drivers).doc(driverId),
+      patch: { vehicle_id: vehicleId, updated_at: new Date() },
+    });
+  };
+  const queueIntakes = async (driverId: string, vehicleId: string | null) => {
+    const snap = await db
+      .collection(COLLECTIONS.driverIntakes)
+      .where("linked_profile_id", "==", driverId)
+      .where("archived_at", "==", null)
+      .get();
+    for (const doc of snap.docs) {
+      pending.push({ ref: doc.ref, patch: { vehicle_id: vehicleId, updated_at: new Date() } });
+    }
+  };
+
   for (const row of preview.rows) {
+    const driverAfter =
+      row.driverAction === "assign"
+        ? row.driverId
+        : row.driverAction === "clear"
+          ? null
+          : row.driverBefore;
     if (row.status === "error" || !row.after) {
-      logged.push({ row, outcome: "failed", message: row.error, vehicleId: row.vehicleId });
+      logged.push({
+        row,
+        outcome: "failed",
+        message: row.error,
+        vehicleId: row.vehicleId,
+        driverBefore: row.driverBefore,
+        driverAfter: row.driverBefore,
+      });
       continue;
     }
-    if (row.status === "create") {
-      const id = crypto.randomUUID();
-      try {
-        await db.collection(COLLECTIONS.vehicles).doc(id).set({
-          id,
-          ...writePayload(row.after),
-          created_by: auth.session.id,
-          created_at: new Date(),
-        });
-        logged.push({ row, outcome: "create", message: null, vehicleId: id });
-      } catch (error) {
+    const snapshot = row.after;
+    try {
+      if (row.status === "create") {
+        const id = crypto.randomUUID();
+        const taken = identityTaken(existing, snapshot.reg_number ?? "", snapshot.bike_id, id);
+        if (taken) throw new Error(taken);
+        if (snapshot.reg_number) {
+          const claimed = await claimPlate(db, snapshot.reg_number, id);
+          if (!claimed) throw new Error("duplicate_plate");
+        }
+        try {
+          await db
+            .collection(COLLECTIONS.vehicles)
+            .doc(id)
+            .set({
+              id,
+              ...writePayload(snapshot),
+              created_by: auth.session.id,
+              created_at: new Date(),
+            });
+        } catch (error) {
+          // Do not leave a plate claimed by a vehicle that was never written.
+          if (snapshot.reg_number) {
+            await releasePlate(db, snapshot.reg_number, id).catch(() => undefined);
+          }
+          throw error;
+        }
         logged.push({
           row,
-          outcome: "failed",
-          message: error instanceof Error ? error.message : "save_failed",
-          vehicleId: null,
+          outcome: "create",
+          message: null,
+          vehicleId: id,
+          driverBefore: null,
+          driverAfter,
         });
+        if (driverAfter) {
+          queueDriver(driverAfter, id);
+          await queueIntakes(driverAfter, id);
+        }
+      } else {
+        const vehicleId = row.vehicleId ?? "";
+        if (!vehicleId) throw new Error("missing_fields");
+        const patch = changedPayload(row.before, snapshot);
+        if (Object.keys(patch).length > 0) {
+          await db.collection(COLLECTIONS.vehicles).doc(vehicleId).set(patch, { merge: true });
+        }
+        logged.push({
+          row,
+          outcome: "update",
+          message: null,
+          vehicleId,
+          driverBefore: row.driverBefore,
+          driverAfter,
+        });
+        if (driverAfter !== row.driverBefore) {
+          for (const holder of driversByVehicle.get(vehicleId) ?? []) {
+            if (holder !== driverAfter) queueDriver(holder, null);
+          }
+          if (row.driverBefore && row.driverBefore !== driverAfter) {
+            queueDriver(row.driverBefore, null);
+            await queueIntakes(row.driverBefore, null);
+          }
+          if (driverAfter) {
+            queueDriver(driverAfter, vehicleId);
+            await queueIntakes(driverAfter, vehicleId);
+          }
+        }
       }
-      continue;
-    }
-    try {
-      await db
-        .collection(COLLECTIONS.vehicles)
-        .doc(row.vehicleId ?? "")
-        .set(writePayload(row.after), { merge: true });
-      logged.push({ row, outcome: "update", message: null, vehicleId: row.vehicleId });
+      if (pending.length >= WRITE_CHUNK) await flush();
     } catch (error) {
       logged.push({
         row,
         outcome: "failed",
         message: error instanceof Error ? error.message : "save_failed",
         vehicleId: row.vehicleId,
+        driverBefore: row.driverBefore,
+        driverAfter: row.driverBefore,
       });
+    }
+  }
+
+  if (pending.length > 0) {
+    try {
+      await flush();
+    } catch (error) {
+      const appliedNow = logged.filter((item) => item.outcome !== "failed").length;
+      return {
+        error: error instanceof Error ? error.message : "save_failed",
+        applied: appliedNow,
+        failed: logged.length - appliedNow,
+      };
     }
   }
 
@@ -331,6 +556,9 @@ export async function applyVehicleImport(input: {
           outcome: item.outcome,
           message: item.message,
           vehicle_id: item.vehicleId,
+          driver_before: item.driverBefore,
+          driver_after: item.driverAfter,
+          cleared_fields: item.row.clearedFields as Json,
           before: (item.row.before ?? null) as Json,
           after: (item.outcome === "failed" ? null : item.row.after) as Json,
           created_at: new Date(),
@@ -359,6 +587,42 @@ export async function applyVehicleImport(input: {
   return { applied, failed };
 }
 
+/**
+ * Puts the rider back (undo) or forward (redo) on one vehicle. `clearId` only
+ * leaves the vehicle when it still points here, so a newer manual assignment is
+ * never clobbered by an old batch.
+ */
+async function syncAssignment(
+  db: Firestore,
+  vehicleId: string,
+  targetId: string | null,
+  clearId: string | null,
+) {
+  const now = new Date();
+  if (clearId && clearId !== targetId) {
+    const snap = await db.collection(COLLECTIONS.drivers).doc(clearId).get();
+    if (snap.exists && str(snap.data()?.vehicle_id) === vehicleId) {
+      await snap.ref.set({ vehicle_id: null, updated_at: now }, { merge: true });
+    }
+  }
+  if (!targetId) return;
+  await db
+    .collection(COLLECTIONS.drivers)
+    .doc(targetId)
+    .set({ vehicle_id: vehicleId, updated_at: now }, { merge: true });
+  const intakes = await db
+    .collection(COLLECTIONS.driverIntakes)
+    .where("linked_profile_id", "==", targetId)
+    .where("archived_at", "==", null)
+    .get();
+  if (intakes.size === 0) return;
+  const batch = db.batch();
+  for (const doc of intakes.docs) {
+    batch.set(doc.ref, { vehicle_id: vehicleId, updated_at: now }, { merge: true });
+  }
+  await batch.commit();
+}
+
 export async function undoVehicleImport(): Promise<{ error?: string; changed?: number }> {
   return replay("undo");
 }
@@ -370,7 +634,7 @@ export async function redoVehicleImport(): Promise<{ error?: string; changed?: n
 async function replay(direction: "undo" | "redo"): Promise<{ error?: string; changed?: number }> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
-  const auth = await requireCreate();
+  const auth = await requireManage();
   if ("error" in auth) return { error: auth.error };
   let db: Firestore;
   try {
@@ -411,12 +675,16 @@ async function replay(direction: "undo" | "redo"): Promise<{ error?: string; cha
   for (const row of rows) {
     const outcome = row.outcome === "create" || row.outcome === "update" ? row.outcome : "failed";
     const vehicleId = str(row.vehicle_id) || null;
+    const driverBefore = str(row.driver_before) || null;
+    const driverAfter = str(row.driver_after) || null;
     if (direction === "undo") {
       const plan = undoRowPlan({ outcome, vehicleId, before: row.before });
       if (!plan) continue;
       try {
         if (plan.op === "delete") {
           await db.collection(COLLECTIONS.vehicles).doc(plan.vehicleId).delete();
+          const plate = str((row.after as Record<string, unknown> | null)?.reg_number);
+          if (plate) await releasePlate(db, plate, plan.vehicleId).catch(() => undefined);
         } else {
           const snapshot = plan.snapshot as VehicleSheetSnapshot;
           await db
@@ -424,6 +692,7 @@ async function replay(direction: "undo" | "redo"): Promise<{ error?: string; cha
             .doc(plan.vehicleId)
             .set(writePayload(snapshot), { merge: true });
         }
+        await syncAssignment(db, plan.vehicleId, driverBefore, driverAfter);
       } catch (error) {
         return { error: error instanceof Error ? error.message : "save_failed" };
       }
@@ -437,6 +706,7 @@ async function replay(direction: "undo" | "redo"): Promise<{ error?: string; cha
           const found = await db.collection(COLLECTIONS.vehicles).doc(plan.vehicleId).get();
           if (found.exists) {
             await found.ref.set(writePayload(snapshot), { merge: true });
+            await syncAssignment(db, plan.vehicleId, driverAfter, driverBefore);
             changed += 1;
             continue;
           }
@@ -448,6 +718,10 @@ async function replay(direction: "undo" | "redo"): Promise<{ error?: string; cha
           created_by: auth.session.id,
           created_at: new Date(),
         });
+        if (snapshot.reg_number) {
+          await claimPlate(db, snapshot.reg_number, id).catch(() => undefined);
+        }
+        await syncAssignment(db, id, driverAfter, driverBefore);
       } catch (error) {
         return { error: error instanceof Error ? error.message : "save_failed" };
       }

@@ -160,6 +160,95 @@ export function resolveRestaurantToken(
   return byName ? { status: "ok", id: byName.id, name: byName.name } : { status: "unmatched" };
 }
 
+/** A row from `employee_statuses` / `employee_sections` / `nationality_categories` / `bank_codes`. */
+export type EmployeeCatalogRecord = {
+  key: string;
+  name: string;
+  name_ar?: string | null;
+};
+
+export type EmployeeCatalogIndex = {
+  byKey: Map<string, EmployeeCatalogRecord>;
+  byName: Map<string, EmployeeCatalogRecord>;
+  ambiguousNames: Set<string>;
+};
+
+/**
+ * Catalogs match on the key **or** either label, because a sheet written by HR
+ * carries "Running" as often as it carries `running`.
+ */
+export function buildEmployeeCatalogIndex(
+  rows: readonly EmployeeCatalogRecord[],
+): EmployeeCatalogIndex {
+  const byKey = new Map<string, EmployeeCatalogRecord>();
+  const byName = new Map<string, EmployeeCatalogRecord>();
+  const ambiguousNames = new Set<string>();
+  for (const row of rows) {
+    const key = norm(row.key);
+    if (key) byKey.set(key, row);
+    for (const label of [row.name, row.name_ar ?? ""]) {
+      const nameKey = norm(label);
+      if (!nameKey) continue;
+      const prev = byName.get(nameKey);
+      if (prev && prev.key !== row.key) {
+        byName.delete(nameKey);
+        ambiguousNames.add(nameKey);
+        continue;
+      }
+      if (!ambiguousNames.has(nameKey)) byName.set(nameKey, row);
+    }
+  }
+  return { byKey, byName, ambiguousNames };
+}
+
+export type CatalogLookupResult =
+  | { status: "ok"; key: string; name: string }
+  | { status: "unmatched" }
+  | { status: "ambiguous" }
+  | { status: "empty" };
+
+export function resolveEmployeeCatalogToken(
+  token: string | null | undefined,
+  index: EmployeeCatalogIndex,
+): CatalogLookupResult {
+  const value = token?.trim() ?? "";
+  if (!value) return { status: "empty" };
+  const key = norm(value);
+  const byKey = index.byKey.get(key);
+  if (byKey) return { status: "ok", key: byKey.key, name: byKey.name };
+  if (index.ambiguousNames.has(key)) return { status: "ambiguous" };
+  const byName = index.byName.get(key);
+  return byName
+    ? { status: "ok", key: byName.key, name: byName.name }
+    : { status: "unmatched" };
+}
+
+/** Resolves a comma list; one bad token fails the whole cell. */
+export function resolveEmployeeCatalogTokens(
+  raw: string | null,
+  index: EmployeeCatalogIndex,
+): {
+  status: "ok" | "unmatched" | "ambiguous" | "empty";
+  keys: string[];
+  names: string[];
+} {
+  const tokens = parseCommaSeparatedIds(raw);
+  if (tokens.length === 0) return { status: "empty", keys: [], names: [] };
+  const keys: string[] = [];
+  const names: string[] = [];
+  for (const token of tokens) {
+    const hit = resolveEmployeeCatalogToken(token, index);
+    if (hit.status !== "ok") {
+      return { status: hit.status === "empty" ? "unmatched" : hit.status, keys: [], names: [] };
+    }
+    if (!keys.includes(hit.key)) {
+      keys.push(hit.key);
+      names.push(hit.name);
+    }
+  }
+  return { status: "ok", keys, names };
+}
+
 export function resolveRestaurantTokens(
   raw: string | null,
   index: RestaurantIndex,

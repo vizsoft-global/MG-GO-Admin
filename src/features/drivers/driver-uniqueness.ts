@@ -1222,7 +1222,11 @@ export async function fetchAllIn<T>(
 }
 
 /** True when another non-archived intake or linked driver already uses this civil ID. */
-export async function civilIdExists(civilId: string, excludeIntakeId?: string): Promise<boolean> {
+export async function civilIdExists(
+  civilId: string,
+  excludeIntakeId?: string,
+  sameEmployeeId?: string,
+): Promise<boolean> {
   const db = await staffClient();
   let intakeQuery = db
     .from("driver_intakes")
@@ -1234,11 +1238,20 @@ export async function civilIdExists(civilId: string, excludeIntakeId?: string): 
   const { data: intakeHit } = await intakeQuery.maybeSingle();
   if (intakeHit) return true;
 
-  const { data: driverHits } = await db.from("drivers").select("id").eq("civil_id", civilId);
+  // `sameEmployeeId` is the rider this intake is about. A live driver row that already
+  // holds the MG ID IS that rider, so its civil ID cannot be somebody else's.
+  const { data: driverHits } = await db
+    .from("drivers")
+    .select("id, employee_id")
+    .eq("civil_id", civilId)
+    .is("archived_at", null);
   if (!driverHits?.length) return false;
-  if (!excludeIntakeId) return true;
+  if (!excludeIntakeId && !sameEmployeeId) return true;
 
+  const ownerKey = sameEmployeeId ? lowerText(sameEmployeeId) : null;
   for (const driver of driverHits) {
+    if (ownerKey && lowerText(driver.employee_id) === ownerKey) continue;
+    if (!excludeIntakeId) return true;
     const { data: linkedIntake } = await db
       .from("driver_intakes")
       .select("id")
@@ -1250,7 +1263,11 @@ export async function civilIdExists(civilId: string, excludeIntakeId?: string): 
 }
 
 /** True when another non-archived intake or linked driver already uses this passport. */
-export async function passportExists(passport: string, excludeIntakeId?: string): Promise<boolean> {
+export async function passportExists(
+  passport: string,
+  excludeIntakeId?: string,
+  sameEmployeeId?: string,
+): Promise<boolean> {
   const db = await staffClient();
   let intakeQuery = db
     .from("driver_intakes")
@@ -1262,11 +1279,18 @@ export async function passportExists(passport: string, excludeIntakeId?: string)
   const { data: intakeHit } = await intakeQuery.maybeSingle();
   if (intakeHit) return true;
 
-  const { data: driverHits } = await db.from("drivers").select("id").eq("passport_number", passport);
+  const { data: driverHits } = await db
+    .from("drivers")
+    .select("id, employee_id")
+    .eq("passport_number", passport)
+    .is("archived_at", null);
   if (!driverHits?.length) return false;
-  if (!excludeIntakeId) return true;
+  if (!excludeIntakeId && !sameEmployeeId) return true;
 
+  const ownerKey = sameEmployeeId ? lowerText(sameEmployeeId) : null;
   for (const driver of driverHits) {
+    if (ownerKey && lowerText(driver.employee_id) === ownerKey) continue;
+    if (!excludeIntakeId) return true;
     const { data: linkedIntake } = await db
       .from("driver_intakes")
       .select("id")
@@ -1290,17 +1314,26 @@ export async function employeeIdExists(employeeId: string, excludeIntakeId?: str
   const { data: intakeHit } = await intakeQuery.maybeSingle();
   if (intakeHit) return true;
 
-  const { data: driverHits } = await db.from("drivers").select("id").ilike("employee_id", employeeId);
+  // Archived riders released their `uniq_employee_id` lock when they were archived, so
+  // they must not block a fresh intake either — the approval callable re-adopts the row.
+  const { data: driverHits } = await db
+    .from("drivers")
+    .select("id")
+    .ilike("employee_id", employeeId)
+    .is("archived_at", null);
   if (!driverHits?.length) return false;
   if (!excludeIntakeId) return true;
 
   for (const driver of driverHits) {
     const { data: linkedIntake } = await db
       .from("driver_intakes")
-      .select("id")
+      .select("id, archived_at")
       .eq("linked_profile_id", driver.id)
       .maybeSingle();
-    if (linkedIntake?.id !== excludeIntakeId) return true;
+    // A live driver row whose own intake was archived is the row approval re-adopts, so it
+    // cannot own the id against a fresh intake — that is exactly the "re-added rider" case.
+    if (!linkedIntake || linkedIntake.archived_at != null) continue;
+    if (linkedIntake.id !== excludeIntakeId) return true;
   }
   return false;
 }

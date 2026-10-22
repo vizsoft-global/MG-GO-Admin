@@ -22,6 +22,15 @@ export const VEHICLE_IMPORT_FIELDS = [
   "locationText",
   "status",
   "fuelMonthlyLimitKwd",
+  "driverEmployeeId",
+  "companyKey",
+  "ownerPartnerName",
+  "registrationIssuedAt",
+  "registrationExpiresAt",
+  "insuranceIssuedAt",
+  "insuranceExpiresAt",
+  "replacesPlate",
+  "replacementStartedAt",
 ] as const;
 
 export type VehicleImportField = (typeof VEHICLE_IMPORT_FIELDS)[number];
@@ -60,7 +69,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Chassis No.",
     required: false,
     pinned: false,
-    allowed: "6–17 letters or numbers. Blank clears.",
+    allowed: "6–17 letters or numbers. Blank keeps, - clears.",
     example: "MD2A16CY0PWH12345",
   },
   {
@@ -68,7 +77,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Kind",
     required: false,
     pinned: false,
-    allowed: KIND.join(", ") + ". Blank on a new row is bike.",
+    allowed: KIND.join(", ") + ". Blank on a new row is bike; an update keeps the kind.",
     example: "bike",
   },
   {
@@ -76,7 +85,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Make",
     required: false,
     pinned: false,
-    allowed: "Letters, numbers, spaces, hyphen. Blank clears.",
+    allowed: "Letters, numbers, spaces, hyphen. Blank keeps, - clears.",
     example: "Honda",
   },
   {
@@ -84,7 +93,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Model",
     required: false,
     pinned: false,
-    allowed: "Letters, numbers, spaces, hyphen. Blank clears.",
+    allowed: "Letters, numbers, spaces, hyphen. Blank keeps, - clears.",
     example: "Wave",
   },
   {
@@ -92,7 +101,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Year",
     required: false,
     pinned: false,
-    allowed: "1990–2100. Blank clears.",
+    allowed: "1990–2100. Blank keeps, - clears.",
     example: "2024",
   },
   {
@@ -100,7 +109,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Condition",
     required: false,
     pinned: false,
-    allowed: VEHICLE_CONDITIONS.join(", "),
+    allowed: VEHICLE_CONDITIONS.join(", ") + ". Blank keeps, - clears.",
     example: "running",
   },
   {
@@ -108,7 +117,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Chip No.",
     required: false,
     pinned: false,
-    allowed: "Letters, numbers, hyphen. Blank clears.",
+    allowed: "Letters, numbers, hyphen. Blank keeps, - clears.",
     example: "CHIP-1",
   },
   {
@@ -116,7 +125,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Fuel Type",
     required: false,
     pinned: false,
-    allowed: VEHICLE_FUEL_TYPES.join(", "),
+    allowed: VEHICLE_FUEL_TYPES.join(", ") + ". Blank keeps, - clears.",
     example: "chip",
   },
   {
@@ -124,7 +133,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Fuel Company",
     required: false,
     pinned: false,
-    allowed: VEHICLE_FUEL_COMPANIES.join(", "),
+    allowed: VEHICLE_FUEL_COMPANIES.join(", ") + ". Blank keeps, - clears.",
     example: "mus",
   },
   {
@@ -132,7 +141,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Car Type",
     required: false,
     pinned: false,
-    allowed: VEHICLE_CAR_TYPES.join(", "),
+    allowed: VEHICLE_CAR_TYPES.join(", ") + ". Blank keeps, - clears.",
     example: "company",
   },
   {
@@ -140,7 +149,8 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Type of Use",
     required: false,
     pinned: false,
-    allowed: "Catalog key from Settings → Vehicle uses (seeded operational, trainer, standby).",
+    allowed:
+      "Catalog key from Settings → Vehicle uses (seeded operational, trainer, standby). Blank keeps, - clears.",
     example: "operational",
   },
   {
@@ -148,7 +158,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Location",
     required: false,
     pinned: false,
-    allowed: "Letters, numbers, spaces, comma, hyphen. Blank clears.",
+    allowed: "Letters, numbers, spaces, comma, hyphen. Blank keeps, - clears.",
     example: "Kuwait",
   },
   {
@@ -156,7 +166,7 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Status",
     required: false,
     pinned: false,
-    allowed: STATUS.join(", ") + ". Blank on a new row is active.",
+    allowed: STATUS.join(", ") + ". Blank on a new row is active; an update keeps the status.",
     example: "active",
   },
   {
@@ -164,8 +174,85 @@ export const VEHICLE_IMPORT_COLUMNS: readonly VehicleImportColumn[] = [
     header: "Monthly fuel limit (KWD)",
     required: false,
     pinned: false,
-    allowed: "Number greater than 0. Blank on a new row uses 30 (bike) or 60 (car).",
+    allowed:
+      "Number greater than 0. Blank keeps on an update; a new row uses 30 (bike) or 60 (car). - clears.",
     example: "30",
+  },
+  {
+    field: "driverEmployeeId",
+    header: "MG ID",
+    required: false,
+    pinned: false,
+    allowed:
+      "MG ID (employee_id) of the rider to assign. The rider must already exist. Blank keeps the current rider, - unassigns.",
+    example: "MG-10231",
+  },
+  {
+    field: "companyKey",
+    header: "Vehicle Company",
+    required: false,
+    pinned: false,
+    allowed:
+      "Vehicle company key, or its English/Arabic name. Blank keeps the company, - clears it.",
+    example: "musallam",
+  },
+  {
+    field: "ownerPartnerName",
+    header: "Partner",
+    required: false,
+    pinned: false,
+    allowed: "Partner name from the partner list. Blank keeps the partner, - clears it.",
+    example: "Musallam Group",
+  },
+  {
+    field: "registrationIssuedAt",
+    header: "Registration issued",
+    required: false,
+    pinned: false,
+    allowed: "Date YYYY-MM-DD. Blank keeps the date, - clears it.",
+    example: "2025-01-15",
+  },
+  {
+    field: "registrationExpiresAt",
+    header: "Registration expiry",
+    required: false,
+    pinned: false,
+    allowed: "Date YYYY-MM-DD, on or after Registration issued. Blank keeps, - clears.",
+    example: "2026-01-15",
+  },
+  {
+    field: "insuranceIssuedAt",
+    header: "Insurance issued",
+    required: false,
+    pinned: false,
+    allowed: "Date YYYY-MM-DD. Blank keeps the date, - clears it.",
+    example: "2025-02-01",
+  },
+  {
+    field: "insuranceExpiresAt",
+    header: "Insurance expiry",
+    required: false,
+    pinned: false,
+    allowed: "Date YYYY-MM-DD, on or after Insurance issued. Blank keeps, - clears.",
+    example: "2026-02-01",
+  },
+  {
+    field: "replacesPlate",
+    header: "Rep. Plate",
+    required: false,
+    pinned: false,
+    allowed:
+      "Plate of the vehicle this one replaces. That plate must exist. Blank keeps, - clears the replacement.",
+    example: "5/6400",
+  },
+  {
+    field: "replacementStartedAt",
+    header: "Since",
+    required: false,
+    pinned: false,
+    allowed:
+      "Date YYYY-MM-DD the replacement started. Only used when Rep. Plate is filled. Blank keeps, - clears.",
+    example: "2025-09-01",
   },
 ];
 
@@ -196,6 +283,42 @@ const HEADER_ALIASES: Record<string, VehicleImportField> = {
   status: "status",
   "monthly fuel limit (kwd)": "fuelMonthlyLimitKwd",
   "monthly fuel limit": "fuelMonthlyLimitKwd",
+  "mg id": "driverEmployeeId",
+  "mg id.": "driverEmployeeId",
+  "driver mg id": "driverEmployeeId",
+  "employee id": "driverEmployeeId",
+  "emp id": "driverEmployeeId",
+  "driver employee id": "driverEmployeeId",
+  "vehicle company": "companyKey",
+  "vehicle company key": "companyKey",
+  company: "companyKey",
+  "owner partner": "ownerPartnerName",
+  partner: "ownerPartnerName",
+  "registration issued": "registrationIssuedAt",
+  "registration issue date": "registrationIssuedAt",
+  "reg. issued": "registrationIssuedAt",
+  "reg issued": "registrationIssuedAt",
+  "registration expiry": "registrationExpiresAt",
+  "registration expires": "registrationExpiresAt",
+  "registration expiration": "registrationExpiresAt",
+  "reg. expiry": "registrationExpiresAt",
+  "reg expiry": "registrationExpiresAt",
+  "insurance issued": "insuranceIssuedAt",
+  "insurance issue date": "insuranceIssuedAt",
+  "ins. issued": "insuranceIssuedAt",
+  "ins issued": "insuranceIssuedAt",
+  "insurance expiry": "insuranceExpiresAt",
+  "insurance expires": "insuranceExpiresAt",
+  "insurance expiration": "insuranceExpiresAt",
+  "ins. expiry": "insuranceExpiresAt",
+  "ins expiry": "insuranceExpiresAt",
+  "rep. plate": "replacesPlate",
+  "rep plate": "replacesPlate",
+  "replaces plate": "replacesPlate",
+  "replaced plate": "replacesPlate",
+  since: "replacementStartedAt",
+  "replacement since": "replacementStartedAt",
+  "replacement started": "replacementStartedAt",
 };
 
 export function headerToField(header: string): VehicleImportField | null {

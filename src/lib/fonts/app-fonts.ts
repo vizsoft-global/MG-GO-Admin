@@ -1,61 +1,10 @@
-import {
-  DM_Sans,
-  Inter,
-  Montserrat,
-  Open_Sans,
-  Plus_Jakarta_Sans,
-  Roboto,
-} from "next/font/google";
+/**
+ * Type is served from `public/fonts/` (`src/app/fonts.css`): Gotham for Latin,
+ * GE SS TWO for Arabic. No `next/font/google` import remains — the remote font
+ * fetch was both a build-time dependency and the source of the Turbopack
+ * import-map failure on Vercel. The alternate picks in Settings resolve through
+ * the CSS stacks in `globals.css`.
+ */
+export const launcherFontClassName = "";
 
-const inter = Inter({
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-});
-
-const roboto = Roboto({
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "700"],
-  variable: "--font-roboto",
-  display: "swap",
-});
-
-const openSans = Open_Sans({
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-open-sans",
-  display: "swap",
-});
-
-const dmSans = DM_Sans({
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-dm-sans",
-  display: "swap",
-});
-
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-plus-jakarta-sans",
-  display: "swap",
-});
-
-/** Home launcher only (`Main.dc.html`). The rest of the panel stays on `appFontClassName`. */
-const montserrat = Montserrat({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-launcher",
-  display: "swap",
-});
-
-export const launcherFontClassName = montserrat.variable;
-
-export const appFontClassName = [
-  inter.variable,
-  roboto.variable,
-  openSans.variable,
-  dmSans.variable,
-  plusJakarta.variable,
-].join(" ");
+export const appFontClassName = "";

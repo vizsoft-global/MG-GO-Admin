@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { queryKeys } from "@/lib/query/query-keys";
-import { Bike, Car, Fuel, Wrench } from "lucide-react";
+import { Bike, Car, FileText, Fuel, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Button } from "@/components/ui/button";
@@ -87,6 +87,10 @@ export function VehicleFormDialog({
   const [ownerPartnerId, setOwnerPartnerId] = useState<string | null>(null);
   const [replacesVehicleId, setReplacesVehicleId] = useState<string | null>(null);
   const [replacementStartedAt, setReplacementStartedAt] = useState("");
+  const [registrationIssuedAt, setRegistrationIssuedAt] = useState("");
+  const [registrationExpiresAt, setRegistrationExpiresAt] = useState("");
+  const [insuranceIssuedAt, setInsuranceIssuedAt] = useState("");
+  const [insuranceExpiresAt, setInsuranceExpiresAt] = useState("");
   const [projectKey, setProjectKey] = useState<DriverProjectKey | "">("");
   const [assignedDriverId, setAssignedDriverId] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<VehicleFieldError | null>(null);
@@ -130,6 +134,10 @@ export function VehicleFormDialog({
     setOwnerPartnerId(vehicle?.owner_partner_id ?? null);
     setReplacesVehicleId(vehicle?.replaces_vehicle_id ?? null);
     setReplacementStartedAt(toKuwaitYmd(vehicle?.replacement_started_at));
+    setRegistrationIssuedAt(toKuwaitYmd(vehicle?.registration_issued_at));
+    setRegistrationExpiresAt(toKuwaitYmd(vehicle?.registration_expires_at));
+    setInsuranceIssuedAt(toKuwaitYmd(vehicle?.insurance_issued_at));
+    setInsuranceExpiresAt(toKuwaitYmd(vehicle?.insurance_expires_at));
     setProjectKey(isDriverProjectKey(vehicle?.assigned_project_key) ? vehicle.assigned_project_key : "");
     setAssignedDriverId(vehicle?.assigned_driver_id ?? null);
     setFieldError(null);
@@ -214,6 +222,13 @@ export function VehicleFormDialog({
               toast.error(t(`errors.${error}` as "errors.missing_fields"));
               return;
             }
+            const datesOutOfOrder =
+              (registrationIssuedAt && registrationExpiresAt && registrationExpiresAt < registrationIssuedAt) ||
+              (insuranceIssuedAt && insuranceExpiresAt && insuranceExpiresAt < insuranceIssuedAt);
+            if (datesOutOfOrder) {
+              toast.error(t("errors.expiry_before_issue"));
+              return;
+            }
             setFieldError(null);
             const formData = new FormData();
             if (vehicle?.id) formData.set("id", vehicle.id);
@@ -237,6 +252,10 @@ export function VehicleFormDialog({
             if (ownerPartnerId) formData.set("ownerPartnerId", ownerPartnerId);
             if (replacesVehicleId) formData.set("replacesVehicleId", replacesVehicleId);
             formData.set("replacementStartedAt", replacementStartedAt);
+            formData.set("registrationIssuedAt", registrationIssuedAt);
+            formData.set("registrationExpiresAt", registrationExpiresAt);
+            formData.set("insuranceIssuedAt", insuranceIssuedAt);
+            formData.set("insuranceExpiresAt", insuranceExpiresAt);
             if (assignedDriverId) formData.set("assignedDriverId", assignedDriverId);
             formData.set("projectKey", projectKey);
             startTransition(async () => {
@@ -611,6 +630,51 @@ export function VehicleFormDialog({
               />
             </FieldBlock>
           </div>
+
+          <SectionHeading icon={FileText} accent="primary">
+            {t("sectionDocuments")}
+          </SectionHeading>
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+            <FieldBlock>
+              <FieldLabel>{t("fieldRegistrationIssued")}</FieldLabel>
+              <Input
+                type="date"
+                value={registrationIssuedAt}
+                onChange={(event) => setRegistrationIssuedAt(event.target.value)}
+                className="h-9"
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t("fieldRegistrationExpires")}</FieldLabel>
+              <Input
+                type="date"
+                value={registrationExpiresAt}
+                min={registrationIssuedAt || undefined}
+                onChange={(event) => setRegistrationExpiresAt(event.target.value)}
+                className="h-9"
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t("fieldInsuranceIssued")}</FieldLabel>
+              <Input
+                type="date"
+                value={insuranceIssuedAt}
+                onChange={(event) => setInsuranceIssuedAt(event.target.value)}
+                className="h-9"
+              />
+            </FieldBlock>
+            <FieldBlock>
+              <FieldLabel>{t("fieldInsuranceExpires")}</FieldLabel>
+              <Input
+                type="date"
+                value={insuranceExpiresAt}
+                min={insuranceIssuedAt || undefined}
+                onChange={(event) => setInsuranceExpiresAt(event.target.value)}
+                className="h-9"
+              />
+            </FieldBlock>
+          </div>
+          <p className="text-[10px] text-muted-foreground">{t("documentsHint")}</p>
 
           </div>
           <div className="px-5 pb-4">

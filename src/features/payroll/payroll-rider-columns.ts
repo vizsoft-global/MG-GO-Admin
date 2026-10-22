@@ -255,7 +255,7 @@ export function riderColumnValue(
       if (/^o\d+$/.test(columnId)) {
         const index = Number(columnId.slice(1)) - 1;
         const info = row.dayInfo[index];
-        return info ? aoShownOrders(info) : null;
+        return info ? aoShownOrders(info, row.days[index]) : null;
       }
       return null;
   }

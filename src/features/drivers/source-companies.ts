@@ -7,6 +7,10 @@ export type SourceCompany = {
   client_code: string | null;
   is_active: boolean;
   is_system: boolean;
+  /** R2 object key `source_companies/{key}/logo.{ext}`, or null when none. */
+  logo_url: string | null;
+  /** Presigned URL resolved on the server; never stored. */
+  logo_display_url?: string | null;
   sort_order: number;
   dpd_target: number | null;
   incentive_enabled: boolean;

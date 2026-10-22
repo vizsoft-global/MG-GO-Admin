@@ -368,6 +368,17 @@ export const adminUpsertSourceCompany = onCall(async (request) => {
   const existing = await ref.get();
   const sortOrder = readNumber(data, "sortOrder") ?? (existing.exists ? null : 100);
 
+  // `logoUrl` is only written when the caller sent the key at all, so a save that
+  // does not touch the logo cannot clear one that is already stored.
+  let logoUrl: string | null | undefined;
+  if (Object.prototype.hasOwnProperty.call(data, "logoUrl")) {
+    const raw = readString(data, "logoUrl").replace(/^\/+/, "");
+    if (raw && !raw.startsWith("source_companies/")) {
+      throw new HttpsError("invalid-argument", "invalid_logo_key");
+    }
+    logoUrl = raw || null;
+  }
+
   const payload: Record<string, unknown> = {
     key,
     name,
@@ -380,6 +391,7 @@ export const adminUpsertSourceCompany = onCall(async (request) => {
     effective_from: effectiveFrom,
     updated_at: FieldValue.serverTimestamp(),
   };
+  if (logoUrl !== undefined) payload.logo_url = logoUrl;
   if (sortOrder !== null) payload.sort_order = sortOrder;
 
   if (!existing.exists) {
@@ -396,6 +408,7 @@ export const adminUpsertSourceCompany = onCall(async (request) => {
     client_code: docString(saved, "client_code"),
     is_active: saved.is_active === true,
     is_system: saved.is_system === true,
+    logo_url: docString(saved, "logo_url"),
     sort_order: docNumber(saved, "sort_order"),
     dpd_target: docNumber(saved, "dpd_target"),
     incentive_enabled: saved.incentive_enabled === true,

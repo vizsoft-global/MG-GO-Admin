@@ -165,7 +165,7 @@ export function PayrollFilterChips({
         </span>
       ))}
       {sortLabel ? (
-        <span className="inline-flex h-7 items-center rounded-md border border-emerald-300 bg-emerald-50 px-2 text-[11px] font-semibold text-emerald-900">
+        <span className="inline-flex h-7 items-center rounded-md border border-primary/30 bg-primary/10 px-2 text-[11px] font-semibold text-primary">
           {sortLabel}
         </span>
       ) : null}
@@ -300,7 +300,7 @@ export function PayrollColumnHeader({
             className={cn(
               "inline-flex size-5 shrink-0 items-center justify-center rounded-sm transition-colors",
               active
-                ? "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-400/60"
+                ? "bg-primary/10 text-primary ring-1 ring-primary/40"
                 : "text-muted-foreground/60 hover:bg-muted hover:text-foreground",
             )}
             aria-label={t("title", { column: label })}
@@ -321,7 +321,7 @@ export function PayrollColumnHeader({
                   className={cn(
                     "inline-flex h-7 items-center rounded-md border px-2 text-[11px] font-semibold transition-colors",
                     mode === id
-                      ? "border-emerald-500 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-400/50"
+                      ? "border-primary bg-primary text-primary-foreground ring-1 ring-primary/40"
                       : "border-border bg-muted/30 text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -354,7 +354,7 @@ export function PayrollColumnHeader({
                     <span
                       className={cn(
                         "flex size-3.5 items-center justify-center rounded-sm border",
-                        allTicked ? "border-emerald-500 bg-emerald-500 text-white" : "border-border",
+                        allTicked ? "border-primary bg-primary text-primary-foreground" : "border-border",
                       )}
                     >
                       {allTicked ? <Check className="size-2.5" /> : null}
@@ -374,7 +374,7 @@ export function PayrollColumnHeader({
                         <span
                           className={cn(
                             "flex size-3.5 shrink-0 items-center justify-center rounded-sm border",
-                            ticked ? "border-emerald-500 bg-emerald-500 text-white" : "border-border",
+                            ticked ? "border-primary bg-primary text-primary-foreground" : "border-border",
                           )}
                         >
                           {ticked ? <Check className="size-2.5" /> : null}

@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "./themes.css";
+@import "./fonts.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -80,27 +81,29 @@
 }
 
 :root {
-  --font-sans: var(--font-inter);
+  /* Brand stack: Gotham for Latin, GE SS TWO for Arabic glyphs. */
+  --font-brand: "Gotham", "GE SS TWO", system-ui, sans-serif;
+  --font-sans: var(--font-brand);
 }
 
-html[data-font="inter"] {
-  --font-sans: var(--font-inter);
+html[data-font="gotham"] {
+  --font-sans: var(--font-brand);
 }
 
 html[data-font="roboto"] {
-  --font-sans: var(--font-roboto);
+  --font-sans: "Roboto", "Gotham", "GE SS TWO", system-ui, sans-serif;
 }
 
 html[data-font="open-sans"] {
-  --font-sans: var(--font-open-sans);
+  --font-sans: "Open Sans", "Gotham", "GE SS TWO", system-ui, sans-serif;
 }
 
 html[data-font="dm-sans"] {
-  --font-sans: var(--font-dm-sans);
+  --font-sans: "DM Sans", "Gotham", "GE SS TWO", system-ui, sans-serif;
 }
 
 html[data-font="plus-jakarta-sans"] {
-  --font-sans: var(--font-plus-jakarta-sans);
+  --font-sans: "Plus Jakarta Sans", "Gotham", "GE SS TWO", system-ui, sans-serif;
 }
 
 @layer base {

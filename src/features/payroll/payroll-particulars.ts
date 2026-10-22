@@ -1,6 +1,5 @@
 import { dayDisplayHours, dayGridLabel, type DayStatus } from "./payroll-formulas";
 import {
-  ADJUSTMENT_STATUSES,
   ADJUSTMENT_STATUS_TO_DAY,
   hoursForStatus,
   type AdjustmentStatus,
@@ -38,8 +37,26 @@ export function particularForDayStatus(status: DayStatus, hours = 0): string {
   return dayGridLabel(status, hours);
 }
 
-/** Every selectable adjustment status, in the SOP picker order. Do not drop any. */
-export const EDITOR_ADJUSTMENT_STATUSES: readonly AdjustmentStatus[] = ADJUSTMENT_STATUSES;
+/** The 15 SOP particulars the payroll report may print. Legacy parser values
+ *  (`actual`, `abs_lh`, `abs_lo`, `custom`) stay parseable on old rows but are
+ *  no longer offered and no longer appear in the filter legend. */
+export const EDITOR_ADJUSTMENT_STATUSES: readonly AdjustmentStatus[] = [
+  "12",
+  "3h",
+  "half",
+  "sick",
+  "off",
+  "accident",
+  "absent",
+  "cancelled",
+  "leave",
+  "terminated",
+  "phone_issue",
+  "id_suspended",
+  "vehicle",
+  "new_hire",
+  "training",
+];
 
 export function sortParticularValues(values: readonly string[]): string[] {
   return [...values].sort((a, b) => {

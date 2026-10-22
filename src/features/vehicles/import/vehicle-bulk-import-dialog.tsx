@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Download, ExternalLink, FilePlus2, History, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -38,7 +38,9 @@ import {
   downloadVehicleTemplate,
 } from "./vehicle-import-sheet";
 import { VehicleTemplateColumnPicker } from "./vehicle-template-picker";
-import { useVehicleUseTypes } from "../use-vehicles";
+import { useVehicleCompanies, useVehiclePartners, useVehicleUseTypes } from "../use-vehicles";
+import { listVehicleTabDrivers } from "../vehicle-tabs-actions";
+import { toKuwaitYmd } from "@/features/fleet/fleet-labels";
 
 const KNOWN_ERRORS = new Set([
   "missing_fields",
@@ -68,6 +70,14 @@ const KNOWN_ERRORS = new Set([
   "too_many_rows",
   "nothing_to_undo",
   "nothing_to_redo",
+  "unknown_driver",
+  "ambiguous_driver",
+  "unknown_company",
+  "unknown_partner",
+  "unknown_replacement",
+  "invalid_replacement",
+  "invalid_document_date",
+  "expiry_before_issue",
 ]);
 
 function toExisting(row: VehicleListRow): VehicleImportExisting {
@@ -90,6 +100,15 @@ function toExisting(row: VehicleListRow): VehicleImportExisting {
     fuel_company: row.fuel_company,
     chip_no: row.chip_no,
     fuel_monthly_limit_kwd: row.fuel_monthly_limit_kwd,
+    company_id: row.company_id,
+    owner_partner_id: row.owner_partner_id,
+    registration_issued_at: row.registration_issued_at,
+    registration_expires_at: row.registration_expires_at,
+    insurance_issued_at: row.insurance_issued_at,
+    insurance_expires_at: row.insurance_expires_at,
+    replaces_vehicle_id: row.replaces_vehicle_id,
+    replacement_started_at: row.replacement_started_at,
+    assigned_driver_id: row.assigned_driver_id,
   };
 }
 
@@ -104,8 +123,16 @@ export function VehicleBulkImportDialog({
 }) {
   const t = useTranslations("pages.vehicles.import");
   const te = useTranslations("pages.vehicles.errors");
+  const locale = useLocale();
   const queryClient = useQueryClient();
   const { data: useTypes = [] } = useVehicleUseTypes();
+  const { data: companies = [] } = useVehicleCompanies();
+  const { data: partners = [] } = useVehiclePartners();
+  const driversQuery = useQuery({
+    queryKey: [...queryKeys.vehicles.all(), "tab-drivers"],
+    queryFn: listVehicleTabDrivers,
+    enabled: open,
+  });
   const [panel, setPanel] = useState<"new" | "history">("new");
   const [logBatchId, setLogBatchId] = useState<string | null>(null);
   const [selected, setSelected] = useState(defaultTemplateSelection);
@@ -150,10 +177,32 @@ export function VehicleBulkImportDialog({
             rows: sheetRows,
             existing: vehicles.map(toExisting),
             allowedUseTypes: useTypes.filter((item) => item.is_active).map((item) => item.key),
+            drivers: (driversQuery.data ?? []).map((driver) => ({
+              id: driver.id,
+              employee_id: driver.employeeId,
+            })),
+            companies: companies.map((company) => ({
+              key: company.key,
+              label_en: company.label_en,
+              label_ar: company.label_ar,
+            })),
+            partners: partners.map((partner) => ({ id: partner.id, name: partner.name })),
           })
         : { error: null, rows: [] },
-    [headers, sheetRows, useTypes, vehicles],
+    [companies, driversQuery.data, headers, partners, sheetRows, useTypes, vehicles],
   );
+  const driverEmployeeId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const driver of driversQuery.data ?? []) map.set(driver.id, driver.employeeId);
+    return map;
+  }, [driversQuery.data]);
+  const companyLabels = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const company of companies) {
+      map.set(company.key, locale.startsWith("ar") ? company.label_ar || company.label_en : company.label_en);
+    }
+    return map;
+  }, [companies, locale]);
   const ready = preview.rows.filter((row) => row.status !== "error").length;
 
   const refresh = async () => {
@@ -311,6 +360,10 @@ export function VehicleBulkImportDialog({
                         <TableHeader>
                           <TableRow>
                             <TableHead className={TABLE_HEAD_CLASS}>{t("colVehicleId")}</TableHead>
+                            <TableHead className={TABLE_HEAD_CLASS}>{t("colMgId")}</TableHead>
+                            <TableHead className={TABLE_HEAD_CLASS}>{t("colCompany")}</TableHead>
+                            <TableHead className={TABLE_HEAD_CLASS}>{t("colRegExpiry")}</TableHead>
+                            <TableHead className={TABLE_HEAD_CLASS}>{t("colInsExpiry")}</TableHead>
                             <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
                             <TableHead className={TABLE_HEAD_CLASS}>{t("colMessage")}</TableHead>
                           </TableRow>
@@ -319,6 +372,22 @@ export function VehicleBulkImportDialog({
                           {preview.rows.map((row) => (
                             <TableRow key={row.rowIndex}>
                               <TableCell className="text-xs">{row.bikeId}</TableCell>
+                              <TableCell className="text-xs tabular-nums">
+                                {row.driverAction === "clear"
+                                  ? "-"
+                                  : row.driverId
+                                    ? driverEmployeeId.get(row.driverId) ?? "—"
+                                    : "—"}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {row.after?.company_id ? companyLabels.get(row.after.company_id) ?? row.after.company_id : "—"}
+                              </TableCell>
+                              <TableCell className="text-xs tabular-nums">
+                                {toKuwaitYmd(row.after?.registration_expires_at) || "—"}
+                              </TableCell>
+                              <TableCell className="text-xs tabular-nums">
+                                {toKuwaitYmd(row.after?.insurance_expires_at) || "—"}
+                              </TableCell>
                               <TableCell className="text-xs">{t(`outcome.${row.status}`)}</TableCell>
                               <TableCell className="text-xs text-muted-foreground">
                                 {row.error ? message(row.error) : "—"}

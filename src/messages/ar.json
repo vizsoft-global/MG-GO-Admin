@@ -3840,6 +3840,12 @@
       "sectionOwnership": "الملكية",
       "sectionFuel": "الوقود",
       "sectionOperations": "التشغيل",
+      "sectionDocuments": "المستندات",
+      "fieldRegistrationIssued": "تاريخ إصدار التسجيل",
+      "fieldRegistrationExpires": "انتهاء التسجيل",
+      "fieldInsuranceIssued": "تاريخ إصدار التأمين",
+      "fieldInsuranceExpires": "انتهاء التأمين",
+      "documentsHint": "تواريخ المستندات محفوظة على المركبة. ارفع الملف الممسوح من تبويب المستندات.",
       "sectionVehicleDetails": "تفاصيل المركبة",
       "sectionDriver": "السائق والتعيين",
       "carTypeHint": "فئة الملكية — ليست الحالة التشغيلية.",
@@ -3925,7 +3931,11 @@
         "previousImports": "الاستيرادات السابقة",
         "requiredLabel": "مطلوب.",
         "requiredCopy": "رقم المركبة هو لوحة الكويت مثل 5/6767. اللوحة هي نفس الهوية.",
-        "optionalCopy": "اختياري: الهيكل، النوع، الشركة، الطراز، السنة، الحالة، الشريحة، نوع الوقود، شركة الوقود، نوع السيارة، نوع الاستخدام، الموقع، الحالة التشغيلية، حد الوقود الشهري. الخلية الفارغة تمسح الحقل. الصف الجديد بلا نوع يصبح دراجة.",
+        "optionalCopy": "اختياري: الشاسيه، النوع، الصناعة، الطراز، السنة، الحالة، الشريحة، نوع الوقود، شركة الوقود، نوع المركبة، نوع الاستخدام، الموقع، الحالة التشغيلية، الحد الشهري للوقود، رقم MG، شركة المركبة، الشريك، تواريخ التسجيل والتأمين، لوحة الاستبدال وتاريخ البداية. الخلية الفارغة تُبقي القيمة الحالية، والشرطة (-) تمسحها. الصف الجديد بدون نوع يصبح دراجة.",
+        "colMgId": "رقم MG",
+        "colCompany": "شركة المركبة",
+        "colRegExpiry": "انتهاء التسجيل",
+        "colInsExpiry": "انتهاء التأمين",
         "downloadTemplate": "تنزيل نموذج",
         "templateColumns": "الأعمدة",
         "templateColumnsTitle": "أعمدة النموذج",
@@ -3993,9 +4003,16 @@
         "invalid_car_type": "نوع السيارة يجب أن يكون company أو rent أو maintenance.",
         "invalid_type_of_use": "نوع الاستخدام يجب أن يكون مفتاحاً من الإعدادات ← استخدامات المركبة.",
         "empty_sheet": "لا توجد صفوف برقم مركبة.",
-        "too_many_rows": "الحد الأقصى 1000 صف.",
+        "too_many_rows": "الحد الأقصى للصفوف في الملف 2000 صف.",
         "nothing_to_undo": "لا يوجد استيراد للتراجع.",
-        "nothing_to_redo": "لا يوجد استيراد للإعادة."
+        "nothing_to_redo": "لا يوجد استيراد للإعادة.",
+        "unknown_driver": "رقم MG غير موجود بين الموظفين.",
+        "ambiguous_driver": "أكثر من موظف يحمل رقم MG نفسه.",
+        "unknown_company": "شركة المركبة غير موجودة في الإعدادات ← شركات المركبات.",
+        "unknown_partner": "الشريك غير موجود في قائمة الشركاء.",
+        "unknown_replacement": "لوحة الاستبدال غير موجودة.",
+        "invalid_document_date": "يجب أن تكون التواريخ بصيغة YYYY-MM-DD.",
+        "expiry_before_issue": "تاريخ الانتهاء قبل تاريخ الإصدار."
       }
     },
     "vehicleDetail": {
@@ -4021,6 +4038,11 @@
       "emptyHandover": "لا توجد سجلات تسليم بعد",
       "emptyAccident": "لا توجد سجلات حوادث بعد",
       "emptyDocuments": "لا توجد وثائق بعد",
+      "docsOnRecordHint": "التواريخ المحفوظة على سجل المركبة. الملفات المرفوعة أدناه.",
+      "docRegistrationIssued": "تاريخ إصدار التسجيل",
+      "docRegistrationExpires": "انتهاء التسجيل",
+      "docInsuranceIssued": "تاريخ إصدار التأمين",
+      "docInsuranceExpires": "انتهاء التأمين",
       "emptyService": "لا توجد سجلات صيانة بعد",
       "emptyAssets": "لا توجد أصول معيَّنة لهذا السائق",
       "emptyAssetsNoDriver": "عيّن سائقاً لعرض أصوله",
@@ -7055,6 +7077,7 @@
       "restaurantUpdated": "تم تحديث المطعم",
       "deliveryRuleCreated": "تم إنشاء قاعدة التوصيل",
       "deliveryRuleUpdated": "تم تحديث قاعدة التوصيل",
+      "deliveryRuleTargetLive": "الهدف {target} فعّال من اليوم",
       "deliveryRuleDeleted": "تم حذف قاعدة التوصيل",
       "deleteDeliveryRuleTitle": "حذف قاعدة التوصيل",
       "incentiveCreated": "تم إنشاء قاعدة الحافز",
@@ -7087,6 +7110,7 @@
       },
       "hints": {
         "baseMinimum": "يجب أن يصل السائق إلى هذا العدد قبل أي دفع من هذه القاعدة.",
+        "dpdPeriod": "تطبيق السائق يقرأ الهدف اليومي فقط في بطاقة DPD اليومية، لذا يجب أن تبقى القاعدة النشطة التي لها هدف على الفترة اليومية.",
         "cumulativeTiers": "يُدفع كل مستوى عند بلوغ عتبة التوصيلات؛ المبالغ تُجمع معاً.",
         "cumulativePayout": "ادفع لكل توصيلة فوق الحد الأدنى مباشرة دون انتظار الوصول إلى الهدف/المستوى.",
         "overridesOthers": "عند التفعيل، تحل هذه القاعدة محل جميع قواعد الحوافز الأخرى للفترة."
@@ -7233,6 +7257,8 @@
         "invalid_dates": "تاريخ النهاية يجب أن يكون بعد البداية أو مساوياً لها",
         "invalid_scope": "اختر خياراً واحداً على الأقل للنطاق المحدد",
         "invalid_target": "يجب أن يكون الهدف أكبر من الحد الأدنى",
+        "dpd_target_required": "القاعدة النشطة تحتاج هدف DPD أكبر من 0",
+        "invalid_dpd_period": "يجب أن يستخدم هدف DPD الفترة اليومية — تطبيق السائق يقرأ الهدف اليومي فقط",
         "invalid_base": "الحد الأدنى يجب أن يكون صفراً أو أكثر",
         "invalid_tiers": "أضف مستوى واحداً على الأقل بعتبات متزايدة فوق الأساس",
         "invalid_reward_mode": "اختر نوع مكافأة صالحاً",
@@ -8824,6 +8850,11 @@
         "cancel": "إلغاء",
         "save": "حفظ",
         "saved": "تم حفظ الشركة",
+        "logo": "شعار الشركة",
+        "logoUpload": "رفع الشعار",
+        "logoReplace": "استبدال",
+        "logoRemove": "إزالة",
+        "logoHint": "PNG أو JPG أو WEBP أو SVG بحجم حتى 2 ميجابايت. يُطبع على مستندات هذه الشركة.",
         "errors": {
           "not_authorized": "ليست لديك صلاحية إدارة الشركات.",
           "invalid_company_key": "أدخل اسم شركة يولّد مفتاحًا صالحًا (حروف وأرقام).",
@@ -8836,7 +8867,10 @@
           "save_failed": "تعذر حفظ الشركة.",
           "invalid_dpd_target": "هدف DPD يجب أن يكون عدداً صحيحاً من 1 فأكثر.",
           "invalid_incentive_rate": "أدخل معدّل فوق الهدف ومعدّل تحت الهدف أكبر من 0.",
-          "incentive_effective_from_required": "حدّد تاريخ السريان عند تفعيل المخطط."
+          "incentive_effective_from_required": "حدّد تاريخ السريان عند تفعيل المخطط.",
+          "logo_file_too_large": "يجب أن يكون حجم الشعار 2 ميجابايت أو أقل.",
+          "logo_invalid_type": "يجب أن يكون الشعار صورة PNG أو JPG أو WEBP أو SVG.",
+          "logo_upload_failed": "تعذر رفع الشعار. حاول مرة أخرى."
         },
         "colDpd": "DPD",
         "dpdBadge": "T {target}",
@@ -9169,8 +9203,8 @@
         "amId": "معرّف MG",
         "mgId": "رقم السائق",
         "name": "الاسم",
-        "restaurant": "المطعم",
-        "restaurantId": "رقم المطعم",
+        "restaurant": "اسم العميل",
+        "restaurantId": "معرّف العميل",
         "zone": "المنطقة",
         "partner": "الشريك",
         "nationality": "الجنسية",
@@ -9244,7 +9278,14 @@
         "vehicle": "مشكلة مركبة",
         "abs_lh": "غياب LH",
         "abs_lo": "غياب LO",
-        "custom": "مخصص"
+        "custom": "مخصص",
+        "cancelled": "ملغي",
+        "leave": "إجازة",
+        "terminated": "منتهي",
+        "phone_issue": "مشكلة هاتف",
+        "id_suspended": "هوية موقوفة",
+        "new_hire": "موظف جديد",
+        "training": "تدريب"
       },
       "tileDept": {
         "operations": "العمليات",
@@ -10406,6 +10447,24 @@
           "fieldTitle": "عنوان الدفعة",
           "fieldDue": "تاريخ الاستحقاق",
           "downloadExample": "تنزيل الملف النموذجي",
+          "editValues": "تعديل قيم القالب",
+          "editTitle": "تعديل قيم القالب لهذه الدفعة",
+          "editHint": "التغييرات تنطبق على هذه الدفعة فقط - القالب نفسه لا يتغير.",
+          "useAsIs": "استخدام كما هو",
+          "editSelectPlaceholder": "اختر قيمة",
+          "editSelectSearch": "بحث في القيم",
+          "editTextPlaceholder": "اكتب قيمة",
+          "signerEmployee": "توقيع الموظف",
+          "signerStaff": "توقيع الإدارة",
+          "noEditableFields": "هذا القالب لا يطلب سوى التوقيع، لذا لا توجد قيمة للتعديل.",
+          "previewCompany": "مسلم للتوصيل",
+          "valueGroups": {
+            "fields": "حقول الملف",
+            "loanRequest": "طلب السلفة",
+            "hrVerification": "تحقق الموارد البشرية",
+            "management": "قرار الإدارة",
+            "verification": "التحقق"
+          },
           "exampleDownloaded": "تم تنزيل الملف النموذجي",
           "uploadTitle": "حمّل ملفك",
           "dropHere": "أفلت ملف Excel هنا أو اضغط للاختيار",
@@ -10856,6 +10915,18 @@
             "title": "المناطق",
             "body": "مناطق التوصيل والنطاقات الجغرافية والسائقون المعيّنون إليها."
           },
+          "driverGroups": {
+            "title": "مجموعات السائقين",
+            "body": "أطقم السائقين والأعضاء المعيّنون في كل مجموعة."
+          },
+          "attendance": {
+            "title": "الحضور",
+            "body": "تسجيلات الحضور اليومية والورديات والاستثناءات المرتبطة بها."
+          },
+          "orderExceptions": {
+            "title": "استثناءات الطلبات",
+            "body": "الطلبات المرفوضة أو الملغاة مع إثبات السائق المرفق."
+          },
           "deliveryRules": {
             "title": "قواعد التوصيل",
             "body": "أهداف عدد الطلبات لكل مطعم ومنطقة وقواعد الطلب."
@@ -10963,7 +11034,33 @@
       "errorNotAuthorized": "ليست لديك صلاحية لعرض استثناءات الطلبات.",
       "errorGeneric": "تعذّر تحميل استثناءات الطلبات.",
       "pagePrev": "السابق",
-      "pageNext": "التالي"
+      "pageNext": "التالي",
+      "export": "تصدير",
+      "exporting": "جارٍ التصدير",
+      "exportDone": "تم تصدير {count} استثناء",
+      "exportCapped": "تم تصدير {exported} من {matched} — ضيّق عوامل التصفية للحصول على الباقي",
+      "exportEmpty": "لا يوجد ما يمكن تصديره بهذه عوامل التصفية",
+      "exportFailed": "تعذّر إنشاء ملف التصدير.",
+      "exportSheetRows": "استثناءات الطلبات",
+      "exportSheetSummary": "الملخص",
+      "colDriverCode": "كود السائق",
+      "colReviewedAt": "تاريخ المراجعة",
+      "colNote": "ملاحظة المراجعة",
+      "colCreated": "تاريخ الإنشاء",
+      "colCounted": "يُحتسب كاستثناء",
+      "countedYes": "نعم",
+      "countedNo": "لا",
+      "summaryFilters": "عوامل التصفية",
+      "summaryStatus": "الحالة",
+      "summaryKind": "النوع",
+      "summarySource": "المصدر",
+      "summaryFrom": "من",
+      "summaryTo": "إلى",
+      "summarySearch": "البحث",
+      "summaryAll": "الكل",
+      "summaryExported": "الصفوف المصدَّرة",
+      "summaryMatched": "الصفوف المطابقة",
+      "summaryCapped": "لم يتم تصديرها"
     }
   }
 }

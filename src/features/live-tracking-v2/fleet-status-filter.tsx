@@ -67,11 +67,11 @@ export function FleetStatusFilter({
         aria-label={t("filters.statuses")}
         className={cn(
           "flex h-9 cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 text-sm shadow-xs transition-colors duration-150",
-          // A narrowed filter is a selection, so it gets the same emerald the chips had:
+          // A narrowed filter is a selection, so it uses the brand navy like the chips:
           // an operator must be able to see at a glance that the map is not showing
           // everything, which was the one thing the chips did well.
           narrowed
-            ? "border-emerald-500 bg-emerald-100 font-semibold text-emerald-900 ring-1 ring-emerald-400/50"
+            ? "border-primary bg-primary font-semibold text-primary-foreground ring-1 ring-primary/40"
             : "border-input bg-background text-muted-foreground hover:text-foreground",
           "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
           className,
@@ -117,7 +117,7 @@ export function FleetStatusFilter({
                 className={cn(
                   "flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-left text-xs transition-colors duration-150",
                   checked
-                    ? "bg-emerald-50 font-semibold text-emerald-900"
+                    ? "bg-primary/10 font-semibold text-primary"
                     : "text-muted-foreground hover:bg-muted/70",
                 )}
               >
@@ -131,7 +131,7 @@ export function FleetStatusFilter({
                 />
                 <span className="min-w-0 flex-1 truncate">{t(`status.${status}`)}</span>
                 {checked ? (
-                  <Check className="size-3.5 shrink-0 stroke-[2.5] text-emerald-600" aria-hidden />
+                  <Check className="size-3.5 shrink-0 stroke-[2.5] text-primary" aria-hidden />
                 ) : null}
               </button>
             );
@@ -148,7 +148,7 @@ export function FleetStatusFilter({
           className={cn(
             "mt-1 flex h-8 cursor-pointer items-center gap-2 rounded-md border-t border-border px-1.5 pt-1 text-left text-xs transition-colors duration-150",
             filters.alertsOnly
-              ? "bg-emerald-50 font-semibold text-emerald-900"
+              ? "bg-primary/10 font-semibold text-primary"
               : "text-muted-foreground hover:bg-muted/70",
           )}
         >
@@ -158,7 +158,7 @@ export function FleetStatusFilter({
           />
           <span className="min-w-0 flex-1 truncate">{t("filters.alertsOnly")}</span>
           {filters.alertsOnly ? (
-            <Check className="size-3.5 shrink-0 stroke-[2.5] text-emerald-600" aria-hidden />
+            <Check className="size-3.5 shrink-0 stroke-[2.5] text-primary" aria-hidden />
           ) : null}
         </button>
       </PopoverContent>

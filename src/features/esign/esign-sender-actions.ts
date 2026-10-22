@@ -16,7 +16,8 @@ import {
   firstMissingRequiredKey,
   mergeFieldValuesForSend,
 } from "./esign-snapshot-merge";
-import { getAppSettings } from "@/lib/branding/get-app-settings";
+import { CHUNK_SIZE } from "./render/esign-batch-cap";
+import { createEsignSheetLogoResolver } from "./esign-sheet-logo";
 import { putEsignObject } from "./esign-r2";
 import {
   effectiveOutgoingCategoryKey,
@@ -25,7 +26,6 @@ import {
   outgoingHubDraftDecision,
 } from "./outgoing-hub-categories";
 import { fetchMyDeskGrants } from "./desk-grants-actions";
-import { CHUNK_SIZE } from "./render/esign-batch-cap";
 import { filledEsignDocumentInput } from "./render/esign-filled-sheet";
 import {
   ESIGN_SHEET_RENDER_VERSION,
@@ -656,15 +656,6 @@ export async function fetchEsignSnapshot(
   return { snapshot: mapSnapshot(data) ?? null };
 }
 
-async function esignSheetLogoUrl(): Promise<string | null> {
-  try {
-    const settings = await getAppSettings();
-    return settings.logoUrl;
-  } catch {
-    return null;
-  }
-}
-
 function documentForLocale(
   template: EsignTemplateDetail,
   _locale: EsignLocale,
@@ -757,7 +748,8 @@ export async function createEsignFromTemplate(input: {
     return { ok: false, error: "field_required" };
   }
 
-  const logoUrl = await esignSheetLogoUrl();
+  const logos = await createEsignSheetLogoResolver();
+  const logoUrl = await logos.forDriver(input.driver_id);
   const browser = await launchEsignBrowser();
   try {
     const sheet = documentForLocale(
@@ -1366,7 +1358,7 @@ export async function runEsignBatchChunk(input: {
   const locale: EsignLocale = batch.language === "ar" ? "ar" : "en";
   const title = String(batch.title ?? loaded.template.name_en);
   const dueAt = batch.due_at != null ? String(batch.due_at) : null;
-  const logoUrl = await esignSheetLogoUrl();
+  const logos = await createEsignSheetLogoResolver();
 
   const browser = await launchEsignBrowser();
   let created = 0;
@@ -1405,6 +1397,7 @@ export async function runEsignBatchChunk(input: {
       const fieldValues = asRecord(row.field_values) as Record<string, string>;
       const values: Record<string, string> = {};
       for (const [k, v] of Object.entries(fieldValues)) values[k] = String(v ?? "");
+      const logoUrl = await logos.forDriver(driverId);
       try {
         const sheet = documentForLocale(
           loaded.template,

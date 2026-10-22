@@ -570,7 +570,7 @@ export function VehiclesPageShell({
                 />
                 <TooltipContent>{t("export")}</TooltipContent>
               </Tooltip>
-              {canCreate ? (
+              {canManage ? (
                 <Tooltip>
                   <TooltipTrigger
                     render={
@@ -725,7 +725,7 @@ export function VehiclesPageShell({
         }}
       />
       <VehicleBulkImportDialog
-        open={importOpen}
+        open={importOpen && canManage}
         vehicles={vehicles}
         onOpenChange={setImportOpen}
       />

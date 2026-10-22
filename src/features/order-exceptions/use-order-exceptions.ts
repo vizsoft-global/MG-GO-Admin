@@ -2,6 +2,7 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  exportOrderExceptions,
   getOrderExceptionSummary,
   listOrderExceptions,
   resolveProofUrls,
@@ -11,6 +12,7 @@ import type {
   OrderExceptionActionResult,
   OrderExceptionDateRange,
   OrderExceptionErrorCode,
+  OrderExceptionExportResult,
   OrderExceptionListFilters,
   OrderExceptionListResult,
   OrderExceptionProof,
@@ -93,5 +95,15 @@ export function useReviewOrderException() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: orderExceptionKeys.all() });
     },
+  });
+}
+
+/**
+ * Export is an imperative one-shot, not a query — it is only run when the operator clicks
+ * Export, and caching a 1000-row payload nobody revisits would be pure memory.
+ */
+export function useExportOrderExceptions() {
+  return useMutation<OrderExceptionExportResult, Error, OrderExceptionListFilters>({
+    mutationFn: async (filters) => unwrap(await exportOrderExceptions(filters)),
   });
 }
