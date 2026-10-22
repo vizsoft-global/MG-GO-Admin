@@ -176,8 +176,8 @@ export function TemplateBuilderPageShell({ templateId }: { templateId?: string }
         title={isEdit ? t("templateEditTitle") : t("templateCreateTitle")}
         description={t("templateBuilderSubtitle")}
         breadcrumbs={[
-          { label: t("title"), href: `/${locale}/notifications` },
-          { label: t("navTemplates"), href: `/${locale}/notifications/templates` },
+          { label: t("title"), href: "/notifications" },
+          { label: t("navTemplates"), href: "/notifications/templates" },
           { label: isEdit ? name || t("templateEditTitle") : t("templateCreateTitle") },
         ]}
       />

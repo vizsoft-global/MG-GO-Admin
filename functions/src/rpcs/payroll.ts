@@ -9,6 +9,7 @@ import { loadAppSettings } from "../core/settings";
 import { requireStaff, type StaffContext } from "../core/staff";
 import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { PAYROLL_ATTENDANCE_FIELDS, PAYROLL_RECON_FIELDS, payrollHoursFromFields } from "./payroll-read-plan";
+import { isKeetaProjectKey } from "./_shared";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GET_ALL_CHUNK = 300;
@@ -834,9 +835,9 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
         name: driverDisplayName(raw, ctx.profileNames.get(driverId)) ?? "—",
         employeeId,
         restaurant:
-          projectKey === "keeta"
-            ? "(Pool)"
-            : asString(restaurant?.["name"]) ?? firstRestaurantName(raw) ?? "(Pool)",
+          isKeetaProjectKey(projectKey)
+            ? "Keeta"
+            : asString(restaurant?.["name"]) ?? firstRestaurantName(raw) ?? "—",
         restaurantId,
         // The rider's merchant-facing id (what staff know the store by) — the
         // same `client_id` the Employees page shows for the rider. The doc id
@@ -849,7 +850,7 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
         partner:
           projectKey === "americana"
             ? "Americana"
-            : projectKey === "keeta"
+            : isKeetaProjectKey(projectKey)
               ? "Keeta"
               : trimmedOrNull(raw["partner_name"]) ?? "—",
         projectKey,
@@ -881,7 +882,10 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
   const sourceCompanies = new Set<string>();
   for (const row of riders) {
     if (row.zoneId && row.zoneName) zoneOptions.set(row.zoneId, row.zoneName);
-    if (row.restaurantId && row.projectKey !== "keeta" && row.restaurant !== "(Pool)") {
+    // The label carries the project for a Keeta rider, so the restaurant filter
+    // must exclude it by that label; the project-key check above keeps any
+    // future non-store project out as well.
+    if (row.restaurantId && !isKeetaProjectKey(row.projectKey) && row.restaurant !== "Keeta") {
       restaurantOptions.set(row.restaurantId, row.restaurant);
     }
     if (row.nationalityCode) nationalities.add(row.nationalityCode);

@@ -1,10 +1,12 @@
 import { getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
+import { pointWithinZoneProximity, type ZoneFeature } from "../core/geo";
 import {
   nearestRestaurant,
   restaurantAllowed,
   restaurantDistanceMeters,
   restaurantReachableForPartner,
+  zoneTypeOf,
   type RestaurantCandidate,
 } from "../core/restaurant-proximity";
 import { chunk, IN_FILTER_LIMIT, loadDocMap, type Dict } from "./_shared";
@@ -37,6 +39,81 @@ export function isCheckInPhotoKeyForKey(driverId: string, key: string): boolean 
  */
 export function needsCheckIn(log: Dict | null | undefined): boolean {
   return !log || log["check_in_at"] == null;
+}
+
+/**
+ * Project key for the Keeta fleet. Stored lowercase by the Admin driver form
+ * (`parseDriverProjectKey` rejects `Keeta`), but the comparison is
+ * case-insensitive so a hand-edited row cannot silently keep the photo gate.
+ */
+export function isKeetaDriver(driver: Dict): boolean {
+  const key = driver["project_key"];
+  return typeof key === "string" && key.trim().toLowerCase() === "keeta";
+}
+
+/** The rider's assigned zone, as the check-in gate needs it. */
+export type CheckInZone = {
+  id: string;
+  name: string | null;
+  geometry: unknown;
+  zone_type: unknown;
+};
+
+/** `{ id, name }` — what the phone names in the refusal copy. */
+export type CheckInZoneSummary = { id: string; name: string | null };
+
+export type KeetaZoneOutcome = "in_range" | "outside_zone" | "no_zone";
+
+/**
+ * The rider's zone document, or null when the assignment is missing.
+ *
+ * `loadDriverZone` in `driver-deliveries` returns only geometry/type and that
+ * module imports this one's sibling (`driver-home`), so importing it here would
+ * create a cycle. The read is the same single document.
+ */
+export async function loadCheckInZone(zoneId: string | null): Promise<CheckInZone | null> {
+  if (!zoneId) return null;
+  const snap = await getFirestore().collection(COLLECTIONS.zones).doc(zoneId).get();
+  if (!snap.exists) return null;
+  const data = (snap.data() ?? {}) as Dict;
+  const name = data["name"];
+  return {
+    id: zoneId,
+    name: typeof name === "string" && name.trim() !== "" ? name.trim() : null,
+    geometry: data["geometry"],
+    zone_type: data["zone_type"],
+  };
+}
+
+/**
+ * Keeta clock-in gate: inside the assigned zone, with a zero buffer.
+ *
+ * A Keeta rider has no single store to prove, so the restaurant proximity test
+ * would always refuse them. The zone is the promise instead: `no_zone` (no
+ * assignment, a missing document or no stored shape) is the "ask your
+ * administrator" case, and `outside_zone` is the "move inside your zone" case.
+ * A shape that exists but cannot be parsed reads as outside rather than
+ * no-zone, so a broken polygon cannot silently admit a rider.
+ */
+export function keetaZoneVerdict(args: {
+  lat: number;
+  lng: number;
+  zone: CheckInZone | null;
+}): { outcome: KeetaZoneOutcome; zone: CheckInZoneSummary | null } {
+  const { lat, lng, zone } = args;
+  if (!zone) return { outcome: "no_zone", zone: null };
+  const summary: CheckInZoneSummary = { id: zone.id, name: zone.name };
+  // No stored shape is the administrator case, not the "walk closer" case, so
+  // the summary is dropped too and the phone shows the assignment copy.
+  if (zone.geometry == null) return { outcome: "no_zone", zone: null };
+  const inside = pointWithinZoneProximity(
+    lat,
+    lng,
+    zone.geometry as ZoneFeature,
+    zoneTypeOf(zone.zone_type),
+    0,
+  );
+  return { outcome: inside ? "in_range" : "outside_zone", zone: summary };
 }
 
 function candidateName(candidate: CheckInCandidate): string | null {

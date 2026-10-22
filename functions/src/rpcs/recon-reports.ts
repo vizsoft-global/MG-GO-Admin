@@ -34,7 +34,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const RECON_MAX_SPAN_DAYS = 93;
 const REPORT_MAX_SPAN_DAYS = 366;
 const RECON_ROW_SCAN_CAP = 50_000;
-const RECON_DELIVERY_SCAN_CAP = 100_000;
+/**
+ * One comparison month is ~111k deliveries in production (October 2026), two
+ * months ~242k and the full 93-day span ~257k. The old 100k ceiling refused
+ * "This Month" with `range_too_large` even after the scan-lane fix, and a 200k
+ * ceiling refused a legal two-month range; the ceiling is a cost guard for an
+ * oversized window, not for any window the page itself allows.
+ */
+const RECON_DELIVERY_SCAN_CAP = 300_000;
 const REPORT_DELIVERY_SCAN_CAP = 200_000;
 const DRIVER_SCAN_CAP = 10_000;
 const RECONCILE_WRITE_CAP = 450;
@@ -132,7 +139,7 @@ async function loadDeliveriesByDay(
     )
     .limit(cap + 1)
     .get();
-  if (snap.size > cap) throw new HttpsError("out-of-range", "range_too_large");
+  if (snap.size > cap) throw new HttpsError("out-of-range", "scan_cap_exceeded");
   return snap.docs.map((doc) => ({ id: doc.id, data: (doc.data() ?? {}) as Dict }));
 }
 
@@ -180,7 +187,9 @@ export const adminOrderComparisonSnapshot = onCall(async (request) => {
     .where("work_date", "<=", to)
     .limit(RECON_ROW_SCAN_CAP + 1)
     .get();
-  if (rowsSnap.size > RECON_ROW_SCAN_CAP) throw new HttpsError("out-of-range", "range_too_large");
+  // A cap is a "too many rows" answer, not a span answer: the page must suggest
+  // a shorter range, not "Date span cannot exceed 93 days".
+  if (rowsSnap.size > RECON_ROW_SCAN_CAP) throw new HttpsError("out-of-range", "scan_cap_exceeded");
 
   const reconRows = rowsSnap.docs
     .map((doc) => ({ id: doc.id, raw: (doc.data() ?? {}) as Dict }))

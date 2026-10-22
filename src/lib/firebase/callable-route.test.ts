@@ -61,6 +61,22 @@ describe("admin callable route", () => {
     assert.equal(route("off", "recalculate_earnings_for_range", 5_000).timeoutMs, 5_000);
   });
 
+  /**
+   * The compare page reported "RPC not live" because this multi-collection scan
+   * sat on the light lane's 60s budget. It is a scan-lane member now, and this
+   * assertion is what keeps it there.
+   */
+  it("routes the order comparison snapshot to the scan lane", () => {
+    const resolved = route(undefined, "admin_order_comparison_snapshot");
+    assert.equal(resolved.lane, "scan");
+    assert.equal(resolved.functionName, "adminOrderComparisonSnapshot");
+    assert.equal(
+      resolved.url,
+      "https://me-central1-musallam-delivery-prod.cloudfunctions.net/adminApiScan",
+    );
+    assert.equal(resolved.timeoutMs, 120_000);
+  });
+
   it("leaves a name without underscores unchanged", () => {
     const resolved = route(undefined, "syncStaffClaims");
     assert.equal(resolved.functionName, "syncStaffClaims");

@@ -9,6 +9,7 @@ import {
   emptyCover,
   efficiencyPct,
   isJustifyingStatus,
+  isKeetaProjectKey,
   kuwaitMonthBounds,
   mapLiveStatusToUi,
   offStructureHoursFor,
@@ -177,7 +178,7 @@ export function buildPayrollOptions(roster: readonly RawPayrollDriver[]): Payrol
   const sourceCompanies = new Set<string>();
   for (const r of roster) {
     if (r.zoneId && r.zoneName) zones.set(r.zoneId, r.zoneName);
-    if (r.restaurantId && r.restaurantName && r.projectKey !== "keeta") {
+    if (r.restaurantId && r.restaurantName && !isKeetaProjectKey(r.projectKey)) {
       restaurants.set(r.restaurantId, r.restaurantName);
     }
     if (r.nationality) nationalities.add(r.nationality);

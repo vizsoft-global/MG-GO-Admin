@@ -30,7 +30,7 @@ export function NotificationHistoryPageShell() {
         title={t("navHistory")}
         description={t("historySubtitle")}
         breadcrumbs={[
-          { label: t("title"), href: `/${locale}/notifications` },
+          { label: t("title"), href: "/notifications" },
           { label: t("navHistory") },
         ]}
       />

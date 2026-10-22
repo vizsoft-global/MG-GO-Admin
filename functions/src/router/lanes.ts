@@ -74,6 +74,13 @@ export const SCHEDULED_FUNCTIONS = ["bitesMirrorSweep", "homeSnapshotRepair"] as
 
 export const SCAN_FUNCTIONS = [
   "adminPerformanceOpsSnapshot",
+  /**
+   * Order Comparison joins `order_recon_rows` with `deliveries`, `drivers`,
+   * `profiles` and `restaurants` for a month window. On the light lane that
+   * scan blew past the 60s client abort and the compare page reported "RPC not
+   * live"; the scan lane's 120s budget is what the read actually needs.
+   */
+  "adminOrderComparisonSnapshot",
   "adminDeliveriesStatusCounts",
   "adminDeliveriesCountsByFilters",
   "adminListDriversPage",

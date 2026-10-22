@@ -2,7 +2,11 @@
 
 import { getSessionUser, type SessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
-import type { Firestore, QueryDocumentSnapshot } from "firebase-admin/firestore";
+import type {
+  Firestore,
+  Query,
+  QueryDocumentSnapshot,
+} from "firebase-admin/firestore";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
@@ -13,22 +17,20 @@ import {
   spanDays,
   type ComparisonSnapshot,
 } from "./order-comparison-model";
-import { addKuwaitDays } from "@/lib/date/kuwait-dates";
+import {
+  ComparisonReadCapError,
+  failureCode,
+} from "./order-comparison-errors";
+import { deliveryDayBounds } from "./order-comparison-range";
 
 const MAX_SPAN = 93;
 const PAGE = 1000;
-
-function rpcMissing(error: { code?: string; message?: string } | null): boolean {
-  if (!error) return false;
-  const code = error.code ?? "";
-  const message = (error.message ?? "").toLowerCase();
-  return (
-    code === "PGRST202" ||
-    code === "42883" ||
-    message.includes("admin_order_comparison_snapshot") ||
-    message.includes("could not find the function")
-  );
-}
+/**
+ * One fallback read may not page past this many documents. Sized above the
+ * page's own 93-day maximum (~257k deliveries in October 2026), so a stale lane
+ * cannot preempt a range the UI itself allows.
+ */
+const FALLBACK_DOCS_CAP = 300_000;
 
 async function requireView(): Promise<{ error: "not_authorized" } | { session: SessionUser }> {
   const session = await getSessionUser();
@@ -61,22 +63,28 @@ async function pageRange(
   db: Firestore,
   collection: string,
   field: string,
-  start: string,
-  end: string,
+  start: string | Date,
+  end: string | Date,
   endInclusive: boolean,
 ): Promise<QueryDocumentSnapshot[]> {
   const docs: QueryDocumentSnapshot[] = [];
-  for (let offset = 0; ; offset += PAGE) {
-    const snap = await db
+  // Cursor pagination, not `offset`: an offset re-bills every skipped document,
+  // and a month is ~111k rows. `startAfter` reads each page once.
+  let cursor: QueryDocumentSnapshot | null = null;
+  for (;;) {
+    let query: Query = db
       .collection(collection)
       .where(field, ">=", start)
       .where(field, endInclusive ? "<=" : "<", end)
       .orderBy(field)
-      .offset(offset)
-      .limit(PAGE)
-      .get();
+      .limit(PAGE);
+    if (cursor) query = query.startAfter(cursor);
+    const snap = await query.get();
     docs.push(...snap.docs);
+    if (docs.length > FALLBACK_DOCS_CAP) throw new ComparisonReadCapError();
     if (snap.size < PAGE) break;
+    cursor = snap.docs[snap.docs.length - 1] ?? null;
+    if (!cursor) break;
   }
   return docs;
 }
@@ -88,6 +96,12 @@ async function loadSnapshotFallback(
 ): Promise<ComparisonSnapshot> {
   const rowDocs = await pageRange(db, COLLECTIONS.orderReconRows, "work_date", from, to, true);
   let docsRead = rowDocs.length;
+  // Every read the fallback makes is charged here, so a wide month cannot page
+  // the whole database: past the cap the caller answers `scan_cap_exceeded`.
+  const charge = (count: number) => {
+    docsRead += count;
+    if (docsRead > FALLBACK_DOCS_CAP) throw new ComparisonReadCapError();
+  };
   const rowPage = rowDocs.map((doc) => {
     const row = doc.data();
     return {
@@ -104,7 +118,7 @@ async function loadSnapshotFallback(
   for (let i = 0; i < runIds.length; i += 100) {
     const refs = runIds.slice(i, i + 100).map((id) => db.collection(COLLECTIONS.orderReconRuns).doc(id));
     const found = refs.length ? await db.getAll(...refs) : [];
-    docsRead += found.length;
+    charge(found.length);
     for (const doc of found) {
       if (!doc.exists) continue;
       const row = doc.data() ?? {};
@@ -146,10 +160,18 @@ async function loadSnapshotFallback(
     else amSum.set(key, { mg_id: pick.raw, work_date: day, orders, rider_name: pick.name });
   }
 
-  const startIso = `${from}T00:00:00+03:00`;
-  const endIso = `${addKuwaitDays(to, 1)}T00:00:00+03:00`;
-  const deliveryDocs = await pageRange(db, COLLECTIONS.deliveries, "delivered_at", startIso, endIso, false);
-  docsRead += deliveryDocs.length;
+  // `delivered_at` is a Timestamp: the old fallback sent an ISO string, which is
+  // why the fallback matched nothing. Day bounds are real Dates now.
+  const bounds = deliveryDayBounds(from, to);
+  const deliveryDocs = await pageRange(
+    db,
+    COLLECTIONS.deliveries,
+    "delivered_at",
+    bounds.start,
+    bounds.endExclusive,
+    false,
+  );
+  charge(deliveryDocs.length);
   const allowed = new Set(["pending", "in_transit", "verified"]);
   const deliveries = deliveryDocs
     .map((doc) => doc.data())
@@ -165,7 +187,7 @@ async function loadSnapshotFallback(
   for (let i = 0; i < driverIds.length; i += 100) {
     const refs = driverIds.slice(i, i + 100).map((id) => db.collection(COLLECTIONS.drivers).doc(id));
     const found = refs.length ? await db.getAll(...refs) : [];
-    docsRead += found.length;
+    charge(found.length);
     for (const doc of found) {
       if (!doc.exists) continue;
       drivers.push({ id: doc.id, employee_id: (doc.data()?.employee_id as string | null) ?? null });
@@ -194,7 +216,7 @@ async function loadSnapshotFallback(
   const wanted = [...new Set([...amIds, ...mgIds].map((id) => id.toLowerCase()))];
   const riderRows: { id: string; employee_id: string | null }[] = [];
   const liveSnap = await db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get();
-  docsRead += liveSnap.size;
+  charge(liveSnap.size);
   for (const doc of liveSnap.docs) {
     const employeeId = doc.data().employee_id as string | null;
     if (employeeId && wanted.includes(employeeId.trim().toLowerCase())) {
@@ -206,7 +228,7 @@ async function loadSnapshotFallback(
   for (let i = 0; i < profileIds.length; i += 100) {
     const refs = profileIds.slice(i, i + 100).map((id) => db.collection(COLLECTIONS.profiles).doc(id));
     const found = refs.length ? await db.getAll(...refs) : [];
-    docsRead += found.length;
+    charge(found.length);
     for (const doc of found) {
       if (!doc.exists) continue;
       names.set(doc.id, String(doc.data()?.full_name ?? ""));
@@ -216,7 +238,7 @@ async function loadSnapshotFallback(
   for (let i = 0; i < profileIds.length; i += 30) {
     const ids = profileIds.slice(i, i + 30);
     const mapSnap = await db.collection(COLLECTIONS.driverRestaurants).where("driver_id", "in", ids).get();
-    docsRead += mapSnap.size;
+    charge(mapSnap.size);
     const maps = mapSnap.docs.map((doc) => ({
       driver_id: String(doc.data().driver_id ?? ""),
       restaurant_id: String(doc.data().restaurant_id ?? ""),
@@ -224,7 +246,7 @@ async function loadSnapshotFallback(
     const restIds = [...new Set(maps.map((m) => m.restaurant_id).filter(Boolean))];
     const restRefs = restIds.map((id) => db.collection(COLLECTIONS.restaurants).doc(id));
     const restDocs = restRefs.length ? await db.getAll(...restRefs) : [];
-    docsRead += restDocs.length;
+    charge(restDocs.length);
     const byId = new Map(
       restDocs.filter((doc) => doc.exists).map((doc) => [doc.id, String(doc.data()?.name ?? "")]),
     );
@@ -278,9 +300,34 @@ export async function getOrderComparison(input: {
   if (!error) {
     return { snapshot: parseComparisonSnapshot(data, from, to) };
   }
-  if (!rpcMissing(error)) return { error: "compare_failed" };
-  if (spanDays(from, to) > 3) return { error: "compare_failed" };
-  return { snapshot: await loadSnapshotFallback(db, from, to) };
+
+  // Name the real failure instead of collapsing everything into compare_failed.
+  // The one line below is what turns "the page is broken" into a status code in
+  // the Vercel log on the next report.
+  const code = failureCode(error);
+  console.error("getOrderComparison failed", {
+    from,
+    to,
+    code,
+    status: error.code ?? null,
+    message: error.message ?? null,
+  });
+  if (code !== "service_stale") return { error: code };
+
+  // The deployed lane does not know the function yet (wrong lane / stale
+  // deploy). Read the same window locally instead of failing a page that used to
+  // work — up to MAX_SPAN days, with the read cap enforced inside.
+  try {
+    return { snapshot: await loadSnapshotFallback(db, from, to) };
+  } catch (fallbackError) {
+    if (fallbackError instanceof ComparisonReadCapError) return { error: "scan_cap_exceeded" };
+    console.error("getOrderComparison fallback failed", {
+      from,
+      to,
+      message: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+    });
+    return { error: "compare_failed" };
+  }
 }
 
 export async function exportComparisonMonth(monthStart: string): Promise<

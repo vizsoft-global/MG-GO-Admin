@@ -35,7 +35,7 @@ export function TemplatesListPageShell() {
         title={t("navTemplates")}
         description={t("templatesSubtitle")}
         breadcrumbs={[
-          { label: t("title"), href: `/${locale}/notifications` },
+          { label: t("title"), href: "/notifications" },
           { label: t("navTemplates") },
         ]}
         actions={

@@ -121,7 +121,7 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
         title={campaign.title}
         description={campaign.body}
         breadcrumbs={[
-          { label: t("title"), href: `/${locale}/notifications` },
+          { label: t("title"), href: "/notifications" },
           { label: campaign.title },
         ]}
         actions={

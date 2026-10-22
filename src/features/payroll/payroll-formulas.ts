@@ -724,13 +724,22 @@ export function isUnjustifiedDay(
   }
 }
 
+export function isKeetaProjectKey(value: string | null | undefined): boolean {
+  return typeof value === "string" && value.trim().toLowerCase() === "keeta";
+}
+
 export function restaurantLabel(input: {
   projectKey: string | null;
   storeName: string | null;
 }): string {
-  if (input.projectKey === "keeta") return "(Pool)";
+  // Keeta riders never carry a single store, so the project names the row.
+  // Every other rider with no store assigned reads as a dash — the payroll
+  // filter and the exported sheet both read this label, so no row may print a
+  // pool placeholder.
+  if (isKeetaProjectKey(input.projectKey)) return "Keeta";
   const name = input.storeName?.trim();
-  return name || "(Pool)";
+  if (!name || name === "(Pool)") return "—";
+  return name;
 }
 
 export function riderMatchesSlicers(

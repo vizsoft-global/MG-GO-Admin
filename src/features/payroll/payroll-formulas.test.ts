@@ -316,10 +316,14 @@ describe("request type maps", () => {
 });
 
 describe("restaurant + slicers", () => {
-  it("Keeta and missing store both become (Pool)", () => {
-    assert.equal(restaurantLabel({ projectKey: "keeta", storeName: "KFC" }), "(Pool)");
+  it("no row can read (Pool): Keeta names the project, an unassigned store is a dash", () => {
+    assert.equal(restaurantLabel({ projectKey: "keeta", storeName: "KFC" }), "Keeta");
+    assert.equal(restaurantLabel({ projectKey: "Keeta", storeName: null }), "Keeta");
+    assert.equal(restaurantLabel({ projectKey: " keeta ", storeName: "KFC" }), "Keeta");
     assert.equal(restaurantLabel({ projectKey: "americana", storeName: "KFC" }), "KFC");
-    assert.equal(restaurantLabel({ projectKey: "americana", storeName: null }), "(Pool)");
+    assert.equal(restaurantLabel({ projectKey: "americana", storeName: null }), "—");
+    assert.equal(restaurantLabel({ projectKey: "americana", storeName: "   " }), "—");
+    assert.equal(restaurantLabel({ projectKey: null, storeName: "(Pool)" }), "—");
   });
 
   it("empty slicer = all", () => {

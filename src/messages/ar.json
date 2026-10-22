@@ -3263,9 +3263,12 @@
         "invalid_headers": "يجب أن تبدأ الأعمدة بـ ID و Driver Name ثم Store Name / Position اختياري ثم أيام YYYY-MM-DD.",
         "no_date_columns": "أضف عمود تاريخ واحداً على الأقل.",
         "range_too_large": "لا يمكن أن يتجاوز المدى 93 يوماً.",
-        "compare_failed": "تعذرت المقارنة. الـ RPC غير مباشر حتى Approve, deploy.",
+        "compare_failed": "تعذرت المقارنة. حاول مجدداً أو اختر مدى أقصر.",
+        "scan_cap_exceeded": "عدد الطلبات كبير جداً للمقارنة في مرة واحدة. اختر مدى أقصر.",
+        "service_unavailable": "خدمة المقارنة مشغولة الآن. حاول بعد قليل.",
+        "service_stale": "خدمة المقارنة قيد التحديث. حاول بعد دقيقة.",
         "save_failed": "تعذر حفظ هذه الجولة.",
-        "not_authorized": "ليست لديك صلاحية الرفع.",
+        "not_authorized": "ليست لديك صلاحية لهذا الإجراء.",
         "nothing_to_undo": "لا شيء للتراجع عنه.",
         "nothing_to_redo": "لا شيء لإعادته."
       }

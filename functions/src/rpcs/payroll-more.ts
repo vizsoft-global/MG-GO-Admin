@@ -34,6 +34,7 @@ import { requireStaff, requireStaffFresh, type StaffContext } from "../core/staf
 import {
   BATCH_LIMIT,
   chunk,
+  isKeetaProjectKey,
   loadDocMap,
   numberOrNull,
   pick,
@@ -620,7 +621,7 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
           ? (restaurantClientIds.get(resolvedRestaurantId) ?? null)
           : null),
       restaurantName:
-        projectKey === "keeta" || !resolvedRestaurantId
+        isKeetaProjectKey(projectKey) || !resolvedRestaurantId
           ? null
           : (restaurantNames.get(resolvedRestaurantId) ?? null),
     };
@@ -833,9 +834,9 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
       mgId: d.driverCode ?? "—",
       name: d.name,
       restaurant:
-        d.projectKey === "keeta" || !trimmedOrNull(d.restaurantName)
-          ? "(Pool)"
-          : (d.restaurantName as string),
+        isKeetaProjectKey(d.projectKey)
+          ? "Keeta"
+          : trimmedOrNull(d.restaurantName) ?? "—",
       restaurantId: d.restaurantId,
       restaurantClientId: d.restaurantClientId,
       zone: d.zoneName ?? "—",
@@ -877,7 +878,7 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
   const sourceCompanies = new Set<string>();
   for (const row of rosterAll) {
     if (row.zoneId && row.zoneName) zoneOptions.set(row.zoneId, row.zoneName);
-    if (row.restaurantId && row.restaurantName && row.projectKey !== "keeta") {
+    if (row.restaurantId && row.restaurantName && !isKeetaProjectKey(row.projectKey)) {
       restaurantOptions.set(row.restaurantId, row.restaurantName);
     }
     if (row.nationality) nationalities.add(row.nationality);
@@ -958,7 +959,7 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
 
 function partnerLabel(projectKey: string | null): string {
   if (projectKey === "americana") return "Americana";
-  if (projectKey === "keeta") return "Keeta";
+  if (isKeetaProjectKey(projectKey)) return "Keeta";
   return "—";
 }
 

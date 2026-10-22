@@ -369,7 +369,7 @@ export function CreateNotificationPageShell() {
         title={t("createTitle")}
         description={t("createSubtitle")}
         breadcrumbs={[
-          { label: t("title"), href: `/${locale}/notifications` },
+          { label: t("title"), href: "/notifications" },
           { label: t("createTitle") },
         ]}
       />

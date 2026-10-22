@@ -34,6 +34,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { cn } from "@/lib/utils";
 import { getOrderComparison } from "./order-comparison-actions";
+import { comparisonErrorKeyFromMessage } from "./order-comparison-errors";
 import { applyPageFilters, activeFilterEntries, filterChipLabel } from "./order-comparison-filters";
 import {
   buildComparisonRiders,
@@ -93,6 +94,12 @@ export function OrderReconPageShell() {
     },
     enabled: !overSpan,
   });
+
+  // The action throws its own error key; show the matching copy instead of one
+  // generic "not live until deploy" line for every failure.
+  const comparisonError = query.isError
+    ? comparisonErrorKeyFromMessage(query.error)
+    : null;
 
   const days = useMemo(() => daysInRange(range.from, range.to), [range.from, range.to]);
   const riders = useMemo(
@@ -249,7 +256,9 @@ export function OrderReconPageShell() {
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : query.isError ? (
-        <p className="text-sm text-destructive">{t("errors.compare_failed")}</p>
+        <p className="text-sm text-destructive">
+          {t(`errors.${comparisonError ?? "compare_failed"}`)}
+        </p>
       ) : (
         <>
           <KpiGrid
