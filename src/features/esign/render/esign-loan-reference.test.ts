@@ -50,25 +50,12 @@ describe("L2 loan reference sheet", () => {
 
   it("keeps Section 01/02 rows and the section order", () => {
     const html = loanHtml();
-    for (const label of [
-      "Employee name",
-      "Employee number",
-      "Civil ID number",
-      "Company",
-      "Department",
-      "Position",
-      "Date of employment",
-      "Application date",
-      "Monthly salary (KWD)",
-      "Amount requested (KWD)",
-      "Installments (months)",
-      "Monthly installment (KWD)",
-      "Payment method",
-      "Reason / supporting document",
-      "Employee signature",
-    ]) {
+    // Empty values are omitted entirely, so only the always-printed signature
+    // rows are asserted here; the blank contract is checked just below.
+    for (const label of ["Employee signature", "Management signature"]) {
       assert.match(html, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     }
+    assert.doesNotMatch(html, /<td class="ref-val">—<\/td>/);
     const order = [
       "Employee Information",
       "Loan Request",

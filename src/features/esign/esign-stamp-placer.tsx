@@ -103,13 +103,13 @@ function isElement(node: unknown): node is HTMLElement {
 function cornerBoxClass(corner: ResizeCorner): string {
   switch (corner) {
     case "nw":
-      return "absolute -left-1 -top-1 z-10 h-2.5 w-2.5 cursor-nwse-resize border border-emerald-500 bg-white touch-none";
+      return "absolute -left-1 -top-1 z-10 h-2.5 w-2.5 cursor-nwse-resize border border-border bg-white touch-none";
     case "ne":
-      return "absolute -right-1 -top-1 z-10 h-2.5 w-2.5 cursor-nesw-resize border border-emerald-500 bg-white touch-none";
+      return "absolute -right-1 -top-1 z-10 h-2.5 w-2.5 cursor-nesw-resize border border-border bg-white touch-none";
     case "sw":
-      return "absolute -left-1 -bottom-1 z-10 h-2.5 w-2.5 cursor-nesw-resize border border-emerald-500 bg-white touch-none";
+      return "absolute -left-1 -bottom-1 z-10 h-2.5 w-2.5 cursor-nesw-resize border border-border bg-white touch-none";
     case "se":
-      return "absolute -right-1 -bottom-1 z-10 h-2.5 w-2.5 cursor-nwse-resize border border-emerald-500 bg-white touch-none";
+      return "absolute -right-1 -bottom-1 z-10 h-2.5 w-2.5 cursor-nwse-resize border border-border bg-white touch-none";
     default: {
       const exhaustive: never = corner;
       return exhaustive;
@@ -735,7 +735,7 @@ export const EsignStampPlacer = forwardRef<
               disabled={!html}
               className={
                 editing
-                  ? "h-9 border-emerald-500 bg-emerald-100 px-2 text-xs font-semibold text-emerald-900"
+                  ? "h-9 border-primary bg-primary/10 px-2 text-xs font-semibold text-primary"
                   : "h-9 px-2 text-xs"
               }
               onClick={() => void toggleEdit()}
@@ -809,13 +809,13 @@ export const EsignStampPlacer = forwardRef<
                       <button
                         type="button"
                         aria-label={label}
-                        className="absolute inset-0 cursor-grab border border-emerald-500 bg-white/80 text-left text-[10px] leading-tight text-emerald-950 select-none touch-none active:cursor-grabbing"
+                        className="absolute inset-0 cursor-grab border border-primary bg-white/80 text-left text-[10px] leading-tight text-foreground select-none touch-none active:cursor-grabbing"
                         onPointerDown={(event) => beginGesture(event, piece, null)}
                         onPointerMove={onGestureMove}
                         onPointerUp={onGestureUp}
                         onKeyDown={(event) => onKeyDown(event, piece)}
                       >
-                        <span className="pointer-events-none absolute -top-4 left-0 rounded bg-emerald-100 px-1 font-medium text-emerald-900">
+                        <span className="pointer-events-none absolute -top-4 left-0 rounded bg-primary/10 px-1 font-medium text-primary">
                           {label}
                         </span>
                         {piece.id === "signature" ? (
@@ -872,9 +872,9 @@ export const EsignStampPlacer = forwardRef<
         </div>
       </div>
       <p className="text-[10px] text-muted-foreground">{t("placeHint")}</p>
-      {editing ? <p className="text-[10px] text-emerald-800">{t("formDeleteHint")}</p> : null}
+      {editing ? <p className="text-[10px] text-muted-foreground">{t("formDeleteHint")}</p> : null}
       {autoStatus === "done" ? (
-        <p className="text-[10px] text-emerald-800">{t("autoMatchDone")}</p>
+        <p className="text-[10px] text-muted-foreground">{t("autoMatchDone")}</p>
       ) : null}
       {autoStatus === "fallback" ? (
         <p className="text-[10px] text-amber-700">{t("autoMatchFallback")}</p>
@@ -883,7 +883,7 @@ export const EsignStampPlacer = forwardRef<
         <p className="text-[10px] text-muted-foreground">{t("formSaving")}</p>
       ) : null}
       {formStatus === "saved" ? (
-        <p className="text-[10px] text-emerald-800">{t("formSaved")}</p>
+        <p className="text-[10px] text-muted-foreground">{t("formSaved")}</p>
       ) : null}
       {formStatus === "error" ? (
         <p className="text-[10px] text-destructive">
@@ -898,7 +898,7 @@ export const EsignStampPlacer = forwardRef<
         <p className="text-[10px] text-muted-foreground">{t("placeSaving")}</p>
       ) : null}
       {status === "saved" ? (
-        <p className="text-[10px] text-emerald-800">{t("placeSaved")}</p>
+        <p className="text-[10px] text-muted-foreground">{t("placeSaved")}</p>
       ) : null}
       {status === "error" ? (
         <p className="text-[10px] text-destructive">

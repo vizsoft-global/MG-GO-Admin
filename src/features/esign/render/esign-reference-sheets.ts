@@ -4,6 +4,7 @@ import type {
   PayslipLine,
 } from "./esign-document-layout";
 import { escapeHtml } from "./esign-placeholders";
+import { logoImageHtml } from "./esign-logo";
 import { MUSALLAM_GROUP_LOGO } from "./esign-reference-logo";
 
 /**
@@ -55,10 +56,10 @@ function tableRows(
   labels: Record<string, [string, string]>,
 ): string {
   return rowsOf(layout, key)
-    .filter((entry) => labels[entry.key])
+    .filter((entry) => { const value = entry.value.trim(); return Boolean(labels[entry.key]) && Boolean(value) && value !== "—"; })
     .map((entry) => {
       const [en, arabic] = labels[entry.key];
-      const value = entry.value.trim() || "—";
+      const value = entry.value.trim();
       return `<tr><td class="ref-lab">${escapeHtml(en)}</td><td class="ref-val">${escapeHtml(value)}</td><td class="ref-ar">${ar(arabic)}</td></tr>`;
     })
     .join("");
@@ -98,27 +99,28 @@ body {
 
 const LOAN_CSS = `
 .loan-page { padding: 18mm 20mm 14mm 22mm; color: #000; font-size: 9pt; }
+.ref-logo { display: block; height: 12mm; width: auto; max-width: 38mm; object-fit: contain; margin: 0 0 5mm; }
 .loan-toprule { height: 1.1pt; background: var(--navy); margin-bottom: 12mm; }
 .loan-bottomrule { position: absolute; left: 22mm; right: 20mm; bottom: 18mm; height: 1.1pt; background: var(--navy); }
 .loan-title { background: var(--navy); color: #fff; text-align: center; font-weight: 700; font-size: 12pt; padding: 1.5mm 0; letter-spacing: .2pt; }
 .loan-title .ar { color: #fff; font-size: 12.5pt; }
 .loan-title .sep { padding: 0 2mm; }
-.loan-block { margin-top: 2.2mm; }
-.ref-sec { background: var(--loan-label); color: #000; text-align: center; font-weight: 700; font-size: 9pt; border: .6pt solid var(--navy); border-bottom: 0; padding: 1.1mm 0; }
+.loan-block { margin-top: 3.2mm; }
+.ref-sec { background: var(--loan-label); color: #000; text-align: center; font-weight: 700; font-size: 9pt; border: .6pt solid var(--navy); border-bottom: 0; padding: 1.6mm 0; }
 .ref-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .ref-table col.c-lab { width: 38%; }
 .ref-table col.c-val { width: 30%; }
 .ref-table col.c-ar { width: 32%; }
-.ref-table td { border: .6pt solid var(--navy); height: 6mm; padding: 0 2mm; font-size: 9.5pt; vertical-align: middle; }
+.ref-table td { border: .6pt solid var(--navy); height: 7.2mm; padding: 0 2.4mm; font-size: 9.5pt; vertical-align: middle; }
 .ref-table .ref-lab { background: var(--loan-label); text-align: left; }
 .ref-table .ref-ar { background: var(--loan-label); text-align: right; font-size: 8.6pt; }
 .ref-table .ref-val { text-align: center; font-weight: 400; font-size: 9.5pt; }
-.ref-decision { display: flex; align-items: center; justify-content: center; gap: 4mm; white-space: nowrap; }
-.ref-table .ref-val.ref-sign-cell { padding: 0 3mm; }
-.ref-sig { display: block; width: 100%; height: 5.2mm; border-bottom: .6pt dotted #4A4A4A; }
-.ref-decl { border: .6pt solid var(--navy); border-top: 0; padding: 1.6mm 2.2mm; display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; font-size: 7.8pt; line-height: 1.5; }
+.ref-decision { display: flex; align-items: center; justify-content: center; gap: 4mm; row-gap: 1mm; flex-wrap: wrap; white-space: normal; }
+.ref-table .ref-val.ref-sign-cell { padding: 1.6mm 3mm; }
+.ref-sig { display: block; width: 100%; height: 6.4mm; border-bottom: .6pt dotted #4A4A4A; }
+.ref-decl { border: .6pt solid var(--navy); border-top: 0; padding: 1.6mm 2.2mm; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 5mm; font-size: 7.8pt; line-height: 1.5; overflow-wrap: anywhere; }
 .ref-decl .ar { text-align: right; font-size: 7pt; }
-.ref-policy { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; font-size: 7.8pt; line-height: 1.5; padding: 1.3mm 2mm; border: .6pt solid var(--navy); border-top: 0; }
+.ref-policy { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 5mm; font-size: 7.8pt; line-height: 1.5; overflow-wrap: anywhere; padding: 1.3mm 2mm; border: .6pt solid var(--navy); border-top: 0; }
 .ref-policy .ar { text-align: right; font-size: 7pt; }
 .ref-policy p { margin: 0 0 1mm; }
 .ref-checks { display: inline-flex; align-items: center; gap: 1.5mm; margin-inline-start: 3mm; font-size: 8.5pt; }
@@ -151,6 +153,7 @@ const ACCIDENT_CSS = `
 
 const PAYSLIP_CSS = `
 .pay-page { padding: 14mm 12mm 12mm; color: #1D2340; }
+.pay-logo { display: block; height: 12mm; width: auto; max-width: 38mm; object-fit: contain; margin-bottom: 3mm; }
 .pay-topline { height: 1.5mm; background: var(--pay-blue); margin: -14mm -12mm 0; }
 .pay-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 6mm; padding: 4.5mm 0 3mm; border-bottom: 1.1mm solid var(--pay-orange); }
 .pay-head > div:first-child { flex: 1; min-width: 0; }
@@ -262,6 +265,7 @@ function declarationFor(
 export function renderLoanReferenceSheet(
   layout: EsignDocumentLayout,
   fontCss?: string,
+  logoUrl?: string | null,
 ): string {
   const title = layout.title;
   const declarationText = declarationFor(layout, LOAN_DECLARATION);
@@ -274,6 +278,7 @@ export function renderLoanReferenceSheet(
   const hrRows = tableRows(layout, "hr_verification", LOAN_HR_LABELS);
 
   const body = `
+${logoImageHtml(logoUrl, "ref-logo")}
 <div class="loan-toprule"></div>
 <div class="loan-title">${escapeHtml(title.en.toUpperCase())}<span class="sep">·</span>${ar(title.ar)}</div>
 <section class="loan-block">
@@ -314,6 +319,7 @@ export function renderLoanReferenceSheet(
 export function renderAccidentReferenceSheet(
   layout: EsignDocumentLayout,
   fontCss?: string,
+  logoUrl?: string | null,
 ): string {
   const rider = layout.riderName?.trim() || rowValue(layout, ["rider_name", "employee_name"]) || "";
 
@@ -332,8 +338,12 @@ export function renderAccidentReferenceSheet(
     "تقرير إثبات العودة إلى العمل من المستشفى.",
   ];
 
+  const accidentLogo =
+    logoImageHtml(logoUrl, "acc-logo", "Musallam Group") ||
+    `<img class="acc-logo" src="${MUSALLAM_GROUP_LOGO}" alt="Musallam Group"/>`;
+
   const body = `
-<img class="acc-logo" src="${MUSALLAM_GROUP_LOGO}" alt="Musallam Group"/>
+${accidentLogo}
 <div class="acc-title"><span class="ar" dir="rtl">إقرار</span><span class="en">Declaration</span></div>
 <div class="acc-body">
   <div>
@@ -403,6 +413,7 @@ function payslipLineRow(line: PayslipLine): string {
 export function renderPayslipReferenceSheet(
   layout: EsignDocumentLayout,
   fontCss?: string,
+  logoUrl?: string | null,
 ): string {
   const company = payslipValue(layout, ["company_name"]) || layout.masthead.company;
   const companyAr = payslipValue(layout, ["company_name_ar"]) || company;
@@ -433,6 +444,7 @@ export function renderPayslipReferenceSheet(
     `<td class="lab">${escapeHtml(en)}<span class="ar" dir="rtl">${escapeHtml(arabic)}</span></td>`;
 
   const body = `
+${logoImageHtml(logoUrl, "pay-logo")}
 <div class="pay-topline"></div>
 <header class="pay-head">
   <div>

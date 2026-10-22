@@ -1221,13 +1221,11 @@ export function EsignSendShell({
           </div>
           ) : null}
 
-          {isV2 ? null : (
-            <EsignSignersEditor
-              draft={staffSigners}
-              onDraftChange={setStaffSigners}
-              onSelectedDisplayNameChange={setPickedStaffName}
-            />
-          )}
+          <EsignSignersEditor
+            draft={staffSigners}
+            onDraftChange={setStaffSigners}
+            onSelectedDisplayNameChange={setPickedStaffName}
+          />
 
           <div className="space-y-2 rounded-lg border border-dashed border-border px-3 py-2">
             <div className="flex items-center justify-between gap-2">
