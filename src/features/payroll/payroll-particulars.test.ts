@@ -41,7 +41,8 @@ describe("payroll particulars catalog", () => {
     assert.equal(particularForAdjustment("abs_lo"), "Abs·LO");
     assert.equal(particularForAdjustment("custom", 4), "4h");
     assert.equal(particularForAdjustment("custom", 0), "0h");
-    // Past a full day the cell prints the SOP 12h word, never 24h/23.5h.
+    // The label never goes past a full day: 12 and above print the 12h word.
+    assert.equal(particularForAdjustment("custom", 12.5), "12h");
     assert.equal(particularForAdjustment("custom", 24), "12h");
   });
 
