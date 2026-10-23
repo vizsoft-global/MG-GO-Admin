@@ -290,6 +290,8 @@ export const queryKeys = {
     columnConfig: () => ["payroll", "column-config"] as const,
     zoneSettings: (monthKey: string) => ["payroll", "zone-settings", monthKey] as const,
     riderStatuses: () => ["payroll", "rider-statuses"] as const,
+    hrPayroll: (monthKey: string, locale: string) =>
+      ["payroll", "hr-payroll", monthKey, locale] as const,
   },
   wrongActions: {
     all: () => ["wrong-actions"] as const,
