@@ -33,6 +33,7 @@ import { getSignedStorageUrl } from "@/lib/storage/storage-actions";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { toKuwaitYmd } from "@/features/fleet/fleet-labels";
 import { AssetFormSheet } from "@/features/assets/asset-form-sheet";
+import { isLegacyVehicleDocType, VEHICLE_DOC_TYPE_VALUES } from "./vehicle-doc-types";
 import type { VehicleListRow } from "./types";
 import {
   assignVehicleAsset,
@@ -51,7 +52,7 @@ import {
 
 type TabId = "handover" | "accident" | "documents" | "service" | "assets";
 
-const DOC_TYPE_VALUES = ["registration", "insurance", "other"] as const;
+const DOC_TYPE_VALUES = VEHICLE_DOC_TYPE_VALUES;
 
 /** Local "now" in the `datetime-local` wire format, used as an input `max`. */
 function localDateTimeInputMax(): string {
@@ -288,15 +289,19 @@ function DocumentsTab({ vehicle, canManage }: { vehicle: VehicleListRow; canMana
   const rows = list.data ?? [];
   const docTypeItems = [
     { value: "registration", label: t("docType.registration") },
-    { value: "insurance", label: t("docType.insurance") },
-    { value: "other", label: t("docType.other") },
+    { value: "health_card", label: t("docType.healthCard") },
+    { value: "baladiya_card", label: t("docType.baladiyaCard") },
   ];
   const docTypeLabel = (value: string): string => {
     if (value === "registration") return t("docType.registration");
-    if (value === "insurance") return t("docType.insurance");
-    if (value === "other") return t("docType.other");
+    if (value === "health_card") return t("docType.healthCard");
+    if (value === "baladiya_card") return t("docType.baladiyaCard");
+    // Retired types stay readable, clearly marked as history.
+    if (value === "insurance") return t("docType.insuranceLegacy");
+    if (value === "other") return t("docType.otherLegacy");
     return value;
   };
+  const hasLegacyRows = rows.some((row) => isLegacyVehicleDocType(row.doc_type));
   return (
     <div className="space-y-3">
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -323,12 +328,22 @@ function DocumentsTab({ vehicle, canManage }: { vehicle: VehicleListRow; canMana
         <TabTable
           heads={[t("colDocType"), t("colExpires"), t("colFile")]}
           rows={rows.map((row) => [
-            docTypeLabel(row.doc_type),
+            <span key={`${row.id}-type`} className="inline-flex items-center gap-1.5">
+              {docTypeLabel(row.doc_type)}
+              {isLegacyVehicleDocType(row.doc_type) ? (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                  {t("docType.legacy")}
+                </span>
+              ) : null}
+            </span>,
             row.expires_at ?? "—",
             <FileLink key={row.id} storageKey={row.storage_key} />,
           ])}
         />
       )}
+      {hasLegacyRows ? (
+        <p className="text-[10px] text-muted-foreground">{t("docType.legacyDocHint")}</p>
+      ) : null}
       <LedgerDialog
         open={open}
         title={t("addDocument")}

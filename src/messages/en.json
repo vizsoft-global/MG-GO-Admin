@@ -1970,6 +1970,7 @@
       "approveSuccess": "Driver approved",
       "approvePasscodeHint": "App passcode: {passcode}",
       "approvePendingHint": "Use Verify & approve to activate the driver and generate their app passcode.",
+    "opsNotRequired": "Non-operational section: no zone or restaurant is required.",
       "approveAwaitingLogin": "Approved — awaiting first app login",
       "statusActive": "Active",
       "approveErrors": {
@@ -2593,6 +2594,7 @@
       "restaurantsEmpty": "No published restaurants yet.",
       "restaurantsUnassignedGroup": "Unassigned",
       "assignmentHint": "Assign a zone or at least one restaurant — a driver needs one of the two.",
+    "nonOperationalHint": "Non-operational section: no zone or restaurant is required for this employee.",
       "restaurantsActivationHint": "A driver needs a zone or at least one published restaurant before the account can be set to active.",
       "addRestaurantLink": "Add restaurants",
       "errors": {
@@ -4077,7 +4079,13 @@
       "docType": {
         "registration": "Registration",
         "insurance": "Insurance",
-        "other": "Other"
+        "other": "Other",
+        "healthCard": "Health Card",
+        "baladiyaCard": "Baladiya Card",
+        "insuranceLegacy": "Insurance (legacy)",
+        "otherLegacy": "Other (legacy)",
+        "legacy": "Legacy",
+        "legacyDocHint": "Legacy documents are read-only. New uploads use Registration, Health Card or Baladiya Card."
       },
       "errors": {
         "missing_fields": "Fill the required fields.",
@@ -7782,6 +7790,9 @@
         "colSystem": "Kind",
         "system": "System",
         "custom": "Custom",
+        "operational": "Operational",
+        "nonOperational": "Non-operational",
+        "operationalHint": "Reserve this for MG Head Office staff. A rider in a non-operational section needs no zone or restaurant, so approval and clock-in both skip that requirement.",
         "statusesTitle": "Employee statuses",
         "statusesSubtitle": "HR status values used on Employees and reports.",
         "sectionsTitle": "Employee sections",

@@ -26,6 +26,7 @@ import type {
   DriverRiderCategory,
 } from "./types";
 import { listCustomFieldDefinitions } from "@/features/custom-fields/custom-fields-actions";
+import { listEmployeeCatalog } from "@/features/employees/employee-catalogs-actions";
 import { validateCustomFieldValues } from "@/lib/custom-fields/validate";
 import { resolveCountryInput } from "@/lib/geo/countries";
 import {
@@ -34,7 +35,7 @@ import {
   clientValueTooLong,
   normalizeClientValue,
 } from "./driver-client-fields";
-import { hasOpsAssignment } from "./driver-assignment";
+import { hasOpsAssignment, requiresOpsAssignment } from "./driver-assignment";
 import {
   flattenProfileSnapshot,
   loadIntakeProfileSnapshot,
@@ -335,6 +336,9 @@ export async function resolveDriverImportPreview(
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
   const db = await staffClient();
+  // The catalogue answers which sections need no zone or restaurant, so the
+  // sheet gate uses the same answer the employee form does.
+  const sections = await listEmployeeCatalog("employee_sections");
 
   const [
     { data: partners },
@@ -538,7 +542,15 @@ export async function resolveDriverImportPreview(
       }
     }
 
-    if (lookupStillOpen() && !existingByEmployeeId && !hasOpsAssignment(zone_id, restaurant_ids)) {
+    // A non-operational section (MG Head Office) has no zone or store by
+    // design, so the sheet may legitimately leave both blank for it.
+    const opsRequired = requiresOpsAssignment(section_keys, sections);
+    if (
+      lookupStillOpen() &&
+      !existingByEmployeeId &&
+      opsRequired &&
+      !hasOpsAssignment(zone_id, restaurant_ids)
+    ) {
       status = "missing_assignment";
     }
 
@@ -764,6 +776,7 @@ export async function resolveDriverImportPreview(
       ...row,
       status,
       existingByEmployeeId,
+      ops_required: opsRequired,
       partner_id,
       partner_name,
       zone_id,
@@ -853,6 +866,7 @@ export async function applyOneImportRow(
   const carriesAssignment = Boolean(row.present.zone_id || row.present.restaurant_ids);
   if (
     carriesAssignment &&
+    row.ops_required !== false &&
     !hasOpsAssignment(row.zone_id, row.restaurant_ids)
   ) {
     return fail("missing_assignment");

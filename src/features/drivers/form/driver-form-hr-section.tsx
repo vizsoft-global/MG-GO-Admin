@@ -1,8 +1,13 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Briefcase } from "lucide-react";
 import { ToggleChip } from "@/components/app/toggle-chip";
-import { catalogLabel, type EmployeeCatalogRow } from "@/features/employees/employee-catalogs";
+import {
+  catalogLabel,
+  isNonOperationalOnly,
+  type EmployeeCatalogRow,
+} from "@/features/employees/employee-catalogs";
 import { FieldBlock, FieldLabel, SectionHeading } from "./driver-form-primitives";
 import { SearchableSelect } from "./searchable-select";
 
@@ -44,6 +49,8 @@ export function DriverFormHrSection({
   const liveStatuses = statuses.filter((row) => row.is_active);
   const liveSections = sections.filter((row) => row.is_active);
   const liveNations = nationalityCategories.filter((row) => row.is_active);
+  const tNew = useTranslations("pages.driverNew");
+  const nonOperational = isNonOperationalOnly(sectionKeys, sections);
 
   return (
     <section className="space-y-2.5 rounded-lg border border-border bg-card p-4">
@@ -82,6 +89,9 @@ export function DriverFormHrSection({
               ))
             )}
           </div>
+          {nonOperational ? (
+            <p className="text-[10px] leading-4 text-emerald-700">{tNew("nonOperationalHint")}</p>
+          ) : null}
         </FieldBlock>
         <FieldBlock>
           <FieldLabel>{labels.nationalityCategories}</FieldLabel>

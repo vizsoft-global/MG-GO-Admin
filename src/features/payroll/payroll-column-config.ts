@@ -16,6 +16,7 @@ export const PAYROLL_HEADING_KEYS = [
   "zoneCategory",
   "partner",
   "vehicleKind",
+  "status",
   "finalOrders",
   "actualHours",
   "appTotalHours",
@@ -35,6 +36,7 @@ export const COMBINED_HEADING_KEYS = [
   "zoneCategory",
   "partner",
   "vehicleKind",
+  "status",
   "finalOrders",
   "actualHours",
 ] as const;
@@ -49,6 +51,7 @@ export const AO_HEADING_KEYS = [
   "zone",
   "zoneCategory",
   "vehicleKind",
+  "status",
   "finalOrders",
   "actualHours",
 ] as const;
@@ -63,6 +66,7 @@ export const APP_ATTENDANCE_HEADING_KEYS = [
   "zone",
   "zoneCategory",
   "vehicleKind",
+  "status",
   "appTotalHours",
   "appActiveDays",
   "appAvgHours",

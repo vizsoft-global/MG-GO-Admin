@@ -44,6 +44,8 @@ import { MetricTile, type Tone } from "@/components/ui/metric-tile";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { hasOpsAssignment } from "./driver-assignment";
+import { isNonOperationalOnly } from "@/features/employees/employee-catalogs";
+import { useEmployeeSections } from "@/features/employees/use-employee-catalogs";
 import { DriverAccountStatusEditor } from "./driver-account-status-editor";
 import { DriverBlockEditor } from "./driver-block-editor";
 import { DriverFreezeEditor } from "./driver-freeze-editor";
@@ -519,12 +521,17 @@ function DriverDetailContent({ id }: { id: string }) {
     return tList("statusPending");
   };
 
+  const sectionsQuery = useEmployeeSections();
+  // MG Head Office staff have no zone or store by design, so a missing
+  // assignment must not hide Approve/Activate from them.
+  const opsNotRequired = isNonOperationalOnly(driver.section_keys ?? [], sectionsQuery.data ?? []);
+
   const canApprove =
     canManage &&
     !isArchived &&
     Boolean(driver.intake_id) &&
     !driver.linked_profile_id &&
-    hasOpsAssignment(driver.zone_id, driver.restaurant_ids);
+    (opsNotRequired || hasOpsAssignment(driver.zone_id, driver.restaurant_ids));
 
   const showApproveButton = canApprove || holdApproveSlot;
 
@@ -1165,15 +1172,18 @@ function DriverDetailContent({ id }: { id: string }) {
                     driverId={driver.linked_profile_id}
                     intakeId={driver.intake_id ?? driver.id}
                     status={driver.account_status}
-                    canActivate={hasOpsAssignment(
-                      driver.zone_id,
-                      driver.has_published_restaurant ? 1 : 0,
-                    )}
+                    canActivate={
+                      opsNotRequired ||
+                      hasOpsAssignment(driver.zone_id, driver.has_published_restaurant ? 1 : 0)
+                    }
                     canManage={canManage}
                   />
                 ) : (
                   <p className="text-sm text-muted-foreground">{t("approvePendingHint")}</p>
                 )}
+                {opsNotRequired ? (
+                  <p className="mt-2 text-[11px] text-muted-foreground">{t("opsNotRequired")}</p>
+                ) : null}
               </div>
             </div>
           ) : null}

@@ -518,6 +518,12 @@ export type DriverImportPreviewRow = Omit<
   skip?: boolean;
   /** True when this employee ID already exists in the fleet (not a second sheet row). */
   existingByEmployeeId?: boolean;
+  /**
+   * False when every HR section on the row is non-operational, so the sheet may
+   * leave zone/restaurants blank. Computed once in the preview so the apply
+   * step does not have to re-read the catalog.
+   */
+  ops_required?: boolean;
   custom_fields: Record<string, string | null>;
 };
 

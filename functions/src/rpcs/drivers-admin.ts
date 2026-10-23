@@ -27,6 +27,7 @@ import { getAuth } from "firebase-admin/auth";
 import { COLLECTIONS, UNIQUE_LOCKS } from "../core/collections";
 import { daysInMonth, parseMonthKey, payrollMonths } from "../core/kuwait";
 import { requireStaff, requireStaffFresh, type StaffContext } from "../core/staff";
+import { riderIsNonOperational } from "../core/operational-sections";
 import { stampStoredRow } from "../core/search-text";
 import { pushAssignmentMirror, pushDriverIdentityMirror } from "./bites-mirror";
 import {
@@ -350,7 +351,9 @@ async function checkIntakeForApproval(
     return { ok: false, error: "missing_fields" };
   }
   const assignment = await intakeOpsAssignment(db, reader, intakeId, intake);
-  if (!assignment.assigned) return { ok: false, error: "driver_missing_assignment" };
+  if (!assignment.assigned && !(await riderIsNonOperational(intake))) {
+    return { ok: false, error: "driver_missing_assignment" };
+  }
   return { ok: true, intake, restaurantIds: assignment.restaurantIds };
 }
 
@@ -919,7 +922,10 @@ export const intakeHasOpsAssignment = onCall(async (request) => {
   const snap = await reader.get(db.collection(COLLECTIONS.driverIntakes).doc(intakeId));
   if (!snap.exists) return false;
   const { assigned } = await intakeOpsAssignment(db, reader, intakeId, dataOf(snap));
-  return assigned;
+  if (assigned) return true;
+  // Office staff have no zone or store by design, so the detail page must not
+  // hide Activate from them.
+  return riderIsNonOperational(dataOf(snap));
 });
 
 function holdsAny(ctx: StaffContext, slugs: readonly string[]): boolean {

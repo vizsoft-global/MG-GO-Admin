@@ -227,12 +227,15 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
       dates: month.dates,
       riders: filteredRiders,
       requests,
-      options: view
-        ? {
-            labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
-            hidden: hiddenSetFor(view, headingConfig),
-          }
-        : undefined,
+      options: {
+        ...(view
+          ? {
+              labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
+              hidden: hiddenSetFor(view, headingConfig),
+            }
+          : {}),
+        today,
+      },
       tileLabel: (key) => t(`tiles.${key}`),
       statusLabel: (status) => t(`status.${status}`),
     });
@@ -347,6 +350,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           kpis={payrollKpis}
           riders={filteredRiders}
           canExport={canExport}
+          today={today}
         />
       ) : tab === "combined" ? (
         <CombinedPayrollTab
@@ -354,6 +358,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           riders={filteredRiders}
           canExport={canExport}
           canManage={canManage}
+          today={today}
         />
       ) : tab === "attendance-orders" ? (
         <PayrollAttendanceOrdersTab
@@ -361,6 +366,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           riders={filteredRiders}
           canExport={canExport}
           canManage={canManage}
+          today={today}
         />
       ) : tab === "app-attendance" ? (
         <ApplicationAttendanceTab
@@ -368,6 +374,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           riders={filteredRiders}
           canExport={canExport}
           canManage={canManage}
+          today={today}
         />
       ) : tab === "requests" ? (
         <RequestsTab

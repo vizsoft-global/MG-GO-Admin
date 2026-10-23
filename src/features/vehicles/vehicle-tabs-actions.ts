@@ -10,6 +10,7 @@ import { staffDb } from "@/lib/firebase/staff-db";
 import { putObject } from "@/lib/storage/r2-client";
 import { buildVehicleFileKey, extensionFromMime } from "@/lib/storage/r2-keys";
 import { syncIntakeAssetAssignments } from "@/features/assets/assets-actions";
+import { isVehicleDocType } from "./vehicle-doc-types";
 import type { DocumentData, Firestore } from "firebase-admin/firestore";
 
 export type VehicleHandoverRow = {
@@ -610,7 +611,7 @@ export async function createVehicleDocument(formData: FormData): Promise<{ error
   if (!vehicleId || !docType || !(file instanceof File) || file.size === 0) {
     return { error: "missing_fields" };
   }
-  if (!["registration", "insurance", "other"].includes(docType)) {
+  if (!isVehicleDocType(docType)) {
     return { error: "invalid_option" };
   }
   const uploaded = await uploadOptional(vehicleId, "docs", file, auth.session.id);

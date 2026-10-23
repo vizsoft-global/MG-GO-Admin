@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   AO_HEADING_KEYS,
+  APP_ATTENDANCE_HEADING_KEYS,
+  COMBINED_HEADING_KEYS,
   columnHiddenIn,
   configByKey,
   hiddenSetFor,
@@ -35,5 +37,14 @@ describe("payroll column config", () => {
       "restaurant",
       "restaurantId",
     ]);
+  });
+
+  it("offers the status heading on every view that renders it", () => {
+    for (const keys of [COMBINED_HEADING_KEYS, AO_HEADING_KEYS, APP_ATTENDANCE_HEADING_KEYS]) {
+      const list = keys as readonly string[];
+      const index = list.indexOf("status");
+      assert.notEqual(index, -1);
+      assert.equal(list[index - 1], "vehicleKind");
+    }
   });
 });

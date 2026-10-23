@@ -32,6 +32,7 @@ import {
   riderColumnValue,
 } from "./payroll-rider-columns";
 import { dayClass, PayrollFillHandle, ZoneCategoryPill } from "./payroll-grid";
+import { RiderStatusPill } from "./rider-status-pill";
 import { usePayrollAdjust } from "./payroll-adjust-context";
 import { aoShownOrders } from "./payroll-orders-display";
 import { PayrollCellMenu, type PayrollCellMenuState } from "./payroll-cell-menu";
@@ -69,11 +70,14 @@ export function PayrollAttendanceOrdersTab({
   riders,
   canExport,
   canManage = false,
+  today,
 }: {
   month: PayrollPeriod;
   riders: readonly PayrollRiderRow[];
   canExport: boolean;
   canManage?: boolean;
+  /** Kuwait date the page calls today; drives the Rider Status column. */
+  today: string;
 }) {
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
@@ -115,15 +119,15 @@ export function PayrollAttendanceOrdersTab({
   const visibleRows = useMemo(() => {
     const filtered = searched.filter((row) => {
       const values: Record<string, string | number | null> = {};
-      for (const column of AO_LEAD_COLUMNS) values[column.id] = riderColumnValue(row, column.id);
+      for (const column of AO_LEAD_COLUMNS) values[column.id] = riderColumnValue(row, column.id, today);
       for (let i = 0; i < dates.length; i += 1) {
         values[dayColumnId(i)] = riderColumnValue(row, dayColumnId(i));
         values[dayOrdersColumnId(i)] = riderColumnValue(row, dayOrdersColumnId(i));
       }
       return rowMatchesColumnFilters(values, filters);
     });
-    return sortByColumn(filtered, sort, (row, columnId) => riderColumnValue(row, columnId));
-  }, [searched, filters, sort, dates.length]);
+    return sortByColumn(filtered, sort, (row, columnId) => riderColumnValue(row, columnId, today));
+  }, [searched, filters, sort, dates.length, today]);
 
   const fallbackLabel = useCallback((key: string) => t(`riderCols.${key}`), [t]);
 
@@ -532,7 +536,7 @@ export function PayrollAttendanceOrdersTab({
                         />
                       }
                       columnId={column.id}
-                      values={searched.map((row) => String(riderColumnValue(row, column.id) ?? ""))}
+                      values={searched.map((row) => String(riderColumnValue(row, column.id, today) ?? ""))}
                       filter={filters[column.id]}
                       onChange={(next) => setFilter(column.id, next)}
                       sort={sort}
@@ -609,10 +613,12 @@ export function PayrollAttendanceOrdersTab({
                       >
                         {column.id === "zoneCategory" ? (
                           <ZoneCategoryPill category={row.zoneCategory} />
+                        ) : column.id === "status" ? (
+                          <RiderStatusPill row={row} today={today} />
                         ) : column.id === "actualHours" ? (
                           row.actualHours.toFixed(2)
                         ) : (
-                          String(riderColumnValue(row, column.id) ?? "—")
+                          String(riderColumnValue(row, column.id, today) ?? "—")
                         )}
                       </td>
                       );
@@ -733,6 +739,7 @@ export function PayrollAttendanceOrdersTab({
                   exportPayrollAttendanceOrdersCsv(month.key, month.dates, visibleRows, {
                     labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
                     hidden: hiddenSetFor("ao", headingConfig),
+                    today,
                   })
                 }
                 className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] font-semibold transition-colors hover:bg-muted/50"

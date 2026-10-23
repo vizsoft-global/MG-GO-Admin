@@ -1,3 +1,5 @@
+import { isNonOperationalOnly } from "@/features/employees/employee-catalogs";
+
 /** Same sentinel the zone picker writes when the field is cleared. */
 export const NONE_ZONE = "__none_zone__";
 
@@ -17,4 +19,18 @@ export function hasOpsAssignment(
 ): boolean {
   if (isAssignedZone(zoneId)) return true;
   return typeof restaurants === "number" ? restaurants > 0 : restaurants.length > 0;
+}
+
+/**
+ * Whether this rider still owes an operational assignment at all.
+ *
+ * MG Head Office staff sit in a non-operational section: they have no zone and
+ * no store, so every gate tests this before `hasOpsAssignment` and skips the
+ * refusal when it answers false. An empty section list keeps the gate.
+ */
+export function requiresOpsAssignment(
+  sectionKeys: readonly string[],
+  sections: readonly { key: string; is_operational?: boolean }[],
+): boolean {
+  return !isNonOperationalOnly(sectionKeys, sections);
 }

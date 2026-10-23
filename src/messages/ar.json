@@ -1971,6 +1971,7 @@
       "approveSuccess": "تم اعتماد السائق",
       "approvePasscodeHint": "رمز التطبيق: {passcode}",
       "approvePendingHint": "استخدم «تحقق واعتماد» لتفعيل السائق وإصدار رمز الدخول.",
+    "opsNotRequired": "قسم غير تشغيلي: لا حاجة إلى منطقة أو مطعم.",
       "approveAwaitingLogin": "معتمد — بانتظار أول دخول للتطبيق",
       "statusActive": "نشط",
       "approveErrors": {
@@ -2593,6 +2594,7 @@
       "restaurantsEmpty": "لا توجد مطاعم منشورة بعد.",
       "restaurantsUnassignedGroup": "غير معيّن",
       "assignmentHint": "عيّن منطقة أو مطعماً واحداً على الأقل — يحتاج السائق أحدهما.",
+    "nonOperationalHint": "قسم غير تشغيلي: لا يحتاج هذا الموظف إلى منطقة أو مطعم.",
       "restaurantsActivationHint": "يحتاج السائق منطقة أو مطعماً منشوراً واحداً على الأقل قبل تفعيل الحساب.",
       "addRestaurantLink": "أضف مطاعم",
       "errors": {
@@ -4077,7 +4079,13 @@
       "docType": {
         "registration": "التسجيل",
         "insurance": "التأمين",
-        "other": "أخرى"
+        "other": "أخرى",
+        "healthCard": "بطاقة صحية",
+        "baladiyaCard": "بطاقة البلدية",
+        "insuranceLegacy": "تأمين (قديم)",
+        "otherLegacy": "أخرى (قديم)",
+        "legacy": "قديم",
+        "legacyDocHint": "المستندات القديمة للقراءة فقط. تستخدم عمليات الرفع الجديدة التسجيل أو البطاقة الصحية أو بطاقة البلدية."
       },
       "errors": {
         "missing_fields": "أكمل الحقول المطلوبة.",
@@ -7782,6 +7790,9 @@
         "colSystem": "النوع",
         "system": "نظام",
         "custom": "مخصص",
+        "operational": "تشغيلي",
+        "nonOperational": "غير تشغيلي",
+        "operationalHint": "خصص هذا لموظفي المكتب الرئيسي. الموظف في قسم غير تشغيلي لا يحتاج إلى منطقة أو مطعم، لذلك تتجاوز الموافقة وتسجيل الحضور هذا الشرط.",
         "statusesTitle": "حالات الموظف",
         "statusesSubtitle": "قيم حالة الموارد البشرية على الموظفين والتقارير.",
         "sectionsTitle": "أقسام الموظف",

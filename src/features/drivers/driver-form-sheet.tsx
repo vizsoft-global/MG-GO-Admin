@@ -470,6 +470,8 @@ export function DriverFormSheet({
       zoneId,
       restaurantIds,
       documents: isEdit ? EMPTY_DOCS : documents,
+      sectionKeys,
+      sections: sectionsQuery.data ?? [],
     });
     setShowErrors(true);
     setFieldErrors(validation);

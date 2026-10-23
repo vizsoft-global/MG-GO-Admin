@@ -15,6 +15,7 @@ import {
   loadHomeSnapshotFlags,
 } from "../core/settings";
 import { requireRider, riderError } from "../core/rider";
+import { riderIsNonOperational } from "../core/operational-sections";
 import { applyAttendanceRollup } from "../core/rollups";
 import { bumpRiderSignal } from "../core/rider-signals";
 import {
@@ -2081,7 +2082,16 @@ export const driverSetDutyState = measureOnCall("driverSetDutyState", async (req
       throw riderError("failed-precondition", "check_in_location_required");
     }
 
-    if (keeta) {
+    if (await riderIsNonOperational(driver)) {
+      // Office staff: the selfie and the GPS fix above still apply, but there is
+      // no zone or store to match, so the attendance row keeps no location.
+      checkInStamp = {
+        photoKey,
+        restaurantId: null,
+        restaurantName: null,
+        distanceM: null,
+      };
+    } else if (keeta) {
       // Keeta has no store assignment to prove, so the location gate is the
       // assigned zone with a zero buffer. The selfie is still owed (the check
       // above is shared), and the attendance row keeps the project as its
@@ -2383,9 +2393,10 @@ export const driverCheckInContext = measureOnCall("driverCheckInContext", async 
   const lat = numberOrNull(pick(data, "p_lat", "lat", "check_in_lat", "checkInLat"));
   const lng = numberOrNull(pick(data, "p_lng", "lng", "check_in_lng", "checkInLng"));
 
-  const [existingAttendance, safety] = await Promise.all([
+  const [existingAttendance, safety, nonOperational] = await Promise.all([
     attendanceLogOn(ctx.uid, day),
     loadDriverAppSafetySettings(),
+    riderIsNonOperational(ctx.driver),
   ]);
 
   const requiresCheckIn = needsCheckIn(existingAttendance?.data ?? null);
@@ -2397,7 +2408,9 @@ export const driverCheckInContext = measureOnCall("driverCheckInContext", async 
     day,
     requires_check_in: requiresCheckIn,
     checked_in_today: !requiresCheckIn,
-    gate: keeta ? "zone" : "restaurant",
+    // A non-operational rider (MG Head Office) has no zone or store at all, so
+    // there is no place to gate on; the selfie below still applies.
+    gate: nonOperational ? "none" : keeta ? "zone" : "restaurant",
     photo_required: safety.checkInPhotoRequired,
     proximity_meters: safety.proximityMeters,
     candidates: 0,
@@ -2418,6 +2431,12 @@ export const driverCheckInContext = measureOnCall("driverCheckInContext", async 
     // No fix yet is a client-side retry, not a refusal: `in_range` stays false
     // and `requires_location` tells the phone which copy to show.
     return { ...base, requires_location: true };
+  }
+
+  if (nonOperational) {
+    // No zone and no store to prove — the precheck admits the rider so the
+    // phone goes straight to the selfie the shared rule still requires.
+    return { ...base, in_range: true };
   }
 
   if (keeta) {

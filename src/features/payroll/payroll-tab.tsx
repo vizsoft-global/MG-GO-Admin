@@ -28,11 +28,14 @@ export function PayrollTab({
   kpis,
   riders,
   canExport,
+  today,
 }: {
   month: PayrollPeriod;
   kpis: PayrollKpis;
   riders: readonly PayrollRiderRow[];
   canExport: boolean;
+  /** Kuwait date the page calls today; drives the Rider Status column. */
+  today: string;
 }) {
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
@@ -137,9 +140,12 @@ export function PayrollTab({
             empty={t("emptyRiders")}
             rangeLabel={month.label}
             visibleColumnIds={visibleColumnIds}
+            today={today}
             exportLabel={canExport ? t("downloadTable") : undefined}
             onExport={
-              canExport ? (visible) => exportPayrollViewCsv(month.key, month.dates, visible) : undefined
+              canExport
+                ? (visible) => exportPayrollViewCsv(month.key, month.dates, visible, { today })
+                : undefined
             }
           />
         )}

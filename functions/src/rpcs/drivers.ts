@@ -19,6 +19,7 @@ import { getFirestore, Timestamp, type Firestore } from "../core/fs";
 import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff, requireStaffFresh } from "../core/staff";
+import { riderIsNonOperational } from "../core/operational-sections";
 import { digitSubsequenceMatch, textContainsMatch } from "../core/search-text";
 import {
   logDriverOperation,
@@ -1184,7 +1185,11 @@ export const setDriverAccountStatus = onCall(async (request) => {
   const driverSnap = await driverRef.get();
   if (!driverSnap.exists) return { ok: false, error: "driver_not_found" };
 
-  if (status === "active" && !(await hasOpsAssignment(driverId))) {
+  if (
+    status === "active" &&
+    !(await hasOpsAssignment(driverId)) &&
+    !(await riderIsNonOperational((driverSnap.data() ?? {}) as Record<string, unknown>))
+  ) {
     return { ok: false, error: "driver_missing_assignment" };
   }
 

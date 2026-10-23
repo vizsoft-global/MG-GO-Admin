@@ -7,7 +7,7 @@ import {
 } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { canViewDriverBankDetails, hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
-import { DEFAULT_EMPLOYEE_STATUS_KEY } from "@/features/employees/employee-catalogs";
+import { DEFAULT_EMPLOYEE_STATUS_KEY, isNonOperationalOnly } from "@/features/employees/employee-catalogs";
 import {
   parseBankDetails,
   sanitizeBankForLog,
@@ -207,6 +207,17 @@ function parseHrFromForm(formData: FormData):
     sectionKeys: parseCsvKeys(formData, "sectionKeys"),
     nationalityCategoryKeys: parseCsvKeys(formData, "nationalityCategoryKeys"),
   };
+}
+
+/**
+ * Whether this rider still owes a zone or a restaurant.
+ *
+ * Read on every save rather than cached: the catalog is small, and a stale
+ * answer would refuse a rider an operator just marked as office staff.
+ */
+async function opsAssignmentRequired(sectionKeys: readonly string[]): Promise<boolean> {
+  const sections = await listEmployeeCatalog("employee_sections");
+  return !isNonOperationalOnly(sectionKeys, sections);
 }
 
 async function parseBankFromForm(
@@ -464,7 +475,7 @@ export async function createDriverIntake(
   }
 
   const restaurantIds = parseRestaurantIds(formData);
-  if (!hasOpsAssignment(zoneId, restaurantIds)) {
+  if ((await opsAssignmentRequired(hr.sectionKeys)) && !hasOpsAssignment(zoneId, restaurantIds)) {
     return { error: "missing_assignment" };
   }
   const db = await staffClient();
@@ -1314,7 +1325,8 @@ async function updateDriverIntakeInner(
   const db = await staffClient();
   const sourceCompany = await resolveSourceCompanyForSave(db, riderCategory, sourceCompanyRaw);
   const restaurantIds = parseRestaurantIds(formData);
-  if (!hasOpsAssignment(zoneId, restaurantIds)) {
+  const opsRequired = await opsAssignmentRequired(hr.sectionKeys);
+  if (opsRequired && !hasOpsAssignment(zoneId, restaurantIds)) {
     return { error: "missing_assignment" };
   }
 
@@ -1355,7 +1367,7 @@ async function updateDriverIntakeInner(
     currentAccountStatus = (linkedDriver?.status as DriverAccountStatus | null) ?? null;
 
     if (linkedDriver?.status === "active") {
-      if (!hasOpsAssignment(zoneId, restaurantIds)) {
+      if (opsRequired && !hasOpsAssignment(zoneId, restaurantIds)) {
         return { error: "missing_assignment" };
       }
       if (restaurantIds.length > 0) {
@@ -1365,7 +1377,11 @@ async function updateDriverIntakeInner(
           .eq("status", "published")
           .eq("is_active", true)
           .in("id", restaurantIds);
-        if ((publishedRows ?? []).length === 0 && !hasOpsAssignment(zoneId, [])) {
+        if (
+          (publishedRows ?? []).length === 0 &&
+          opsRequired &&
+          !hasOpsAssignment(zoneId, [])
+        ) {
           return { error: "missing_assignment" };
         }
       }

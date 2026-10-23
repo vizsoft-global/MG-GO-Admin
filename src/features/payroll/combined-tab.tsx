@@ -21,11 +21,14 @@ export function CombinedPayrollTab({
   riders,
   canExport,
   canManage,
+  today,
 }: {
   month: PayrollPeriod;
   riders: readonly PayrollRiderRow[];
   canExport: boolean;
   canManage: boolean;
+  /** Kuwait date the page calls today; drives the Rider Status column. */
+  today: string;
 }) {
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
@@ -112,6 +115,7 @@ export function CombinedPayrollTab({
             key={group.key}
             dates={month.dates}
             rows={rows}
+            today={today}
             empty={t("emptyRiders")}
             exportLabel={t("downloadTable")}
             headingConfig={headingConfig}
@@ -121,6 +125,7 @@ export function CombinedPayrollTab({
                 exportCombinedPayrollCsv(month.key, month.dates, visible, {
                   labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
                   hidden: hiddenSetFor("combined", headingConfig),
+                  today,
                 });
               }
             }}

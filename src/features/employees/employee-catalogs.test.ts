@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   catalogKeyFromLabel,
+  DEFAULT_EMPLOYEE_SECTIONS,
   DEFAULT_EMPLOYEE_STATUSES,
   DEFAULT_BANK_CODES,
   isNbkBank,
+  isNonOperationalOnly,
+  isOperationalSection,
   mergeCatalogRows,
   parseCatalogRow,
 } from "./employee-catalogs";
@@ -38,5 +41,35 @@ describe("employee catalogs", () => {
   it("slugs a label into a catalog key", () => {
     assert.equal(catalogKeyFromLabel("Absent from MOSAL"), "absent_from_mosal");
     assert.equal(parseCatalogRow({ key: "BAD KEY" }), null);
+  });
+
+  it("ships MG Head Office as a non-operational section", () => {
+    const seed = DEFAULT_EMPLOYEE_SECTIONS.find((row) => row.key === "service_field_mg_head_office");
+    assert.ok(seed);
+    assert.equal(seed.is_operational, false);
+    assert.equal(isOperationalSection("service_field_mg_head_office", DEFAULT_EMPLOYEE_SECTIONS), false);
+    // Unknown keys stay operational, and no section at all keeps the gate.
+    assert.equal(isOperationalSection("unknown", DEFAULT_EMPLOYEE_SECTIONS), true);
+    assert.equal(isNonOperationalOnly([], DEFAULT_EMPLOYEE_SECTIONS), false);
+    assert.equal(isNonOperationalOnly(["service_field_mg_head_office"], DEFAULT_EMPLOYEE_SECTIONS), true);
+    assert.equal(
+      isNonOperationalOnly(["service_field_mg_head_office", "unknown"], DEFAULT_EMPLOYEE_SECTIONS),
+      false,
+    );
+  });
+
+  it("fills a stored row's missing operational flag from the seed", () => {
+    const stored = [
+      parseCatalogRow({ key: "service_field_mg_head_office", label_en: "Head Office" })!,
+    ];
+    assert.equal(mergeCatalogRows(stored, DEFAULT_EMPLOYEE_SECTIONS)[0]?.is_operational, false);
+    const explicit = [
+      parseCatalogRow({
+        key: "service_field_mg_head_office",
+        label_en: "Head Office",
+        is_operational: true,
+      })!,
+    ];
+    assert.equal(mergeCatalogRows(explicit, DEFAULT_EMPLOYEE_SECTIONS)[0]?.is_operational, true);
   });
 });
