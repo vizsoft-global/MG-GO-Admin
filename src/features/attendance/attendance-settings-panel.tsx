@@ -106,7 +106,7 @@ export function AttendanceSettingsPanel() {
               value={autoCheckout}
               onChange={(e) => setAutoCheckout(e.target.value)}
             />
-            <p className="text-[10px] text-muted-foreground">{t("autoCheckoutHint")}</p>
+            <p className="text-xs text-muted-foreground">{t("autoCheckoutHint")}</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="gps-stale">{t("gpsStale")}</Label>

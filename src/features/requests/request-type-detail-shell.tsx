@@ -244,7 +244,7 @@ export function RequestTypeDetailShell({ typeKey }: { typeKey: string }) {
           <div className="flex flex-col gap-1 pt-1">
             <Link
               href="/requests/settings/workflows"
-              className="text-[11px] font-medium text-primary hover:underline"
+              className="text-xs font-medium text-primary hover:underline"
             >
               {t("editChain")}
             </Link>
@@ -252,7 +252,7 @@ export function RequestTypeDetailShell({ typeKey }: { typeKey: string }) {
             {definition.key === "loan" ? (
               <Link
                 href="/requests/settings/tenure"
-                className="text-[11px] font-medium text-primary hover:underline"
+                className="text-xs font-medium text-primary hover:underline"
               >
                 {t("manageTenure")}
               </Link>
@@ -260,14 +260,14 @@ export function RequestTypeDetailShell({ typeKey }: { typeKey: string }) {
             {definition.key === "complaint" ? (
               <Link
                 href="/requests/settings/categories"
-                className="text-[11px] font-medium text-primary hover:underline"
+                className="text-xs font-medium text-primary hover:underline"
               >
                 {t("manageCategories")}
               </Link>
             ) : null}
           </div>
           {definition.is_system ? (
-            <p className="flex gap-1.5 border-t border-border pt-2 text-[10px] text-muted-foreground">
+            <p className="flex gap-1.5 border-t border-border pt-2 text-xs text-muted-foreground">
               <Lock className="mt-px h-3 w-3 shrink-0" />
               {t("systemLockNote")}
             </p>
@@ -279,7 +279,7 @@ export function RequestTypeDetailShell({ typeKey }: { typeKey: string }) {
             <h3 className="text-sm font-semibold">{t("fieldsTitle")}</h3>
             <div className="flex items-center gap-2">
               {dirty ? (
-                <span className="rounded-full border border-warning-bg bg-warning-bg px-2 py-0.5 text-[11px] font-medium text-warning">
+                <span className="rounded-full border border-warning-bg bg-warning-bg px-2 py-0.5 text-xs font-medium text-warning">
                   {t("unsavedChanges")}
                 </span>
               ) : null}
@@ -396,7 +396,7 @@ function FieldRow({
         </span>
 
         <div className="min-w-[150px] flex-1 space-y-1">
-          <Label className="text-[10px]">{t("fieldLabelEn")}</Label>
+          <Label className="text-xs">{t("fieldLabelEn")}</Label>
           <Input
             className="h-9"
             value={field.label_en}
@@ -406,7 +406,7 @@ function FieldRow({
         </div>
 
         <div className="w-[150px] space-y-1">
-          <Label className="text-[10px]">{t("fieldKey")}</Label>
+          <Label className="text-xs">{t("fieldKey")}</Label>
           <Input
             className="h-9 font-mono text-xs"
             value={field.field_key}
@@ -416,7 +416,7 @@ function FieldRow({
         </div>
 
         <div className="w-[130px] space-y-1">
-          <Label className="text-[10px]">{t("fieldKind")}</Label>
+          <Label className="text-xs">{t("fieldKind")}</Label>
           <Select
             value={field.kind}
             disabled={locked}
@@ -445,7 +445,7 @@ function FieldRow({
         </div>
 
         <div className="w-[140px] space-y-1">
-          <Label className="text-[10px]">{t("fieldTarget")}</Label>
+          <Label className="text-xs">{t("fieldTarget")}</Label>
           <Select
             value={field.target}
             disabled={locked}
@@ -500,7 +500,7 @@ function FieldRow({
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 ps-8">
-        <label className="flex items-center gap-1.5 text-[11px]">
+        <label className="flex items-center gap-1.5 text-xs">
           <Switch
             checked={field.is_required}
             disabled={locked}
@@ -510,7 +510,7 @@ function FieldRow({
           />
           {t("toggleRequired")}
         </label>
-        <label className="flex items-center gap-1.5 text-[11px]">
+        <label className="flex items-center gap-1.5 text-xs">
           <Switch
             checked={field.is_server_required}
             disabled={locked || !field.is_required}
@@ -559,7 +559,7 @@ function FieldRow({
       </div>
 
       {field.is_server_required ? (
-        <p className="mt-1 ps-8 text-[10px] text-muted-foreground">
+        <p className="mt-1 ps-8 text-xs text-muted-foreground">
           {t("serverRequiredHint")}
         </p>
       ) : null}

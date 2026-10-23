@@ -270,7 +270,7 @@ export function FleetRequestDialog({
           title={row?.request_code ?? preview?.request_code ?? ""}
           subtitle={request?.current_step_label ?? row?.current_step_label ?? preview?.current_step_label ?? "—"}
           meta={
-            <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${chipClass}`}>
+            <span className={`inline-flex rounded-md px-1.5 py-0.5 text-xs font-semibold ${chipClass}`}>
               {typeLabel}
             </span>
           }

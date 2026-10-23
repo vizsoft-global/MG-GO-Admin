@@ -37,7 +37,7 @@ export function DriverWrongActionsTab({ driverId }: { driverId: string }) {
         <div>
           <p className="text-sm font-semibold text-foreground">{t("title")}</p>
           {!isLoading && rows.length > 0 ? (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("driverWeightedHint", { count: counts.total, weight: counts.weighted })}
             </p>
           ) : null}
@@ -81,7 +81,7 @@ export function DriverWrongActionsTab({ driverId }: { driverId: string }) {
             >
               <TableCell>
                 <p className="font-medium">{t(`type.${row.action_type}` as "type.delay")}</p>
-                <p className="text-[11px] text-primary">{t("viewDetails")}</p>
+                <p className="text-xs text-primary">{t("viewDetails")}</p>
               </TableCell>
               <TableCell>
                 <Badge variant={severityTone(row.severity)}>

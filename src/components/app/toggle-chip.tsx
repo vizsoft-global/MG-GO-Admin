@@ -26,7 +26,7 @@ export function ToggleChip({
   size?: "sm" | "md";
 }) {
   const sizeClass =
-    size === "md" ? "h-8 gap-1.5 px-2.5 text-xs" : "h-7 gap-1 px-2 text-[11px]";
+    size === "md" ? "h-8 gap-1.5 px-2.5 text-xs" : "h-7 gap-1 px-2 text-xs";
 
   return (
     <button

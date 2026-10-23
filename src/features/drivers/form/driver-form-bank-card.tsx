@@ -7,6 +7,7 @@ import { catalogLabel, isNbkBank, type EmployeeCatalogRow } from "@/features/emp
 import type { DriverBankDetails } from "@/features/employees/bank-details";
 import { FieldBlock, FieldError, FieldLabel, SectionHeading } from "./driver-form-primitives";
 import { SearchableSelect } from "./searchable-select";
+import { useTranslations } from "next-intl";
 
 export function DriverFormBankCard({
   locale,
@@ -38,6 +39,9 @@ export function DriverFormBankCard({
 }) {
   const liveBanks = banks.filter((row) => row.is_active);
   const nbk = isNbkBank(value.bank_code, liveBanks);
+  /** Cash has no account and no IBAN — it is a complete answer on its own. */
+  const isCash = (value.bank_code ?? "").toLowerCase() === "cash";
+  const tCash = useTranslations("pages.driverDetail.profile.fields");
 
   return (
     <section className="space-y-2.5 rounded-lg border border-border bg-card p-4">
@@ -65,17 +69,20 @@ export function DriverFormBankCard({
           <SearchableSelect
             value={value.bank_code ?? ""}
             onValueChange={(next) => onChange({ ...value, bank_code: next || null, account_number: null, iban: null })}
-            items={liveBanks.map((row) => ({
-              value: row.key,
-              label: catalogLabel(row.key, liveBanks, locale),
-            }))}
+            items={[
+              ...liveBanks.map((row) => ({
+                value: row.key,
+                label: catalogLabel(row.key, liveBanks, locale),
+              })),
+              { value: "cash", label: tCash("cash") },
+            ]}
             placeholder={labels.bank}
             searchPlaceholder={labels.searchBank}
             recentsKey="driver-bank-code"
           />
           <FieldError message={errors.bank} />
         </FieldBlock>
-        {nbk ? (
+        {isCash ? null : nbk ? (
           <FieldBlock>
             <FieldLabel htmlFor="driver-bank-account">{labels.accountNumber}</FieldLabel>
             <Input

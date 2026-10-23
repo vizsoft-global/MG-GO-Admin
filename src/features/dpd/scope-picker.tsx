@@ -20,7 +20,7 @@ import type { DpdScopeOptions, RuleScopeType } from "./types";
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return (
-    <p className="text-[11px] text-destructive" role="alert">
+    <p className="text-xs text-destructive" role="alert">
       {message}
     </p>
   );

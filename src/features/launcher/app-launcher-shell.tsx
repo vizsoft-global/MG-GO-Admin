@@ -54,12 +54,12 @@ function LauncherGlyph({ id, icon }: { id: string; icon: string }) {
   if (path) {
     return (
       <svg
-        width="27"
-        height="27"
+        width={24}
+        height={24}
         viewBox="0 0 24 24"
         fill="none"
         stroke="#ffffff"
-        strokeWidth="1.6"
+        strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden
@@ -69,7 +69,7 @@ function LauncherGlyph({ id, icon }: { id: string; icon: string }) {
     );
   }
   const Icon = resolveIcon(icon);
-  return <Icon className="size-[25px] text-white" strokeWidth={1.7} aria-hidden />;
+  return <Icon className="size-6 text-white" strokeWidth={2} aria-hidden />;
 }
 
 export function AppLauncherShell() {
@@ -128,7 +128,7 @@ export function AppLauncherShell() {
         className="group/hub flex flex-col items-center gap-2.5 text-center"
       >
         <span
-          className="relative grid size-[60px] place-items-center overflow-visible rounded-[18px]"
+          className="relative grid size-14 place-items-center overflow-visible rounded-[18px]"
           style={{
             backgroundColor: launcherTileHex(item.id),
             boxShadow: TILE_SHADOW,
@@ -139,7 +139,7 @@ export function AppLauncherShell() {
           </span>
           {badge ? (
             <span
-              className="absolute -end-[7px] -top-[7px] z-10 inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[11px] px-[5px] text-[11px] font-bold tabular-nums text-white"
+              className="absolute -end-[7px] -top-[7px] z-10 inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[11px] px-[5px] text-xs font-normal tabular-nums text-white"
               style={{
                 backgroundColor: LAUNCHER_BRAND.badge,
                 border: `2px solid ${LAUNCHER_BRAND.badgeBorder}`,
@@ -150,7 +150,7 @@ export function AppLauncherShell() {
           ) : null}
         </span>
         <span
-          className="text-[12px] font-bold leading-[1.3]"
+          className="text-xs font-normal leading-[1.3]"
           style={{ color: LAUNCHER_BRAND.tileLabel }}
         >
           {labels.get(item.id) ?? item.label}
@@ -201,10 +201,10 @@ export function AppLauncherShell() {
             className="h-[26px] w-auto"
           />
           <span className="flex min-w-0 flex-col leading-[1.15]">
-            <span className="truncate text-[13px] font-bold tracking-[0.04em]">
+            <span className="truncate text-sm font-bold tracking-[0.04em]">
               {branding.appName}
             </span>
-            <span className="truncate text-[11px] font-medium" style={{ color: LAUNCHER_BRAND.muted }}>
+            <span className="truncate text-xs font-normal" style={{ color: LAUNCHER_BRAND.muted }}>
               {branding.appSubtitle}
             </span>
           </span>
@@ -218,8 +218,8 @@ export function AppLauncherShell() {
           }}
         >
           <svg
-            width="16"
-            height="16"
+            width="20"
+            height="20"
             viewBox="0 0 24 24"
             fill="none"
             stroke={LAUNCHER_BRAND.muted}
@@ -234,10 +234,10 @@ export function AppLauncherShell() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("searchPlaceholder")}
-            className="h-auto w-full flex-1 border-0 bg-transparent p-0 text-[13px] font-medium text-white shadow-none focus-visible:border-0 focus-visible:ring-0"
+            className="h-auto w-full flex-1 border-0 bg-transparent p-0 text-sm font-normal text-white shadow-none focus-visible:border-0 focus-visible:ring-0"
           />
           <kbd
-            className="hidden shrink-0 rounded px-[5px] py-px text-[11px] sm:inline"
+            className="hidden shrink-0 rounded px-[5px] py-px text-xs sm:inline"
             style={{
               color: LAUNCHER_BRAND.muted,
               border: "1px solid rgba(255,255,255,0.2)",
@@ -254,12 +254,12 @@ export function AppLauncherShell() {
             aria-label={tNav("nav.notifications")}
           >
             <svg
-              width="18"
-              height="18"
+              width="20"
+              height="20"
               viewBox="0 0 24 24"
               fill="none"
               stroke="#ffffff"
-              strokeWidth="1.8"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
               aria-hidden
@@ -270,12 +270,12 @@ export function AppLauncherShell() {
           <DropdownMenu>
             <DropdownMenuTrigger className="flex cursor-pointer items-center gap-2 rounded-full pe-1 hover:bg-white/10">
               <span
-                className="grid size-[30px] place-items-center rounded-full text-[11px] font-bold text-white"
+                className="grid size-[30px] place-items-center rounded-full text-xs font-normal text-white"
                 style={{ backgroundColor: LAUNCHER_BRAND.accent }}
               >
                 {initials}
               </span>
-              <span className="hidden max-w-[140px] truncate text-start text-[13px] font-semibold leading-tight lg:block">
+              <span className="hidden max-w-[140px] truncate text-start text-sm font-normal leading-tight lg:block">
                 {roleLabel || displayName}
               </span>
             </DropdownMenuTrigger>
@@ -308,12 +308,12 @@ export function AppLauncherShell() {
             style={{ backgroundColor: LAUNCHER_BRAND.accent }}
           />
           <h1
-            className="m-0 text-[18px] font-bold tracking-[0.01em]"
+            className="m-0 text-2xl font-bold tracking-[0.01em]"
             style={{ color: LAUNCHER_BRAND.text }}
           >
             {t(`greeting.${greeting}`)}, <span className="font-bold">{displayName}</span>
           </h1>
-          <p className="m-0 text-[12.5px] font-medium" style={{ color: LAUNCHER_BRAND.subText }}>
+          <p className="m-0 text-xs font-normal" style={{ color: LAUNCHER_BRAND.subText }}>
             {t("subtitle")}
           </p>
         </div>
@@ -331,7 +331,7 @@ export function AppLauncherShell() {
               className="absolute start-0 top-0 w-[17px]"
             />
             <div
-              className="text-[12px] font-bold tracking-[0.22em] whitespace-nowrap"
+              className="text-xs font-normal tracking-[0.22em] whitespace-nowrap"
               style={{ color: LAUNCHER_BRAND.text }}
             >
               {t("slogan")}
@@ -341,7 +341,7 @@ export function AppLauncherShell() {
       </main>
 
       <footer
-        className="relative z-10 shrink-0 px-4 pt-[18px] pb-[22px] text-center text-[12px] font-medium"
+        className="relative z-10 shrink-0 px-4 pt-[18px] pb-[22px] text-center text-xs font-normal"
         style={{ color: LAUNCHER_BRAND.footer }}
       >
         <span className="font-bold" style={{ color: LAUNCHER_BRAND.text }}>

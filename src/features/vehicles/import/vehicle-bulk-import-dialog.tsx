@@ -313,7 +313,7 @@ export function VehicleBulkImportDialog({
                     <p className="text-xs text-foreground">
                       <span className="font-semibold">{t("requiredLabel")}</span> {t("requiredCopy")}
                     </p>
-                    <p className="mt-1 text-[10px] text-muted-foreground">{t("optionalCopy")}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{t("optionalCopy")}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <Button
                         type="button"

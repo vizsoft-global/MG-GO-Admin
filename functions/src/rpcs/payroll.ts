@@ -9,6 +9,9 @@ import { loadAppSettings } from "../core/settings";
 import { requireStaff, type StaffContext } from "../core/staff";
 import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { PAYROLL_ATTENDANCE_FIELDS, PAYROLL_RECON_FIELDS, payrollHoursFromFields } from "./payroll-read-plan";
+import { isKeetaProjectKey } from "./_shared";
+import { applyPayrollManualOrders } from "./payroll-edits";
+import { loadNationalityLabels, nationalityLabel } from "../core/nationality-label";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GET_ALL_CHUNK = 300;
@@ -214,7 +217,7 @@ export const adminPayrollRuleSnapshot = measureOnCall("adminPayrollRuleSnapshot"
   const settings = await loadAppSettings();
 
   const ctx = await loadPayrollContext({ month, zoneMonth, start, end, lastDay, days, settings, phases });
-  return buildSnapshot(ctx, slicers, staff);
+  return await buildSnapshot(ctx, slicers, staff);
   } finally {
     logPhases("adminPayrollRuleSnapshot", phases);
   }
@@ -237,7 +240,7 @@ async function loadPayrollContext(input: {
   const phases = input.phases ?? {};
   const firstDay = kuwaitDayString(start);
 
-  const [driverSnap, attendanceSnap, clientsSnap, zonesSnap, restaurantsSnap, adjustmentsSnap, offSnap] =
+  const [driverSnap, attendanceSnap, clientsSnap, zonesSnap, restaurantsSnap, adjustmentsSnap, offSnap, orderSnap] =
     await timedPhase(phases, "fanoutMs", () => Promise.all([
       db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get(),
       db
@@ -256,6 +259,11 @@ async function loadPayrollContext(input: {
         .where("work_date", "<=", lastDay)
         .get(),
       db.collection(COLLECTIONS.driverOffStructure).where("period_month", "==", `${month}-01`).get(),
+      db
+        .collection(COLLECTIONS.payrollOrderOverrides)
+        .where("work_date", ">=", firstDay)
+        .where("work_date", "<=", lastDay)
+        .get(),
     ]));
 
   const clientKeys = clientsSnap.docs
@@ -389,6 +397,15 @@ async function loadPayrollContext(input: {
     adjustmentByDriverDay.set(key, raw);
   }
 
+  const manualOrders = new Map<string, number>();
+  for (const doc of orderSnap.docs) {
+    const driverId = asString(doc.get("driver_id"));
+    const workDate = asString(doc.get("work_date"));
+    const orders = nullableNumber(doc.get("orders"));
+    if (!driverId || !workDate || orders == null) continue;
+    manualOrders.set(`${driverId}|${workDate}`, orders);
+  }
+
   return {
     month,
     zoneMonth,
@@ -410,6 +427,7 @@ async function loadPayrollContext(input: {
     offStructure,
     workedByDriverDay,
     adjustmentByDriverDay,
+    manualOrders,
     profileNames,
   };
 }
@@ -451,10 +469,6 @@ function reconOrdersFor(
     if (hit) return hit.orders;
   }
   return null;
-}
-
-function displayOrdersFor(recon: number | null, verified: number): number {
-  return recon ?? verified;
 }
 
 async function loadVerifiedByDriverDay(
@@ -605,7 +619,7 @@ function inList(list: string[] | null, value: string | null): boolean {
   return value !== null && list.includes(value);
 }
 
-function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContext) {
+async function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContext) {
   const { month, days, settings } = ctx;
 
   const zoneNames = new Map<string, string>();
@@ -783,6 +797,7 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
   }
 
   const dayGrid = dayStringsBetween(ctx.firstDay, ctx.lastDay).slice(0, days);
+  const nationalityLabels = await loadNationalityLabels("en");
 
   const riders = ctx.driverSnap.docs
     .map((doc) => {
@@ -811,11 +826,17 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
         const hours = ctx.workedByDriverDay.get(key) ?? 0;
         const adjustment = ctx.adjustmentByDriverDay.get(key);
         const reconHit = reconOrdersFor(ctx.recon, day, employeeId, driverCode);
+        const counted = applyPayrollManualOrders(
+          ctx.manualOrders.get(key) ?? null,
+          reconHit,
+          ctx.verifiedByDriverDay.get(key) ?? 0,
+        );
         return {
           d: day,
           h: Math.round(hours * 100) / 100,
-          o: reconHit ?? 0,
-          do: displayOrdersFor(reconHit, ctx.verifiedByDriverDay.get(key) ?? 0),
+          o: counted.orders,
+          do: counted.displayOrders,
+          mo: counted.overridden ? counted.orders : null,
           // Whether an attendance log exists at all: a check-in with no check-out
           // is 0 h and is still a worked day, not an absent one.
           k: ctx.workedByDriverDay.has(key),
@@ -834,9 +855,9 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
         name: driverDisplayName(raw, ctx.profileNames.get(driverId)) ?? "—",
         employeeId,
         restaurant:
-          projectKey === "keeta"
-            ? "(Pool)"
-            : asString(restaurant?.["name"]) ?? firstRestaurantName(raw) ?? "(Pool)",
+          isKeetaProjectKey(projectKey)
+            ? "Keeta"
+            : asString(restaurant?.["name"]) ?? firstRestaurantName(raw) ?? "—",
         restaurantId,
         // The rider's merchant-facing id (what staff know the store by) — the
         // same `client_id` the Employees page shows for the rider. The doc id
@@ -849,14 +870,22 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
         partner:
           projectKey === "americana"
             ? "Americana"
-            : projectKey === "keeta"
+            : isKeetaProjectKey(projectKey)
               ? "Keeta"
               : trimmedOrNull(raw["partner_name"]) ?? "—",
         projectKey,
         nationality:
-          asString(raw["nationality"]) ?? asString(raw["nationality_code"]) ?? "—",
+          nationalityLabel(
+            raw["nationality_category_keys"],
+            nationalityLabels,
+            asString(raw["nationality"]) ?? asString(raw["nationality_code"]),
+          ) ?? "—",
         nationalityCode:
-          asString(raw["nationality_code"]) ?? asString(raw["nationality"]),
+          nationalityLabel(
+            raw["nationality_category_keys"],
+            nationalityLabels,
+            asString(raw["nationality"]) ?? asString(raw["nationality_code"]),
+          ),
         status: asString(raw["status"]) === "active" ? "Active" : "Inactive",
         vehicleKey:
           asString(raw["vehicle_key"]) ??
@@ -881,7 +910,10 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
   const sourceCompanies = new Set<string>();
   for (const row of riders) {
     if (row.zoneId && row.zoneName) zoneOptions.set(row.zoneId, row.zoneName);
-    if (row.restaurantId && row.projectKey !== "keeta" && row.restaurant !== "(Pool)") {
+    // The label carries the project for a Keeta rider, so the restaurant filter
+    // must exclude it by that label; the project-key check above keeps any
+    // future non-store project out as well.
+    if (row.restaurantId && !isKeetaProjectKey(row.projectKey) && row.restaurant !== "Keeta") {
       restaurantOptions.set(row.restaurantId, row.restaurant);
     }
     if (row.nationalityCode) nationalities.add(row.nationalityCode);

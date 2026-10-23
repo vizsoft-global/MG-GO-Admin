@@ -61,7 +61,7 @@ export function KpiCard({
         </span>
       ) : null}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <p className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
         </p>
         {compact ? (
@@ -70,7 +70,7 @@ export function KpiCard({
               {value}
             </span>
             {caption ? (
-              <span className="truncate text-[11px] text-muted-foreground">{caption}</span>
+              <span className="truncate text-xs text-muted-foreground">{caption}</span>
             ) : null}
           </p>
         ) : (
@@ -79,7 +79,7 @@ export function KpiCard({
               {value}
             </p>
             {caption ? (
-              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{caption}</p>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">{caption}</p>
             ) : null}
           </>
         )}

@@ -85,7 +85,7 @@ export function LiveTrackingPageShell({
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2.5">
           <div className="flex min-w-0 items-center gap-3">
             <h1 className="truncate text-sm font-semibold">{t("commandCenter")}</h1>
-            <Badge variant="secondary" className="gap-1 text-[10px]">
+            <Badge variant="secondary" className="gap-1 text-xs">
               <Radio className="h-3 w-3 text-emerald-500" />
               {t("tabLive")}
             </Badge>

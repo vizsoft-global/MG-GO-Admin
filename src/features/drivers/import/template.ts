@@ -102,21 +102,21 @@ const STANDARD_COLUMNS: Array<
     field: "vehicle_label",
     header: "Vehicle",
     allowed:
-      "Bike ID or registration number of an existing vehicle. An unmatched value is kept as-is; the row still imports.",
+      "Bike ID or registration number of an existing vehicle. An unmatched value blocks that row. `-` clears the link. A blank cell on update leaves the stored vehicle.",
     example: "BIKE-1024",
   },
   {
     field: "vehicle_type",
     header: "Vehicle Type",
     allowed:
-      "bike or car (bike | motorcycle | scooter | motor, car | van | truck are accepted). Blank means bike.",
+      "bike or car (bike | motorcycle | scooter | motor, car | van | truck are accepted). Blank on update leaves the stored type. `-` clears it. A missing column is not written.",
     example: "bike",
   },
   {
-    field: "nationality",
+    field: "nationality_category_keys",
     header: "Nationality",
-    allowed: "Country name or 2-letter ISO code, e.g. IN, EG, KW.",
-    example: "IN",
+    allowed: "A nationality from Settings → Nationality, e.g. Indian, Filipino, Nepalese.",
+    example: "Indian",
   },
   {
     field: "rider_category",
@@ -157,6 +157,36 @@ const STANDARD_COLUMNS: Array<
       "Whole number of OFF days for the current Kuwait month (0 up to the days in that month). Blank leaves the default of 2 and writes nothing. The rider must be approved on this import or already linked.",
     example: "3",
   },
+  { field: "passport_number", header: "Passport", allowed: "Passport number, or `-` to clear. Blank on update leaves the stored value.", example: "P1234567" },
+  { field: "nationality", header: "Country", allowed: "Country name or ISO code.", example: "India" },
+  { field: "employee_status_key", header: "Employee Status", allowed: "A status from the employee catalog, e.g. running. `-` clears.", example: "running" },
+  { field: "section_keys", header: "Section", allowed: "Section names, comma-separated. `-` clears every section.", example: "" },
+  { field: "project_key", header: "Project", allowed: "A project key such as keeta or americana. `-` clears.", example: "" },
+  { field: "accommodation", header: "Accommodation", allowed: "Free text. `-` clears.", example: "" },
+  { field: "work_start_date", header: "Work Start", allowed: "Date YYYY-MM-DD or DD-MM-YYYY. Stored as work_start_date. `-` clears.", example: "2024-01-15" },
+  { field: "screenshots_allowed", header: "Screenshots", allowed: "yes or no. `-` turns the flag off.", example: "no" },
+  { field: "login_verification_exempt", header: "Login Exempt", allowed: "yes or no.", example: "no" },
+  { field: "bank_code", header: "Bank", allowed: "Bank code or name, or cash. `-` clears the whole bank record.", example: "cash" },
+  { field: "account_number", header: "Account Number", allowed: "6 to 20 digits. Cleared automatically when the bank is cash.", example: "" },
+  { field: "iban", header: "IBAN", allowed: "Kuwait IBAN. Cleared automatically when the bank is cash.", example: "" },
+  { field: "beneficiary_civil_id", header: "Beneficiary Civil ID", allowed: "12 digits.", example: "" },
+  { field: "currency", header: "Currency", allowed: "A payment currency code such as KWD. Blank with a bank defaults to KWD.", example: "KWD" },
+  { field: "license_expiry", header: "License Expiry", allowed: "Date. `-` stops tracking and keeps the uploaded file.", example: "2027-01-01" },
+  { field: "civil_id_expiry", header: "Civil ID Expiry", allowed: "Date. `-` stops tracking and keeps the uploaded file.", example: "" },
+  { field: "work_permit_expiry", header: "Work Permit Expiry", allowed: "Date. `-` stops tracking and keeps the uploaded file.", example: "" },
+  { field: "passport_expiry", header: "Passport Expiry", allowed: "Date. `-` stops tracking and keeps the uploaded file.", example: "" },
+  { field: "health_card_expiry", header: "Health Card Expiry", allowed: "Date. `-` stops tracking and keeps the uploaded file.", example: "" },
+  { field: "operations_card_expiry", header: "Operations Card Expiry", allowed: "Date. `-` stops tracking and keeps the uploaded file.", example: "" },
+  { field: "sponsorship_key", header: "Sponsorship", allowed: "A sponsorship from Settings. `-` clears.", example: "" },
+  { field: "job_position", header: "Job Position", allowed: "rider or light_driver.", example: "rider" },
+  { field: "hiring_type", header: "Hiring Type", allowed: "overseas, old_local, new_local, or outsourcing_partner.", example: "new_local" },
+  { field: "job_end_date", header: "Job End Date", allowed: "Date YYYY-MM-DD. `-` clears.", example: "" },
+  { field: "job_end_description", header: "Job End Description", allowed: "end_of_contract, issue_maker, not_willing_to_continue, or travelled_not_returned.", example: "" },
+  { field: "residency_expiry_date", header: "Residency Expiry", allowed: "Date. `-` clears.", example: "" },
+  { field: "fixed_salary", header: "Fixed Salary", allowed: "Non-negative amount, up to 3 decimals.", example: "120.000" },
+  { field: "work_permit_salary", header: "Work Permit Salary", allowed: "Non-negative amount, up to 3 decimals.", example: "90.000" },
+  { field: "last_increment_date", header: "Last Increment", allowed: "Date. `-` clears.", example: "" },
+  { field: "asset_ids", header: "Assets", allowed: "Asset catalog names or codes, comma-separated. `-` returns every assigned asset. A blank cell leaves assignments alone.", example: "" },
 ];
 
 export const DRIVER_IMPORT_COLUMNS: readonly DriverImportColumnSpec[] =
@@ -255,6 +285,22 @@ export function resolveTemplateColumns(
   if (selected === null) return all;
   const wanted = new Set(selected);
   return all.filter((column) => column.pinned || wanted.has(column.field));
+}
+
+/** Sample cells for zone and restaurant come from the live lists when one exists. */
+export function applyTemplateExamples(
+  columns: readonly DriverImportColumnSpec[],
+  examples: { restaurant?: string; zone?: string },
+): DriverImportColumnSpec[] {
+  return columns.map((column) => {
+    if (column.field === "restaurant_ids" && examples.restaurant) {
+      return { ...column, example: examples.restaurant };
+    }
+    if (column.field === "zone_id" && examples.zone) {
+      return { ...column, example: examples.zone };
+    }
+    return column;
+  });
 }
 
 export function guideRequiredLabel(column: DriverImportColumnSpec): string {

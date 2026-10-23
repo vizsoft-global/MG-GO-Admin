@@ -362,7 +362,7 @@ export function LiveTrackingActivityView({
                   </ToggleChip>
                 ))}
               </div>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {categories.length === 0 ? t("activityAllCategories") : null}
               </p>
             </div>
@@ -412,7 +412,7 @@ export function LiveTrackingActivityView({
             <div className="flex min-w-0 items-center gap-2">
               <ListChecks className="h-4 w-4 shrink-0 text-primary" />
               <h2 className="truncate text-sm font-semibold">{t("activityFeed")}</h2>
-              <Badge variant="secondary" className="text-[10px] tabular-nums">
+              <Badge variant="secondary" className="text-xs tabular-nums">
                 {events.length}
               </Badge>
             </div>
@@ -421,7 +421,7 @@ export function LiveTrackingActivityView({
                 type="button"
                 size="sm"
                 variant="outline"
-                className="h-7 cursor-pointer gap-1 border-emerald-500 bg-emerald-100 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-200"
+                className="h-7 cursor-pointer gap-1 border-emerald-500 bg-emerald-100 text-xs font-semibold text-emerald-900 hover:bg-emerald-200"
                 onClick={resumeLive}
               >
                 <ArrowUp className="h-3 w-3" />
@@ -491,12 +491,12 @@ function ActivityRow({
 
   return (
     <div className="flex items-start gap-3 px-4 py-2">
-      <span className="w-[104px] shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground">
+      <span className="w-[104px] shrink-0 pt-0.5 text-xs tabular-nums text-muted-foreground">
         {formatEventTime(event.occurredAt, locale)}
       </span>
       <span
         className={cn(
-          "shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+          "shrink-0 rounded-md border px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
           TONE_CHIP[tone],
         )}
       >
@@ -508,18 +508,18 @@ function ActivityRow({
         <p className="truncate text-xs font-medium">
           {label}
           {event.success ? null : (
-            <span className="ms-1.5 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+            <span className="ms-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">
               {event.errorCode ? humanizeErrorCode(event.errorCode) : t("activityFailed")}
             </span>
           )}
         </p>
         {summary ? (
-          <p className="truncate text-[10px] text-muted-foreground">{summary}</p>
+          <p className="truncate text-xs text-muted-foreground">{summary}</p>
         ) : null}
       </div>
       <div className="w-[132px] shrink-0 text-end">
         <p className="truncate text-xs font-medium">{event.driverName}</p>
-        <p className="truncate text-[10px] text-muted-foreground">{event.driverCode}</p>
+        <p className="truncate text-xs text-muted-foreground">{event.driverCode}</p>
       </div>
     </div>
   );

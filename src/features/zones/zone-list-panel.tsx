@@ -235,7 +235,7 @@ export function ZoneListPanel({
 
       <div className="shrink-0 border-t border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-300">
         <p>{t("geofence.showingCount", { shown: visibleZones.length, total: zones.length })}</p>
-        <p className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-400">
+        <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-400">
           {t("geofence.doubleClickToEdit")}
         </p>
       </div>

@@ -7,7 +7,11 @@ import {
 } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { canViewDriverBankDetails, hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
-import { DEFAULT_EMPLOYEE_STATUS_KEY } from "@/features/employees/employee-catalogs";
+import {
+  CATALOG_KEY_RE,
+  DEFAULT_EMPLOYEE_STATUS_KEY,
+  isNonOperationalOnly,
+} from "@/features/employees/employee-catalogs";
 import {
   parseBankDetails,
   sanitizeBankForLog,
@@ -20,13 +24,27 @@ import { normalizeCountryCode } from "@/lib/geo/countries";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
 import { hasOpsAssignment } from "./driver-assignment";
 import {
+  isHiringType,
+  isJobEndDescription,
+  isJobPosition,
+  mergePrivateInfo,
+  optionalChoice,
+  parseOptionalMoney,
+  parseOptionalYmd,
+} from "./driver-private-fields";
+import {
   flattenProfileSnapshot,
   loadChangeLabels,
   loadIntakeProfileSnapshot,
   logDriverChange,
   resolveIntakeIdForDriver,
 } from "./driver-change-log";
-import { normalizeClientValue } from "./driver-client-fields";
+import {
+  CLIENT_ID_MAX_LENGTH,
+  CLIENT_NAME_MAX_LENGTH,
+  clientValueTooLong,
+  normalizeClientValue,
+} from "./driver-client-fields";
 import { parseDriverRiderCategory } from "./driver-rider-category";
 import {
   companyMatchesCategory,
@@ -207,6 +225,17 @@ function parseHrFromForm(formData: FormData):
     sectionKeys: parseCsvKeys(formData, "sectionKeys"),
     nationalityCategoryKeys: parseCsvKeys(formData, "nationalityCategoryKeys"),
   };
+}
+
+/**
+ * Whether this rider still owes a zone or a restaurant.
+ *
+ * Read on every save rather than cached: the catalog is small, and a stale
+ * answer would refuse a rider an operator just marked as office staff.
+ */
+async function opsAssignmentRequired(sectionKeys: readonly string[]): Promise<boolean> {
+  const sections = await listEmployeeCatalog("employee_sections");
+  return !isNonOperationalOnly(sectionKeys, sections);
 }
 
 async function parseBankFromForm(
@@ -419,7 +448,9 @@ export async function createDriverIntake(
   const civilId = String(formData.get("civilId") ?? "").trim();
   const employeeIdRaw = String(formData.get("employeeId") ?? "");
   const employeeId = normalizeEmployeeId(employeeIdRaw);
-  const nationality = normalizeCountryCode(String(formData.get("nationality") ?? ""));
+  const nationalityPatch = formData.has("nationality")
+    ? { nationality: normalizeCountryCode(String(formData.get("nationality") ?? "")) }
+    : {};
   const riderCategory = parseDriverRiderCategory(String(formData.get("riderCategory") ?? ""));
   const sourceCompanyRaw = String(formData.get("sourceCompany") ?? "");
   const projectKey = parseDriverProjectKey(formData.get("projectKey"));
@@ -464,7 +495,7 @@ export async function createDriverIntake(
   }
 
   const restaurantIds = parseRestaurantIds(formData);
-  if (!hasOpsAssignment(zoneId, restaurantIds)) {
+  if ((await opsAssignmentRequired(hr.sectionKeys)) && !hasOpsAssignment(zoneId, restaurantIds)) {
     return { error: "missing_assignment" };
   }
   const db = await staffClient();
@@ -548,7 +579,7 @@ export async function createDriverIntake(
       full_name: fullName,
       civil_id: civilIdNormalized,
       employee_id: employeeId,
-      nationality,
+      ...nationalityPatch,
       rider_category: riderCategory,
       source_company: sourceCompany,
       project_key: projectKey,
@@ -637,7 +668,7 @@ export async function createDriverIntake(
       zone: labels.zone,
       restaurants: labels.restaurants,
       vehicle: labels.vehicle,
-      nationality,
+      ...nationalityPatch,
       rider_category: riderCategory,
       source_company: sourceCompany,
       project_key: projectKey,
@@ -1267,7 +1298,9 @@ async function updateDriverIntakeInner(
   const vehicleTypeKey = String(formData.get("vehicleTypeKey") ?? "bike").trim() || "bike";
   const employeeIdRaw = String(formData.get("employeeId") ?? "");
   const employeeId = normalizeEmployeeId(employeeIdRaw);
-  const nationality = normalizeCountryCode(String(formData.get("nationality") ?? ""));
+  const nationalityPatch = formData.has("nationality")
+    ? { nationality: normalizeCountryCode(String(formData.get("nationality") ?? "")) }
+    : {};
   const riderCategory = parseDriverRiderCategory(String(formData.get("riderCategory") ?? ""));
   const sourceCompanyRaw = String(formData.get("sourceCompany") ?? "");
   const projectKey = parseDriverProjectKey(formData.get("projectKey"));
@@ -1314,7 +1347,8 @@ async function updateDriverIntakeInner(
   const db = await staffClient();
   const sourceCompany = await resolveSourceCompanyForSave(db, riderCategory, sourceCompanyRaw);
   const restaurantIds = parseRestaurantIds(formData);
-  if (!hasOpsAssignment(zoneId, restaurantIds)) {
+  const opsRequired = await opsAssignmentRequired(hr.sectionKeys);
+  if (opsRequired && !hasOpsAssignment(zoneId, restaurantIds)) {
     return { error: "missing_assignment" };
   }
 
@@ -1355,7 +1389,7 @@ async function updateDriverIntakeInner(
     currentAccountStatus = (linkedDriver?.status as DriverAccountStatus | null) ?? null;
 
     if (linkedDriver?.status === "active") {
-      if (!hasOpsAssignment(zoneId, restaurantIds)) {
+      if (opsRequired && !hasOpsAssignment(zoneId, restaurantIds)) {
         return { error: "missing_assignment" };
       }
       if (restaurantIds.length > 0) {
@@ -1365,7 +1399,11 @@ async function updateDriverIntakeInner(
           .eq("status", "published")
           .eq("is_active", true)
           .in("id", restaurantIds);
-        if ((publishedRows ?? []).length === 0 && !hasOpsAssignment(zoneId, [])) {
+        if (
+          (publishedRows ?? []).length === 0 &&
+          opsRequired &&
+          !hasOpsAssignment(zoneId, [])
+        ) {
           return { error: "missing_assignment" };
         }
       }
@@ -1402,7 +1440,7 @@ async function updateDriverIntakeInner(
       phone,
       civil_id: civilIdNormalized,
       employee_id: employeeId,
-      nationality,
+      ...nationalityPatch,
       rider_category: riderCategory,
       source_company: sourceCompany,
       project_key: projectKey,
@@ -1478,7 +1516,7 @@ async function updateDriverIntakeInner(
           vehicle_type_key: vehicleTypeKey,
           civil_id: civilIdNormalized,
           employee_id: employeeId,
-          nationality,
+          ...nationalityPatch,
           rider_category: riderCategory,
           source_company: sourceCompany,
           project_key: projectKey,
@@ -1574,7 +1612,7 @@ async function updateDriverIntakeInner(
       zone: afterLabels.zone,
       restaurants: afterLabels.restaurants,
       vehicle: afterLabels.vehicle,
-      nationality,
+      ...nationalityPatch,
       rider_category: riderCategory,
       source_company: sourceCompany,
       project_key: projectKey,
@@ -1638,19 +1676,57 @@ async function fetchDriverFreezeRow(
   };
 }
 
+function maskPartnerDriverDetail(
+  session: { accessKind: string | null; partnerProjectKey: string | null },
+  detail: DriverDetailModel,
+): DriverDetailModel | null {
+  if (session.accessKind !== "partner") return detail;
+  const locked = session.partnerProjectKey?.toLowerCase() ?? "";
+  const project = detail.project_key?.toLowerCase() ?? "";
+  if (!locked || project !== locked) return null;
+  return {
+    ...detail,
+    bank_details: null,
+    app_passcode: null,
+    private_info: {
+      ...detail.private_info,
+      fixed_salary: null,
+      work_permit_salary: null,
+    },
+  };
+}
+
 export async function fetchDriverDetail(
   id: string,
 ): Promise<DriverDetailModel | null> {
   const session = await requireDriversView();
   void logAdminRead("driver_intake", "fetchDriverDetail", { id });
   try {
-    return await fetchDriverDetailInner(
+    const detail = await fetchDriverDetailInner(
       id,
       canViewDriverBankDetails(session.permissions, session.isSuperAdmin),
     );
+    if (!detail) return null;
+    return maskPartnerDriverDetail(session, detail);
   } catch {
     return null;
   }
+}
+
+/** The contracted OFF days for this Kuwait month, or null when no row exists. */
+async function fetchOffStructureDays(
+  db: Awaited<ReturnType<typeof staffClient>>,
+  driverId: string,
+): Promise<number | null> {
+  const month = `${kuwaitTodayYmd().slice(0, 7)}-01`;
+  const { data } = await db
+    .from("driver_off_structure")
+    .select("off_days")
+    .eq("driver_id", driverId)
+    .eq("period_month", month)
+    .maybeSingle();
+  const value = (data as { off_days?: unknown } | null)?.off_days;
+  return typeof value === "number" ? value : null;
 }
 
 async function fetchDriverDetailInner(
@@ -1681,6 +1757,16 @@ async function fetchDriverDetailInner(
       nationality_category_keys,
       archive_reason,
       bank_details,
+      sponsorship_key,
+      job_position,
+      hiring_type,
+      work_start_date,
+      job_end_date,
+      job_end_description,
+      residency_expiry_date,
+      fixed_salary,
+      work_permit_salary,
+      last_increment_date,
       driver_code,
       workflow_status,
       linked,
@@ -1727,6 +1813,16 @@ async function fetchDriverDetailInner(
       nationality_category_keys: string[];
       archive_reason: string | null;
       bank_details: DriverBankDetails | null;
+      sponsorship_key: string | null;
+      job_position: string | null;
+      hiring_type: string | null;
+      work_start_date: string | null;
+      job_end_date: string | null;
+      job_end_description: string | null;
+      residency_expiry_date: string | null;
+      fixed_salary: number | string | null;
+      work_permit_salary: number | string | null;
+      last_increment_date: string | null;
       is_blocked: boolean;
       blocked_reason: string | null;
       blocked_at: string | null;
@@ -1749,7 +1845,7 @@ async function fetchDriverDetailInner(
           .maybeSingle(),
         db
           .from("drivers")
-          .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, source_company, project_key, accommodation, passport_number, employee_status_key, section_keys, nationality_category_keys, archive_reason, bank_details, is_blocked, blocked_reason, blocked_at, login_verification_exempt, screenshots_allowed, avatar_object_key, zone_id, zones (name, code)")
+          .select("app_passcode, status, employee_id, nationality, rider_category, client_id, client_name, source_company, project_key, accommodation, passport_number, employee_status_key, section_keys, nationality_category_keys, archive_reason, bank_details, sponsorship_key, job_position, hiring_type, work_start_date, job_end_date, job_end_description, residency_expiry_date, fixed_salary, work_permit_salary, last_increment_date, is_blocked, blocked_reason, blocked_at, login_verification_exempt, screenshots_allowed, avatar_object_key, zone_id, zones (name, code)")
           .eq("id", linkedId)
           .maybeSingle(),
         fetchDriverFreezeRow(db, linkedId),
@@ -1776,6 +1872,16 @@ async function fetchDriverDetailInner(
             nationality_category_keys: asStringKeys(drv.nationality_category_keys),
             archive_reason: drv.archive_reason ?? null,
             bank_details: canSeeBank ? parseBankDetails(drv.bank_details) : null,
+            sponsorship_key: drv.sponsorship_key ?? null,
+            job_position: drv.job_position ?? null,
+            hiring_type: drv.hiring_type ?? null,
+            work_start_date: drv.work_start_date ?? null,
+            job_end_date: drv.job_end_date ?? null,
+            job_end_description: drv.job_end_description ?? null,
+            residency_expiry_date: drv.residency_expiry_date ?? null,
+            fixed_salary: drv.fixed_salary ?? null,
+            work_permit_salary: drv.work_permit_salary ?? null,
+            last_increment_date: drv.last_increment_date ?? null,
             is_blocked: drv.is_blocked ?? false,
             blocked_reason: drv.blocked_reason ?? null,
             blocked_at: drv.blocked_at ?? null,
@@ -1803,8 +1909,14 @@ async function fetchDriverDetailInner(
       linkedId != null
         ? await fetchDriverRestaurantIds(db, linkedId)
         : await fetchIntakeRestaurantIds(db, intake.id);
-    const [restaurant_names, has_published_restaurant, avatar_url, assigned_assets, deliveryCounts] =
-      await Promise.all([
+    const [
+      restaurant_names,
+      has_published_restaurant,
+      avatar_url,
+      assigned_assets,
+      deliveryCounts,
+      offs_structure_days,
+    ] = await Promise.all([
       loadRestaurantNames(db, restaurant_ids),
       hasPublishedActiveRestaurants(db, restaurant_ids),
       resolveDriverAvatarUrl(
@@ -1816,6 +1928,7 @@ async function fetchDriverDetailInner(
       ),
       fetchDriverAssetAssignments(intake.id, linkedId),
       fetchDriverDeliveryCounts(db, linkedId),
+      linkedId ? fetchOffStructureDays(db, linkedId) : Promise.resolve(null),
     ]);
 
     return {
@@ -1846,6 +1959,11 @@ async function fetchDriverDetailInner(
       bank_details: canSeeBank
         ? parseBankDetails(linkedDriver?.bank_details ?? intake.bank_details)
         : null,
+      private_info: mergePrivateInfo(
+        intake as Record<string, unknown>,
+        linkedDriver as Record<string, unknown> | null,
+      ),
+      offs_structure_days,
       nationality: linkedDriver?.nationality ?? intake.nationality ?? null,
       rider_category: linkedDriver?.rider_category ?? intake.rider_category ?? "in_house",
       client_id: linkedDriver?.client_id ?? intake.client_id ?? null,
@@ -1936,6 +2054,16 @@ async function fetchDriverDetailInner(
       nationality_category_keys,
       archive_reason,
       bank_details,
+      sponsorship_key,
+      job_position,
+      hiring_type,
+      work_start_date,
+      job_end_date,
+      job_end_description,
+      residency_expiry_date,
+      fixed_salary,
+      work_permit_salary,
+      last_increment_date,
       is_blocked,
       blocked_reason,
       blocked_at,
@@ -1975,14 +2103,20 @@ async function fetchDriverDetailInner(
   const { data: intakeForDriver } = await db
     .from("driver_intakes")
     .select(
-      "id, assets_issued, workflow_status, linked, partner_id, zone_id, vehicle_id, archived_at, avatar_url, accommodation, passport_number, employee_status_key, section_keys, nationality_category_keys, archive_reason, bank_details, zones (name, code)",
+      "id, assets_issued, workflow_status, linked, partner_id, zone_id, vehicle_id, archived_at, avatar_url, accommodation, passport_number, employee_status_key, section_keys, nationality_category_keys, archive_reason, bank_details, sponsorship_key, job_position, hiring_type, work_start_date, job_end_date, job_end_description, residency_expiry_date, fixed_salary, work_permit_salary, last_increment_date, zones (name, code)",
     )
     .eq("linked_profile_id", id)
     .maybeSingle();
 
   const restaurant_ids = await fetchDriverRestaurantIds(db, id);
-  const [restaurant_names, has_published_restaurant, avatar_url, assigned_assets, deliveryCounts] =
-    await Promise.all([
+  const [
+    restaurant_names,
+    has_published_restaurant,
+    avatar_url,
+    assigned_assets,
+    deliveryCounts,
+    offs_structure_days,
+  ] = await Promise.all([
     loadRestaurantNames(db, restaurant_ids),
     hasPublishedActiveRestaurants(db, restaurant_ids),
     resolveDriverAvatarUrl(
@@ -1994,6 +2128,7 @@ async function fetchDriverDetailInner(
     ),
     fetchDriverAssetAssignments(intakeForDriver?.id ?? null, id),
     fetchDriverDeliveryCounts(db, id),
+    fetchOffStructureDays(db, id),
   ]);
 
   return {
@@ -2019,6 +2154,11 @@ async function fetchDriverDetailInner(
     bank_details: canSeeBank
       ? parseBankDetails(driverRow.bank_details ?? intakeForDriver?.bank_details)
       : null,
+    private_info: mergePrivateInfo(
+      intakeForDriver as Record<string, unknown> | null,
+      driverRow as Record<string, unknown>,
+    ),
+    offs_structure_days,
     nationality: driverRow.nationality ?? null,
     rider_category: (driverRow.rider_category as DriverRiderCategory) ?? "in_house",
     client_id: driverRow.client_id ?? null,
@@ -2151,6 +2291,295 @@ export async function setDriverLoginVerificationExempt(
 export type RegeneratePasscodeResult =
   | { success: true; passcode: string }
   | { error: string };
+
+/**
+ * The Private Information tab's save: a patch of the HR-owned fields only.
+ *
+ * `updateDriverIntake` is a full-form save — it re-validates the assignment,
+ * rewrites the restaurants, syncs assets and may move the avatar. A Profile
+ * edit owns none of that, so this action writes just its own fields and leaves
+ * the assignment alone. Both rows get the same patch: the intake (the editable
+ * draft) and the linked `drivers` row (what the list and payroll read).
+ */
+export async function saveDriverPrivateInformation(
+  formData: FormData,
+): Promise<DriverMutationResult> {
+  const auth = await requireDriversManager();
+  if (auth.error) return { error: auth.error };
+
+  try {
+    const mutationAuth = await requireMutationAuth();
+    if ("error" in mutationAuth) return { error: mutationAuth.error };
+
+    const intakeId = String(formData.get("intakeId") ?? "").trim();
+    if (!intakeId) return { error: "missing_fields" };
+
+    const fullName = String(formData.get("fullName") ?? "").trim();
+    if (!fullName) return { error: "missing_fields" };
+
+    const phoneRaw = String(formData.get("phone") ?? "").trim();
+    const phone = phoneRaw ? normalizeKuwaitPhone(phoneRaw) : null;
+    if (phoneRaw && !phone) return { error: "invalid_phone" };
+
+    const civilRaw = String(formData.get("civilId") ?? "").trim();
+    const civilId = civilRaw ? normalizeCivilId(civilRaw) : null;
+    if (civilRaw && !civilId) return { error: "invalid_civil_id" };
+
+    const hr = parseHrFromForm(formData);
+    if ("error" in hr) return { error: hr.error };
+    const bank = await parseBankFromForm(formData);
+    if ("error" in bank) return { error: bank.error };
+
+    const sponsorshipRaw = String(formData.get("sponsorshipKey") ?? "").trim().toLowerCase();
+    const sponsorshipKey =
+      !sponsorshipRaw || sponsorshipRaw === "none" ? null : sponsorshipRaw;
+    if (sponsorshipKey && !CATALOG_KEY_RE.test(sponsorshipKey)) {
+      return { error: "missing_fields" };
+    }
+
+    const jobPosition = optionalChoice(formData.get("jobPosition"), isJobPosition);
+    const hiringType = optionalChoice(formData.get("hiringType"), isHiringType);
+    if (!jobPosition.ok || !hiringType.ok) return { error: "missing_fields" };
+    const jobEndDescriptionRaw = String(formData.get("jobEndDescription") ?? "").trim();
+    const jobEndDescription =
+      !jobEndDescriptionRaw || jobEndDescriptionRaw === "none" ? null : jobEndDescriptionRaw;
+    if (jobEndDescription && !isJobEndDescription(jobEndDescription)) {
+      return { error: "missing_fields" };
+    }
+
+    const workStart = parseOptionalYmd(formData.get("workStartDate"));
+    const jobEnd = parseOptionalYmd(formData.get("jobEndDate"));
+    const residency = parseOptionalYmd(formData.get("residencyExpiryDate"));
+    const lastIncrement = parseOptionalYmd(formData.get("lastIncrementDate"));
+    if (!workStart.ok || !jobEnd.ok || !residency.ok || !lastIncrement.ok) {
+      return { error: "missing_fields" };
+    }
+
+    const fixedSalary = parseOptionalMoney(formData.get("fixedSalary"));
+    const workPermitSalary = parseOptionalMoney(formData.get("workPermitSalary"));
+    if (!fixedSalary.ok || !workPermitSalary.ok) return { error: "missing_fields" };
+
+    const nationalityPatch = formData.has("nationality")
+      ? { nationality: normalizeCountryCode(String(formData.get("nationality") ?? "")) }
+      : {};
+    const now = new Date().toISOString();
+    const db = await staffClient();
+
+    // Category is written only when the form sends it. An absent field must
+    // not fall through to in_house and overwrite an outsourced rider.
+    let categoryFields: {
+      rider_category: ReturnType<typeof parseDriverRiderCategory>;
+      source_company: string | null;
+    } | null = null;
+    if (formData.has("riderCategory")) {
+      const riderCategory = parseDriverRiderCategory(String(formData.get("riderCategory") ?? ""));
+      let companyRaw = String(formData.get("sourceCompany") ?? "").trim();
+      if (companyRaw === "none") companyRaw = "";
+      let sourceCompany = await resolveSourceCompanyForSave(db, riderCategory, companyRaw);
+      if (riderCategory === "in_house" && !sourceCompany) {
+        const { data: companyRows } = await db
+          .from("source_companies")
+          .select("key, is_system, is_active");
+        const rows = (companyRows ?? []) as { key: string; is_system: boolean; is_active: boolean }[];
+        sourceCompany =
+          rows.find((row) => row.is_system && row.is_active)?.key ??
+          rows.find((row) => row.is_system)?.key ??
+          null;
+      }
+      categoryFields = { rider_category: riderCategory, source_company: sourceCompany };
+    }
+
+    const shared = {
+      full_name: fullName,
+      phone,
+      civil_id: civilId,
+      ...nationalityPatch,
+      passport_number: hr.passport,
+      employee_status_key: hr.employeeStatusKey,
+      section_keys: hr.sectionKeys,
+      nationality_category_keys: hr.nationalityCategoryKeys,
+      sponsorship_key: sponsorshipKey,
+      job_position: jobPosition.value,
+      hiring_type: hiringType.value,
+      work_start_date: workStart.value,
+      job_end_date: jobEnd.value,
+      job_end_description: jobEndDescription,
+      residency_expiry_date: residency.value,
+      fixed_salary: fixedSalary.value,
+      work_permit_salary: workPermitSalary.value,
+      last_increment_date: lastIncrement.value,
+      ...(categoryFields ?? {}),
+    };
+    const { data: existing, error: readError } = await db
+      .from("driver_intakes")
+      .select("id, linked_profile_id")
+      .eq("id", intakeId)
+      .maybeSingle();
+    if (readError || !existing) return { error: "save_failed" };
+
+    const { error } = await db
+      .from("driver_intakes")
+      .update({ ...shared, ...bankWritePatch(bank), updated_at: now })
+      .eq("id", intakeId);
+    if (error) return { error: mapDriverDbError(error, "employee_id") };
+
+    const linkedId = existing.linked_profile_id as string | null;
+    if (linkedId) {
+      const [profileWrite, driverWrite] = await Promise.all([
+        db
+          .from("profiles")
+          .update({ full_name: fullName, phone, updated_at: now })
+          .eq("id", linkedId),
+        db
+          .from("drivers")
+          .update({ ...shared, ...bankWritePatch(bank), updated_at: now })
+          .eq("id", linkedId),
+      ]);
+      const writeError = driverWrite.error ?? profileWrite.error;
+      if (writeError) {
+        return { error: mapDriverDbError(writeError, "employee_id") };
+      }
+    }
+
+    void logAdminMutation({
+      action: "update",
+      entityType: "driver_intake",
+      entityId: intakeId,
+      routeName: "saveDriverPrivateInformation",
+      after: sanitizeBankForLog({ ...shared, ...bankWritePatch(bank) }),
+    });
+    return { success: true };
+  } catch {
+    return { error: "save_failed" };
+  }
+}
+
+/**
+ * The Project tab: which project the rider delivers for (the old Partner field
+ * moved here). Assignment fields stay where they are — this writes one key.
+ */
+export async function saveDriverProjectSettings(
+  formData: FormData,
+): Promise<DriverMutationResult> {
+  const auth = await requireDriversManager();
+  if (auth.error) return { error: auth.error };
+
+  try {
+    const mutationAuth = await requireMutationAuth();
+    if ("error" in mutationAuth) return { error: mutationAuth.error };
+
+    const intakeId = String(formData.get("intakeId") ?? "").trim();
+    if (!intakeId) return { error: "missing_fields" };
+    const projectKey = parseDriverProjectKey(formData.get("projectKey"));
+    const zoneId = String(formData.get("zoneId") ?? "").trim();
+    const vehicleId = String(formData.get("vehicleId") ?? "").trim();
+    const vehicleTypeKey = String(formData.get("vehicleTypeKey") ?? "").trim() === "car" ? "car" : "bike";
+    const clientId = normalizeClientValue(String(formData.get("clientId") ?? ""));
+    const clientName = normalizeClientValue(String(formData.get("clientName") ?? ""));
+    const accommodation = normalizeClientValue(String(formData.get("accommodation") ?? ""));
+    const restaurantIds = parseRestaurantIds(formData);
+    const accountStatusRaw = String(formData.get("accountStatus") ?? "").trim();
+    const accountStatus =
+      accountStatusRaw === "active" || accountStatusRaw === "suspended" || accountStatusRaw === "pending"
+        ? accountStatusRaw
+        : null;
+    if (clientValueTooLong(clientId, CLIENT_ID_MAX_LENGTH)) return { error: "invalid_client_id" };
+    if (clientValueTooLong(clientName, CLIENT_NAME_MAX_LENGTH)) return { error: "invalid_client_name" };
+    if (accommodation && accommodation.length > CLIENT_NAME_MAX_LENGTH) return { error: "invalid_client_name" };
+
+    const db = await staffClient();
+    const { data: existing, error: readError } = await db
+      .from("driver_intakes")
+      .select(
+        "id, linked_profile_id, project_key, zone_id, vehicle_id, vehicle_type_key, client_id, client_name, accommodation, section_keys",
+      )
+      .eq("id", intakeId)
+      .maybeSingle();
+    if (readError || !existing) return { error: "save_failed" };
+
+    const linkedId = existing.linked_profile_id as string | null;
+    let sectionKeys = asStringKeys(existing.section_keys);
+    let currentStatus: DriverAccountStatus | null = null;
+    if (linkedId) {
+      const { data: driverRow, error: driverReadError } = await db
+        .from("drivers")
+        .select("status, section_keys")
+        .eq("id", linkedId)
+        .maybeSingle();
+      if (driverReadError || !driverRow) return { error: "save_failed" };
+      sectionKeys = asStringKeys(driverRow.section_keys);
+      currentStatus = (driverRow.status as DriverAccountStatus | null) ?? null;
+    }
+
+    const nextStatus = accountStatus ?? currentStatus;
+    const opsRequired = await opsAssignmentRequired(sectionKeys);
+    if (nextStatus === "active" && opsRequired && !hasOpsAssignment(zoneId, restaurantIds)) {
+      return { error: "missing_assignment" };
+    }
+    const published = await validateRestaurantsPublished(db, restaurantIds);
+    if (published.error) return { error: published.error };
+
+    const now = new Date().toISOString();
+    const patch = {
+      project_key: projectKey,
+      zone_id: zoneId || null,
+      vehicle_id: vehicleId || null,
+      vehicle_type_key: vehicleTypeKey,
+      client_id: clientId,
+      client_name: clientName,
+      accommodation,
+      updated_at: now,
+    };
+
+    if (linkedId) await syncDriverRestaurants(db, linkedId, restaurantIds);
+    await syncIntakeRestaurants(db, intakeId, restaurantIds);
+
+    const { error } = await db.from("driver_intakes").update(patch).eq("id", intakeId);
+    if (error) return { error: mapDriverDbError(error, "employee_id") };
+
+    if (linkedId) {
+      const { error: driverError } = await db.from("drivers").update(patch).eq("id", linkedId);
+      if (driverError) return { error: mapDriverDbError(driverError, "employee_id") };
+      const { data: afterSync } = await db
+        .from("drivers")
+        .select("status")
+        .eq("id", linkedId)
+        .maybeSingle();
+      const statusNow = (afterSync?.status as DriverAccountStatus | null) ?? null;
+      const restore = accountStatusToRestoreAfterRestaurantSync({
+        statusBefore: currentStatus,
+        intended: accountStatus,
+        statusNow,
+      });
+      const writeStatus =
+        accountStatus && accountStatus !== currentStatus ? accountStatus : restore;
+      if (writeStatus && writeStatus !== statusNow) {
+        const statusResult = await updateDriverAccountStatus(linkedId, writeStatus);
+        if ("error" in statusResult) return { error: statusResult.error };
+      }
+    }
+
+    void logAdminMutation({
+      action: "update",
+      entityType: "driver_intake",
+      entityId: intakeId,
+      routeName: "saveDriverProjectSettings",
+      before: {
+        project_key: existing.project_key ?? null,
+        zone_id: existing.zone_id ?? null,
+        vehicle_id: existing.vehicle_id ?? null,
+        vehicle_type_key: existing.vehicle_type_key ?? null,
+        client_id: existing.client_id ?? null,
+        client_name: existing.client_name ?? null,
+        accommodation: existing.accommodation ?? null,
+      },
+      after: { ...patch, restaurant_ids: restaurantIds, account_status: accountStatus },
+    });
+    return { success: true };
+  } catch {
+    return { error: "save_failed" };
+  }
+}
 
 export async function updateDriverAccountStatus(
   driverId: string,

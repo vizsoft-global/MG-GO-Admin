@@ -63,7 +63,7 @@ export function PayrollPartnerView({
   const allSelected = value.length === 0;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="me-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+      <span className="me-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
         {t("viewLabel")}
       </span>
       <button
@@ -71,7 +71,7 @@ export function PayrollPartnerView({
         aria-pressed={allSelected}
         onClick={() => onChange([])}
         className={cn(
-          "inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-[11px] font-semibold transition-colors",
+          "inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-semibold transition-colors",
           allSelected
             ? "border-emerald-500 bg-emerald-100 text-emerald-900 shadow-sm ring-1 ring-emerald-400/50"
             : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -91,7 +91,7 @@ export function PayrollPartnerView({
             aria-pressed={selected}
             onClick={() => onChange(selected ? value.filter((k) => k !== key) : [...value, key])}
             className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-[11px] font-semibold transition-colors",
+              "inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-semibold transition-colors",
               selected
                 ? "border-emerald-500 bg-emerald-100 text-emerald-900 shadow-sm ring-1 ring-emerald-400/50"
                 : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -132,7 +132,7 @@ export function PayrollZoneCategoryChips({
   const allSelected = value == null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="me-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+      <span className="me-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
         {t("viewLabel")}
       </span>
       <ToggleChip selected={allSelected} icon={CircleDashed} onClick={() => onChange(null)}>
@@ -217,7 +217,7 @@ export function PayrollRangePills({
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           className={cn(
-            "inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-[11px] font-semibold transition-colors",
+            "inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-xs font-semibold transition-colors",
             preset === "custom"
               ? "border-emerald-500 bg-emerald-100 text-emerald-900 shadow-sm ring-1 ring-emerald-400/50"
               : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -229,7 +229,7 @@ export function PayrollRangePills({
         <PopoverContent align="start" className="w-[min(340px,92vw)] origin-(--transform-origin) p-3">
           <p className="mb-2 text-xs font-semibold">{t("customTitle")}</p>
           <div className="grid grid-cols-2 gap-2">
-            <label className="text-[10px] font-medium text-muted-foreground">
+            <label className="text-xs font-medium text-muted-foreground">
               {t("from")}
               <input
                 type="date"
@@ -240,7 +240,7 @@ export function PayrollRangePills({
                 onChange={(e) => setDraftFrom(e.target.value)}
               />
             </label>
-            <label className="text-[10px] font-medium text-muted-foreground">
+            <label className="text-xs font-medium text-muted-foreground">
               {t("to")}
               <input
                 type="date"
@@ -252,7 +252,7 @@ export function PayrollRangePills({
               />
             </label>
           </div>
-          <p className="mt-2 text-[10px] text-muted-foreground">
+          <p className="mt-2 text-xs text-muted-foreground">
             {t("windowHint", { from: isoDayLabel(win.from), to: isoDayLabel(win.to) })}
           </p>
           <div className="mt-3 flex justify-end gap-2">
@@ -277,7 +277,7 @@ export function PayrollRangePills({
         <button
           type="button"
           onClick={onClearCustom}
-          className="inline-flex h-7 items-center rounded-md border border-border bg-muted/30 px-2 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          className="inline-flex h-7 items-center rounded-md border border-border bg-muted/30 px-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
         >
           {t("clearCustom")}
         </button>
@@ -298,7 +298,7 @@ export function PayrollSummaryStrip({
   const t = useTranslations("pages.payroll");
   const counts = useMemo(() => countRidersByZoneCategory(riders), [riders]);
   return (
-    <p className="text-[11px] text-muted-foreground">
+    <p className="text-xs text-muted-foreground">
       {t("summaryStrip", {
         riders: riders.length,
         good: counts.good,

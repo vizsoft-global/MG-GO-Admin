@@ -277,12 +277,12 @@ export function DriverDayRoute({
       <div className="fleet-overlay rounded-xl border p-2 shadow-md">
         <div className="flex items-center gap-2">
           <RouteIcon className="size-3.5 text-muted-foreground" aria-hidden />
-          <span className="text-[11px] font-semibold">{t("route.heading")}</span>
+          <span className="text-xs font-semibold">{t("route.heading")}</span>
 
           {isLoading ? (
-            <span className="text-[10px] text-muted-foreground">{t("route.loading")}</span>
+            <span className="text-xs text-muted-foreground">{t("route.loading")}</span>
           ) : data && points.length > 1 ? (
-            <span className="flex items-center gap-2 text-[10px] tabular-nums text-muted-foreground">
+            <span className="flex items-center gap-2 text-xs tabular-nums text-muted-foreground">
               <span>
                 {t("route.distance")} {(data.distance_m / 1000).toFixed(1)} km
               </span>
@@ -318,7 +318,7 @@ export function DriverDayRoute({
               ) : null}
             </span>
           ) : (
-            <span className="text-[10px] text-muted-foreground">{t("route.empty")}</span>
+            <span className="text-xs text-muted-foreground">{t("route.empty")}</span>
           )}
 
           <Button
@@ -380,7 +380,7 @@ export function DriverDayRoute({
               </div>
             </div>
 
-            <span className="w-10 shrink-0 text-[10px] tabular-nums text-muted-foreground">
+            <span className="w-10 shrink-0 text-xs tabular-nums text-muted-foreground">
               {cursorPoint ? formatClock(cursorPoint.recorded_at) : "--:--"}
             </span>
 
@@ -392,7 +392,7 @@ export function DriverDayRoute({
                   onClick={() => setSpeed(option)}
                   aria-pressed={speed === option}
                   className={cn(
-                    "h-6 cursor-pointer rounded px-1 text-[10px] font-semibold tabular-nums transition-colors duration-150",
+                    "h-6 cursor-pointer rounded px-1 text-xs font-semibold tabular-nums transition-colors duration-150",
                     speed === option
                       ? "bg-emerald-100 text-emerald-900"
                       : "text-muted-foreground hover:bg-muted",

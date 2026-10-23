@@ -116,7 +116,7 @@ export function CategoriesSettingsPanel() {
       />
 
       <AppListCard className="space-y-3 p-4">
-        <p className="text-[11px] text-muted-foreground">{t("emptyHint")}</p>
+        <p className="text-xs text-muted-foreground">{t("emptyHint")}</p>
 
         <div className="grid gap-2 sm:grid-cols-4">
           <div className="space-y-1">

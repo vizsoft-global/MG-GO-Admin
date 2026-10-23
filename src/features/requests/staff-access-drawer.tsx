@@ -188,7 +188,7 @@ export function StaffAccessDrawer({
               </Avatar>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{staff?.full_name}</p>
-                <p className="truncate text-[11px] text-muted-foreground">
+                <p className="truncate text-xs text-muted-foreground">
                   {[staff?.department, staff?.email].filter(Boolean).join(" · ") || "—"}
                 </p>
               </div>
@@ -204,7 +204,7 @@ export function StaffAccessDrawer({
             </div>
           )}
 
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {isAssignMode ? t("perTypeHintAssign") : t("perTypeHint")}
           </p>
 

@@ -70,7 +70,7 @@ export function DocumentExpiryFields({
       {value.trackExpiry ? (
         <>
           <div className="space-y-1">
-            <label className="text-[10px] font-medium text-muted-foreground">
+            <label className="text-xs font-medium text-muted-foreground">
               {t("expiresOn")} <span className="text-destructive">*</span>
             </label>
             <Input
@@ -85,7 +85,7 @@ export function DocumentExpiryFields({
           </div>
 
           <div className="space-y-1">
-            <p className="text-[10px] font-medium text-muted-foreground">{t("notifyBefore")}</p>
+            <p className="text-xs font-medium text-muted-foreground">{t("notifyBefore")}</p>
             <div className="flex flex-wrap gap-1">
               {LEAD_DAY_OPTIONS.map((day) => (
                 <ToggleChip

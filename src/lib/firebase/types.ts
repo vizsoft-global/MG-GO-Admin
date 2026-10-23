@@ -20,8 +20,10 @@ export type ProfileDoc = {
   /** `rider` or `staff`. */
   role: ProfileRole;
   locale: string;
-  /** `manager` | `user` | null — the per-user access kind. */
+  /** `manager` | `user` | `partner` | null — the per-user access kind. */
   access_kind: string | null;
+  /** Set only while `access_kind` is `partner` (`keeta` | `americana`). */
+  partner_project_key?: string | null;
   admin_role_id: string | null;
   approval_status: AdminApprovalStatus;
   approved_at: string | null;

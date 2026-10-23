@@ -209,7 +209,7 @@ export function OrderReconImportDialog({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="text-xs font-semibold">{t("columnDetails")}</p>
-                        <p className="text-[10px] text-muted-foreground">{t("columnDetailsHint")}</p>
+                        <p className="text-xs text-muted-foreground">{t("columnDetailsHint")}</p>
                       </div>
                       <Button
                         type="button"
@@ -238,7 +238,7 @@ export function OrderReconImportDialog({
                                 {col.required ? t("requiredYes") : t("requiredNo")}
                               </TableCell>
                               <TableCell className="text-xs">{col.example}</TableCell>
-                              <TableCell className="text-[10px] text-muted-foreground">
+                              <TableCell className="text-xs text-muted-foreground">
                                 {col.notes}
                               </TableCell>
                             </TableRow>
@@ -286,7 +286,7 @@ export function OrderReconImportDialog({
                                   ? t("reasonUnknownId")
                                   : t("reasonUnknownStore")}
                               </span>
-                              <span className="ms-auto text-[10px] text-muted-foreground">
+                              <span className="ms-auto text-xs text-muted-foreground">
                                 {t("issueDays", { count: issue.days })}
                                 {issue.days > 1
                                   ? ` · ${t("issueRange", {
@@ -464,7 +464,7 @@ function LogTable({
                 <TableCell className="text-xs">
                   {row.employee_name || row.employee_id || "—"}
                   {row.employee_id ? (
-                    <div className="text-[10px] text-muted-foreground">{row.employee_id}</div>
+                    <div className="text-xs text-muted-foreground">{row.employee_id}</div>
                   ) : null}
                 </TableCell>
                 <TableCell className="text-xs">{row.restaurant_name || "—"}</TableCell>

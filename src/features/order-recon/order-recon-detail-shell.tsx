@@ -128,7 +128,7 @@ export function OrderReconDetailShell({ runId }: { runId: string }) {
       </div>
 
       {bucket === "blank" ? (
-        <p className="text-[10px] text-muted-foreground">{t("blankHint")}</p>
+        <p className="text-xs text-muted-foreground">{t("blankHint")}</p>
       ) : null}
 
       <AppListCard
@@ -162,7 +162,7 @@ export function OrderReconDetailShell({ runId }: { runId: string }) {
                     {employeeLabel(row.employee_name, row.employee_id) || "—"}
                   </div>
                   {row.employee_name.trim() && row.employee_id.trim() ? (
-                    <div className="text-[10px] text-muted-foreground">{row.employee_id}</div>
+                    <div className="text-xs text-muted-foreground">{row.employee_id}</div>
                   ) : null}
                   <div className="mt-1">
                     <ReconProgressBar pct={row.pct} />

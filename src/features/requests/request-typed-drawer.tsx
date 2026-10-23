@@ -95,7 +95,7 @@ export function RequestTypedDrawer({
               <div className="space-y-1.5 border-t border-border pt-2.5">
                 {subjectRow ? (
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {t("detail.subject")}
                     </p>
                     <p className="text-sm font-semibold">{subjectRow.value}</p>
@@ -103,7 +103,7 @@ export function RequestTypedDrawer({
                 ) : null}
                 {message ? (
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {t("detail.message")}
                     </p>
                     <p className="text-sm text-foreground/90 whitespace-pre-wrap">{message}</p>
@@ -113,11 +113,11 @@ export function RequestTypedDrawer({
             ) : null}
 
             <div className="space-y-1.5 border-t border-border pt-2.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("detail.attachments")}
               </p>
               {attachments.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground">{t("detail.noAttachments")}</p>
+                <p className="text-xs text-muted-foreground">{t("detail.noAttachments")}</p>
               ) : (
                 <div className="grid grid-cols-2 gap-1.5">
                   {attachments.map((a) => (
@@ -129,11 +129,11 @@ export function RequestTypedDrawer({
                     >
                       <Download className="h-3.5 w-3.5 shrink-0 text-primary" />
                       <div className="min-w-0">
-                        <p className="truncate text-[11px] font-medium">
+                        <p className="truncate text-xs font-medium">
                           {attachmentDisplayName(a.file_name, a.storage_key)}
                         </p>
                         {a.byte_size != null ? (
-                          <p className="text-[10px] text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             {formatFileSize(a.byte_size)}
                           </p>
                         ) : null}
@@ -146,7 +146,7 @@ export function RequestTypedDrawer({
 
             {detailRows.length > 0 ? (
               <div className="border-t border-border pt-2.5">
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("detail.fields")}
                 </p>
                 <div className="divide-y divide-border rounded-lg border border-border">
@@ -157,7 +157,7 @@ export function RequestTypedDrawer({
                       muted={row.value === "—" && !row.gatedKey}
                     >
                       {row.gatedKey ? (
-                        <span className="text-[11px] font-normal text-warning">
+                        <span className="text-xs font-normal text-warning">
                           {t(`detail.${row.gatedKey}` as "detail.categoryGated")}
                         </span>
                       ) : (
@@ -171,7 +171,7 @@ export function RequestTypedDrawer({
 
             {steps.length > 0 ? (
               <div className="border-t border-border pt-2.5">
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("detail.approval")}
                 </p>
                 <RequestApprovalTimeline steps={steps} />

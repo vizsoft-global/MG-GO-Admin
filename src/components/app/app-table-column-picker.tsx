@@ -74,7 +74,7 @@ export function AppTableColumnPicker({
               <Columns3 className="h-4 w-4" />
               <span className="hidden 2xl:inline">{t("columns")}</span>
               {hiddenCount > 0 ? (
-                <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+                <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
                   {hiddenCount}
                 </span>
               ) : null}

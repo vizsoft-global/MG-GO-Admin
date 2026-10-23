@@ -69,7 +69,7 @@ export function RestaurantLocationPicker({
         </Button>
       ) : null}
 
-      <p className="pointer-events-none absolute start-3 bottom-3 z-10 max-w-[min(280px,70%)] rounded-md bg-background/90 px-2 py-1 text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm">
+      <p className="pointer-events-none absolute start-3 bottom-3 z-10 max-w-[min(280px,70%)] rounded-md bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm backdrop-blur-sm">
         {t("hints.pickLocation")}
       </p>
     </div>

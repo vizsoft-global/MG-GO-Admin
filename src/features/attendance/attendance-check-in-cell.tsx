@@ -83,12 +83,12 @@ export function AttendanceCheckInCell({
         <span className="text-muted-foreground">—</span>
       )}
       <span className="min-w-0">
-        <span className="block max-w-[9rem] truncate text-[11px] leading-tight">
+        <span className="block max-w-[9rem] truncate text-xs leading-tight">
           {restaurantName ?? (photoKey ? t("checkInPhoto.noRestaurant") : "—")}
         </span>
         {distanceLabel ? (
           <span
-            className={`mt-0.5 inline-flex rounded px-1 py-0.5 text-[10px] font-medium tabular-nums ${
+            className={`mt-0.5 inline-flex rounded px-1 py-0.5 text-xs font-medium tabular-nums ${
               distanceM !== null && distanceM <= 50
                 ? "bg-emerald-50 text-emerald-700"
                 : "bg-amber-50 text-amber-800"
@@ -98,7 +98,7 @@ export function AttendanceCheckInCell({
           </span>
         ) : null}
         {failed ? (
-          <span className="block text-[10px] text-muted-foreground">
+          <span className="block text-xs text-muted-foreground">
             {t("checkInPhoto.unavailable")}
           </span>
         ) : null}

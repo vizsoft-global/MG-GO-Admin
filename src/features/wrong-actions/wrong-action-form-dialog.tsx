@@ -166,7 +166,7 @@ export function WrongActionFormDialog({
                 className="h-9"
                 required
               />
-              <p className="text-[10px] text-muted-foreground">{t("occurredHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("occurredHint")}</p>
             </div>
           </div>
 
@@ -206,7 +206,7 @@ export function WrongActionFormDialog({
                 </ToggleChip>
               ))}
             </div>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("severityWeightHint", { weight: WRONG_ACTION_SEVERITY_WEIGHT[severity] })}
             </p>
           </div>

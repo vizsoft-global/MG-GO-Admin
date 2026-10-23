@@ -7,6 +7,7 @@ import {
   type Transaction,
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
+import { bumpOperationsDashboards } from "../router/read-snapshot";
 import { stampStoredRow } from "../core/search-text";
 import { bumpRiderSignal } from "../core/rider-signals";
 import { requireStaff, type StaffContext } from "../core/staff";
@@ -192,13 +193,16 @@ async function runOutcome(
   requestId?: string,
 ): Promise<Dict> {
   const outcome = await getFirestore().runTransaction(work);
-  if (outcome.notify) {
-    await notifyDriverTransactional(outcome.notify);
-  } else if (requestId && outcome.result.ok === true) {
+  if (outcome.result.ok === true && requestId) {
     const snap = await getFirestore().collection(COLLECTIONS.requests).doc(requestId).get();
-    const driverId = textOrNull(snap.get("driver_id"));
-    if (driverId) await bumpRiderSignal(driverId, ["requests"], "request:step");
+    const requestType = textOrNull(snap.get("request_type"));
+    if (requestType === "leave" || requestType === "sick_leave") await bumpOperationsDashboards();
+    if (!outcome.notify) {
+      const driverId = textOrNull(snap.get("driver_id"));
+      if (driverId) await bumpRiderSignal(driverId, ["requests"], "request:step");
+    }
   }
+  if (outcome.notify) await notifyDriverTransactional(outcome.notify);
   return outcome.result;
 }
 

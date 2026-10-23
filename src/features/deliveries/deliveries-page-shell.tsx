@@ -710,7 +710,7 @@ function DeliveriesPageContent() {
         <KpiGrid items={kpis} />
         {kpiError ? (
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[10px] text-muted-foreground">{t("kpiErrorHint")}</p>
+            <p className="text-xs text-muted-foreground">{t("kpiErrorHint")}</p>
             <Button
               type="button"
               variant="outline"
@@ -1031,7 +1031,7 @@ function DeliveriesPageContent() {
                           className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
                         >
                           {group.label}
-                          <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                          <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
                             {group.rows.length}
                           </span>
                         </TableCell>
@@ -1082,7 +1082,7 @@ function DeliveriesPageContent() {
                           {delivery.driver_name}
                           {delivery.gps_is_mocked ? (
                             <span
-                              className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold text-destructive"
+                              className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive"
                               title={t("mockGpsTooltip")}
                             >
                               {t("mockGpsBadge")}
@@ -1124,7 +1124,7 @@ function DeliveriesPageContent() {
                           </StatusPill>
                           {delivery.is_early_drop === true ? (
                             <span
-                              className="rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[10px] font-medium text-amber-800"
+                              className="rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-xs font-medium text-amber-800"
                               title={
                                 delivery.pickup_delivery_distance_m !== null
                                   ? `${Math.round(delivery.pickup_delivery_distance_m)} m`
@@ -1136,7 +1136,7 @@ function DeliveriesPageContent() {
                           ) : null}
                           {delivery.is_out_of_zone === true ? (
                             <span
-                              className="rounded border border-rose-200 bg-rose-50 px-1 py-0.5 text-[10px] font-medium text-rose-700"
+                              className="rounded border border-rose-200 bg-rose-50 px-1 py-0.5 text-xs font-medium text-rose-700"
                               title={
                                 delivery.zone_distance_m !== null
                                   ? `${Math.round(delivery.zone_distance_m)} m`
@@ -1148,7 +1148,7 @@ function DeliveriesPageContent() {
                           ) : null}
                           {delivery.order_proof_ocr_matched === false ? (
                             <span
-                              className="rounded border border-purple-200 bg-purple-50 px-1 py-0.5 text-[10px] font-medium text-purple-700"
+                              className="rounded border border-purple-200 bg-purple-50 px-1 py-0.5 text-xs font-medium text-purple-700"
                               title={delivery.order_proof_ocr_order_id ?? undefined}
                             >
                               {t("flagPhotoMismatch")}
@@ -1277,7 +1277,7 @@ function DeliveriesPageContent() {
               onChange={(e) => setRejectReason(e.target.value)}
               placeholder={t("bulk.reasonPlaceholder")}
             />
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("bulk.reasonHint", { count: `${verifiableSelected.length}` })}
             </p>
           </div>

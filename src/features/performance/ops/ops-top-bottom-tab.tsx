@@ -131,9 +131,9 @@ export function OpsTopBottomTab({
       {showRiderSection ? (
         <section className={cn("flex flex-col", LAYOUT.stackGap)}>
           {auto ? (
-            <p className="text-[11px] text-muted-foreground">{t("topBottomHint", { n: requestedRiders })}</p>
+            <p className="text-xs text-muted-foreground">{t("topBottomHint", { n: requestedRiders })}</p>
           ) : active.length < requestedRiders ? (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("topBottomFewerRiders", { count: active.length })}
             </p>
           ) : null}
@@ -187,9 +187,9 @@ export function OpsTopBottomTab({
       {showStoreSection ? (
         <section className={cn("flex flex-col", LAYOUT.stackGap)}>
           {auto ? (
-            <p className="text-[11px] text-muted-foreground">{t("topBottomStoresHint", { n: requestedStores })}</p>
+            <p className="text-xs text-muted-foreground">{t("topBottomStoresHint", { n: requestedStores })}</p>
           ) : stores.length < requestedStores ? (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("topBottomFewerStores", { count: stores.length })}
             </p>
           ) : null}
@@ -242,9 +242,9 @@ export function OpsTopBottomTab({
 
       <section className={cn("flex flex-col", LAYOUT.stackGap)}>
         {showZoneSection && auto ? (
-          <p className="text-[11px] text-muted-foreground">{t("topBottomZonesHint", { n: requestedZones })}</p>
+          <p className="text-xs text-muted-foreground">{t("topBottomZonesHint", { n: requestedZones })}</p>
         ) : showZoneSection && zones.length < requestedZones ? (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t("topBottomFewerZones", { count: zones.length })}
           </p>
         ) : null}
@@ -299,7 +299,7 @@ export function OpsTopBottomTab({
           </OpsChartCard>
         )}
       </section>
-      <p className="text-[10px] text-muted-foreground">{t("topBottomTooltip")}</p>
+      <p className="text-xs text-muted-foreground">{t("topBottomTooltip")}</p>
     </div>
   );
 }

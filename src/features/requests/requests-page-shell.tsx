@@ -923,7 +923,7 @@ export function RequestsPageShell({
                     <Avatar className="h-7 w-7 shrink-0 border border-border">
                       <AvatarFallback
                         className={cn(
-                          "bg-transparent text-[10px] font-semibold",
+                          "bg-transparent text-xs font-semibold",
                           avatarTintFromName(row.driver_name),
                         )}
                       >
@@ -936,10 +936,10 @@ export function RequestsPageShell({
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="truncate text-[13px] font-medium leading-tight">
+                      <p className="truncate text-sm font-medium leading-tight">
                         {row.is_confidential ? t("confidential") : row.driver_name}
                       </p>
-                      <p className="text-[11px] leading-tight text-muted-foreground tabular-nums">
+                      <p className="text-xs leading-tight text-muted-foreground tabular-nums">
                         {row.is_confidential ? "—" : row.driver_code || "—"}
                       </p>
                     </div>
@@ -958,7 +958,7 @@ export function RequestsPageShell({
                 </TableCell>
                 <TableCell>
                   {row.department_label ? (
-                    <span className="inline-flex items-center rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                    <span className="inline-flex items-center rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                       {row.department_label}
                     </span>
                   ) : (
@@ -1066,7 +1066,7 @@ export function RequestsPageShell({
               onChange={(e) => setRejectReason(e.target.value)}
               placeholder={t("bulk.reasonPlaceholder")}
             />
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("bulk.reasonHint", { count: `${selectedRows.length}` })}
             </p>
           </div>

@@ -42,7 +42,7 @@ export function ArchiveLoadPrompt({
         <DialogContent className="w-[min(560px,96vw)] overflow-visible pt-4" showCloseButton closeOutside>
           <div className="space-y-3 px-5 py-4 text-sm text-muted-foreground">
             <p>{t("body", { day })}</p>
-            <p className="text-[11px]">{t("feeNote")}</p>
+            <p className="text-xs">{t("feeNote")}</p>
           </div>
           <AppModalFooter title={t("title")} subtitle={t("subtitle", { day })}>
             <Button type="button" variant="outline" className="h-9" onClick={() => setOpen(false)}>

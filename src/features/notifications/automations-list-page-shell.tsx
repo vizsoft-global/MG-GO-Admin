@@ -37,7 +37,7 @@ export function AutomationsListPageShell() {
         title={t("navAutomations")}
         description={t("automationsSubtitle")}
         breadcrumbs={[
-          { label: t("title"), href: `/${locale}/notifications` },
+          { label: t("title"), href: "/notifications" },
           { label: t("navAutomations") },
         ]}
         actions={

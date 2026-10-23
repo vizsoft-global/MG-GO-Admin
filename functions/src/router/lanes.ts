@@ -35,7 +35,10 @@ import { allLegacyNames, moduleForFunction } from "./legacy-modules";
 
 export const FUNCTIONS_REGION = "me-central1";
 
-/** Phase 5 sets this to 0. Until then the scan lane stays warm. */
+/**
+ * Stays 0 until router logs show isolate boot, not the scan, is the p95.
+ * A warm instance does not make a collection scan cheaper. Decision 2026-10-23.
+ */
 export const SCAN_MIN_INSTANCES = 0;
 
 export const LANE_EXPORT_NAMES = ["adminApi", "adminApiScan", "adminApiHeavy"] as const;
@@ -74,6 +77,13 @@ export const SCHEDULED_FUNCTIONS = ["bitesMirrorSweep", "homeSnapshotRepair"] as
 
 export const SCAN_FUNCTIONS = [
   "adminPerformanceOpsSnapshot",
+  /**
+   * Order Comparison joins `order_recon_rows` with `deliveries`, `drivers`,
+   * `profiles` and `restaurants` for a month window. On the light lane that
+   * scan blew past the 60s client abort and the compare page reported "RPC not
+   * live"; the scan lane's 120s budget is what the read actually needs.
+   */
+  "adminOrderComparisonSnapshot",
   "adminDeliveriesStatusCounts",
   "adminDeliveriesCountsByFilters",
   "adminListDriversPage",
@@ -81,10 +91,14 @@ export const SCAN_FUNCTIONS = [
   "adminLiveFleetSnapshot",
   "adminPayrollRuleSnapshot",
   "adminPayrollMonthSnapshot",
+  "adminHrPayrollSnapshot",
   "adminListAttendanceDaily",
   "adminAttendanceKpis",
   "adminIncentiveDailyReport",
   "adminEmployeesDashboard",
+  /** Roster-wide status, leave and job-end scans. Leave list/upsert stay on the light lane. */
+  "adminOperationsDashboard",
+  "adminClientPortalDashboard",
   /**
    * Month-to-date level for the fleet: one attendance window, one rollup
    * window, and the roster joined in. The single-rider call from a detail page

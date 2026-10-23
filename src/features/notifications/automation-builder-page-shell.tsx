@@ -285,8 +285,8 @@ export function AutomationBuilderPageShell({ automationId }: { automationId?: st
         title={isEdit ? t("automationEditTitle") : t("automationCreateTitle")}
         description={t("automationBuilderSubtitle")}
         breadcrumbs={[
-          { label: t("title"), href: `/${locale}/notifications` },
-          { label: t("navAutomations"), href: `/${locale}/notifications/automations` },
+          { label: t("title"), href: "/notifications" },
+          { label: t("navAutomations"), href: "/notifications/automations" },
           { label: isEdit ? name || t("automationEditTitle") : t("automationCreateTitle") },
         ]}
         actions={

@@ -14,11 +14,13 @@ export function TabBar({
   items,
   activeId,
   className,
+  markerClassName,
   onSelect,
 }: {
   items: TabItem[];
   activeId: string;
   className?: string;
+  markerClassName?: string;
   onSelect?: (id: string) => void;
 }) {
   return (
@@ -35,9 +37,16 @@ export function TabBar({
             aria-selected={isActive}
             aria-controls={`tabpanel-${item.id}`}
             className={cn(
-              "h-auto cursor-pointer rounded-none border-b-2 px-0 pb-3 text-sm font-semibold hover:bg-transparent",
+              markerClassName
+                ? "h-auto min-h-11 cursor-pointer rounded-none border-b-[3px] px-3 pb-2.5 pt-2.5 text-sm font-semibold hover:bg-transparent"
+                : "h-auto cursor-pointer rounded-none border-b-2 px-0 pb-3 text-sm font-semibold hover:bg-transparent",
               isActive
-                ? "border-primary text-foreground"
+                ? cn(
+                    markerClassName
+                      ? "text-foreground"
+                      : "border-primary text-foreground",
+                    markerClassName,
+                  )
                 : "border-transparent text-muted-foreground hover:text-foreground",
             )}
             onClick={() => onSelect?.(item.id)}

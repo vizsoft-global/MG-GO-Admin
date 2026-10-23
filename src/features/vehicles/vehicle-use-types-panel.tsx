@@ -189,7 +189,7 @@ export function VehicleUseTypesPanel({ types }: { types: VehicleUseTypeWithUsage
                     onChange={(event) => setDraft({ ...draft, labelEn: event.target.value })}
                   />
                   {draft.isNew && draftKey ? (
-                    <p className="text-[10px] text-muted-foreground">{t("keyHint", { key: draftKey })}</p>
+                    <p className="text-xs text-muted-foreground">{t("keyHint", { key: draftKey })}</p>
                   ) : null}
                 </div>
                 <div className="space-y-1.5">
@@ -220,12 +220,12 @@ export function VehicleUseTypesPanel({ types }: { types: VehicleUseTypeWithUsage
                     </SegmentOption>
                   </div>
                   {!draft.isNew && draft.vehicleCount > 0 ? (
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {t("inUseHint", { count: draft.vehicleCount })}
                     </p>
                   ) : null}
                   {draft.isSystem ? (
-                    <p className="text-[10px] text-muted-foreground">{t("systemHint")}</p>
+                    <p className="text-xs text-muted-foreground">{t("systemHint")}</p>
                   ) : null}
                 </div>
               </div>

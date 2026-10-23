@@ -1,9 +1,17 @@
 import "../core/init";
 import { createRequire } from "node:module";
 import { monitorEventLoopDelay } from "node:perf_hooks";
-import { HttpsError, onCall, type CallableOptions } from "firebase-functions/v2/https";
+import { HttpsError, onCall, type CallableOptions, type CallableRequest } from "firebase-functions/v2/https";
+import { runWithCallableName } from "../core/callable-name";
+import { requireStaff } from "../core/staff";
 import { routerRequirePath } from "./legacy-modules";
 import { callableOptionsForLane, laneOf, type LaneId } from "./lanes";
+import {
+  readThroughScanSnapshot,
+  scanSnapshotEnabled,
+  snapshotScope,
+  type ScanSnapshotOutcome,
+} from "./read-snapshot";
 
 const requireFromRouter = createRequire(__filename);
 
@@ -47,11 +55,19 @@ function toHttps(err: unknown): HttpsError {
   return new HttpsError("internal", "INTERNAL");
 }
 
-function writeRouterLog(lane: LaneId, fn: string | null, inFlight: number): void {
+function writeRouterLog(
+  lane: LaneId,
+  fn: string | null,
+  inFlight: number,
+  ms: number,
+  snapshot: ScanSnapshotOutcome,
+): void {
   const line = {
     perf: "router",
     lane,
     fn,
+    ms,
+    snapshot,
     eventLoopDelayP99Ms: Math.round(eventLoopDelay.percentile(99) / 1e6),
     heapUsed: process.memoryUsage().heapUsed,
     inflight: inFlight,
@@ -103,14 +119,30 @@ export async function dispatchAdminLane(
 ): Promise<unknown> {
   inflight += 1;
   const fn = readFn(request);
+  const started = Date.now();
+  let snapshot: ScanSnapshotOutcome = "off";
   try {
     try {
-      return await runLane(lane, request, fn, load);
+      if (!fn) return await runLane(lane, request, fn, load);
+      return await runWithCallableName(fn, async () => {
+        if (lane !== "scan" || !scanSnapshotEnabled()) {
+          return runLane(lane, request, fn, load);
+        }
+        const staff = await requireStaff(request as CallableRequest<unknown>);
+        const outcome = await readThroughScanSnapshot({
+          fn,
+          scope: snapshotScope(staff),
+          args: unwrapArgs(request),
+          load: () => runLane(lane, request, fn, load),
+        });
+        snapshot = outcome.snapshot;
+        return outcome.value;
+      });
     } catch (err) {
       throw toHttps(err);
     }
   } finally {
-    writeRouterLog(lane, fn, inflight);
+    writeRouterLog(lane, fn, inflight, Date.now() - started, snapshot);
     inflight -= 1;
   }
 }

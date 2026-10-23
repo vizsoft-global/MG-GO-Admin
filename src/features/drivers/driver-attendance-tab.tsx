@@ -204,7 +204,7 @@ export function DriverAttendanceTab({ driverId }: { driverId: string }) {
               <div
                 key={row.attendance_date}
                 title={tipParts.join(" · ")}
-                className={`rounded px-1 py-2 text-center text-[10px] ${
+                className={`rounded px-1 py-2 text-center text-xs ${
                   row.status === "present"
                     ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40"
                     : row.status === "online_unvalidated"

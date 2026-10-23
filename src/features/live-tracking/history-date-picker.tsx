@@ -135,7 +135,7 @@ export function HistoryDatePicker({
 
         <div className="grid grid-cols-7 gap-1 text-center">
           {WEEKDAY_LABELS.map((label) => (
-            <span key={label} className="py-1 text-[10px] font-medium uppercase text-muted-foreground">
+            <span key={label} className="py-1 text-xs font-medium uppercase text-muted-foreground">
               {label}
             </span>
           ))}
@@ -185,7 +185,7 @@ export function HistoryDatePicker({
           >
             {t("historyToday")}
           </button>
-          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             <span className="inline-block size-3 rounded border border-emerald-400/70 bg-emerald-50" />
             {t("historyDateHasData")}
           </span>

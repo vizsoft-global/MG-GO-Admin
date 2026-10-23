@@ -85,7 +85,7 @@ export function RestrictionReasonSelect({
           className="min-h-[72px] resize-none"
         />
       ) : null}
-      <p className="text-[10px] text-muted-foreground">{t("reasonHint")}</p>
+      <p className="text-xs text-muted-foreground">{t("reasonHint")}</p>
     </div>
   );
 }

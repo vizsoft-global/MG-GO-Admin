@@ -28,11 +28,16 @@ export function PayrollTab({
   kpis,
   riders,
   canExport,
+  canManage = false,
+  today,
 }: {
   month: PayrollPeriod;
   kpis: PayrollKpis;
   riders: readonly PayrollRiderRow[];
   canExport: boolean;
+  canManage?: boolean;
+  /** Kuwait date the page calls today; drives the Rider Status column. */
+  today: string;
 }) {
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
@@ -74,7 +79,7 @@ export function PayrollTab({
 
   return (
     <div className="space-y-2">
-      <div className="rounded-xl border border-border bg-card px-4 py-3 text-[12px] leading-5 shadow-sm">
+      <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-5 shadow-sm">
         <b>{t("payrollBannerTitle")}</b>{" "}
         {t("payrollBannerBody", { days: month.days, fixed: month.fixedDays })}
       </div>
@@ -137,9 +142,13 @@ export function PayrollTab({
             empty={t("emptyRiders")}
             rangeLabel={month.label}
             visibleColumnIds={visibleColumnIds}
+            today={today}
+            canManage={canManage}
             exportLabel={canExport ? t("downloadTable") : undefined}
             onExport={
-              canExport ? (visible) => exportPayrollViewCsv(month.key, month.dates, visible) : undefined
+              canExport
+                ? (visible) => exportPayrollViewCsv(month.key, month.dates, visible, { today })
+                : undefined
             }
           />
         )}

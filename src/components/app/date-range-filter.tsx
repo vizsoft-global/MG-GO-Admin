@@ -320,7 +320,7 @@ export function DateRangeFilter({
           </div>
           {showCustom ? (
             <div className="flex flex-col border-s border-border">
-              <p className="px-3 pt-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="px-3 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("pickStartEnd")}
               </p>
               <Calendar
@@ -332,7 +332,7 @@ export function DateRangeFilter({
               />
               <div className="grid grid-cols-2 gap-2 border-t border-border px-3 py-2">
                 <div className="space-y-1">
-                  <Label htmlFor="date-range-start-time" className="text-[10px] text-muted-foreground">
+                  <Label htmlFor="date-range-start-time" className="text-xs text-muted-foreground">
                     {t("startTime")}
                   </Label>
                   <Input
@@ -344,7 +344,7 @@ export function DateRangeFilter({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="date-range-end-time" className="text-[10px] text-muted-foreground">
+                  <Label htmlFor="date-range-end-time" className="text-xs text-muted-foreground">
                     {t("endTime")}
                   </Label>
                   <Input

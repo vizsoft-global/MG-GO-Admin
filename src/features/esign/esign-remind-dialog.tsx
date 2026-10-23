@@ -199,7 +199,7 @@ export function EsignRemindDialog({
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-medium">{row.label ?? row.request_code}</p>
                       {info && info.reminderCount > 0 ? (
-                        <p className="truncate text-[10px] text-muted-foreground">
+                        <p className="truncate text-xs text-muted-foreground">
                           {t("cooldownHint", {
                             count: info.reminderCount,
                             hours: state?.cooldownHours ?? 0,
@@ -207,15 +207,15 @@ export function EsignRemindDialog({
                         </p>
                       ) : null}
                     </div>
-                    <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
+                    <span className="shrink-0 text-xs font-medium text-muted-foreground">
                       {panelStageLabel(stage, t)}
                     </span>
                     {info && info.reminderCount > 0 ? (
                       <span
                         className={
                           blocked
-                            ? "shrink-0 rounded-md border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
-                            : "shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
+                            ? "shrink-0 rounded-md border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800"
+                            : "shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-xs font-semibold text-emerald-700"
                         }
                       >
                         {blocked ? `${info.hoursLeft}h` : `${info.reminderCount}×`}
@@ -228,7 +228,7 @@ export function EsignRemindDialog({
           )}
 
           <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("sendChannels")}
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -245,7 +245,7 @@ export function EsignRemindDialog({
           </div>
 
           <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("messagePreview")}
             </p>
             <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-sm">

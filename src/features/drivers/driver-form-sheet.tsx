@@ -171,7 +171,6 @@ export function DriverFormSheet({
   const [nationalityCategoryKeys, setNationalityCategoryKeys] = useState<string[]>([]);
   const [bankDetails, setBankDetails] = useState<DriverBankDetails>(EMPTY_BANK_DETAILS);
   const [employeeId, setEmployeeId] = useState("");
-  const [nationality, setNationality] = useState("");
   const [riderCategory, setRiderCategory] = useState<DriverRiderCategory>("in_house");
   const [sourceCompany, setSourceCompany] = useState("");
   const [projectKey, setProjectKey] = useState<DriverProjectKey | "">("");
@@ -227,7 +226,6 @@ export function DriverFormSheet({
       setNationalityCategoryKeys(activeDriver.nationality_category_keys ?? []);
       setBankDetails(activeDriver.bank_details ?? EMPTY_BANK_DETAILS);
       setEmployeeId(activeDriver.employee_id ?? "");
-      setNationality(activeDriver.nationality ?? "");
       setRiderCategory(activeDriver.rider_category ?? "in_house");
       setSourceCompany(activeDriver.source_company ?? "");
       setProjectKey(isDriverProjectKey(activeDriver.project_key) ? activeDriver.project_key : "");
@@ -266,7 +264,6 @@ export function DriverFormSheet({
     setNationalityCategoryKeys([]);
     setBankDetails(EMPTY_BANK_DETAILS);
     setEmployeeId("");
-    setNationality("");
     setRiderCategory("in_house");
     setSourceCompany("");
     setProjectKey("");
@@ -334,7 +331,7 @@ export function DriverFormSheet({
       fullName,
       phone,
       civilId,
-      nationality,
+      nationalityCategoryKeys,
       riderCategory,
       sourceCompany,
       projectKey,
@@ -351,7 +348,7 @@ export function DriverFormSheet({
     [
       selectedCatalogIds,
       civilId,
-      nationality,
+      nationalityCategoryKeys,
       riderCategory,
       sourceCompany,
       projectKey,
@@ -382,7 +379,11 @@ export function DriverFormSheet({
       setFullName(parsed.fullName ?? "");
       setPhone(parsed.phone ?? "");
       setCivilId(parsed.civilId ?? "");
-      setNationality(parsed.nationality ?? "");
+      setNationalityCategoryKeys(
+        Array.isArray(parsed.nationalityCategoryKeys)
+          ? parsed.nationalityCategoryKeys.filter((item) => typeof item === "string")
+          : [],
+      );
       setRiderCategory(parsed.riderCategory === "outsourced" ? "outsourced" : "in_house");
       setSourceCompany(parsed.sourceCompany ?? "");
       setProjectKey(isDriverProjectKey(parsed.projectKey) ? parsed.projectKey : "");
@@ -470,6 +471,8 @@ export function DriverFormSheet({
       zoneId,
       restaurantIds,
       documents: isEdit ? EMPTY_DOCS : documents,
+      sectionKeys,
+      sections: sectionsQuery.data ?? [],
     });
     setShowErrors(true);
     setFieldErrors(validation);
@@ -545,7 +548,6 @@ export function DriverFormSheet({
         formData.append("paymentCurrency", bankDetails.currency);
       }
       formData.append("employeeId", employeeId);
-      formData.append("nationality", nationality);
       formData.append("riderCategory", riderCategory);
       formData.append("sourceCompany", sourceCompany);
       formData.append("projectKey", projectKey);
@@ -657,8 +659,6 @@ export function DriverFormSheet({
                 setEmployeeId(next);
                 clearFieldError("employeeId");
               }}
-              nationality={nationality}
-              onNationalityChange={setNationality}
               riderCategory={riderCategory}
               onRiderCategoryChange={setRiderCategory}
               sourceCompany={sourceCompany}
@@ -674,7 +674,6 @@ export function DriverFormSheet({
                 civilId: tNew("fields.civilId"),
                 passportNumber: tNew("fields.passportNumber"),
                 employeeId: tDrivers("employeeId"),
-                nationality: tNew("fields.nationality"),
                 riderCategory: tNew("fields.riderCategory"),
                 sourceCompany: tNew("fields.sourceCompany"),
                 project: tNew("fields.project"),
@@ -695,8 +694,6 @@ export function DriverFormSheet({
                 passportNumber: tNew("placeholders.passportNumber"),
                 employeeId: tDrivers("employeeIdPlaceholder"),
                 employeeIdHelp: tDrivers("employeeIdHelp"),
-                nationality: tNew("placeholders.nationality"),
-                searchNationality: tNew("placeholders.searchNationality"),
                 sourceCompany: tNew("placeholders.sourceCompany"),
                 searchSourceCompany: tNew("placeholders.searchSourceCompany"),
               }}
@@ -731,6 +728,7 @@ export function DriverFormSheet({
                 sections: tNew("fields.sections"),
                 nationalityCategories: tNew("fields.nationalityCategories"),
                 searchStatus: tNew("placeholders.searchStatus"),
+                searchNationality: tNew("placeholders.searchNationality"),
               }}
             />
 

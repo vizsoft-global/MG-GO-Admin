@@ -372,7 +372,7 @@ export function LiveTrackingDiagnosticsView({
                   </ToggleChip>
                 ))}
               </div>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {categories.length === 0 ? t("diagnosticsAllCategories") : null}
               </p>
             </div>
@@ -400,7 +400,7 @@ export function LiveTrackingDiagnosticsView({
                   {t("diagnosticsIncludeOps")}
                 </ToggleChip>
                 {!driverId ? (
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {t("diagnosticsIncludeOpsHint")}
                   </p>
                 ) : null}
@@ -452,7 +452,7 @@ export function LiveTrackingDiagnosticsView({
             <div className="flex min-w-0 items-center gap-2">
               <Stethoscope className="h-4 w-4 shrink-0 text-primary" />
               <h2 className="truncate text-sm font-semibold">{t("diagnosticsFeed")}</h2>
-              <Badge variant="secondary" className="text-[10px] tabular-nums">
+              <Badge variant="secondary" className="text-xs tabular-nums">
                 {merged.length}
               </Badge>
             </div>
@@ -563,12 +563,12 @@ function TelemetryRow({
 
   return (
     <div className="flex items-start gap-3 px-4 py-2">
-      <span className="w-[104px] shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground">
+      <span className="w-[104px] shrink-0 pt-0.5 text-xs tabular-nums text-muted-foreground">
         {formatEventTime(event.clientTs, locale)}
       </span>
       <span
         className={cn(
-          "shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+          "shrink-0 rounded-md border px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
           TONE_CHIP[tone],
         )}
       >
@@ -580,13 +580,13 @@ function TelemetryRow({
         <p className="truncate text-xs font-medium">
           {label}
           {event.severity === "error" ? (
-            <span className="ms-1.5 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+            <span className="ms-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">
               {t("diagnosticsErrorTag")}
             </span>
           ) : null}
           {event.contextStrippedKeys > 0 ? (
             <span
-              className="ms-1.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400"
+              className="ms-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400"
               title={t("diagnosticsStrippedHint")}
             >
               {t("diagnosticsStripped", { count: event.contextStrippedKeys })}
@@ -594,17 +594,17 @@ function TelemetryRow({
           ) : null}
         </p>
         {summary ? (
-          <p className="truncate text-[10px] text-muted-foreground">{summary}</p>
+          <p className="truncate text-xs text-muted-foreground">{summary}</p>
         ) : null}
       </div>
       <div className="w-[132px] shrink-0 text-end">
         {showDriver ? (
           <>
             <p className="truncate text-xs font-medium">{event.driverName}</p>
-            <p className="truncate text-[10px] text-muted-foreground">{event.driverCode}</p>
+            <p className="truncate text-xs text-muted-foreground">{event.driverCode}</p>
           </>
         ) : (
-          <p className="truncate text-[10px] text-muted-foreground">
+          <p className="truncate text-xs text-muted-foreground">
             {formatClockSkew(event.clockSkewMs)}
           </p>
         )}
@@ -627,22 +627,22 @@ function OperationOverlayRow({
 
   return (
     <div className="flex items-start gap-3 bg-primary/5 px-4 py-2">
-      <span className="w-[104px] shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground">
+      <span className="w-[104px] shrink-0 pt-0.5 text-xs tabular-nums text-muted-foreground">
         {formatEventTime(event.occurredAt, locale)}
       </span>
-      <span className="shrink-0 rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+      <span className="shrink-0 rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-primary">
         {t("diagnosticsOperationTag")}
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium">
           {label}
           {event.success ? null : (
-            <span className="ms-1.5 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+            <span className="ms-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">
               {event.errorCode ?? t("activityFailed")}
             </span>
           )}
         </p>
-        <p className="truncate text-[10px] text-muted-foreground">
+        <p className="truncate text-xs text-muted-foreground">
           {t.has(`activityCategories.${event.category}`)
             ? t(`activityCategories.${event.category}`)
             : humanizeCategory(event.category)}

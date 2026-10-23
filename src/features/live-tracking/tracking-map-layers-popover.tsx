@@ -108,7 +108,7 @@ export function TrackingMapLayersPopover({
                     )}
                     aria-hidden
                   />
-                  <span className="truncate text-center text-[11px] leading-tight">
+                  <span className="truncate text-center text-xs leading-tight">
                     {item.label}
                   </span>
                   {active ? (

@@ -26,25 +26,25 @@ export function PartnerHealthWidget({
       <p className="text-sm font-semibold text-foreground">{card.partnerName}</p>
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="rounded-lg bg-muted/30 px-2 py-1.5">
-          <p className="text-[10px] text-muted-foreground">{t("partnerAssigned")}</p>
+          <p className="text-xs text-muted-foreground">{t("partnerAssigned")}</p>
           <p className="text-sm font-semibold tabular-nums text-foreground">
             {card.assignedRiders}
           </p>
         </div>
         <div className="rounded-lg bg-muted/30 px-2 py-1.5">
-          <p className="text-[10px] text-muted-foreground">{t("partnerActiveToday")}</p>
+          <p className="text-xs text-muted-foreground">{t("partnerActiveToday")}</p>
           <p className="text-sm font-semibold tabular-nums text-foreground">
             {card.activeToday}
           </p>
         </div>
         <div className="rounded-lg bg-muted/30 px-2 py-1.5">
-          <p className="text-[10px] text-muted-foreground">{t("partnerMissingAttendance")}</p>
+          <p className="text-xs text-muted-foreground">{t("partnerMissingAttendance")}</p>
           <p className="text-sm font-semibold tabular-nums text-foreground">
             {card.missingAttendance}
           </p>
         </div>
         <div className="rounded-lg bg-muted/30 px-2 py-1.5">
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t("partnerPendingVerification")}
           </p>
           <p className="text-sm font-semibold tabular-nums text-foreground">
@@ -57,7 +57,7 @@ export function PartnerHealthWidget({
           {card.restaurants.slice(0, 3).map((r) => (
             <li
               key={`${card.partnerId}-${r.restaurantName}`}
-              className="flex items-center justify-between text-[11px] text-muted-foreground"
+              className="flex items-center justify-between text-xs text-muted-foreground"
             >
               <span>{r.restaurantName}</span>
               <span className="tabular-nums">

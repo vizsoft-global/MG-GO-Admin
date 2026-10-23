@@ -30,6 +30,7 @@ import {
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { cn } from "@/lib/utils";
+import { PayrollIdentityCell, payrollIdentityField, payrollIdentityValue } from "./payroll-identity-cell";
 import {
   countDaysByStatus,
   countedRiderDays,
@@ -65,6 +66,8 @@ import {
   type PayrollRiderColumn,
 } from "./payroll-rider-columns";
 import { cellsFromSelection, fillTargetCells, tilePasteOntoSelection, visibleFillTargets } from "./payroll-snapshot";
+import { PayrollStatusCell } from "./payroll-status-cell";
+import { usePayrollStatusFilterList } from "./payroll-status-context";
 import type { PayrollAdjustmentCell, PayrollRiderRow } from "./payroll-types";
 import { PayrollCellMenu, type PayrollCellMenuState } from "./payroll-cell-menu";
 import {
@@ -230,6 +233,7 @@ export function PayrollDayGrid({
   editor,
   headingConfig,
   headingManage = false,
+  today,
 }: {
   dates: readonly string[];
   rows: readonly PayrollRiderRow[];
@@ -240,6 +244,8 @@ export function PayrollDayGrid({
   editor?: PayrollGridEditor;
   headingConfig?: ReadonlyMap<string, PayrollColumnConfigRow>;
   headingManage?: boolean;
+  /** Kuwait date the page calls today; drives the Rider Status column. */
+  today?: string;
 }) {
   const t = useTranslations("pages.payroll");
   const parentRef = useRef<HTMLDivElement>(null);
@@ -252,6 +258,7 @@ export function PayrollDayGrid({
   const [menu, setMenu] = useState<PayrollCellMenuState | null>(null);
 
   const editable = Boolean(editor?.canManage);
+  const statusList = usePayrollStatusFilterList();
   const identity = useMemo(() => {
     if (!headingConfig) return COMBINED_IDENTITY_COLUMNS;
     return COMBINED_IDENTITY_COLUMNS.filter((column) => !columnHiddenIn(column.id, "combined", headingConfig));
@@ -263,14 +270,14 @@ export function PayrollDayGrid({
     const map = new Map<string, Record<string, string | number | null>>();
     for (const row of rows) {
       const values: Record<string, string | number | null> = {};
-      for (const column of identity) values[column.id] = riderColumnValue(row, column.id);
+      for (const column of identity) values[column.id] = riderColumnValue(row, column.id, today);
       for (let i = 0; i < days; i += 1) {
         values[dayColumnId(i)] = riderColumnValue(row, dayColumnId(i));
       }
       map.set(row.driverId, values);
     }
     return map;
-  }, [rows, days, identity]);
+  }, [rows, days, identity, today]);
 
   const visibleRows = useMemo(() => {
     const filtered = rows.filter((row) => {
@@ -278,8 +285,8 @@ export function PayrollDayGrid({
       if (!values) return true;
       return rowMatchesColumnFilters(values, filters);
     });
-    return sortByColumn(filtered, sort, (row, columnId) => riderColumnValue(row, columnId));
-  }, [rows, filters, sort, valuesByRow]);
+    return sortByColumn(filtered, sort, (row, columnId) => riderColumnValue(row, columnId, today));
+  }, [rows, filters, sort, valuesByRow, today]);
 
   const dayColumnValues = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -709,7 +716,7 @@ export function PayrollDayGrid({
         </div>
       ) : null}
       {editable && selectedMeta ? (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-3 py-2 text-[11px]">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-3 py-2 text-xs">
           <span className="font-semibold">
             {t("adjust.selectionBar", {
               cells: selectedMeta.count,
@@ -747,7 +754,7 @@ export function PayrollDayGrid({
           editable && "focus-visible:ring-2 focus-visible:ring-primary/40",
         )}
       >
-        <table className="w-max min-w-full border-collapse text-[12px]">
+        <table className="w-max min-w-full border-collapse text-xs">
           <colgroup>
             {Array.from({ length: colCount }, (_, i) => (
               <col key={i} className={i >= identityCount ? "min-w-[52px]" : undefined} />
@@ -779,7 +786,8 @@ export function PayrollDayGrid({
                     ) : undefined
                   }
                   columnId={column.id}
-                  values={rows.map((row) => String(riderColumnValue(row, column.id) ?? ""))}
+                  values={rows.map((row) => String(riderColumnValue(row, column.id, today) ?? ""))}
+                  fixedList={column.id === "status" ? statusList : undefined}
                   filter={filters[column.id]}
                   onChange={(next) => setFiltersFor(setFilters, column.id, next)}
                   sort={sort}
@@ -840,7 +848,7 @@ export function PayrollDayGrid({
                           )}
                           style={sticky?.style}
                         >
-                          {renderIdentityCell(row, column)}
+                          {renderIdentityCell(row, column, today, editable)}
                         </td>
                         );
                       })}
@@ -913,7 +921,7 @@ export function PayrollDayGrid({
                                 : undefined
                             }
                         className={cn(
-                              "relative min-w-[52px] px-1 py-1.5 text-center text-[11px] font-semibold select-none",
+                              "relative min-w-[52px] px-1 py-1.5 text-center text-xs font-semibold select-none",
                               dayClass(st),
                               selected && "ring-2 ring-inset ring-primary/60",
                               isFillTarget(item.index, columnIndex) && "outline-dashed outline-1 outline-emerald-500",
@@ -978,12 +986,12 @@ export function PayrollDayGrid({
           </tbody>
         </table>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
         <span>{footer}</span>
         <button
           type="button"
           onClick={() => onExport(visibleRows)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted/50"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted/50"
         >
           <Download className="size-3.5" />
           {exportLabel}
@@ -1052,25 +1060,46 @@ function setFiltersFor(
   });
 }
 
-function renderIdentityCell(row: PayrollRiderRow, column: PayrollRiderColumn) {
+function renderIdentityCell(
+  row: PayrollRiderRow,
+  column: PayrollRiderColumn,
+  today?: string,
+  canEdit = false,
+) {
   if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
-  const value = riderColumnValue(row, column.id);
+  if (column.id === "status") return <PayrollStatusCell row={row} today={today} canEdit={canEdit} />;
+  const field = payrollIdentityField(column.id);
+  if (field) {
+    return (
+      <PayrollIdentityCell
+        driverId={row.driverId}
+        field={field}
+        value={payrollIdentityValue(row, field)}
+        canEdit={canEdit}
+      />
+    );
+  }
+  const value = riderColumnValue(row, column.id, today);
   return value == null || value === "" ? "—" : String(value);
 }
 
-function renderSummaryCell(row: PayrollRiderRow, column: PayrollRiderColumn) {
+function renderSummaryCell(
+  row: PayrollRiderRow,
+  column: PayrollRiderColumn,
+  today?: string,
+  canEdit = false,
+) {
   if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
-  if (column.id === "status") {
-    const active = row.status === "Active";
+  if (column.id === "status") return <PayrollStatusCell row={row} today={today} canEdit={canEdit} />;
+  const field = payrollIdentityField(column.id);
+  if (field) {
     return (
-      <span
-        className={cn(
-          "inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
-          active ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700",
-        )}
-      >
-        {row.status}
-      </span>
+      <PayrollIdentityCell
+        driverId={row.driverId}
+        field={field}
+        value={payrollIdentityValue(row, field)}
+        canEdit={canEdit}
+      />
     );
   }
   if (column.id === "efficiency" || column.id === "zoneEff") {
@@ -1091,14 +1120,14 @@ function renderSummaryCell(row: PayrollRiderRow, column: PayrollRiderColumn) {
   }
   if (column.id === "reduced3") {
     return row.reducedDays > 0 ? (
-      <span className="inline-flex rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
+      <span className="inline-flex rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-bold text-amber-900">
         {row.reducedDays}
       </span>
     ) : (
       0
     );
   }
-  const value = riderColumnValue(row, column.id);
+  const value = riderColumnValue(row, column.id, today);
   if (value == null || value === "") return <span className="text-muted-foreground/50">—</span>;
   if (typeof value === "number" && (column.id === "requiredHours" || column.id === "actualHours" || column.id === "zoneDpd")) {
     return value.toFixed(column.id === "actualHours" ? 2 : 1);
@@ -1112,7 +1141,7 @@ export function ZoneCategoryPill({ category }: { category: string }) {
     return <span className="text-muted-foreground/60">{t("not_set")}</span>;
   }
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium">
       <span className="size-2.5 rounded-sm" style={{ background: categoryHex(category) }} />
       {t(category)}
     </span>
@@ -1132,6 +1161,8 @@ export function PayrollSummaryTable({
   onExport,
   rangeLabel,
   visibleColumnIds,
+  today,
+  canManage = false,
 }: {
   rows: readonly PayrollRiderRow[];
   empty: string;
@@ -1140,8 +1171,12 @@ export function PayrollSummaryTable({
   rangeLabel?: string;
   /** Ordered column ids from the picker. Locked identity columns always render first. */
   visibleColumnIds?: readonly string[];
+  /** Kuwait date the page calls today; drives the Rider Status column. */
+  today?: string;
+  canManage?: boolean;
 }) {
   const t = useTranslations("pages.payroll");
+  const statusList = usePayrollStatusFilterList();
   const [filters, setFilters] = useState<ColumnFilters>({});
   const [sort, setSort] = useState<ColumnSort>(null);
   const columns = useMemo(() => {
@@ -1160,11 +1195,11 @@ export function PayrollSummaryTable({
   const visibleRows = useMemo(() => {
     const filtered = rows.filter((row) => {
       const values: Record<string, string | number | null> = {};
-      for (const column of columns) values[column.id] = riderColumnValue(row, column.id);
+      for (const column of columns) values[column.id] = riderColumnValue(row, column.id, today);
       return rowMatchesColumnFilters(values, filters);
     });
-    return sortByColumn(filtered, sort, (row, columnId) => riderColumnValue(row, columnId));
-  }, [rows, filters, sort, columns]);
+    return sortByColumn(filtered, sort, (row, columnId) => riderColumnValue(row, columnId, today));
+  }, [rows, filters, sort, columns, today]);
 
   const labelOf = (columnId: string) => {
     const known = columns.find((c) => c.id === columnId);
@@ -1203,7 +1238,7 @@ export function PayrollSummaryTable({
         </div>
       ) : null}
       <div className="max-h-[min(420px,46dvh)] overflow-auto">
-        <table className="w-max min-w-full border-collapse text-[12px]">
+        <table className="w-max min-w-full border-collapse text-xs">
           <thead className="sticky top-0 z-10 bg-card">
             <tr>
               {columns.map((column, index) => (
@@ -1211,7 +1246,8 @@ export function PayrollSummaryTable({
                   key={column.id}
                   label={t(`riderCols.${column.labelKey}`)}
                   columnId={column.id}
-                  values={rows.map((row) => String(riderColumnValue(row, column.id) ?? ""))}
+                  values={rows.map((row) => String(riderColumnValue(row, column.id, today) ?? ""))}
+                  fixedList={column.id === "status" ? statusList : undefined}
                   filter={filters[column.id]}
                   onChange={(next) => setFiltersFor(setFilters, column.id, next)}
                   sort={sort}
@@ -1237,7 +1273,7 @@ export function PayrollSummaryTable({
                       key={column.id}
                       className={cn("whitespace-nowrap px-2 py-1.5", stickyClass(index), index === 2 && "font-medium")}
                     >
-                      {renderSummaryCell(row, column)}
+                      {renderSummaryCell(row, column, today, canManage)}
                     </td>
                   ))}
                 </tr>
@@ -1248,7 +1284,7 @@ export function PayrollSummaryTable({
       </div>
       {onExport && exportLabel ? (
         <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t("tableFootRange", {
               shown: visibleRows.length,
               total: rows.length,
@@ -1258,7 +1294,7 @@ export function PayrollSummaryTable({
           <button
             type="button"
             onClick={() => onExport(visibleRows)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] font-semibold transition-colors hover:bg-muted/50"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold transition-colors hover:bg-muted/50"
           >
             <Download className="size-3.5" />
             {exportLabel}
@@ -1266,7 +1302,7 @@ export function PayrollSummaryTable({
         </div>
       ) : (
         <div className="border-t border-border px-3 py-2">
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t("tableFootRange", {
               shown: visibleRows.length,
               total: rows.length,

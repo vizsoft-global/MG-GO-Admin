@@ -290,7 +290,7 @@ export function VehicleFormDialog({
                 placeholder="5/6767"
               />
               {fieldError === "invalid_plate" || fieldError === "missing_fields" ? (
-                <p className="text-[10px] text-destructive">{t(`errors.${fieldError}`)}</p>
+                <p className="text-xs text-destructive">{t(`errors.${fieldError}`)}</p>
               ) : null}
             </FieldBlock>
             <FieldBlock>
@@ -302,7 +302,7 @@ export function VehicleFormDialog({
                 maxLength={17}
               />
               {fieldError === "invalid_chassis" ? (
-                <p className="text-[10px] text-destructive">{t("errors.invalid_chassis")}</p>
+                <p className="text-xs text-destructive">{t("errors.invalid_chassis")}</p>
               ) : null}
             </FieldBlock>
             <FieldBlock>
@@ -337,7 +337,7 @@ export function VehicleFormDialog({
                 maxLength={40}
               />
               {fieldError === "invalid_make" ? (
-                <p className="text-[10px] text-destructive">{t("errors.invalid_make")}</p>
+                <p className="text-xs text-destructive">{t("errors.invalid_make")}</p>
               ) : null}
             </FieldBlock>
             <FieldBlock>
@@ -349,7 +349,7 @@ export function VehicleFormDialog({
                 maxLength={40}
               />
               {fieldError === "invalid_model" ? (
-                <p className="text-[10px] text-destructive">{t("errors.invalid_model")}</p>
+                <p className="text-xs text-destructive">{t("errors.invalid_model")}</p>
               ) : null}
             </FieldBlock>
             <FieldBlock>
@@ -362,7 +362,7 @@ export function VehicleFormDialog({
                 maxLength={4}
               />
               {fieldError === "invalid_year" ? (
-                <p className="text-[10px] text-destructive">{t("errors.invalid_year")}</p>
+                <p className="text-xs text-destructive">{t("errors.invalid_year")}</p>
               ) : null}
             </FieldBlock>
             <FieldBlock>
@@ -374,7 +374,7 @@ export function VehicleFormDialog({
                 maxLength={80}
               />
               {fieldError === "invalid_location" ? (
-                <p className="text-[10px] text-destructive">{t("errors.invalid_location")}</p>
+                <p className="text-xs text-destructive">{t("errors.invalid_location")}</p>
               ) : null}
             </FieldBlock>
             <div className="sm:col-span-2">
@@ -415,7 +415,7 @@ export function VehicleFormDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[10px] text-muted-foreground">{t("carTypeHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("carTypeHint")}</p>
             </FieldBlock>
             <FieldBlock>
               <FieldLabel>{t("colCarsCompany")}</FieldLabel>
@@ -470,7 +470,7 @@ export function VehicleFormDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[10px] text-muted-foreground">{t("typeOfUseHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("typeOfUseHint")}</p>
             </FieldBlock>
             <FieldBlock>
               <FieldLabel>{t("colVehicleCompany")}</FieldLabel>
@@ -544,7 +544,7 @@ export function VehicleFormDialog({
                 maxLength={32}
               />
               {fieldError === "invalid_chip" ? (
-                <p className="text-[10px] text-destructive">{t("errors.invalid_chip")}</p>
+                <p className="text-xs text-destructive">{t("errors.invalid_chip")}</p>
               ) : null}
             </FieldBlock>
             <FieldBlock>
@@ -556,7 +556,7 @@ export function VehicleFormDialog({
                 inputMode="decimal"
               />
               {fieldError === "invalid_fuel_limit" ? (
-                <p className="text-[10px] text-destructive">{t("errors.invalid_fuel_limit")}</p>
+                <p className="text-xs text-destructive">{t("errors.invalid_fuel_limit")}</p>
               ) : null}
             </FieldBlock>
           </div>
@@ -593,7 +593,7 @@ export function VehicleFormDialog({
                   </SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-[10px] text-muted-foreground">{t("statusHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("statusHint")}</p>
             </FieldBlock>
             <FieldBlock>
               <FieldLabel>{t("fieldReplaces")}</FieldLabel>
@@ -674,7 +674,7 @@ export function VehicleFormDialog({
               />
             </FieldBlock>
           </div>
-          <p className="text-[10px] text-muted-foreground">{t("documentsHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("documentsHint")}</p>
 
           </div>
           <div className="px-5 pb-4">

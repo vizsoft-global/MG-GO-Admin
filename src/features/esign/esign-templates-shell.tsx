@@ -128,11 +128,11 @@ export function EsignTemplatesShell() {
                 <TableCell className="text-sm font-medium">
                   {row.name_en}
                   {row.name_ar ? (
-                    <div className="text-[11px] text-muted-foreground">{row.name_ar}</div>
+                    <div className="text-xs text-muted-foreground">{row.name_ar}</div>
                   ) : null}
                   <Link
                     href={`/requests/esign/templates/${row.id}`}
-                    className="mt-0.5 flex items-center gap-1 text-[10px] text-primary hover:underline"
+                    className="mt-0.5 flex items-center gap-1 text-xs text-primary hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <ExternalLink className="h-3 w-3" />

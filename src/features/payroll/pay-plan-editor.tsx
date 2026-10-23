@@ -207,15 +207,15 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
       <div className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-[13px] font-semibold">{t("title")}</h3>
-            <p className="text-[10px] leading-4 text-muted-foreground">{t("hint")}</p>
+            <h3 className="text-sm font-semibold">{t("title")}</h3>
+            <p className="text-xs leading-4 text-muted-foreground">{t("hint")}</p>
           </div>
           {canManage ? (
             <div className="flex items-center gap-2">
               {saveFlash === "saving" ? (
-                <span className="text-[10px] text-muted-foreground">{t("actions.saving")}</span>
+                <span className="text-xs text-muted-foreground">{t("actions.saving")}</span>
               ) : saveFlash === "saved" ? (
-                <span className="text-[10px] text-emerald-700">{t("actions.saved")}</span>
+                <span className="text-xs text-emerald-700">{t("actions.saved")}</span>
               ) : null}
               <Button type="button" variant="outline" className="h-9" onClick={resetToDefaults}>
                 <RotateCcw className="size-3.5" />
@@ -236,11 +236,11 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
               </Button>
             </div>
           ) : (
-            <span className="text-[10px] text-muted-foreground">{t("readOnly")}</span>
+            <span className="text-xs text-muted-foreground">{t("readOnly")}</span>
           )}
         </div>
         {issue ? (
-          <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-900">
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-900">
             <TriangleAlert className="size-3.5" />
             {t(`errors.${issue}`)}
           </div>
@@ -251,8 +251,8 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
         <div className="flex flex-col gap-2">
           <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
             <div>
-              <h3 className="text-[13px] font-semibold">{t("plan.title")}</h3>
-              <p className="text-[10px] text-muted-foreground">{t("plan.hint")}</p>
+              <h3 className="text-sm font-semibold">{t("plan.title")}</h3>
+              <p className="text-xs text-muted-foreground">{t("plan.hint")}</p>
             </div>
             <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
               <NumberField
@@ -285,7 +285,7 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
                 onCommit={(v) => patchPlan({ floorKwd: v })}
               />
             </div>
-            <p className="text-[10px] leading-4 text-muted-foreground">
+            <p className="text-xs leading-4 text-muted-foreground">
               {t("plan.thresholdHint")} · {t("plan.floorHint")}
             </p>
           </div>
@@ -293,8 +293,8 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
           <div className="flex-1 space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h3 className="text-[13px] font-semibold">{t("bands.title")}</h3>
-                <p className="text-[10px] text-muted-foreground">{t("bands.hint")}</p>
+                <h3 className="text-sm font-semibold">{t("bands.title")}</h3>
+                <p className="text-xs text-muted-foreground">{t("bands.hint")}</p>
               </div>
               {canManage ? (
                 <Button type="button" variant="outline" className="h-9" onClick={addBand}>
@@ -303,7 +303,7 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
                 </Button>
               ) : null}
             </div>
-            <table className="w-full border-collapse text-[12px]">
+            <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="border-b border-border">
                   <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("bands.from")}</th>
@@ -368,8 +368,8 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
         <div className="flex flex-col gap-2">
           <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
             <div>
-              <h3 className="text-[13px] font-semibold">{t("penalties.title")}</h3>
-              <p className="text-[10px] text-muted-foreground">{t("penalties.hint")}</p>
+              <h3 className="text-sm font-semibold">{t("penalties.title")}</h3>
+              <p className="text-xs text-muted-foreground">{t("penalties.hint")}</p>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <NumberField
@@ -389,8 +389,8 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
             </div>
             <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
               <div>
-                <h4 className="text-[12px] font-semibold">{t("ladder.title")}</h4>
-                <span className="text-[10px] text-muted-foreground">{t("ladder.hint")}</span>
+                <h4 className="text-xs font-semibold">{t("ladder.title")}</h4>
+                <span className="text-xs text-muted-foreground">{t("ladder.hint")}</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <NumberField
@@ -421,12 +421,12 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
           <div className="flex-1 space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center gap-1.5">
               <Calculator className="size-3.5 text-primary" />
-              <h3 className="text-[13px] font-semibold">{t("preview.title")}</h3>
+              <h3 className="text-sm font-semibold">{t("preview.title")}</h3>
             </div>
-            <p className="text-[10px] leading-4 text-muted-foreground">{t("preview.hint")}</p>
+            <p className="text-xs leading-4 text-muted-foreground">{t("preview.hint")}</p>
             <div className="flex flex-wrap items-end gap-2">
               <div className="space-y-1">
-                <Label htmlFor="pay-plan-sample-orders" className="text-[11px]">
+                <Label htmlFor="pay-plan-sample-orders" className="text-xs">
                   {t("preview.orders")}
                 </Label>
                 <Input
@@ -438,7 +438,7 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-[11px]">{t("preview.vehicle")}</Label>
+                <Label className="text-xs">{t("preview.vehicle")}</Label>
                 <Select
                   value={sampleVehicle}
                   onValueChange={(value) => setSampleVehicle((value ?? "bike") as PayVehicle)}
@@ -453,7 +453,7 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="pay-plan-sample-rejected" className="text-[11px]">
+                <Label htmlFor="pay-plan-sample-rejected" className="text-xs">
                   {t("preview.rejected")}
                 </Label>
                 <Input
@@ -465,7 +465,7 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="pay-plan-sample-cancelled" className="text-[11px]">
+                <Label htmlFor="pay-plan-sample-cancelled" className="text-xs">
                   {t("preview.cancelled")}
                 </Label>
                 <Input
@@ -477,7 +477,7 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="pay-plan-sample-invalid" className="text-[11px]">
+                <Label htmlFor="pay-plan-sample-invalid" className="text-xs">
                   {t("preview.invalidDays")}
                 </Label>
                 <Input
@@ -491,14 +491,14 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
             </div>
 
             <div className="inline-flex flex-wrap items-center gap-2 rounded-lg border border-emerald-400/50 bg-emerald-50 px-3 py-2 text-emerald-900">
-              <span className="text-[11px] font-semibold uppercase tracking-wide">
+              <span className="text-xs font-semibold uppercase tracking-wide">
                 {t("preview.final")}
               </span>
-              <span className="text-[15px] font-bold tabular-nums">{money(preview.finalPay)}</span>
-              <span className="text-[10px]">{t("currency")}</span>
+              <span className="text-sm font-bold tabular-nums">{money(preview.finalPay)}</span>
+              <span className="text-xs">{t("currency")}</span>
             </div>
 
-            <table className="w-full border-collapse text-[11px]">
+            <table className="w-full border-collapse text-xs">
               <tbody>
                 <tr className="border-b border-border/60">
                   <td className="px-1 py-1 text-muted-foreground">
@@ -546,13 +546,13 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
               {preview.warnings.map((warning) => (
                 <span
                   key={warning}
-                  className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-900"
+                  className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900"
                 >
                   {t(`warnings.${warning}`)}
                 </span>
               ))}
               {preview.ordersToNext != null && preview.nextBandFrom != null ? (
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {t("preview.ordersToNext", {
                     count: preview.ordersToNext,
                     from: preview.nextBandFrom,
@@ -560,7 +560,7 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
                 </span>
               ) : null}
             </div>
-            <p className="text-[10px] leading-4 text-muted-foreground">{t("preview.referenceHint")}</p>
+            <p className="text-xs leading-4 text-muted-foreground">{t("preview.referenceHint")}</p>
           </div>
         </div>
       </div>
@@ -589,7 +589,7 @@ function NumberField({
   }, [value]);
   return (
     <div className="space-y-1">
-      <Label htmlFor={id} className="text-[11px]">
+      <Label htmlFor={id} className="text-xs">
         {label}
       </Label>
       <Input

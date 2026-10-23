@@ -228,12 +228,12 @@ function DeliveryProofColumn({
         {!trimmedKey ? (
           <div className="flex flex-col items-center gap-1 text-center">
             <FileImage className="h-7 w-7 text-muted-foreground/50" />
-            <p className="text-[11px] text-muted-foreground">{t("proofUnavailable")}</p>
+            <p className="text-xs text-muted-foreground">{t("proofUnavailable")}</p>
           </div>
         ) : !displayUrl ? (
           <div className="flex flex-col items-center gap-1 text-center">
             <FileImage className="h-7 w-7 text-muted-foreground/50" />
-            <p className="text-[11px] text-muted-foreground">{t("proofUnavailable")}</p>
+            <p className="text-xs text-muted-foreground">{t("proofUnavailable")}</p>
           </div>
         ) : isPdf ? (
           <a
@@ -244,7 +244,7 @@ function DeliveryProofColumn({
             aria-label={t("proofOpenNew")}
           >
             <FileImage className="h-7 w-7 text-muted-foreground/60" />
-            <p className="text-[11px] text-muted-foreground">{t("proofPdf")}</p>
+            <p className="text-xs text-muted-foreground">{t("proofPdf")}</p>
           </a>
         ) : isImage && !imgError ? (
           <a
@@ -266,7 +266,7 @@ function DeliveryProofColumn({
           </a>
         ) : (
           <div className="flex flex-col items-center gap-2 text-center">
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {imgError ? t("proofExpired") : t("proofUnavailable")}
             </p>
             {imgError ? (
@@ -274,7 +274,7 @@ function DeliveryProofColumn({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-7 cursor-pointer rounded-lg px-2 text-[11px]"
+                className="h-7 cursor-pointer rounded-lg px-2 text-xs"
                 onClick={() => setImgError(false)}
               >
                 <RefreshCw className="me-1 h-3 w-3" />
@@ -923,7 +923,7 @@ export function DeliveryDetailSheet({
                 </div>
               </div>
               {isInTransit && liveLocation ? (
-                <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+                <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
                   {t("liveLocationUpdated", {
                     time: formatDateTime(liveLocation.lastSeenAt),
                   })}

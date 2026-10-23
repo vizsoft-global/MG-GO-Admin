@@ -1,4 +1,5 @@
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
+import { activeCallableName } from "./callable-name";
 import { getFirestore } from "./fs";
 import { COLLECTIONS, FIELDS } from "./collections";
 import { AUTH_EPOCHS_DOC_ID, configEpochs, createKeyedEpochCache } from "./config-cache";
@@ -31,10 +32,41 @@ export type StaffContext = {
   uid: string;
   isSuperAdmin: boolean;
   isManager: boolean;
+  isPartner: boolean;
+  partnerProjectKey: string | null;
+  accessKind: string | null;
   roleId: string | null;
   /** The caller's effective slugs, after the Manager/User resolution. */
   permissionSlugs: Set<string>;
 };
+
+/** Callables a partner session may invoke. Compared case-insensitively to FUNCTION_TARGET / K_SERVICE. */
+export const PARTNER_CALLABLE_ALLOWLIST = [
+  "adminListDriversPage",
+  "adminDriversFilterValues",
+  "adminEmployeesDashboard",
+  "adminListLeavePlans",
+  "adminClientPortalDashboard",
+] as const;
+
+const PARTNER_CALLABLE_ALLOWLIST_SET = new Set(
+  PARTNER_CALLABLE_ALLOWLIST.map((name) => name.toLowerCase()),
+);
+
+const PARTNER_SEED_SLUGS = ["client_portal.view", "drivers.view"];
+
+export function partnerCallableAllowed(functionName: string | undefined): boolean {
+  if (!functionName) return false;
+  const bare = functionName.split("/").pop()?.trim().toLowerCase() ?? "";
+  return PARTNER_CALLABLE_ALLOWLIST_SET.has(bare);
+}
+
+export function scopedProjectKey(staff: StaffContext, requested: unknown): string | null {
+  if (!staff.isPartner) {
+    return typeof requested === "string" && requested.trim() ? requested.trim().toLowerCase() : null;
+  }
+  return staff.partnerProjectKey;
+}
 
 type PermissionArrayDoc = { permission_slugs?: string[] };
 
@@ -120,18 +152,41 @@ async function resolveStaff(
   const isSuperAdmin = request.auth?.token.superAdmin === true;
   const roleId = (profile[FIELDS.profiles.adminRoleId] as string | null) ?? null;
   const accessKind = (profile.access_kind as string | null) ?? null;
-  const isManager = isSuperAdmin || accessKind === "manager";
+  const isPartner = accessKind === "partner";
+  const isManager = !isPartner && (isSuperAdmin || accessKind === "manager");
+  const partnerProjectKey = isPartner ? partnerProjectOf(profile.partner_project_key) : null;
+  if (isPartner && !partnerProjectKey) {
+    throw new HttpsError("permission-denied", "not_authorized");
+  }
 
   // A missing counters document means "no invalidation signal", so the cache is
   // skipped rather than pinned to a zero that would never move.
   const epoch = !fresh && epochSnap.exists ? configEpochs(epochSnap.data()).access : null;
-  const permissions = await resolvePermissionSlugs(uid, roleId, isManager, epoch);
+  const permissions = await resolvePermissionSlugs(uid, roleId, isManager, isPartner, epoch);
 
-  if (requiredSlug && !permissionGranted(permissions, requiredSlug)) {
+  if (isPartner && !partnerCallableAllowed(activeCallableName())) {
     throw new HttpsError("permission-denied", "not_authorized");
   }
 
-  return { uid, isSuperAdmin, isManager, roleId, permissionSlugs: permissions };
+  if (requiredSlug && !isSuperAdmin && !permissionGranted(permissions, requiredSlug)) {
+    throw new HttpsError("permission-denied", "not_authorized");
+  }
+
+  return {
+    uid,
+    isSuperAdmin,
+    isManager,
+    isPartner,
+    partnerProjectKey,
+    accessKind,
+    roleId,
+    permissionSlugs: permissions,
+  };
+}
+
+function partnerProjectOf(value: unknown): "keeta" | "americana" | null {
+  if (value === "keeta" || value === "americana") return value;
+  return null;
 }
 
 /** Staff with any of the slugs (super admin still bypasses). */
@@ -214,8 +269,10 @@ async function resolvePermissionSlugs(
   uid: string,
   roleId: string | null,
   isManager: boolean,
+  isPartner: boolean,
   epoch: number | null,
 ): Promise<Set<string>> {
+  if (isPartner) return new Set(PARTNER_SEED_SLUGS);
   if (isManager) {
     return new Set(await catalogSlugs(epoch));
   }

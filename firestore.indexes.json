@@ -3202,12 +3202,37 @@
         { "fieldPath": "source", "order": "ASCENDING" },
         { "fieldPath": "created_at", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "driver_leave_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "project_key", "order": "ASCENDING" },
+        { "fieldPath": "year_month", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "driver_leave_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "year_month", "order": "ASCENDING" },
+        { "fieldPath": "start_date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "driver_leave_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "driver_id", "order": "ASCENDING" },
+        { "fieldPath": "start_date", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
     { "collectionGroup": "driver_location_events", "fieldPath": "expire_at", "ttl": true, "indexes": [] },
     { "collectionGroup": "driver_operation_events", "fieldPath": "expire_at", "ttl": true, "indexes": [] },
     { "collectionGroup": "driver_telemetry_events", "fieldPath": "expire_at", "ttl": true, "indexes": [] },
-    { "collectionGroup": "admin_cost_samples", "fieldPath": "expire_at", "ttl": true, "indexes": [] }
+    { "collectionGroup": "admin_cost_samples", "fieldPath": "expire_at", "ttl": true, "indexes": [] },
+    { "collectionGroup": "page_read_snapshots", "fieldPath": "expire_at", "ttl": true, "indexes": [] }
   ]
 }

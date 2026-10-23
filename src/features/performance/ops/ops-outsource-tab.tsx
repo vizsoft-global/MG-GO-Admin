@@ -59,7 +59,7 @@ export function OpsOutsourceTab({
 
   return (
     <div className={cn("flex flex-col", LAYOUT.stackGap)}>
-      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
         {t("outsourceBanner")}
       </p>
       <KpiGrid

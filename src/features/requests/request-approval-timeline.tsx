@@ -75,7 +75,7 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
               >
                 {step.step_name}
               </p>
-              <p className={cn("text-[11px]", isActive ? "font-medium text-orange-700 dark:text-orange-300" : "text-muted-foreground")}>
+              <p className={cn("text-xs", isActive ? "font-medium text-orange-700 dark:text-orange-300" : "text-muted-foreground")}>
                 {isCompleted
                   ? formatStamp(step.decided_at)
                   : isRejected
@@ -89,19 +89,19 @@ export function RequestApprovalTimeline({ steps }: { steps: RequestApprovalStep[
                         : t("detail.stepNotStarted")}
               </p>
               {step.actor_display_name ? (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t("detail.stepActor", { name: step.actor_display_name })}
                 </p>
               ) : null}
               {isActive && step.sla_due_at ? (
-                <p className={cn("text-[11px]", overdue ? "text-danger" : "text-muted-foreground")}>
+                <p className={cn("text-xs", overdue ? "text-danger" : "text-muted-foreground")}>
                   {t(overdue ? "detail.stepSlaBreached" : "detail.stepSlaDue", {
                     stamp: formatStamp(step.sla_due_at),
                   })}
                 </p>
               ) : null}
               {step.decision_note ? (
-                <p className="mt-0.5 text-[11px] text-muted-foreground italic">
+                <p className="mt-0.5 text-xs text-muted-foreground italic">
                   {step.decision_note}
                 </p>
               ) : null}

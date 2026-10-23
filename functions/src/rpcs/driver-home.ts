@@ -15,6 +15,7 @@ import {
   loadHomeSnapshotFlags,
 } from "../core/settings";
 import { requireRider, riderError } from "../core/rider";
+import { riderIsNonOperational } from "../core/operational-sections";
 import { applyAttendanceRollup } from "../core/rollups";
 import { bumpRiderSignal } from "../core/rider-signals";
 import {
@@ -42,10 +43,14 @@ import {
 } from "./_shared";
 import {
   isCheckInPhotoKeyForKey,
+  keetaZoneVerdict,
+  riderUsesKeetaZoneGate,
   loadCheckInCandidates,
+  loadCheckInZone,
   matchCheckInRestaurant,
   nearestCheckInRestaurant,
   needsCheckIn,
+  type CheckInZoneSummary,
 } from "./check-in-gate";
 import {
   findActiveShift,
@@ -2053,6 +2058,7 @@ export const driverSetDutyState = measureOnCall("driverSetDutyState", async (req
     distanceM: number | null;
   };
   let checkInStamp: CheckInStamp | null = null;
+  const keeta = await riderUsesKeetaZoneGate(ctx.uid, driver);
 
   if (freshCheckIn) {
     const safety = await loadDriverAppSafetySettings();
@@ -2076,29 +2082,64 @@ export const driverSetDutyState = measureOnCall("driverSetDutyState", async (req
       throw riderError("failed-precondition", "check_in_location_required");
     }
 
-    const candidates = await loadCheckInCandidates(ctx.uid, driver);
-    const match = matchCheckInRestaurant({
-      candidates,
-      lat,
-      lng,
-      proximityMeters: safety.proximityMeters > 0 ? safety.proximityMeters : 500,
-      requestedId: requestedRestaurantId,
-    });
-    if (!match) {
-      const nearest = nearestCheckInRestaurant({ candidates, lat, lng });
-      throw riderError("failed-precondition", "check_in_outside_restaurant_range", {
-        nearest_restaurant: nearest?.name ?? null,
-        nearest_restaurant_id: nearest?.id ?? null,
-        distance_m: nearest?.distanceM ?? null,
+    if (await riderIsNonOperational(driver)) {
+      // Office staff: the selfie and the GPS fix above still apply, but there is
+      // no zone or store to match, so the attendance row keeps no location.
+      checkInStamp = {
+        photoKey,
+        restaurantId: null,
+        restaurantName: null,
+        distanceM: null,
+      };
+    } else if (keeta) {
+      // Keeta has no store assignment to prove, so the location gate is the
+      // assigned zone with a zero buffer. The selfie is still owed (the check
+      // above is shared), and the attendance row keeps the project as its
+      // "store" so the admin grid reads Keeta rather than a blank.
+      const zone = await loadCheckInZone(asString(driver["zone_id"]));
+      const verdict = keetaZoneVerdict({ lat, lng, zone });
+      if (verdict.outcome !== "in_range") {
+        if (verdict.outcome === "no_zone") {
+          throw riderError("failed-precondition", "check_in_zone_unassigned", {
+            zone_name: verdict.zone?.name ?? null,
+          });
+        }
+        throw riderError("failed-precondition", "check_in_outside_zone", {
+          zone_name: verdict.zone?.name ?? null,
+          zone_id: verdict.zone?.id ?? null,
+        });
+      }
+      checkInStamp = {
+        photoKey,
+        restaurantId: null,
+        restaurantName: "Keeta",
+        distanceM: 0,
+      };
+    } else {
+      const candidates = await loadCheckInCandidates(ctx.uid, driver);
+      const match = matchCheckInRestaurant({
+        candidates,
+        lat,
+        lng,
+        proximityMeters: safety.proximityMeters > 0 ? safety.proximityMeters : 500,
+        requestedId: requestedRestaurantId,
       });
-    }
+      if (!match) {
+        const nearest = nearestCheckInRestaurant({ candidates, lat, lng });
+        throw riderError("failed-precondition", "check_in_outside_restaurant_range", {
+          nearest_restaurant: nearest?.name ?? null,
+          nearest_restaurant_id: nearest?.id ?? null,
+          distance_m: nearest?.distanceM ?? null,
+        });
+      }
 
-    checkInStamp = {
-      photoKey,
-      restaurantId: match.id,
-      restaurantName: match.name,
-      distanceM: match.distanceM,
-    };
+      checkInStamp = {
+        photoKey,
+        restaurantId: match.id,
+        restaurantName: match.name,
+        distanceM: match.distanceM,
+      };
+    }
   }
 
   await db.collection(COLLECTIONS.drivers).doc(ctx.uid).set(
@@ -2117,7 +2158,9 @@ export const driverSetDutyState = measureOnCall("driverSetDutyState", async (req
       ...(checkInStamp
         ? {
             [ATT.checkInPhotoKey]: checkInStamp.photoKey,
-            [ATT.checkInPhotoAt]: stamp,
+            // A Keeta clock-in has no photo to point at, so the timestamp stays
+            // unset instead of claiming a photo the row cannot resolve.
+            ...(checkInStamp.photoKey ? { [ATT.checkInPhotoAt]: stamp } : {}),
             [ATT.checkInRestaurantId]: checkInStamp.restaurantId,
             [ATT.checkInRestaurantName]: checkInStamp.restaurantName,
             [ATT.checkInDistanceM]: checkInStamp.distanceM,
@@ -2334,6 +2377,13 @@ function checkInRestaurantSummary(match: {
  * `requires_check_in: false` lets it skip both the photo and the proximity gate
  * — exactly the condition `freshCheckIn` refuses on.
  *
+ * A Keeta rider gets a zone gate instead of a restaurant gate: `gate: "zone"`
+ * and a `zone` summary (`{ id, name }`). The photo is **not** exempt — the same
+ * `photo_required` answer as everyone else, so the phone opens the camera once
+ * the zone check passes. No zone or no stored shape answers `in_range: false`
+ * with `zone: null` so the phone sends them to an administrator, not 800 m down
+ * the road.
+ *
  * It never throws for a refusal, so it is safe to call on every Clock In tap.
  */
 export const driverCheckInContext = measureOnCall("driverCheckInContext", async (request) => {
@@ -2343,16 +2393,24 @@ export const driverCheckInContext = measureOnCall("driverCheckInContext", async 
   const lat = numberOrNull(pick(data, "p_lat", "lat", "check_in_lat", "checkInLat"));
   const lng = numberOrNull(pick(data, "p_lng", "lng", "check_in_lng", "checkInLng"));
 
-  const [existingAttendance, safety] = await Promise.all([
+  const [existingAttendance, safety, nonOperational] = await Promise.all([
     attendanceLogOn(ctx.uid, day),
     loadDriverAppSafetySettings(),
+    riderIsNonOperational(ctx.driver),
   ]);
 
   const requiresCheckIn = needsCheckIn(existingAttendance?.data ?? null);
+  // Keeta has no store to match: `gate` names the location gate (the assigned
+  // zone) and `zone` carries the name so the refusal can say which zone was
+  // missed. The photo requirement below is shared with every other rider.
+  const keeta = await riderUsesKeetaZoneGate(ctx.uid, ctx.driver);
   const base = {
     day,
     requires_check_in: requiresCheckIn,
     checked_in_today: !requiresCheckIn,
+    // A non-operational rider (MG Head Office) has no zone or store at all, so
+    // there is no place to gate on; the selfie below still applies.
+    gate: nonOperational ? "none" : keeta ? "zone" : "restaurant",
     photo_required: safety.checkInPhotoRequired,
     proximity_meters: safety.proximityMeters,
     candidates: 0,
@@ -2360,6 +2418,7 @@ export const driverCheckInContext = measureOnCall("driverCheckInContext", async 
     in_range: false,
     restaurant: null as CheckInRestaurantSummary | null,
     nearest: null as CheckInRestaurantSummary | null,
+    zone: null as CheckInZoneSummary | null,
   };
 
   if (!requiresCheckIn) {
@@ -2372,6 +2431,22 @@ export const driverCheckInContext = measureOnCall("driverCheckInContext", async 
     // No fix yet is a client-side retry, not a refusal: `in_range` stays false
     // and `requires_location` tells the phone which copy to show.
     return { ...base, requires_location: true };
+  }
+
+  if (nonOperational) {
+    // No zone and no store to prove — the precheck admits the rider so the
+    // phone goes straight to the selfie the shared rule still requires.
+    return { ...base, in_range: true };
+  }
+
+  if (keeta) {
+    const zone = await loadCheckInZone(asString(ctx.driver["zone_id"]));
+    const verdict = keetaZoneVerdict({ lat, lng, zone });
+    return {
+      ...base,
+      in_range: verdict.outcome === "in_range",
+      zone: verdict.zone,
+    };
   }
 
   const candidates = await loadCheckInCandidates(ctx.uid, ctx.driver);

@@ -26,7 +26,7 @@ export function AppFormSection({
       {title ? (
         <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-border px-6 py-4">
           <div className="space-y-1">
-            <CardTitle className="text-base font-semibold tracking-tight">
+            <CardTitle className="text-base font-bold tracking-tight">
               {title}
             </CardTitle>
             {description ? (

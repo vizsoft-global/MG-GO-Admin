@@ -1,4 +1,4 @@
-import { countryLabel } from "@/lib/geo/countries";
+import { getCountryLabel, normalizeCountryCode } from "@/lib/geo/countries";
 import {
   displayRiderId,
   efficiencyBucket,
@@ -93,6 +93,13 @@ export function companyLabel(key: string | null | undefined): string {
   return SOURCE_COMPANY_LABEL[key as SourceCompanyKey] ?? key.toUpperCase();
 }
 
+function nationalityDisplay(value: string | null | undefined): string {
+  if (!value || value === "—") return "—";
+  const iso = normalizeCountryCode(value);
+  if (iso) return getCountryLabel(iso) ?? iso;
+  return value;
+}
+
 export function enrichOpsRider(row: OpsRiderRow): OpsRiderView {
   return {
     ...row,
@@ -110,7 +117,7 @@ export function enrichOpsRider(row: OpsRiderRow): OpsRiderView {
       storeName: row.store,
     }),
     vehicle_label: vehicleLabel(row.vehicle_key),
-    nationality_label: countryLabel(row.nationality),
+    nationality_label: nationalityDisplay(row.nationality),
     partner_label: partnerLabel(row.project_key),
     bucket: efficiencyBucket(row.tgt_eff),
   };

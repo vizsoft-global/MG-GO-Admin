@@ -30,7 +30,7 @@ export function SortableTableHeadLabel({
       }
       className={cn(
         "inline-flex h-9 max-w-full items-center gap-1 rounded-md px-0 text-left",
-        "text-xs font-semibold uppercase tracking-wider text-muted-foreground",
+        "text-xs font-normal uppercase tracking-wider text-muted-foreground",
         "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         "active:scale-[0.97] transition-colors duration-150",
         direction && "text-foreground",

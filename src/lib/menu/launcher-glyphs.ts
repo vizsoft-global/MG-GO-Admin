@@ -9,6 +9,8 @@ export const LAUNCHER_GLYPH: Record<LauncherTileId, string> = {
     "M9 11a4 4 0 1 0 0-8a4 4 0 1 0 0 8z M2 21v-1a6 6 0 0 1 12 0v1 M16 11l2 2 4-4",
   drivers:
     "M9 11a4 4 0 1 0 0-8a4 4 0 1 0 0 8z M2 21v-1a6 6 0 0 1 12 0v1 M16 3.5a4 4 0 0 1 0 7.5 M22 21v-1a6 6 0 0 0-4-5.6",
+  "operations-dashboard": "M4 19V5 M4 19h16 M8 16v-5 M12 16V8 M16 16v-3",
+  "client-portal": "M8 11a3 3 0 1 0 0-6a3 3 0 1 0 0 6z M16 11a3 3 0 1 0 0-6a3 3 0 1 0 0 6z M3 19v-1a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4v1 M14 14a4 4 0 0 1 4-4h1a4 4 0 0 1 4 4v1",
   deliveries: "M12 3l8 4.5v9L12 21l-8-4.5v-9z M4 7.5l8 4.5 8-4.5 M12 12v9",
   employeedesk: "M3 13l3-8h12l3 8v6H3z M3 13h5l1 3h6l1-3h5",
   "visit-bookings": "M4 5h16v15H4z M4 10h16 M8 3v4 M16 3v4 M9 15l2 2 4-4",

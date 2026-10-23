@@ -32,6 +32,14 @@ import {
   riderColumnValue,
 } from "./payroll-rider-columns";
 import { dayClass, PayrollFillHandle, ZoneCategoryPill } from "./payroll-grid";
+import {
+  PayrollIdentityCell,
+  PayrollOrderCell,
+  payrollIdentityField,
+  payrollIdentityValue,
+} from "./payroll-identity-cell";
+import { PayrollStatusCell } from "./payroll-status-cell";
+import { usePayrollStatusFilterList } from "./payroll-status-context";
 import { usePayrollAdjust } from "./payroll-adjust-context";
 import { aoShownOrders } from "./payroll-orders-display";
 import { PayrollCellMenu, type PayrollCellMenuState } from "./payroll-cell-menu";
@@ -69,13 +77,17 @@ export function PayrollAttendanceOrdersTab({
   riders,
   canExport,
   canManage = false,
+  today,
 }: {
   month: PayrollPeriod;
   riders: readonly PayrollRiderRow[];
   canExport: boolean;
   canManage?: boolean;
+  /** Kuwait date the page calls today; drives the Rider Status column. */
+  today: string;
 }) {
   const t = useTranslations("pages.payroll");
+  const statusList = usePayrollStatusFilterList();
   const [search, setSearch] = useState("");
   const { prefs } = usePayrollListPrefs("payroll-ao");
   const [filters, setFilters] = useState<ColumnFilters>({});
@@ -115,15 +127,15 @@ export function PayrollAttendanceOrdersTab({
   const visibleRows = useMemo(() => {
     const filtered = searched.filter((row) => {
       const values: Record<string, string | number | null> = {};
-      for (const column of AO_LEAD_COLUMNS) values[column.id] = riderColumnValue(row, column.id);
+      for (const column of AO_LEAD_COLUMNS) values[column.id] = riderColumnValue(row, column.id, today);
       for (let i = 0; i < dates.length; i += 1) {
         values[dayColumnId(i)] = riderColumnValue(row, dayColumnId(i));
         values[dayOrdersColumnId(i)] = riderColumnValue(row, dayOrdersColumnId(i));
       }
       return rowMatchesColumnFilters(values, filters);
     });
-    return sortByColumn(filtered, sort, (row, columnId) => riderColumnValue(row, columnId));
-  }, [searched, filters, sort, dates.length]);
+    return sortByColumn(filtered, sort, (row, columnId) => riderColumnValue(row, columnId, today));
+  }, [searched, filters, sort, dates.length, today]);
 
   const fallbackLabel = useCallback((key: string) => t(`riderCols.${key}`), [t]);
 
@@ -432,7 +444,7 @@ export function PayrollAttendanceOrdersTab({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="rounded-xl border border-border bg-card px-4 py-3 text-[12px] leading-5 shadow-sm">
+        <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-5 shadow-sm">
           <b>{t("ao.bannerTitle")}</b> {t("ao.bannerBody")}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -505,7 +517,7 @@ export function PayrollAttendanceOrdersTab({
             editable && "focus-visible:ring-2 focus-visible:ring-primary/40",
           )}
         >
-          <table className="w-max min-w-full border-collapse text-[12px]">
+          <table className="w-max min-w-full border-collapse text-xs">
             <thead className="sticky top-0 z-10 bg-card">
               <tr className="border-b border-border">
                 {columns.map((column, index) => {
@@ -532,7 +544,8 @@ export function PayrollAttendanceOrdersTab({
                         />
                       }
                       columnId={column.id}
-                      values={searched.map((row) => String(riderColumnValue(row, column.id) ?? ""))}
+                      values={searched.map((row) => String(riderColumnValue(row, column.id, today) ?? ""))}
+                      fixedList={column.id === "status" ? statusList : undefined}
                       filter={filters[column.id]}
                       onChange={(next) => setFilter(column.id, next)}
                       sort={sort}
@@ -547,7 +560,7 @@ export function PayrollAttendanceOrdersTab({
                   <th
                     key={date}
                     colSpan={2}
-                    className={cn(TABLE_HEAD_CLASS, "border-s border-border px-2 py-1.5 text-center text-[11px]")}
+                    className={cn(TABLE_HEAD_CLASS, "border-s border-border px-2 py-1.5 text-center text-xs")}
                   >
                     {isoDayLabel(date)}
                   </th>
@@ -609,10 +622,19 @@ export function PayrollAttendanceOrdersTab({
                       >
                         {column.id === "zoneCategory" ? (
                           <ZoneCategoryPill category={row.zoneCategory} />
+                        ) : column.id === "status" ? (
+                          <PayrollStatusCell row={row} today={today} canEdit={editable} />
                         ) : column.id === "actualHours" ? (
                           row.actualHours.toFixed(2)
+                        ) : payrollIdentityField(column.id) ? (
+                          <PayrollIdentityCell
+                            driverId={row.driverId}
+                            field={payrollIdentityField(column.id)!}
+                            value={payrollIdentityValue(row, payrollIdentityField(column.id)!)}
+                            canEdit={editable}
+                          />
                         ) : (
-                          String(riderColumnValue(row, column.id) ?? "—")
+                          String(riderColumnValue(row, column.id, today) ?? "—")
                         )}
                       </td>
                       );
@@ -670,7 +692,7 @@ export function PayrollAttendanceOrdersTab({
                           >
                             <span
                               className={cn(
-                                "relative inline-flex min-w-8 justify-center rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                                "relative inline-flex min-w-8 justify-center rounded px-1.5 py-0.5 text-xs font-semibold",
                                 dayClass(status),
                                 adjusted && "outline outline-2 outline-orange-400",
                               )}
@@ -702,7 +724,13 @@ export function PayrollAttendanceOrdersTab({
                             ) : null}
                           </td>
                           <td className="px-1 py-1 text-center tabular-nums">
-                            {orders === 0 ? <span className="text-muted-foreground/50">–</span> : orders}
+                            <PayrollOrderCell
+                              driverId={row.driverId}
+                              date={date}
+                              orders={info?.ordersOverridden ? (info.displayOrders ?? info.orders) : orders}
+                              overridden={Boolean(info?.ordersOverridden)}
+                              canEdit={editable}
+                            />
                           </td>
                         </Fragment>
                       );
@@ -714,12 +742,12 @@ export function PayrollAttendanceOrdersTab({
           </table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2">
-          <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             <Info className="size-3.5" />
             {t("ao.footNote")}
           </span>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] font-semibold text-muted-foreground">
+            <span className="text-xs font-semibold text-muted-foreground">
               {t("tableFootRange", {
                 shown: visibleRows.length,
                 total: riders.length,
@@ -733,9 +761,10 @@ export function PayrollAttendanceOrdersTab({
                   exportPayrollAttendanceOrdersCsv(month.key, month.dates, visibleRows, {
                     labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
                     hidden: hiddenSetFor("ao", headingConfig),
+                    today,
                   })
                 }
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] font-semibold transition-colors hover:bg-muted/50"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold transition-colors hover:bg-muted/50"
               >
                 <Download className="size-3.5" />
                 {t("downloadTable")}

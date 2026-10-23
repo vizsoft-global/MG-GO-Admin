@@ -4,9 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchDashboardSnapshot } from "./dashboard-actions";
 import type { DashboardSnapshot } from "./types";
 
-export function useDashboardSnapshot(initialData: DashboardSnapshot, locale: string) {
+export function useDashboardSnapshot(locale: string, initialData?: DashboardSnapshot) {
   return useQuery({
-    queryKey: ["dashboard", "snapshot", initialData.today, locale],
+    queryKey: ["dashboard", "snapshot", locale],
     queryFn: () => fetchDashboardSnapshot(locale),
     initialData,
     refetchInterval: 60_000,

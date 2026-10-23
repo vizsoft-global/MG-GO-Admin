@@ -187,7 +187,7 @@ export function OffStructureDialog({
             </Button>
           </div>
           {selected ? (
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("current", {
                 days: selected.offStructureDays,
                 source: t(`source_${selected.offStructureSource}`),

@@ -90,6 +90,8 @@ export const LAUNCHER_TILE_HEX: Record<string, string> = {
   assistant: "#732b1a",
   "app-releases": "#7A4DA8",
   drivers: "#b5643f",
+  "operations-dashboard": "#4a5768",
+  "client-portal": "#6e4f8a",
   deliveries: "#557f6a",
   employeedesk: "#a73d24",
   requests: "#a73d24",

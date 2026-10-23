@@ -220,7 +220,7 @@ function SystemHead({ label, hint }: { label: string; hint: string }) {
   return (
     <span className="flex flex-col">
       <span>{label}</span>
-      <span className="text-[9px] font-normal normal-case tracking-normal text-emerald-700">{hint}</span>
+      <span className="text-xs font-normal normal-case tracking-normal text-emerald-700">{hint}</span>
     </span>
   );
 }
@@ -777,7 +777,7 @@ export function BulkImportShell({
               <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
             </div>
           </div>
-          <span className="shrink-0 rounded-md bg-[#FFFAEB] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B54708]">
+          <span className="shrink-0 rounded-md bg-[#FFFAEB] px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[#B54708]">
             {tRcm("youSend")}
           </span>
         </div>
@@ -822,7 +822,7 @@ export function BulkImportShell({
             )}
             {step === 1 ? (
               <div className="space-y-1.5 pt-1">
-                <p className="text-[10px] font-normal uppercase tracking-[0.5px] text-[#a1a1aa]">
+                <p className="text-xs font-normal uppercase tracking-[0.5px] text-[#a1a1aa]">
                   {t("penaltyCategory")}
                 </p>
                 <div className="flex flex-col gap-1">
@@ -831,7 +831,7 @@ export function BulkImportShell({
                       key={child.key}
                       type="button"
                       className={cn(
-                        "flex h-8 items-center rounded px-2 text-start text-[12.5px] font-normal text-[#18181b] hover:bg-[#f4f4f5]",
+                        "flex h-8 items-center rounded px-2 text-start text-xs font-normal text-[#18181b] hover:bg-[#f4f4f5]",
                         template &&
                           effectiveOutgoingCategoryKey(template) ===
                             alignPenaltyCategoryKey(child.key)
@@ -913,7 +913,7 @@ export function BulkImportShell({
                     ) : (
                       sheetGroups.map((group) => (
                         <div key={group.key} className="space-y-1.5">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">
+                          <p className="text-xs font-semibold uppercase tracking-[0.5px] text-muted-foreground">
                             {t(`valueGroups.${group.key}`)}
                           </p>
                           <div className="grid gap-2 sm:grid-cols-2">
@@ -960,7 +960,7 @@ export function BulkImportShell({
                 <FileSpreadsheet className="size-3.5 text-muted-foreground" aria-hidden />
                 <span className="truncate">{fileName}</span>
               </p>
-              <p className="mt-1 text-[10px] text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {t("rowsFound", { count: drafts.length })}
               </p>
               <button
@@ -973,7 +973,7 @@ export function BulkImportShell({
               </button>
               <button
                 type="button"
-                className="mt-1 block text-[10px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+                className="mt-1 block text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
                 disabled={savingDraft || busy || drafts.length === 0}
                 onClick={() => void saveDraft()}
               >
@@ -1024,7 +1024,7 @@ export function BulkImportShell({
                         </span>
                       ) : null}
                     </h2>
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {t("reviewHelper")}
                       {sheetValueFields.length > 3
                         ? ` ${t("extraColumns", { count: sheetValueFields.length - 3 })}`
@@ -1131,7 +1131,7 @@ export function BulkImportShell({
                         })}
                         <TableCell>
                           {tone === "pending" ? (
-                            <span className="text-[10px] text-muted-foreground">—</span>
+                            <span className="text-xs text-muted-foreground">—</span>
                           ) : (
                             <ReviewStatusChip
                               tone={tone}
@@ -1147,7 +1147,7 @@ export function BulkImportShell({
             )}
             {drafts.length > 0 ? (
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2">
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t("showingCount", {
                     shown: Math.min(drafts.length, (page + 1) * PAGE_SIZE) - page * PAGE_SIZE,
                     total: drafts.length,
@@ -1163,7 +1163,7 @@ export function BulkImportShell({
                   >
                     {t("prevPage")}
                   </Button>
-                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                  <span className="text-xs tabular-nums text-muted-foreground">
                     {page + 1} / {pageCount}
                   </span>
                   <Button
@@ -1194,7 +1194,7 @@ export function BulkImportShell({
             >
               <CloudUpload className="size-8 text-[#F04438]" aria-hidden />
               <span className="text-sm font-medium">{t("dropHere")}</span>
-              <span className="text-[11px] text-muted-foreground">{t("dropHint")}</span>
+              <span className="text-xs text-muted-foreground">{t("dropHint")}</span>
               <span className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-xs font-medium">
                 {t("browseFile")}
               </span>
@@ -1207,7 +1207,7 @@ export function BulkImportShell({
               />
             </label>
             <div className="space-y-1">
-              <p className="text-[10px] font-semibold text-foreground">{t("beforeYouUpload")}</p>
+              <p className="text-xs font-semibold text-foreground">{t("beforeYouUpload")}</p>
               <CheckRow label={t("checks.employeeId")} />
               <CheckRow label={t("checks.columns")} />
               <CheckRow label={t("checks.dates")} />
@@ -1256,7 +1256,7 @@ export function BulkImportShell({
 
       {step === 3 ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2">
-          <p className="text-[10px] text-muted-foreground">{t("sendNote")}</p>
+          <p className="text-xs text-muted-foreground">{t("sendNote")}</p>
           <div className="flex flex-wrap items-center gap-2">
             {needsFixing > 0 ? (
               <Button
@@ -1344,13 +1344,13 @@ function Stepper({
                 type="button"
                 onClick={() => onGo(index)}
                 className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-md px-1.5 text-[11px] font-semibold",
+                  "inline-flex h-8 items-center gap-1.5 rounded-md px-1.5 text-xs font-semibold",
                   active || done ? "text-foreground" : "text-muted-foreground",
                 )}
               >
                 <span
                   className={cn(
-                    "grid size-5 place-items-center rounded-full text-[10px] font-bold",
+                    "grid size-5 place-items-center rounded-full text-xs font-bold",
                     done && "bg-emerald-500 text-white",
                     active && "bg-zinc-950 text-white",
                     !done && !active && "border border-border bg-background text-muted-foreground",
@@ -1361,8 +1361,8 @@ function Stepper({
                 {label}
               </button>
             ) : (
-              <span className="inline-flex h-8 items-center gap-1.5 px-1.5 text-[11px] font-semibold text-muted-foreground">
-                <span className="grid size-5 place-items-center rounded-full border border-border bg-background text-[10px] font-bold text-muted-foreground">
+              <span className="inline-flex h-8 items-center gap-1.5 px-1.5 text-xs font-semibold text-muted-foreground">
+                <span className="grid size-5 place-items-center rounded-full border border-border bg-background text-xs font-bold text-muted-foreground">
                   {index}
                 </span>
                 {label}
@@ -1440,7 +1440,7 @@ function ColumnGroup({
     <div className="space-y-1.5">
       <p
         className={cn(
-          "flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide",
+          "flex items-center gap-1 text-xs font-semibold uppercase tracking-wide",
           tone === "system" ? "text-sky-700" : "text-[#EA580C]",
         )}
       >
@@ -1452,7 +1452,7 @@ function ColumnGroup({
           <li
             key={item.header}
             className={cn(
-              "inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+              "inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
               item.chip === "system" && "border-sky-200 bg-sky-50 text-sky-900",
               item.chip === "required" && "border-orange-200 bg-orange-50 text-orange-800",
               item.chip === "sheet" && "border-border bg-muted/40 text-muted-foreground",
@@ -1473,7 +1473,7 @@ function ColumnGroup({
 
 function CheckRow({ label }: { label: string }) {
   return (
-    <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
+    <p className="flex items-center gap-1 text-xs text-muted-foreground">
       <Check className="size-3 text-emerald-600" aria-hidden />
       {label}
     </p>
@@ -1562,7 +1562,7 @@ function FixRowForm({
           autoFocus
           onChange={(e) => setValue(e.target.value)}
         />
-        <p className="text-[10px] text-muted-foreground">{labels.hint}</p>
+        <p className="text-xs text-muted-foreground">{labels.hint}</p>
       </div>
       <AppModalFooter title={labels.title} subtitle={labels.subtitle}>
         <Button type="button" variant="outline" className="h-9" onClick={onCancel}>

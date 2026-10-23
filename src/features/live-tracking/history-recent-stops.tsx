@@ -39,7 +39,7 @@ export function HistoryRecentStops({
       <div
         className={cn(
           "text-center text-muted-foreground",
-          compact ? "px-1 py-2 text-[11px]" : "rounded-xl border border-border bg-card p-3 text-xs",
+          compact ? "px-1 py-2 text-xs" : "rounded-xl border border-border bg-card p-3 text-xs",
         )}
       >
         {t("historyNoStops")}
@@ -52,7 +52,7 @@ export function HistoryRecentStops({
       <h4
         className={cn(
           "font-semibold uppercase tracking-wide text-muted-foreground",
-          compact ? "text-[10px]" : "text-xs",
+          compact ? "text-xs" : "text-xs",
         )}
       >
         {t("historyRecentStops")}
@@ -80,19 +80,19 @@ export function HistoryRecentStops({
               <p
                 className={cn(
                   "truncate font-semibold text-foreground",
-                  compact ? "text-[11px]" : "text-xs",
+                  compact ? "text-xs" : "text-xs",
                 )}
               >
                 {stop.title}
               </p>
               <Pill
                 tone={stop.type === "delivery" ? "primary" : stop.type === "idle" ? "neutral" : "success"}
-                className={compact ? "text-[9px]" : undefined}
+                className={compact ? "text-xs" : undefined}
               >
                 {stop.type === "delivery" ? "Delivery" : stop.type === "idle" ? "Idle" : "Moving"}
               </Pill>
             </div>
-            <p className={cn("text-muted-foreground", compact ? "text-[10px]" : "mt-1 text-[11px]")}>
+            <p className={cn("text-muted-foreground", compact ? "text-xs" : "mt-1 text-xs")}>
               {formatTime(stop.startAt)}
               {stop.endAt !== stop.startAt ? ` – ${formatTime(stop.endAt)}` : ""}
             </p>

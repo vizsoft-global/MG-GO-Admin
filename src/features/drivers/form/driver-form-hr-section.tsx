@@ -1,8 +1,13 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Briefcase } from "lucide-react";
 import { ToggleChip } from "@/components/app/toggle-chip";
-import { catalogLabel, type EmployeeCatalogRow } from "@/features/employees/employee-catalogs";
+import {
+  catalogLabel,
+  isNonOperationalOnly,
+  type EmployeeCatalogRow,
+} from "@/features/employees/employee-catalogs";
 import { FieldBlock, FieldLabel, SectionHeading } from "./driver-form-primitives";
 import { SearchableSelect } from "./searchable-select";
 
@@ -39,11 +44,14 @@ export function DriverFormHrSection({
     sections: string;
     nationalityCategories: string;
     searchStatus: string;
+    searchNationality: string;
   };
 }) {
   const liveStatuses = statuses.filter((row) => row.is_active);
   const liveSections = sections.filter((row) => row.is_active);
   const liveNations = nationalityCategories.filter((row) => row.is_active);
+  const tNew = useTranslations("pages.driverNew");
+  const nonOperational = isNonOperationalOnly(sectionKeys, sections);
 
   return (
     <section className="space-y-2.5 rounded-lg border border-border bg-card p-4">
@@ -69,7 +77,7 @@ export function DriverFormHrSection({
           <FieldLabel>{labels.sections}</FieldLabel>
           <div className="flex flex-wrap gap-1.5">
             {liveSections.length === 0 ? (
-              <p className="text-[10px] text-muted-foreground">—</p>
+              <p className="text-xs text-muted-foreground">—</p>
             ) : (
               liveSections.map((row) => (
                 <ToggleChip
@@ -82,24 +90,24 @@ export function DriverFormHrSection({
               ))
             )}
           </div>
+          {nonOperational ? (
+            <p className="text-xs leading-4 text-emerald-700">{tNew("nonOperationalHint")}</p>
+          ) : null}
         </FieldBlock>
         <FieldBlock>
           <FieldLabel>{labels.nationalityCategories}</FieldLabel>
-          <div className="flex flex-wrap gap-1.5">
-            {liveNations.length === 0 ? (
-              <p className="text-[10px] text-muted-foreground">—</p>
-            ) : (
-              liveNations.map((row) => (
-                <ToggleChip
-                  key={row.key}
-                  selected={nationalityCategoryKeys.includes(row.key)}
-                  onClick={() => onNationalityCategoryKeysChange(toggleKey(nationalityCategoryKeys, row.key))}
-                >
-                  {catalogLabel(row.key, liveNations, locale)}
-                </ToggleChip>
-              ))
-            )}
-          </div>
+          <SearchableSelect
+            value={nationalityCategoryKeys[0] ?? ""}
+            onValueChange={(value) => onNationalityCategoryKeysChange(value ? [value] : [])}
+            items={liveNations.map((row) => ({
+              value: row.key,
+              label: catalogLabel(row.key, liveNations, locale),
+              keywords: [row.key, row.label_en, row.label_ar],
+            }))}
+            placeholder={labels.nationalityCategories}
+            searchPlaceholder={labels.searchNationality}
+            recentsKey="driver-nationality-category"
+          />
         </FieldBlock>
       </div>
     </section>

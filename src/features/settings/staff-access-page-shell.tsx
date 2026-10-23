@@ -323,7 +323,7 @@ export function StaffAccessDetailShell({
         <SegmentOption selected={kind === "user"} onClick={() => applyKind("user")}>
           {t("kindUser")}
         </SegmentOption>
-        <p className="text-[10px] text-muted-foreground">{t("kindHint")}</p>
+        <p className="text-xs text-muted-foreground">{t("kindHint")}</p>
       </div>
 
       {kind === "manager" ? (
@@ -406,7 +406,7 @@ export function StaffAccessDetailShell({
                     />
                     <span>
                       {row.label}
-                      <span className="ms-1 text-[10px] text-muted-foreground">{row.slug}</span>
+                      <span className="ms-1 text-xs text-muted-foreground">{row.slug}</span>
                     </span>
                   </label>
                 ))}

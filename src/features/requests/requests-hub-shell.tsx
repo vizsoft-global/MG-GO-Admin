@@ -112,7 +112,7 @@ function HubTile({
           className="absolute left-1/2 top-1/2 size-10 -translate-x-1/2 -translate-y-1/2 object-contain"
         />
       </span>
-      <span className="h-[34px] w-full break-words text-center text-[13px] font-medium leading-[normal] text-[#f4f4f5]">
+      <span className="h-[34px] w-full break-words text-center text-sm font-medium leading-[normal] text-[#f4f4f5]">
         {label}
       </span>
       {count != null && count > 0 ? (
@@ -154,7 +154,7 @@ export function RequestsHubShell() {
               {t("hub.sender")}
             </ToggleChip>
           </div>
-          <h1 className="text-[30px] font-semibold leading-none text-white">
+          <h1 className="text-2xl font-semibold leading-none text-white">
             {view === "sender" ? t("hub.senderTitle") : t("hub.title")}
           </h1>
           <p className="text-sm text-[#c4c4ce]">
@@ -164,7 +164,7 @@ export function RequestsHubShell() {
 
         {view === "sender" ? (
           <section className="flex flex-col items-center gap-[18px]">
-            <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
+            <h2 className="text-xs font-semibold uppercase tracking-[1px] text-[#9ca3af]">
               {t("hub.senderHeading")}
             </h2>
             <div className="flex w-max max-w-full flex-nowrap items-start justify-center gap-x-5">
@@ -183,7 +183,7 @@ export function RequestsHubShell() {
         ) : (
           <>
         <section className="flex flex-col items-center gap-[18px]">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
+          <h2 className="text-xs font-semibold uppercase tracking-[1px] text-[#9ca3af]">
             {t("hub.requestTypesHeading")}
           </h2>
           <div className="flex w-max max-w-full flex-nowrap items-start justify-center gap-x-5">
@@ -202,7 +202,7 @@ export function RequestsHubShell() {
         </section>
 
         <section className="flex flex-col items-center gap-[18px]">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-[#9ca3af]">
+          <h2 className="text-xs font-semibold uppercase tracking-[1px] text-[#9ca3af]">
             {t("hub.operationsHeading")}
           </h2>
           <div className="flex w-[min(780px,100%)] flex-wrap content-start items-start justify-center gap-x-5 gap-y-6">

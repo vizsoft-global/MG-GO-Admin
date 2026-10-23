@@ -199,13 +199,19 @@ export function mapRowsFromSheet(
 
   return rows
     .map((row, rowIndex) => {
+      const cleared: Partial<Record<DriverImportTargetField, boolean>> = {};
       const get = (field: DriverImportTargetField): string | null => {
         const src = mapping[field];
         if (!src) return null;
         const idx = headerIndex.get(cleanCell(src));
         if (idx == null) return null;
         const v = cleanCell(row[idx]);
-        return v || null;
+        if (!v) return null;
+        if (isClearToken(v)) {
+          cleared[field] = true;
+          return null;
+        }
+        return v;
       };
 
       const phoneRaw = get("phone");
@@ -242,7 +248,7 @@ export function mapRowsFromSheet(
         nationality_category_keys: get("nationality_category_keys"),
         project_key: get("project_key"),
         accommodation: get("accommodation"),
-        joined_at: get("joined_at"),
+        work_start_date: get("work_start_date"),
         screenshots_allowed: get("screenshots_allowed"),
         login_verification_exempt: get("login_verification_exempt"),
         bank_code: get("bank_code"),
@@ -255,8 +261,20 @@ export function mapRowsFromSheet(
         passport_expiry: get("passport_expiry"),
         health_card_expiry: get("health_card_expiry"),
         operations_card_expiry: get("operations_card_expiry"),
+        sponsorship_key: get("sponsorship_key"),
+        job_position: get("job_position"),
+        hiring_type: get("hiring_type"),
+        job_end_date: get("job_end_date"),
+        job_end_description: get("job_end_description"),
+        residency_expiry_date: get("residency_expiry_date"),
+        fixed_salary: get("fixed_salary"),
+        work_permit_salary: get("work_permit_salary"),
+        last_increment_date: get("last_increment_date"),
+        currency: get("currency"),
+        asset_ids: get("asset_ids"),
         custom_fields,
         present,
+        cleared,
       };
     })
     .filter(
@@ -321,7 +339,16 @@ export function guessColumnMapping(
       find("full name", "driver name") ?? findExcept(OTHER_NAMES, "name"),
     phone: find("phone", "mobile", "tel"),
     civil_id: findNoExpiry("civil", "national id", "nid"),
-    employee_id: find("mg id", "mg_id", "mgid", "emp id", "emp_id", "employee"),
+    employee_id: find(
+      "mg id",
+      "mg_id",
+      "mgid",
+      "employee id",
+      "employeeid",
+      "emp id",
+      "emp_id",
+      "employee",
+    ),
     passport_number: findNoExpiry("passport", "passport number", "passport no"),
     partner_id: find("partner id", "partner_id", "partner uuid", "partner"),
     zone_id: find("zone id", "zone_id", "zone uuid", "zone"),
@@ -346,7 +373,7 @@ export function guessColumnMapping(
       "store id",
       "merchant id",
     ),
-    nationality: find("nationality", "country"),
+    nationality: find("country"),
     rider_category: find("rider category", "category", "outsourced", "in house"),
     // A company's Client ID is derived, so a "Company Client ID" column is never
     // the company itself.
@@ -378,10 +405,41 @@ export function guessColumnMapping(
     off_days: find("number of offs", "number of off", "off days", "off_days"),
     employee_status_key: find("employee status", "employee_status", "hr status", "hr_status"),
     section_keys: find("employee section", "section", "sections"),
-    nationality_category_keys: find("nationality category", "nationality_category", "nationality group"),
+    nationality_category_keys:
+      find("nationality category", "nationality_category", "nationality group") ??
+      findExcept(["country"], "nationality"),
     project_key: find("project", "project key", "project_key"),
     accommodation: find("accommodation", "housing"),
-    joined_at: find("joined", "join date", "joining date", "date of joining", "hire date"),
+    work_start_date: find(
+      "work start",
+      "work_start",
+      "joined",
+      "join date",
+      "joining date",
+      "date of joining",
+      "hire date",
+    ),
+    sponsorship_key: find("sponsorship", "sponsor"),
+    job_position: find("job position", "job_position"),
+    hiring_type: find("hiring type", "hiring_type", "hiring"),
+    job_end_date: findExcept(
+      ["description", "reason"],
+      "job end date",
+      "job_end_date",
+      "end of job",
+    ),
+    job_end_description: find(
+      "job end description",
+      "job_end_description",
+      "end description",
+      "leaving reason",
+    ),
+    residency_expiry_date: find("residency expiry", "residency_expiry", "residency"),
+    fixed_salary: find("fixed salary", "fixed_salary"),
+    work_permit_salary: find("work permit salary", "work_permit_salary", "permit salary"),
+    last_increment_date: find("last increment", "increment date", "last_increment"),
+    currency: find("currency", "payment currency"),
+    asset_ids: findExcept(["request"], "assets", "asset"),
     screenshots_allowed: find("screenshots", "screenshot"),
     login_verification_exempt: find("login verification", "verification exempt", "exempt"),
     bank_code: find("bank code", "bank_code", "bank name", "bank"),

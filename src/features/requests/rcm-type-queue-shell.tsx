@@ -279,7 +279,7 @@ export function RcmTypeQueueShell({
               <span>{tabName(tab)}</span>
               <span
                 className={cn(
-                  "ms-1.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] tabular-nums",
+                  "ms-1.5 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs tabular-nums",
                   selected ? "bg-muted font-semibold text-foreground" : "text-muted-foreground",
                 )}
               >
@@ -390,7 +390,7 @@ export function RcmTypeQueueShell({
                   <div className="flex items-center gap-2">
                     <span
                       className={cn(
-                        "flex size-8 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+                        "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                         avatarTintFromName(row.driver_name),
                       )}
                     >
@@ -398,7 +398,7 @@ export function RcmTypeQueueShell({
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium">{row.driver_name}</span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
+                      <span className="block truncate text-xs text-muted-foreground">
                         {[code, zone].filter(Boolean).join(" · ") || "—"}
                       </span>
                     </span>

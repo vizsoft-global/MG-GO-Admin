@@ -1,4 +1,4 @@
-import { hasOpsAssignment, NONE_ZONE } from "./driver-assignment";
+import { hasOpsAssignment, NONE_ZONE, requiresOpsAssignment } from "./driver-assignment";
 import { isValidEmployeeId } from "./driver-errors";
 
 export { NONE_ZONE };
@@ -73,6 +73,9 @@ export type ValidateDriverFormInput = {
   zoneId: string;
   restaurantIds: readonly string[];
   documents: Record<DriverDocumentType, File | null>;
+  /** HR sections the rider belongs to; a non-operational section needs no zone. */
+  sectionKeys?: readonly string[];
+  sections?: readonly { key: string; is_operational?: boolean }[];
 };
 
 export function validateDriverForm(
@@ -106,8 +109,11 @@ export function validateDriverForm(
   }
 
   // Zone-only and restaurant-only fleets are both legal. A driver with
-  // neither has nowhere to work and is refused here rather than at approve.
-  if (!hasOpsAssignment(input.zoneId, input.restaurantIds)) {
+  // neither has nowhere to work and is refused here rather than at approve —
+  // unless every one of their HR sections is non-operational (MG Head Office),
+  // which has no zone or store by design.
+  const opsRequired = requiresOpsAssignment(input.sectionKeys ?? [], input.sections ?? []);
+  if (opsRequired && !hasOpsAssignment(input.zoneId, input.restaurantIds)) {
     errors.zoneId = "missing_assignment";
     errors.restaurants = "missing_assignment";
   }

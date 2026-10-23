@@ -50,7 +50,7 @@ export function FleetConnectionPill({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex h-6 items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 text-[10px] font-semibold text-muted-foreground",
+        "inline-flex h-6 items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 text-xs font-semibold text-muted-foreground",
         className,
       )}
       title={noLiveData ? t("noLiveDataHint") : rail === "edge" ? undefined : t("hint")}

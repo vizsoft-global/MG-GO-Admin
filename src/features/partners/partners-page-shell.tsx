@@ -233,7 +233,7 @@ function PartnersPageContent() {
         {hasActiveFilters ? (
           <Badge
             variant="secondary"
-            className="ms-2 h-5 min-w-5 rounded-full px-1.5 text-[10px]"
+            className="ms-2 h-5 min-w-5 rounded-full px-1.5 text-xs"
           >
             {(driversFilter !== "all" ? 1 : 0) + (logoFilter !== "all" ? 1 : 0)}
           </Badge>

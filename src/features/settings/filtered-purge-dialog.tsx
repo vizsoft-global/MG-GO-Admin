@@ -321,7 +321,7 @@ export function PurgeFilteredDialog({
             ) : (
               <div className="flex flex-wrap items-end gap-2">
                 <div className="min-w-[180px] flex-1">
-                  <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
                     {t("filtered.column")}
                   </p>
                   <Select
@@ -358,7 +358,7 @@ export function PurgeFilteredDialog({
                 </div>
 
                 <div className="min-w-[240px] flex-[2_1_320px]">
-                  <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
                     {t("filtered.value")}
                   </p>
                   {draftColumn?.kind === "list" ? (
@@ -456,11 +456,11 @@ export function PurgeFilteredDialog({
             )}
 
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-medium text-muted-foreground">
+              <span className="text-xs font-medium text-muted-foreground">
                 {t("filtered.activeFilters", { count: activeCount })}
               </span>
               {activeCount === 0 ? (
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {t("filtered.noFilters")}
                 </span>
               ) : (
@@ -471,7 +471,7 @@ export function PurgeFilteredDialog({
                     <button
                       key={key}
                       type="button"
-                      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15"
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
                       onClick={() => {
                         setDraft(valueToDraft(column, value));
                         setPage(1);
@@ -532,7 +532,7 @@ export function PurgeFilteredDialog({
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {t("pageOf", { page, total: totalPages })}
                   </span>
                   <Button

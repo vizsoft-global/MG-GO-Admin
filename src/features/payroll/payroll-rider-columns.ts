@@ -1,10 +1,20 @@
 "use client";
 
 import { vehicleLabel } from "@/features/performance/performance-ops-format";
-import { PAYROLL_DAY_HOURS, type DayStatus } from "./payroll-formulas";
+import { kuwaitToday } from "@/features/performance/performance-formulas";
+import { PAYROLL_DAY_HOURS, PAYROLL_STATUS_CHIP, type DayStatus } from "./payroll-formulas";
 import { aoShownOrders } from "./payroll-orders-display";
 import { cellParticular } from "./payroll-particulars";
 import { ADJUSTMENT_STATUS_TO_DAY, type AdjustmentStatus } from "./payroll-rules-engine";
+import {
+  CORE_PAYROLL_STATUS_HEX,
+  CORE_PAYROLL_STATUS_LABEL,
+  CUSTOM_STATUS_HEX,
+  isCorePayrollStatus,
+  payrollGridStatusFromDay,
+  payrollStatusChoiceFromLabel,
+  type CorePayrollStatusKey,
+} from "./payroll-status-options";
 import type { PayrollRiderRow } from "./payroll-types";
 
 export type PayrollRiderColumn = {
@@ -65,6 +75,7 @@ export const COMBINED_IDENTITY_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "zoneCategory", numeric: false, labelKey: "zoneCategory" },
   { id: "partner", numeric: false, labelKey: "partner" },
   { id: "vehicleKind", numeric: false, labelKey: "vehicleKind" },
+  { id: "status", numeric: false, labelKey: "status" },
   { id: "finalOrders", numeric: true, labelKey: "finalOrders" },
   { id: "actualHours", numeric: true, labelKey: "actualHours" },
 ] as const;
@@ -85,6 +96,7 @@ export const APP_ATTENDANCE_LEAD_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "zone", numeric: false, labelKey: "zone" },
   { id: "zoneCategory", numeric: false, labelKey: "zoneCategory" },
   { id: "vehicleKind", numeric: false, labelKey: "vehicleKind" },
+  { id: "status", numeric: false, labelKey: "status" },
   { id: "appTotalHours", numeric: true, labelKey: "appTotalHours" },
   { id: "appActiveDays", numeric: true, labelKey: "appActiveDays" },
   { id: "appAvgHours", numeric: true, labelKey: "appAvgHours" },
@@ -100,6 +112,7 @@ export const AO_LEAD_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "zone", numeric: false, labelKey: "zone" },
   { id: "zoneCategory", numeric: false, labelKey: "zoneCategory" },
   { id: "vehicleKind", numeric: false, labelKey: "vehicleKind" },
+  { id: "status", numeric: false, labelKey: "status" },
   { id: "finalOrders", numeric: true, labelKey: "finalOrders" },
   { id: "actualHours", numeric: true, labelKey: "actualHours" },
 ] as const;
@@ -165,9 +178,155 @@ export function restaurantDisplayId(row: PayrollRiderRow): string {
   return row.restaurantClientId || row.restaurantId || "";
 }
 
+/**
+ * What the Rider Status column says for one row.
+ *
+ * The column answers "what is this rider doing today", so a day status wins
+ * whenever the selected month actually contains today. A past month has no
+ * today cell, and a rider whose today cell is still blank has nothing to
+ * report, so both fall back to the account status the riders list shows.
+ * `label` is the one string the pill, the column filter, the sort and the CSV
+ * all read, so an export can never disagree with the grid.
+ */
+export type RiderStatusValue = {
+  /** A core Status choice, a custom label, or the riders-list Inactive account. */
+  status: CorePayrollStatusKey | "inactive" | "custom";
+  label: string;
+  /** Null for Active and Inactive, which use the account pill. */
+  hex: string | null;
+  /** Kuwait date the day status came from, when one did. */
+  date: string | null;
+  kind: "day" | "account" | "manual";
+};
+
+/** Pill vocabulary: the legend's words, shortened to fit one cell. */
+const RIDER_STATUS_LABELS: Record<DayStatus, string> = {
+  work: "Work",
+  reduced3: "3h",
+  half: "Half",
+  actual: "Actual",
+  off: "OFF",
+  sick: "Sick",
+  accident: "Accident",
+  vehicle: "Vehicle",
+  absent: "Absent",
+  abs_lh: "Abs·LH",
+  abs_lo: "Abs·LO",
+  custom: "Custom",
+  cancelled: "Cancelled",
+  leave: "Leave",
+  terminated: "Terminated",
+  phone_issue: "Phone issue",
+  id_suspended: "ID Suspended",
+  new_hire: "New hire",
+  training: "Training",
+  blank: "",
+};
+
+export function riderStatusLabel(status: DayStatus): string {
+  return RIDER_STATUS_LABELS[status];
+}
+
+/**
+ * Legend swatch per status. `actual`, `custom`, `abs_lh` and `abs_lo` are not
+ * legend chips of their own, so they borrow the swatch of the day type they
+ * behave like: a worked day, or an absence.
+ */
+const RIDER_STATUS_HEX: Record<DayStatus, string | null> = {
+  work: PAYROLL_STATUS_CHIP.work.hex,
+  reduced3: PAYROLL_STATUS_CHIP.reduced3.hex,
+  half: PAYROLL_STATUS_CHIP.half.hex,
+  actual: PAYROLL_STATUS_CHIP.work.hex,
+  off: PAYROLL_STATUS_CHIP.off.hex,
+  sick: PAYROLL_STATUS_CHIP.sick.hex,
+  accident: PAYROLL_STATUS_CHIP.accident.hex,
+  vehicle: PAYROLL_STATUS_CHIP.vehicle.hex,
+  absent: PAYROLL_STATUS_CHIP.absent.hex,
+  abs_lh: PAYROLL_STATUS_CHIP.absent.hex,
+  abs_lo: PAYROLL_STATUS_CHIP.absent.hex,
+  custom: PAYROLL_STATUS_CHIP.work.hex,
+  cancelled: PAYROLL_STATUS_CHIP.cancelled.hex,
+  leave: PAYROLL_STATUS_CHIP.leave.hex,
+  terminated: PAYROLL_STATUS_CHIP.terminated.hex,
+  phone_issue: PAYROLL_STATUS_CHIP.phone_issue.hex,
+  id_suspended: PAYROLL_STATUS_CHIP.id_suspended.hex,
+  new_hire: PAYROLL_STATUS_CHIP.new_hire.hex,
+  training: PAYROLL_STATUS_CHIP.training.hex,
+  blank: null,
+};
+
+export function riderStatusHex(status: DayStatus): string | null {
+  return RIDER_STATUS_HEX[status];
+}
+
+function manualStatus(row: PayrollRiderRow): RiderStatusValue | null {
+  const override = row.statusOverride;
+  const raw = override?.label?.trim();
+  if (!override || !raw) return null;
+  if (isCorePayrollStatus(override.key)) {
+    return {
+      status: override.key,
+      label: CORE_PAYROLL_STATUS_LABEL[override.key],
+      hex: CORE_PAYROLL_STATUS_HEX[override.key],
+      date: null,
+      kind: "manual",
+    };
+  }
+  const choice = payrollStatusChoiceFromLabel(raw);
+  if (!choice) return null;
+  if (isCorePayrollStatus(choice.key)) {
+    return {
+      status: choice.key,
+      label: choice.label,
+      hex: CORE_PAYROLL_STATUS_HEX[choice.key],
+      date: null,
+      kind: "manual",
+    };
+  }
+  return {
+    status: "custom",
+    label: choice.label,
+    hex: CUSTOM_STATUS_HEX,
+    date: null,
+    kind: "manual",
+  };
+}
+
+export function resolveRiderStatus(
+  row: PayrollRiderRow,
+  todayDate?: string | null,
+): RiderStatusValue {
+  const manual = manualStatus(row);
+  if (manual) return manual;
+  const today = todayDate ?? kuwaitToday();
+  const index = row.dayInfo.findIndex((info) => info.date === today);
+  const dayStatus = index >= 0 ? row.days[index] : undefined;
+  if (dayStatus && dayStatus !== "blank") {
+    const key = payrollGridStatusFromDay(dayStatus);
+    if (key) {
+      return {
+        status: key,
+        label: CORE_PAYROLL_STATUS_LABEL[key],
+        hex: CORE_PAYROLL_STATUS_HEX[key],
+        date: today,
+        kind: "day",
+      };
+    }
+  }
+  const active = row.status === "Active";
+  return {
+    status: active ? "active" : "inactive",
+    label: active ? "Active" : "Inactive",
+    hex: null,
+    date: null,
+    kind: "account",
+  };
+}
+
 export function riderColumnValue(
   row: PayrollRiderRow,
   columnId: string,
+  todayDate?: string | null,
 ): string | number | null {
   switch (columnId) {
     case "amId":
@@ -197,7 +356,7 @@ export function riderColumnValue(
     case "nationality":
       return row.nationality;
     case "status":
-      return row.status;
+      return resolveRiderStatus(row, todayDate).label;
     case "totalDays":
       return row.workDays;
     case "totalHours":

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import {
   Table,
@@ -44,12 +45,15 @@ export function EmployeeCatalogPanel({
   const [labelAr, setLabelAr] = useState("");
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<EmployeeCatalogRow | null>(null);
+  const [operational, setOperational] = useState(true);
+  const isSections = kind === "employee_sections";
 
   const reset = () => {
     setKey("");
     setLabelEn("");
     setLabelAr("");
     setEditing(null);
+    setOperational(true);
   };
 
   const startAdd = () => {
@@ -62,6 +66,7 @@ export function EmployeeCatalogPanel({
     setKey(row.key);
     setLabelEn(row.label_en);
     setLabelAr(row.label_ar);
+    setOperational(row.is_operational !== false);
     setOpen(true);
   };
 
@@ -80,6 +85,7 @@ export function EmployeeCatalogPanel({
       isActive: editing?.is_active ?? true,
       sortOrder: editing?.sort_order,
       color: editing?.color,
+      isOperational: isSections ? operational : undefined,
     });
     setSaving(false);
     if ("error" in result) {
@@ -125,7 +131,14 @@ export function EmployeeCatalogPanel({
                 <TableCell className="text-sm">{row.label_en}</TableCell>
                 <TableCell className="text-sm">{row.label_ar || "—"}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">
-                  {row.is_system ? t("system") : t("custom")}
+                  <span className="inline-flex items-center gap-1.5">
+                    {row.is_system ? t("system") : t("custom")}
+                    {isSections && row.is_operational === false ? (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                        {t("nonOperational")}
+                      </span>
+                    ) : null}
+                  </span>
                 </TableCell>
               </TableRow>
             ))}
@@ -177,6 +190,21 @@ export function EmployeeCatalogPanel({
                 onChange={(event) => setKey(event.target.value.toLowerCase())}
               />
             </div>
+            {isSections ? (
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3">
+                <div className="space-y-0.5">
+                  <Label htmlFor="catalog-operational">{t("operational")}</Label>
+                  <p className="text-xs leading-4 text-muted-foreground">
+                    {t("operationalHint")}
+                  </p>
+                </div>
+                <Switch
+                  id="catalog-operational"
+                  checked={operational}
+                  onCheckedChange={setOperational}
+                />
+              </div>
+            ) : null}
           </div>
           <AppModalFooter title={editing ? t("edit") : t("add")} subtitle={title}>
             <Button type="button" variant="outline" className="h-9" onClick={() => setOpen(false)}>

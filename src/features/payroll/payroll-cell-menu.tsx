@@ -58,7 +58,7 @@ export function PayrollCellMenu({
       <button
         type="button"
         role="menuitem"
-        className="flex h-8 w-full items-center gap-2 rounded-sm px-2 text-[11px] font-semibold text-primary hover:bg-primary/10"
+        className="flex h-8 w-full items-center gap-2 rounded-sm px-2 text-xs font-semibold text-primary hover:bg-primary/10"
         onClick={onEdit}
       >
         <PencilLine className="size-3.5" />
@@ -67,7 +67,7 @@ export function PayrollCellMenu({
       <button
         type="button"
         role="menuitem"
-        className="flex h-8 w-full items-center gap-2 rounded-sm px-2 text-[11px] font-semibold hover:bg-muted/50"
+        className="flex h-8 w-full items-center gap-2 rounded-sm px-2 text-xs font-semibold hover:bg-muted/50"
         onClick={onHistory}
       >
         <History className="size-3.5" />

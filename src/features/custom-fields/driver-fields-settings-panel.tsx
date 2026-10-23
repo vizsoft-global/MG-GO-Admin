@@ -279,7 +279,7 @@ export function DriverFieldsSettingsPanel() {
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold">{def.label}</p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {def.key} · {def.field_type}
                     {def.required ? ` · ${t("required")}` : ""}
                     {def.field_type === "text" && def.letters_only
@@ -498,13 +498,13 @@ export function DriverFieldsSettingsPanel() {
               ) : null}
             </div>
             {draft.field_type === "text" && draft.letters_only ? (
-              <p className="text-[10px] text-muted-foreground">{t("lettersOnlyHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("lettersOnlyHint")}</p>
             ) : null}
             {draft.field_type === "select" || draft.field_type === "checkbox" ? (
               <div className="space-y-2">
                 <Label>{t("options")}</Label>
                 {draft.field_type === "checkbox" ? (
-                  <p className="text-[10px] text-muted-foreground">{t("checkboxOptionsHint")}</p>
+                  <p className="text-xs text-muted-foreground">{t("checkboxOptionsHint")}</p>
                 ) : null}
                 {draft.options.map((opt, i) => (
                   draft.field_type === "checkbox" ? (

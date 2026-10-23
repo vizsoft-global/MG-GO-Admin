@@ -105,7 +105,7 @@ function TimelineStep({
       />
       <div>
         <p className={cn("text-xs font-medium", !done && "text-muted-foreground")}>{label}</p>
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {at ? formatStamp(at) : (pendingLabel ?? "—")}
         </p>
       </div>
@@ -116,7 +116,7 @@ function TimelineStep({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="text-end text-xs font-medium">{value}</dd>
     </div>
   );
@@ -416,7 +416,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
                 className="min-h-0 w-full flex-1 rounded-lg border border-border bg-card"
               />
               {previewIsSignedCopy ? (
-                <p className="text-[10px] text-muted-foreground">{t("previewSignedCopy")}</p>
+                <p className="text-xs text-muted-foreground">{t("previewSignedCopy")}</p>
               ) : null}
             </div>
           ) : linksLoading ? (
@@ -429,7 +429,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
             <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card py-16 text-center">
               <FileText className="h-8 w-8 text-muted-foreground/50" />
               <p className="text-sm font-medium">{t("noDocumentTitle")}</p>
-              <p className="max-w-xs text-[11px] text-muted-foreground">
+              <p className="max-w-xs text-xs text-muted-foreground">
                 {t("noDocumentBody")}
               </p>
             </div>
@@ -442,7 +442,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
                 alt={request.signer_display_name ?? t("signerName")}
                 className="h-16 object-contain"
               />
-              <p className="mt-1 border-t border-border pt-1 text-[10px] text-muted-foreground">
+              <p className="mt-1 border-t border-border pt-1 text-xs text-muted-foreground">
                 {t("signedElectronically", { at: formatStamp(request.signed_at) })}
               </p>
             </div>
@@ -458,7 +458,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               </StatusPill>
             </div>
             {request.awaiting_counter_signature ? (
-              <p className="text-[10px] font-medium text-amber-700">{t("awaitingCounter")}</p>
+              <p className="text-xs font-medium text-amber-700">{t("awaitingCounter")}</p>
             ) : null}
             <ol className="space-y-2">
               <TimelineStep label={t("timelineSent")} at={request.sent_at} />
@@ -509,7 +509,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
               />
             </div>
             {(request.attachments ?? []).length === 0 ? (
-              <p className="text-[10px] text-muted-foreground">{t("noAttachments")}</p>
+              <p className="text-xs text-muted-foreground">{t("noAttachments")}</p>
             ) : (
               <ul className="space-y-1.5">
                 {(request.attachments ?? []).map((attachment) => (
@@ -526,7 +526,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
                       {attachment.name}
                     </a>
                     <span className="flex shrink-0 items-center gap-1">
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {formatBytes(attachment.size)}
                       </span>
                       <button
@@ -566,7 +566,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
                     <p className="text-xs text-muted-foreground">{request.review_note}</p>
                   ) : null}
                   {request.reviewed_at ? (
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {formatStamp(request.reviewed_at)}
                     </p>
                   ) : null}
@@ -624,7 +624,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
                 <Row label={t("signedAt")} value={formatStamp(request.signed_at)} />
               )}
               <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-[11px] text-muted-foreground">{t("screenshot")}</dt>
+                <dt className="text-xs text-muted-foreground">{t("screenshot")}</dt>
                 <dd className="flex items-center gap-1.5 text-xs font-medium">
                   {request.screenshot_restricted ? (
                     <>
@@ -673,14 +673,14 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
             </dl>
             {declinedReason ? (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2">
-                <p className="text-[10px] font-semibold text-destructive">
+                <p className="text-xs font-semibold text-destructive">
                   {t("declineReasonLabel")}
                 </p>
                 <p className="mt-0.5 text-xs">{declinedReason}</p>
               </div>
             ) : null}
             {proofRows.length === 0 ? (
-              <p className="text-[10px] text-muted-foreground">{t("noSignerMeta")}</p>
+              <p className="text-xs text-muted-foreground">{t("noSignerMeta")}</p>
             ) : null}
           </AppListCard>
 
@@ -699,8 +699,8 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
             <p
               className={
                 links?.signedDocumentError
-                  ? "rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[10px] text-destructive"
-                  : "rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-800"
+                  ? "rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive"
+                  : "rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800"
               }
             >
               {links?.signedDocumentError

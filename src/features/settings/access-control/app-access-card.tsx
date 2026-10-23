@@ -48,7 +48,7 @@ function SubViewChip({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border px-[7px] text-[10.5px] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border px-[7px] text-xs transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
         active
           ? "border-black/30 bg-[#F4F4F5] text-[#374151]"
           : "border-[#E4E4E7] bg-white text-[#71717A] hover:bg-[#FAFAFA]",
@@ -114,8 +114,8 @@ export function AppAccessCard({
           {createElement(resolveIcon(iconName), { className: "size-3.5 text-white" })}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[12.5px] font-semibold text-[#18181B]">{label}</p>
-          <p className="truncate text-[10.5px] text-[#71717A]">
+          <p className="truncate text-xs font-semibold text-[#18181B]">{label}</p>
+          <p className="truncate text-xs text-[#71717A]">
             {hidden
               ? t("hiddenFromUser")
               : t("subViewsSummary", {
@@ -138,7 +138,7 @@ export function AppAccessCard({
               disabled={disabled}
               onClick={() => onLevel(level)}
               className={cn(
-                "h-6 flex-1 cursor-pointer rounded-md text-[10px] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+                "h-6 flex-1 cursor-pointer rounded-md text-xs transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
                 active
                   ? "bg-[#18181B] font-medium text-white"
                   : "text-[#6B7280] hover:text-[#18181B]",
@@ -151,7 +151,7 @@ export function AppAccessCard({
       </div>
 
       {item.custom ? (
-        <p className="flex items-center gap-1.5 text-[9.5px] text-[#646464]">
+        <p className="flex items-center gap-1.5 text-xs text-[#646464]">
           <span className="size-1.5 shrink-0 rounded-full bg-[#646464]" aria-hidden />
           {t("changedManually")}
         </p>
@@ -159,7 +159,7 @@ export function AppAccessCard({
 
       {!hidden && entry.subViews.length > 0 ? (
         <div className="flex flex-col gap-1.5">
-          <p className="text-[9.5px] font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
+          <p className="text-xs font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
             {t("visibleSubViews")}
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -178,7 +178,7 @@ export function AppAccessCard({
 
       {!hidden && entry.rcm && onSides ? (
         <div className="flex flex-col gap-1.5">
-          <p className="text-[9.5px] font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
+          <p className="text-xs font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
             {t("sides")}
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -200,7 +200,7 @@ export function AppAccessCard({
 
       {!hidden && entry.rcm && item.sender === true && onToggleEsign ? (
         <div className="flex flex-col gap-1.5">
-          <p className="text-[9.5px] font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
+          <p className="text-xs font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
             {t("outgoingCategoriesHeading")}
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -219,7 +219,7 @@ export function AppAccessCard({
 
       {!hidden && entry.rcm && item.receiver === true && requestTypes && onToggleType ? (
         <div className="flex flex-col gap-1.5">
-          <p className="text-[9.5px] font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
+          <p className="text-xs font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
             {t("requestTypes")}
           </p>
           <div className="flex flex-wrap gap-1.5">

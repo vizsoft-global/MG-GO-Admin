@@ -230,7 +230,7 @@ export function DriverDevicesTab({
                         <Tooltip>
                           <TooltipTrigger
                             render={
-                              <span className="cursor-default font-mono text-[10px] text-muted-foreground">
+                              <span className="cursor-default font-mono text-xs text-muted-foreground">
                                 {truncateDeviceId(session.device_id)}
                               </span>
                             }
@@ -248,7 +248,7 @@ export function DriverDevicesTab({
                       {formatSeenAt(session.last_seen_at)}
                       {session.flush_deadline_at &&
                       resolveDeviceSessionStatus(session) === "override_pending" ? (
-                        <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                        <p className="text-xs text-amber-700 dark:text-amber-400">
                           {t("flushUntil", { time: formatSeenAt(session.flush_deadline_at) })}
                         </p>
                       ) : null}
@@ -264,7 +264,7 @@ export function DriverDevicesTab({
         )}
 
         {isFetching && !isLoading ? (
-          <p className="mt-2 text-[10px] text-muted-foreground">{t("refreshing")}</p>
+          <p className="mt-2 text-xs text-muted-foreground">{t("refreshing")}</p>
         ) : null}
       </TrackingGlassCard>
 

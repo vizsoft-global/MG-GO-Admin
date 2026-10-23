@@ -219,10 +219,10 @@ export function CopyAccessDialog({
         showCloseButton
       >
         <DialogHeader className="gap-1 border-b border-[#E4E4E7] px-5 py-4 pe-12">
-          <DialogTitle className="text-[16px] font-semibold text-[#18181B]">
+          <DialogTitle className="text-base font-semibold text-[#18181B]">
             {t("copyAccess")}
           </DialogTitle>
-          <DialogDescription className="text-[12.5px] text-[#71717A]">
+          <DialogDescription className="text-xs text-[#71717A]">
             {t("copySubtitle")}
           </DialogDescription>
         </DialogHeader>
@@ -236,7 +236,7 @@ export function CopyAccessDialog({
                 setPreview(null);
               }}
               className={cn(
-                "flex-1 cursor-pointer rounded-md text-[12.5px] transition-colors duration-150",
+                "flex-1 cursor-pointer rounded-md text-xs transition-colors duration-150",
                 tab === "user"
                   ? "bg-white font-medium text-[#18181B] shadow-sm"
                   : "text-[#71717A]",
@@ -251,7 +251,7 @@ export function CopyAccessDialog({
                 setPreview(null);
               }}
               className={cn(
-                "flex-1 cursor-pointer rounded-md text-[12.5px] transition-colors duration-150",
+                "flex-1 cursor-pointer rounded-md text-xs transition-colors duration-150",
                 tab === "role"
                   ? "bg-white font-medium text-[#18181B] shadow-sm"
                   : "text-[#71717A]",
@@ -268,7 +268,7 @@ export function CopyAccessDialog({
                 onChange={setUserQuery}
                 placeholder={t("searchUsers")}
                 clearLabel={t("clearSearch")}
-                inputClassName="h-9 rounded-lg border-[#E4E4E7] bg-white text-[12.5px] ps-8"
+                inputClassName="h-9 rounded-lg border-[#E4E4E7] bg-white text-xs ps-8"
               />
               <ul className="max-h-[220px] overflow-auto rounded-lg border border-[#E4E4E7]">
                 {visibleUsers.length === 0 ? (
@@ -295,14 +295,14 @@ export function CopyAccessDialog({
                             selected ? "bg-[#FAFAFA]" : "hover:bg-[#FAFAFA]",
                           )}
                         >
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#FDE68A] text-[11px] font-semibold text-[#574500]">
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#FDE68A] text-xs font-semibold text-[#574500]">
                             {initials(row.fullName)}
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[13px] font-medium text-[#18181B]">
+                            <span className="block truncate text-sm font-medium text-[#18181B]">
                               {name}
                             </span>
-                            <span className="block truncate text-[11px] text-[#71717A]">{hint}</span>
+                            <span className="block truncate text-xs text-[#71717A]">{hint}</span>
                           </span>
                           {selected ? (
                             <Check className="size-4 shrink-0 text-[#18181B]" aria-hidden />
@@ -328,7 +328,7 @@ export function CopyAccessDialog({
                         selected ? "bg-[#FAFAFA]" : "hover:bg-[#FAFAFA]",
                       )}
                     >
-                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#18181B]">
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-[#18181B]">
                         {role.name}
                       </span>
                       {selected ? (
@@ -344,7 +344,7 @@ export function CopyAccessDialog({
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
           {diff && preview ? (
-            <div className="space-y-1.5 text-[12.5px]">
+            <div className="space-y-1.5 text-xs">
               <p className="font-medium text-[#18181B]">
                 {t("diffAdded", { count: diff.addedApps.length })}
                 {" · "}
@@ -367,10 +367,10 @@ export function CopyAccessDialog({
               </ul>
             </div>
           ) : (
-            <p className="text-[11px] text-muted-foreground">{t("copyPreviewHint")}</p>
+            <p className="text-xs text-muted-foreground">{t("copyPreviewHint")}</p>
           )}
 
-          <label className="flex items-center gap-2 text-[12.5px] text-[#18181B]">
+          <label className="flex items-center gap-2 text-xs text-[#18181B]">
             <Checkbox
               checked={keepSubViews}
               onCheckedChange={(checked) => {

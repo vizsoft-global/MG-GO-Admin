@@ -354,7 +354,7 @@ function MatrixColumnHeader({
   return (
     <div className="sticky top-0 z-10 flex items-end gap-2 border-b border-border bg-card px-4 py-2">
             <div className="min-w-0 flex-1 pb-0.5">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {t("permissionColumn")}
         </p>
       </div>
@@ -376,7 +376,7 @@ function MatrixColumnHeader({
               onClick={() => onSelectRole(role.id)}
             >
               <p className="truncate text-xs font-semibold">{role.name}</p>
-              <p className="truncate text-[10px] tabular-nums opacity-80">
+              <p className="truncate text-xs tabular-nums opacity-80">
                 {t("roleColumnSummary", {
                   checked: enabled,
                   total: totalPermissions,
@@ -781,7 +781,7 @@ export function RolesPermissionsPanel({
   return (
     <>
       <div className="space-y-3">
-        <p className="text-[10px] text-muted-foreground">{t("templateNote")}</p>
+        <p className="text-xs text-muted-foreground">{t("templateNote")}</p>
         <RolesActionBar
           roles={editableRoles}
           selectedColumnId={selectedColumnId}
@@ -849,7 +849,7 @@ export function RolesPermissionsPanel({
                             {categoryLabel(category, t)}
                           </p>
                           {selectedColumn ? (
-                            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
                               {t("categoryProgress", {
                                 checked: checkedCount,
                                 total: perms.length,

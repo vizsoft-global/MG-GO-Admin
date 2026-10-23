@@ -21,6 +21,7 @@ const KIND_COLLECTION: Record<EmployeeCatalogKind, string> = {
   employee_sections: COLLECTIONS.employeeSections,
   nationality_categories: COLLECTIONS.nationalityCategories,
   bank_codes: COLLECTIONS.bankCodes,
+  sponsorships: COLLECTIONS.sponsorships,
 };
 
 export type EmployeeCatalogError =
@@ -62,6 +63,8 @@ export async function upsertEmployeeCatalog(input: {
   isActive: boolean;
   sortOrder?: number;
   color?: string | null;
+  /** `employee_sections` only: false removes the zone/restaurant requirement. */
+  isOperational?: boolean;
 }): Promise<{ ok: true } | { error: EmployeeCatalogError }> {
   try {
     await requireManage();
@@ -81,6 +84,7 @@ export async function upsertEmployeeCatalog(input: {
     isActive: input.isActive,
     sortOrder: input.sortOrder ?? 100,
     color: input.color ?? null,
+    isOperational: input.isOperational,
   });
   if (error) {
     const code = error.message;

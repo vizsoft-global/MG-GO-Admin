@@ -1,10 +1,12 @@
 import { getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
+import { pointWithinZoneProximity, type ZoneFeature } from "../core/geo";
 import {
   nearestRestaurant,
   restaurantAllowed,
   restaurantDistanceMeters,
   restaurantReachableForPartner,
+  zoneTypeOf,
   type RestaurantCandidate,
 } from "../core/restaurant-proximity";
 import { chunk, IN_FILTER_LIMIT, loadDocMap, type Dict } from "./_shared";
@@ -37,6 +39,154 @@ export function isCheckInPhotoKeyForKey(driverId: string, key: string): boolean 
  */
 export function needsCheckIn(log: Dict | null | undefined): boolean {
   return !log || log["check_in_at"] == null;
+}
+
+/**
+ * Project key for the Keeta fleet. Stored lowercase by the Admin driver form
+ * (`parseDriverProjectKey` rejects `Keeta`), but the comparison is
+ * case-insensitive so a hand-edited row cannot silently keep the photo gate.
+ */
+export function isKeetaDriver(driver: Dict): boolean {
+  const key = driver["project_key"];
+  return typeof key === "string" && key.trim().toLowerCase() === "keeta";
+}
+
+/** Partner name or key stored as Keeta, ignoring case and surrounding space. */
+export function isKeetaLabel(value: unknown): boolean {
+  return typeof value === "string" && value.trim().toLowerCase() === "keeta";
+}
+
+/**
+ * A restaurant name that means this rider clocks in on a zone.
+ * `(Pool)` is the employees-list label for an unassigned Keeta store, and
+ * `Keeta - Jahra` is a real restaurant row whose name starts with Keeta.
+ */
+export function isKeetaZoneRestaurantName(name: string): boolean {
+  const trimmed = name.trim().toLowerCase();
+  return trimmed === "(pool)" || trimmed === "pool" || /^keeta\b/.test(trimmed);
+}
+
+/**
+ * Zone gate, not a restaurant pin.
+ * True when the project is Keeta, the partner is Keeta, or any assigned
+ * restaurant is a Keeta / pool store. A zone on an Americana rider does not
+ * qualify — that fleet still matches a restaurant.
+ */
+export function usesKeetaZoneGate(input: {
+  projectKey: unknown;
+  partnerName: unknown;
+  partnerKey: unknown;
+  restaurantNames: readonly string[];
+}): boolean {
+  if (isKeetaDriver({ project_key: input.projectKey })) return true;
+  if (isKeetaLabel(input.partnerName) || isKeetaLabel(input.partnerKey)) return true;
+  return input.restaurantNames.some((name) => isKeetaZoneRestaurantName(name));
+}
+
+function restaurantNamesOf(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+/**
+ * The check-in decision for one rider document.
+ * Denormalized restaurant names decide first. Partner is read only when those
+ * names and the project key do not already match. Assigned restaurants are
+ * loaded only when the driver has no denormalized names at all, so an
+ * Americana rider with real store names does not pay a second candidate read.
+ */
+export async function riderUsesKeetaZoneGate(driverId: string, driver: Dict): Promise<boolean> {
+  const names = restaurantNamesOf(driver["restaurant_names"]);
+  let partnerName: unknown = driver["partner_name"];
+  let partnerKey: unknown = driver["partner_key"] ?? driver["partner_slug"];
+  const projectKey = driver["project_key"];
+  if (usesKeetaZoneGate({ projectKey, partnerName, partnerKey, restaurantNames: names })) return true;
+
+  const partnerId = typeof driver["partner_id"] === "string" ? driver["partner_id"].trim() : "";
+  if (partnerId) {
+    const snap = await getFirestore().collection(COLLECTIONS.partners).doc(partnerId).get();
+    const row = snap.data() ?? {};
+    partnerName = row["name"];
+    partnerKey = row["key"] ?? row["slug"];
+    if (usesKeetaZoneGate({ projectKey, partnerName, partnerKey, restaurantNames: names })) return true;
+  }
+
+  if (names.length > 0) return false;
+
+  const candidates = await loadCheckInCandidates(driverId, driver);
+  return usesKeetaZoneGate({
+    projectKey,
+    partnerName,
+    partnerKey,
+    restaurantNames: candidates.map((item) =>
+      typeof item.restaurant["name"] === "string" ? item.restaurant["name"] : "",
+    ),
+  });
+}
+
+/** The rider's assigned zone, as the check-in gate needs it. */
+export type CheckInZone = {
+  id: string;
+  name: string | null;
+  geometry: unknown;
+  zone_type: unknown;
+};
+
+/** `{ id, name }` — what the phone names in the refusal copy. */
+export type CheckInZoneSummary = { id: string; name: string | null };
+
+export type KeetaZoneOutcome = "in_range" | "outside_zone" | "no_zone";
+
+/**
+ * The rider's zone document, or null when the assignment is missing.
+ *
+ * `loadDriverZone` in `driver-deliveries` returns only geometry/type and that
+ * module imports this one's sibling (`driver-home`), so importing it here would
+ * create a cycle. The read is the same single document.
+ */
+export async function loadCheckInZone(zoneId: string | null): Promise<CheckInZone | null> {
+  if (!zoneId) return null;
+  const snap = await getFirestore().collection(COLLECTIONS.zones).doc(zoneId).get();
+  if (!snap.exists) return null;
+  const data = (snap.data() ?? {}) as Dict;
+  const name = data["name"];
+  return {
+    id: zoneId,
+    name: typeof name === "string" && name.trim() !== "" ? name.trim() : null,
+    geometry: data["geometry"],
+    zone_type: data["zone_type"],
+  };
+}
+
+/**
+ * Keeta clock-in gate: inside the assigned zone, with a zero buffer.
+ *
+ * A Keeta rider has no single store to prove, so the restaurant proximity test
+ * would always refuse them. The zone is the promise instead: `no_zone` (no
+ * assignment, a missing document or no stored shape) is the "ask your
+ * administrator" case, and `outside_zone` is the "move inside your zone" case.
+ * A shape that exists but cannot be parsed reads as outside rather than
+ * no-zone, so a broken polygon cannot silently admit a rider.
+ */
+export function keetaZoneVerdict(args: {
+  lat: number;
+  lng: number;
+  zone: CheckInZone | null;
+}): { outcome: KeetaZoneOutcome; zone: CheckInZoneSummary | null } {
+  const { lat, lng, zone } = args;
+  if (!zone) return { outcome: "no_zone", zone: null };
+  const summary: CheckInZoneSummary = { id: zone.id, name: zone.name };
+  // No stored shape is the administrator case, not the "walk closer" case, so
+  // the summary is dropped too and the phone shows the assignment copy.
+  if (zone.geometry == null) return { outcome: "no_zone", zone: null };
+  const inside = pointWithinZoneProximity(
+    lat,
+    lng,
+    zone.geometry as ZoneFeature,
+    zoneTypeOf(zone.zone_type),
+    0,
+  );
+  return { outcome: inside ? "in_range" : "outside_zone", zone: summary };
 }
 
 function candidateName(candidate: CheckInCandidate): string | null {

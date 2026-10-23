@@ -108,7 +108,7 @@ export function FleetRail({
         >
           <ChevronRight className="size-4 rtl:rotate-180" aria-hidden />
         </Button>
-        <span className="flex flex-col items-center gap-0.5 text-[10px] font-semibold tabular-nums">
+        <span className="flex flex-col items-center gap-0.5 text-xs font-semibold tabular-nums">
           <Users className="size-3.5 text-muted-foreground" aria-hidden />
           {driverIds.length}
         </span>
@@ -116,7 +116,7 @@ export function FleetRail({
           {statusDots.map((entry) => (
             <span key={entry.key} className="flex flex-col items-center">
               <span className={cn("size-2 rounded-full", FLEET_TONE_DOT[entry.tone])} aria-hidden />
-              <span className="text-[9px] tabular-nums text-muted-foreground">{entry.count}</span>
+              <span className="text-xs tabular-nums text-muted-foreground">{entry.count}</span>
             </span>
           ))}
         </div>
@@ -129,7 +129,7 @@ export function FleetRail({
       <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border/60 px-2">
         <Users className="size-3.5 text-muted-foreground" aria-hidden />
         <span className="text-xs font-semibold">{t("rail.heading")}</span>
-        <span className="text-[10px] tabular-nums text-muted-foreground">
+        <span className="text-xs tabular-nums text-muted-foreground">
           {t("rail.showing", { visible: driverIds.length, total: snapshot.totalDrivers })}
         </span>
         <Button
@@ -147,7 +147,7 @@ export function FleetRail({
       {driverIds.length === 0 ? (
         <div className="px-3 py-6 text-center">
           <p className="text-xs font-medium">{t("rail.empty")}</p>
-          <p className="mt-1 text-[10px] text-muted-foreground">{t("rail.emptyHint")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{t("rail.emptyHint")}</p>
         </div>
       ) : (
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">

@@ -72,7 +72,7 @@ export function ZoneGeofenceTypeSection({ value, onChange }: GeofenceFieldsProps
               >
                 {t(`geofence.kind.${kind}`)}
               </span>
-              <span className="text-[11px] leading-tight text-muted-foreground">
+              <span className="text-xs leading-tight text-muted-foreground">
                 {t(`geofence.kindHint.${kind}`)}
               </span>
             </button>
@@ -135,7 +135,7 @@ export function ZoneGeofenceShapeSection({
               <span className="text-sm font-semibold text-foreground">
                 {t(`geofence.shape.${shape}`)}
               </span>
-              <span className="text-[11px] leading-tight text-muted-foreground">
+              <span className="text-xs leading-tight text-muted-foreground">
                 {t(`geofence.shapeHint.${shape}`)}
               </span>
             </button>
@@ -251,7 +251,7 @@ export function ZoneAlertSettingsSection({ value, onChange }: GeofenceFieldsProp
           aria-describedby="dwell-time-help"
           className="h-9 rounded-lg font-mono text-sm tracking-wider"
         />
-        <p id="dwell-time-help" className="text-[11px] text-muted-foreground">
+        <p id="dwell-time-help" className="text-xs text-muted-foreground">
           {t("geofence.dwellTimeHint")}
         </p>
       </div>

@@ -27,6 +27,7 @@ import { getAuth } from "firebase-admin/auth";
 import { COLLECTIONS, UNIQUE_LOCKS } from "../core/collections";
 import { daysInMonth, parseMonthKey, payrollMonths } from "../core/kuwait";
 import { requireStaff, requireStaffFresh, type StaffContext } from "../core/staff";
+import { riderIsNonOperational } from "../core/operational-sections";
 import { stampStoredRow } from "../core/search-text";
 import { pushAssignmentMirror, pushDriverIdentityMirror } from "./bites-mirror";
 import {
@@ -350,7 +351,9 @@ async function checkIntakeForApproval(
     return { ok: false, error: "missing_fields" };
   }
   const assignment = await intakeOpsAssignment(db, reader, intakeId, intake);
-  if (!assignment.assigned) return { ok: false, error: "driver_missing_assignment" };
+  if (!assignment.assigned && !(await riderIsNonOperational(intake))) {
+    return { ok: false, error: "driver_missing_assignment" };
+  }
   return { ok: true, intake, restaurantIds: assignment.restaurantIds };
 }
 
@@ -593,6 +596,23 @@ async function approveInTransaction(
       project_key: intake["project_key"] ?? null,
       accommodation: intake["accommodation"] ?? null,
       source_company: intake["source_company"] ?? null,
+      // The Profile's HR-owned fields travel with the approval, so the row is
+      // complete before anyone opens the edit form. `bank_number` is `iban`.
+      passport_number: intake["passport_number"] ?? null,
+      employee_status_key: intake["employee_status_key"] ?? null,
+      section_keys: intake["section_keys"] ?? [],
+      nationality_category_keys: intake["nationality_category_keys"] ?? [],
+      bank_details: intake["bank_details"] ?? null,
+      sponsorship_key: intake["sponsorship_key"] ?? null,
+      job_position: intake["job_position"] ?? null,
+      hiring_type: intake["hiring_type"] ?? null,
+      work_start_date: intake["work_start_date"] ?? null,
+      job_end_date: intake["job_end_date"] ?? null,
+      job_end_description: intake["job_end_description"] ?? null,
+      residency_expiry_date: intake["residency_expiry_date"] ?? null,
+      fixed_salary: intake["fixed_salary"] ?? null,
+      work_permit_salary: intake["work_permit_salary"] ?? null,
+      last_increment_date: intake["last_increment_date"] ?? null,
       custom_fields: intake["custom_fields"] ?? {},
       restaurant_ids: restaurantIds,
       intake_id: intakeId,
@@ -919,7 +939,10 @@ export const intakeHasOpsAssignment = onCall(async (request) => {
   const snap = await reader.get(db.collection(COLLECTIONS.driverIntakes).doc(intakeId));
   if (!snap.exists) return false;
   const { assigned } = await intakeOpsAssignment(db, reader, intakeId, dataOf(snap));
-  return assigned;
+  if (assigned) return true;
+  // Office staff have no zone or store by design, so the detail page must not
+  // hide Activate from them.
+  return riderIsNonOperational(dataOf(snap));
 });
 
 function holdsAny(ctx: StaffContext, slugs: readonly string[]): boolean {

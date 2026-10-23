@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { Camera, ImageOff, Loader2 } from "lucide-react";
-import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,13 +47,13 @@ function VerificationCard({
 
   return (
     <>
-      <div className="flex min-h-[10rem] flex-col rounded-xl border border-border bg-card px-3 py-3 shadow-sm">
+      <div className="flex min-h-[10rem] flex-col rounded-[14px] border border-border bg-card p-4">
         <p className="text-sm font-medium text-foreground">{label}</p>
         <span
           className={
             item.livenessPassed
-              ? "mt-1 inline-flex w-fit rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400"
-              : "mt-1 inline-flex w-fit rounded-md bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground"
+              ? "mt-1 inline-flex w-fit rounded-full bg-[#E3F1E6] px-2.5 py-[3px] text-xs font-semibold text-[#1F5C2E]"
+              : "mt-1 inline-flex w-fit rounded-full bg-[#F2F2F5] px-2.5 py-[3px] text-xs font-semibold text-muted-foreground"
           }
         >
           {item.livenessPassed
@@ -65,16 +64,16 @@ function VerificationCard({
           {item.signedUrl ? (
             <button
               type="button"
-              className="group relative aspect-[4/3] w-full cursor-pointer overflow-hidden rounded-lg border border-border bg-muted"
+              className="relative aspect-[4/3] w-full cursor-pointer overflow-hidden rounded-lg border border-border bg-muted"
               onClick={() => setPreviewOpen(true)}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={item.signedUrl}
                 alt=""
-                className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+                className="h-full w-full object-cover"
               />
-              <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent px-2 py-1.5 text-start text-[10px] font-medium text-white">
+              <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent px-2 py-1.5 text-start text-xs font-medium text-white">
                 {previewLabel}
               </span>
             </button>
@@ -107,7 +106,14 @@ function VerificationCard({
   );
 }
 
-export function DriverLoginVerificationTab({ driverId }: { driverId: string }) {
+export function DriverLoginVerificationTab({
+  driverId,
+  controls,
+}: {
+  driverId: string;
+  /** App access + security controls, rendered by the Profile shell. */
+  controls?: ReactNode;
+}) {
   const t = useTranslations("pages.driverDetail");
   const locale = useLocale();
   const [draftStart, setDraftStart] = useState("");
@@ -156,131 +162,149 @@ export function DriverLoginVerificationTab({ driverId }: { driverId: string }) {
   );
 
   return (
-    <div className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-foreground">
-            {t("loginVerificationTitle")}
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {t("loginVerificationSummary")}
-          </p>
-        </div>
-        <Camera className="h-5 w-5 text-muted-foreground" aria-hidden />
+    <div className="flex flex-col gap-4">
+      <div>
+        <h2 className="text-lg font-bold text-foreground">
+          {t("tabLoginVerification")}
+        </h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          {t("loginVerificationControlsHint")}
+        </p>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 p-3 sm:flex-row sm:flex-wrap sm:items-end">
-        <div className="grid flex-1 gap-1.5 sm:max-w-[11rem]">
-          <Label htmlFor="login-verify-start" className="text-xs">
-            {t("loginVerificationStartDate")}
-          </Label>
-          <Input
-            id="login-verify-start"
-            type="date"
-            value={draftStart}
-            onChange={(e) => setDraftStart(e.target.value)}
-            className="h-9 cursor-pointer rounded-lg"
-          />
-        </div>
-        <div className="grid flex-1 gap-1.5 sm:max-w-[11rem]">
-          <Label htmlFor="login-verify-end" className="text-xs">
-            {t("loginVerificationEndDate")}
-          </Label>
-          <Input
-            id="login-verify-end"
-            type="date"
-            value={draftEnd}
-            onChange={(e) => setDraftEnd(e.target.value)}
-            className="h-9 cursor-pointer rounded-lg"
-          />
-        </div>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            size="sm"
-            className="h-9 cursor-pointer rounded-lg"
-            onClick={applyFilters}
-          >
-            {t("loginVerificationApplyFilters")}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-9 cursor-pointer rounded-lg"
-            onClick={clearFilters}
-          >
-            {t("loginVerificationClearFilters")}
-          </Button>
-        </div>
-      </div>
-
-      {query.isLoading ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          {t("loginVerificationLoading")}
-        </div>
-      ) : query.isError ? (
-        <div className="py-12 text-center">
-          <p className="text-sm text-destructive">
-            {t("loginVerificationError")}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-3 cursor-pointer rounded-lg"
-            onClick={() => query.refetch()}
-          >
-            {t("tryAgain")}
-          </Button>
-        </div>
-      ) : items.length === 0 ? (
-        <div className="py-8">
-          <AppEmptyState
-            title={t("loginVerificationEmptyTitle")}
-            description={t("loginVerificationEmptyDescription")}
-          />
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {items.map((item) => (
-              <VerificationCard
-                key={item.id}
-                item={item}
-                locale={locale}
-                previewLabel={t("loginVerificationPreview")}
-                livenessVerifiedLabel={t("loginVerificationLivenessVerified")}
-                livenessNotVerifiedLabel={t(
-                  "loginVerificationLivenessNotVerified",
-                )}
-              />
-            ))}
+      <section className="w-full rounded-[14px] border border-border bg-card px-5 py-[18px]">
+        <div className="flex items-start gap-2.5">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#F7E9E4] text-sidebar-primary">
+            <Camera className="h-[18px] w-[18px]" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold text-foreground">
+              {t("loginVerificationTitle")}
+            </h3>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {t("loginVerificationSummary")}
+            </p>
           </div>
-          {query.hasNextPage ? (
-            <div className="flex justify-center pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer rounded-lg"
-                disabled={query.isFetchingNextPage}
-                onClick={() => query.fetchNextPage()}
-              >
-                {query.isFetchingNextPage ? (
-                  <>
-                    <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" />
-                    {t("loginVerificationLoading")}
-                  </>
-                ) : (
-                  t("loginVerificationLoadMore")
-                )}
-              </Button>
+        </div>
+
+        <div className="mt-4 flex w-full flex-col gap-3 rounded-[10px] border border-border bg-[#F7F6F4] p-3 min-[560px]:flex-row min-[560px]:flex-wrap min-[560px]:items-end">
+          <div className="grid min-w-[180px] flex-1 gap-1.5">
+            <Label htmlFor="login-verify-start" className="text-sm font-semibold text-muted-foreground">
+              {t("loginVerificationStartDate")}
+            </Label>
+            <Input
+              id="login-verify-start"
+              type="date"
+              value={draftStart}
+              onChange={(e) => setDraftStart(e.target.value)}
+              className="h-[42px] min-h-[42px] cursor-pointer rounded-lg px-3"
+            />
+          </div>
+          <div className="grid min-w-[180px] flex-1 gap-1.5">
+            <Label htmlFor="login-verify-end" className="text-sm font-semibold text-muted-foreground">
+              {t("loginVerificationEndDate")}
+            </Label>
+            <Input
+              id="login-verify-end"
+              type="date"
+              value={draftEnd}
+              onChange={(e) => setDraftEnd(e.target.value)}
+              className="h-[42px] min-h-[42px] cursor-pointer rounded-lg px-3"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              className="h-10 min-h-10 cursor-pointer rounded-lg bg-[#292A3F] px-4 text-white hover:bg-[#292A3F]/90"
+              onClick={applyFilters}
+            >
+              {t("loginVerificationApplyFilters")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 min-h-10 cursor-pointer rounded-lg px-4"
+              onClick={clearFilters}
+            >
+              {t("loginVerificationClearFilters")}
+            </Button>
+          </div>
+        </div>
+
+        {query.isLoading ? (
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {t("loginVerificationLoading")}
+          </div>
+        ) : query.isError ? (
+          <div className="py-10 text-center">
+            <p className="text-sm text-destructive">
+              {t("loginVerificationError")}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 h-10 min-h-10 cursor-pointer rounded-lg"
+              onClick={() => query.refetch()}
+            >
+              {t("tryAgain")}
+            </Button>
+          </div>
+        ) : items.length === 0 ? (
+          <div className="px-4 py-9 text-center">
+            <p className="text-sm font-semibold text-foreground">
+              {t("loginVerificationEmptyTitle")}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t("loginVerificationEmptyDescription")}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="mt-4 grid grid-cols-1 gap-4 min-[560px]:grid-cols-2">
+              {items.map((item) => (
+                <VerificationCard
+                  key={item.id}
+                  item={item}
+                  locale={locale}
+                  previewLabel={t("loginVerificationPreview")}
+                  livenessVerifiedLabel={t("loginVerificationLivenessVerified")}
+                  livenessNotVerifiedLabel={t(
+                    "loginVerificationLivenessNotVerified",
+                  )}
+                />
+              ))}
             </div>
-          ) : null}
-        </>
-      )}
+            {query.hasNextPage ? (
+              <div className="flex justify-center pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 min-h-10 cursor-pointer rounded-lg"
+                  disabled={query.isFetchingNextPage}
+                  onClick={() => query.fetchNextPage()}
+                >
+                  {query.isFetchingNextPage ? (
+                    <>
+                      <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" />
+                      {t("loginVerificationLoading")}
+                    </>
+                  ) : (
+                    t("loginVerificationLoadMore")
+                  )}
+                </Button>
+              </div>
+            ) : null}
+          </>
+        )}
+      </section>
+
+      {controls ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:contents">
+          {controls}
+        </div>
+      ) : null}
     </div>
   );
 }
+

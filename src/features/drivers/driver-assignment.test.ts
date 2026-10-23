@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { hasOpsAssignment, isAssignedZone } from "./driver-assignment";
+import { hasOpsAssignment, isAssignedZone, requiresOpsAssignment } from "./driver-assignment";
 import { NONE_ZONE, validateDriverForm } from "./driver-form-validation";
 import type { DriverDocumentType } from "./types";
 
@@ -54,5 +54,22 @@ describe("validateDriverForm — zone or restaurant", () => {
     assert.equal(form({}).restaurants, "missing_assignment");
     assert.equal(form({ zoneId: "zone-1" }).zoneId, undefined);
     assert.equal(form({ restaurantIds: ["r1"] }).restaurants, undefined);
+  });
+
+  it("skips the requirement for a non-operational section only", () => {
+    const sections = [
+      { key: "ops" },
+      { key: "head_office", is_operational: false },
+    ];
+    assert.equal(requiresOpsAssignment([], sections), true);
+    assert.equal(requiresOpsAssignment(["ops"], sections), true);
+    assert.equal(requiresOpsAssignment(["head_office"], sections), false);
+    assert.equal(requiresOpsAssignment(["head_office", "ops"], sections), true);
+
+    const office = form({ sectionKeys: ["head_office"], sections });
+    assert.equal(office.zoneId, undefined);
+    assert.equal(office.restaurants, undefined);
+    // An operational section still asks for a zone.
+    assert.equal(form({ sectionKeys: ["ops"], sections }).zoneId, "missing_assignment");
   });
 });

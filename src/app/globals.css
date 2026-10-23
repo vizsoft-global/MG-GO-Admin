@@ -66,6 +66,41 @@
   --color-fleet-kind-car-fg: var(--fleet-kind-car-fg);
   --color-fleet-kind-bike: var(--fleet-kind-bike);
   --color-fleet-kind-bike-fg: var(--fleet-kind-bike-fg);
+  --color-btn-primary: var(--btn-primary);
+  --color-btn-primary-fg: var(--btn-primary-fg);
+  --color-btn-primary-hover: var(--btn-primary-hover);
+  --color-btn-primary-active: var(--btn-primary-active);
+  --color-btn-secondary-fg: var(--btn-secondary-fg);
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 20px;
+  --text-lg--line-height: 28px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 32px;
+  --text-3xl: 24px;
+  --text-3xl--line-height: 32px;
+  --text-4xl: 24px;
+  --text-4xl--line-height: 32px;
+  --text-5xl: 24px;
+  --text-5xl--line-height: 32px;
+  --text-6xl: 24px;
+  --text-6xl--line-height: 32px;
+  --text-7xl: 24px;
+  --text-7xl--line-height: 32px;
+  --text-8xl: 24px;
+  --text-8xl--line-height: 32px;
+  --text-9xl: 24px;
+  --text-9xl--line-height: 32px;
+  --font-weight-medium: 400;
+  --font-weight-semibold: 400;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 700;
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -215,8 +250,8 @@ html[data-font="plus-jakarta-sans"] {
   border: 1px solid var(--zone-color, #e5e7eb);
   border-radius: 10px;
   padding: 4px 8px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 400;
   line-height: 1.3;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
   white-space: nowrap;
@@ -230,12 +265,12 @@ html[data-font="plus-jakarta-sans"] {
 }
 
 .zone-map-label__name {
-  font-weight: 600;
+  font-weight: 400;
   color: #0f172a;
 }
 
 .zone-map-label__area {
-  font-size: 10px;
+  font-size: 12px;
   color: #475569;
 }
 
@@ -258,4 +293,180 @@ html[data-font="plus-jakarta-sans"] {
 /* Google Maps zoom control — offset below place search overlay */
 .restaurant-draw-map-wrapper--modal .gm-bundled-control {
   margin-top: 3.5rem !important;
+}
+
+h1,
+h2,
+h3,
+[data-slot="dialog-title"],
+[data-slot="sheet-title"],
+[data-slot="card-title"],
+[data-slot="section-heading"],
+.type-h1,
+.type-h2,
+.type-h3 {
+  font-weight: 700;
+}
+
+.type-h1 {
+  font-size: var(--type-h1);
+  line-height: 1.25;
+}
+
+.type-h2 {
+  font-size: var(--type-h2);
+  line-height: 1.3;
+}
+
+.type-h3 {
+  font-size: var(--type-h3);
+  line-height: 1.35;
+}
+
+.type-body {
+  font-size: var(--type-body);
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.type-caption {
+  font-size: var(--type-caption);
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+h1 {
+  font-size: var(--type-h1);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--type-h2);
+  line-height: 1.3;
+}
+
+h3 {
+  font-size: var(--type-h3);
+  line-height: 1.35;
+}
+
+body {
+  font-size: var(--type-body);
+  font-weight: 400;
+}
+
+small {
+  font-size: var(--type-caption);
+  font-weight: 400;
+}
+
+label,
+td,
+th,
+p {
+  font-weight: 400;
+}
+
+[data-slot="button"][data-variant="default"] {
+  background: var(--btn-primary);
+  color: var(--btn-primary-fg);
+  border-color: transparent;
+}
+
+[data-slot="button"][data-variant="default"]:hover {
+  background: var(--btn-primary-hover);
+}
+
+[data-slot="button"][data-variant="default"]:active {
+  background: var(--btn-primary-active);
+}
+
+[data-slot="button"][data-variant="outline"],
+[data-slot="button"][data-variant="secondary"] {
+  background: transparent;
+  color: var(--btn-secondary-fg);
+  border: 1px solid var(--btn-secondary-border);
+}
+
+[data-slot="button"][data-variant="outline"]:hover,
+[data-slot="button"][data-variant="secondary"]:hover {
+  background: var(--btn-secondary-hover);
+}
+
+[data-slot="button"][data-variant="outline"]:active,
+[data-slot="button"][data-variant="secondary"]:active {
+  background: var(--btn-secondary-active);
+}
+
+[data-slot="button"][data-variant="ghost"] {
+  border-color: transparent;
+}
+
+[data-slot="button"][data-variant="ghost"]:hover {
+  background: var(--btn-secondary-hover);
+}
+
+[data-slot="button"][data-variant="ghost"]:active {
+  background: var(--btn-secondary-active);
+}
+
+[data-slot="button"][data-variant="link"] {
+  color: var(--btn-secondary-fg);
+}
+
+[data-slot="button"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--btn-focus);
+}
+
+[data-slot="button"]:disabled,
+[data-slot="button"][aria-disabled="true"] {
+  opacity: var(--btn-disabled-opacity);
+}
+
+button[class*="bg-[#18181B]"],
+button[class*="bg-[#18181b]"],
+a[class*="bg-[#18181B]"],
+a[class*="bg-[#18181b]"] {
+  background: var(--btn-primary);
+  color: var(--btn-primary-fg);
+  border-color: transparent;
+}
+
+button[class*="bg-[#18181B]"]:hover,
+button[class*="bg-[#18181b]"]:hover,
+a[class*="bg-[#18181B]"]:hover,
+a[class*="bg-[#18181b]"]:hover {
+  background: var(--btn-primary-hover);
+}
+
+button[class*="bg-[#18181B]"]:active,
+button[class*="bg-[#18181b]"]:active,
+a[class*="bg-[#18181B]"]:active,
+a[class*="bg-[#18181b]"]:active {
+  background: var(--btn-primary-active);
+}
+
+button[class*="bg-[#18181B]"]:focus-visible,
+button[class*="bg-[#18181b]"]:focus-visible,
+a[class*="bg-[#18181B]"]:focus-visible,
+a[class*="bg-[#18181b]"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--btn-focus);
+}
+
+button[class*="bg-[#18181B]"]:disabled,
+button[class*="bg-[#18181b]"]:disabled,
+a[class*="bg-[#18181B]"]:disabled,
+a[class*="bg-[#18181b]"]:disabled,
+button[class*="bg-[#18181B]"][aria-disabled="true"],
+button[class*="bg-[#18181b]"][aria-disabled="true"],
+a[class*="bg-[#18181B]"][aria-disabled="true"],
+a[class*="bg-[#18181b]"][aria-disabled="true"] {
+  opacity: var(--btn-disabled-opacity);
+}
+
+svg.lucide {
+  stroke-width: 2;
+  fill: none;
 }

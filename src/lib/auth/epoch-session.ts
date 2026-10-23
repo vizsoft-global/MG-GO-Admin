@@ -14,7 +14,11 @@ import {
   type EnrichedProfile,
 } from "@/lib/auth/profile-auth";
 import { canAccessAdminPanel } from "@/lib/auth/permissions";
-import { parseStaffAccessKind, type StaffAccessKind } from "@/lib/auth/staff-access";
+import {
+  parsePartnerProjectKey,
+  parseStaffAccessKind,
+  type StaffAccessKind,
+} from "@/lib/auth/staff-access";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import type { ProfileDoc } from "@/lib/firebase/types";
 
@@ -33,6 +37,7 @@ export type EpochSession = {
   isSuperAdmin: boolean;
   isManager: boolean;
   accessKind: StaffAccessKind | null;
+  partnerProjectKey: string | null;
   adminRoleSlug: string;
   epochs: EpochCounters;
 };
@@ -87,6 +92,8 @@ async function assemble(
   const isSuperAdmin = probe.claims?.superAdmin === true;
   const accessKind = parseStaffAccessKind(profile.access_kind);
   const isManager = isSuperAdmin || accessKind === "manager";
+  const partnerProjectKey =
+    accessKind === "partner" ? parsePartnerProjectKey(profile.partner_project_key) : null;
   const [permissions, slug] = await Promise.all([
     enrichSessionPermissions(db, profile.admin_role_id, isSuperAdmin, accessKind, probe.uid ?? undefined, {
       cache: fresh ? undefined : (cache ?? undefined),
@@ -103,6 +110,7 @@ async function assemble(
     isSuperAdmin,
     isManager,
     accessKind,
+    partnerProjectKey,
     adminRoleSlug: slug ?? "operator",
     epochs,
   };

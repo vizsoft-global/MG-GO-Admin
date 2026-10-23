@@ -111,7 +111,7 @@ export function TranslationEditorPanel({ localeCode }: { localeCode: string }) {
           />
         </div>
         {needsReviewCount > 0 && (
-          <Badge variant="outline" className="border-accent text-accent">
+          <Badge variant="outline" className="border-border text-foreground">
             {needsReviewCount} {t("needReview")}
           </Badge>
         )}
@@ -138,7 +138,7 @@ export function TranslationEditorPanel({ localeCode }: { localeCode: string }) {
                 return (
                   <div key={key} className="grid gap-2 p-4 md:grid-cols-2">
                     <div>
-                      <p className="font-mono text-[11px] text-muted-foreground">{key}</p>
+                      <p className="font-mono text-xs text-muted-foreground">{key}</p>
                       <p className="mt-1 text-sm text-muted-foreground">{enValue}</p>
                     </div>
                     <Input

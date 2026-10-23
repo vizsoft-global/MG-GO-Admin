@@ -2,6 +2,7 @@ import { staffClient } from "@/features/drivers/driver-uniqueness";
 import * as XLSX from "xlsx";
 import {
   TEMPLATE_COLUMNS_PARAM,
+  applyTemplateExamples,
   resolveTemplateColumns,
   templateDriversAoa,
   templateGuideAoa,
@@ -63,15 +64,9 @@ export async function GET(request: Request) {
       ?.restaurant_code ||
     lists.restaurants.find((row) => row.importable)?.name ||
     "";
-  const zoneExample = lists.zones[0]?.id || "";
-  const documented = columns.map((column) => {
-    if (column.field === "restaurant_ids" && restaurantExample) {
-      return { ...column, example: restaurantExample };
-    }
-    if (column.field === "zone_id" && zoneExample) {
-      return { ...column, example: zoneExample };
-    }
-    return column;
+  const documented = applyTemplateExamples(columns, {
+    restaurant: restaurantExample,
+    zone: lists.zones[0]?.id || "",
   });
 
   XLSX.utils.book_append_sheet(
@@ -102,9 +97,9 @@ export async function GET(request: Request) {
     XLSX.utils.aoa_to_sheet(companiesLookupAoa(companies ?? [])),
     "Companies",
   );
-  const buffer = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+  const bytes = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
 
-  return new Response(buffer, {
+  return new Response(new Uint8Array(bytes), {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

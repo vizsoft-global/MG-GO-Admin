@@ -124,7 +124,7 @@ export function PerformanceLivePanel() {
               <Trophy className="size-4 text-amber-600" />
               <h3 className="text-sm font-semibold">{tl("leaderboardTitle")}</h3>
             </div>
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">
               {tl("leaderboardLegend")}
             </span>
           </div>
@@ -152,17 +152,17 @@ export function PerformanceLivePanel() {
                       <p className="truncate text-sm font-medium">
                         {row.driver_name}
                       </p>
-                      <p className="truncate text-[10px] text-muted-foreground">
+                      <p className="truncate text-xs text-muted-foreground">
                         {row.driver_code}
                         {row.zone_name ? ` · ${row.zone_name}` : ""}
                         {row.partner_name ? ` · ${row.partner_name}` : ""}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <span className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-emerald-800">
+                      <span className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-emerald-800">
                         {row.verified}
                       </span>
-                      <span className="text-[11px] tabular-nums text-muted-foreground">
+                      <span className="text-xs tabular-nums text-muted-foreground">
                         {tl("submittedShort", { count: row.submitted })}
                       </span>
                       <Link
@@ -201,7 +201,7 @@ export function PerformanceLivePanel() {
             <div className="flex items-center gap-2">
               <Radio className="size-4 text-emerald-600" />
               <h3 className="text-sm font-semibold">{t("liveOnDutyTitle")}</h3>
-              <span className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-[10px] font-semibold text-emerald-800">
+              <span className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-xs font-semibold text-emerald-800">
                 {t("liveBadge")}
               </span>
             </div>
@@ -230,13 +230,13 @@ export function PerformanceLivePanel() {
                       <p className="truncate text-sm font-medium">
                         {d.driverName}
                       </p>
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {d.driverCode}
                         {d.restaurantName ? ` · ${d.restaurantName}` : ""}
                       </p>
                       <Link
                         href={`/drivers/${d.driverId}`}
-                        className="inline-flex items-center gap-1 text-[10px] text-primary hover:bg-primary/10"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:bg-primary/10"
                       >
                         <ExternalLink className="size-3" />
                         {t("viewDetails")}
@@ -257,7 +257,7 @@ export function PerformanceLivePanel() {
               <h3 className="text-sm font-semibold">
                 {t("liveDeliveriesTitle")}
               </h3>
-              <span className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-[10px] font-semibold text-emerald-800">
+              <span className="rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-xs font-semibold text-emerald-800">
                 {t("liveBadge")}
               </span>
             </div>
@@ -283,7 +283,7 @@ export function PerformanceLivePanel() {
                       <p className="truncate text-sm font-medium">
                         {item.driver_name}
                       </p>
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {item.driver_code}
                         {item.partner_name ? ` · ${item.partner_name}` : ""}
                         {item.zone_name ? ` · ${item.zone_name}` : ""}
@@ -302,7 +302,7 @@ export function PerformanceLivePanel() {
                       >
                         {item.status}
                       </StatusPill>
-                      <span className="text-[10px] tabular-nums text-muted-foreground">
+                      <span className="text-xs tabular-nums text-muted-foreground">
                         {new Date(
                           item.delivered_at ?? item.created_at,
                         ).toLocaleString()}
@@ -317,7 +317,7 @@ export function PerformanceLivePanel() {
       </div>
 
       {snapshot ? (
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {tl("scoreToday", {
             score: snapshot.score.avg_overall ?? "—",
             checkedIn: snapshot.roster.checked_in,

@@ -43,7 +43,7 @@ import {
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return (
-    <p className="text-[11px] text-destructive" role="alert">
+    <p className="text-xs text-destructive" role="alert">
       {message}
     </p>
   );
@@ -375,7 +375,7 @@ export function RuleFormSheet({
               </Select>
               <FieldError message={showFieldError("dpdPeriod")} />
               {status === "active" && Number(dpdTarget) > 0 ? (
-                <p className="text-[11px] text-muted-foreground">{t("hints.dpdPeriod")}</p>
+                <p className="text-xs text-muted-foreground">{t("hints.dpdPeriod")}</p>
               ) : null}
             </div>
           </div>

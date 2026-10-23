@@ -158,7 +158,7 @@ function AssetFormBody({
             disabled={!canSave || isPending}
             className="rounded-lg bg-background"
           />
-          <p className="text-[11px] text-muted-foreground">{t("nameHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("nameHint")}</p>
         </div>
 
         <div className="space-y-1.5">
@@ -171,7 +171,7 @@ function AssetFormBody({
             placeholder="gps"
             className="rounded-lg bg-background"
           />
-          <p className="text-[11px] text-muted-foreground">{t("codeHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("codeHint")}</p>
         </div>
 
         <div className="space-y-1.5">
@@ -197,7 +197,7 @@ function AssetFormBody({
               placeholder={t("categoryPlaceholder")}
               className="rounded-lg bg-background"
             />
-            <p className="text-[11px] text-muted-foreground">{t("categoryHint")}</p>
+            <p className="text-xs text-muted-foreground">{t("categoryHint")}</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="asset-penalty">{t("fieldPenalty")}</Label>
@@ -212,7 +212,7 @@ function AssetFormBody({
               placeholder={t("penaltyPlaceholder")}
               className="rounded-lg bg-background"
             />
-            <p className="text-[11px] text-muted-foreground">{t("penaltyHint")}</p>
+            <p className="text-xs text-muted-foreground">{t("penaltyHint")}</p>
           </div>
         </div>
 
@@ -234,7 +234,7 @@ function AssetFormBody({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-[11px] text-muted-foreground">{t("iconFallbackHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("iconFallbackHint")}</p>
         </div>
 
         <div className="space-y-2">
@@ -286,7 +286,7 @@ function AssetFormBody({
               ) : null}
             </div>
           </div>
-          <p className="text-[11px] text-muted-foreground">{t("imageHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("imageHint")}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">

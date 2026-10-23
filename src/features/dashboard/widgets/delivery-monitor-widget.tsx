@@ -45,7 +45,7 @@ export function DeliveryMonitorWidget({
         <StatusPill variant={feedVariant(item.severity)}>
           {t(`deliveryFeedLabel.${item.messageKey}`)}
         </StatusPill>
-        <span className="text-[10px] tabular-nums text-muted-foreground">
+        <span className="text-xs tabular-nums text-muted-foreground">
           {new Date(item.at).toLocaleTimeString()}
         </span>
       </div>

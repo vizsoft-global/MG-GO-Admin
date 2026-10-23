@@ -166,7 +166,7 @@ export function PerformanceFiltersButton({
       <SlidersHorizontal className="size-3.5" />
       {t("filters")}
       {activeCount > 0 ? (
-        <span className="rounded-md bg-primary/10 px-1.5 text-[10px] font-semibold text-primary">
+        <span className="rounded-md bg-primary/10 px-1.5 text-xs font-semibold text-primary">
           {activeCount}
         </span>
       ) : null}

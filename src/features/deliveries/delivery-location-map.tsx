@@ -235,7 +235,7 @@ export function DeliveryLocationMap({
                 {legendKinds.map((kind) => (
                   <span
                     key={kind}
-                    className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground"
                   >
                     <span
                       className="inline-block h-2 w-2 rounded-full"

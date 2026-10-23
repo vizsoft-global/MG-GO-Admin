@@ -200,7 +200,7 @@ export function IncentiveRuleImportDialog({
                       <TableCell>
                         {row.restaurant || "—"}
                         {row.replace_rule_name ? (
-                          <p className="text-[10px] text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             {t("wouldReplaceRule", {
                               name: row.replace_rule_name,
                             })}

@@ -47,13 +47,13 @@ export function HistoryDriverHeader({
         </div>
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/30 px-2 py-0.5 text-xs text-muted-foreground">
           <Bike className="h-3 w-3" />
           Bike
         </span>
         <Pill tone={isOnDuty ? "success" : "neutral"}>{isOnDuty ? t("onDuty") : t("offDuty")}</Pill>
       </div>
-      <p className="mt-2 text-[10px] text-muted-foreground">{dateLabel}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{dateLabel}</p>
     </div>
   );
 }

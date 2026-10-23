@@ -31,9 +31,11 @@ import {
   parseMonthKey,
 } from "../core/kuwait";
 import { requireStaff, requireStaffFresh, type StaffContext } from "../core/staff";
+import { loadNationalityLabels, nationalityLabel } from "../core/nationality-label";
 import {
   BATCH_LIMIT,
   chunk,
+  isKeetaProjectKey,
   loadDocMap,
   numberOrNull,
   pick,
@@ -43,6 +45,7 @@ import {
   pickText,
   type Dict,
 } from "./_shared";
+import { bumpScanSnapshots, PAYROLL_SNAPSHOTS } from "../router/read-snapshot";
 
 const DEFAULT_OFF_DAYS = 2;
 const DAY_HOURS = 12;
@@ -396,6 +399,7 @@ export const adminApplyPayrollAdjustments = onCall(async (request) => {
     after: { cells: cells.length, reason, actor },
   });
 
+  await bumpScanSnapshots(PAYROLL_SNAPSHOTS);
   return { applied: cells.length, reason, by: actor };
 });
 
@@ -578,6 +582,7 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
     restaurantClientId: string | null;
   };
 
+  const nationalityLabels = await loadNationalityLabels("en");
   const rosterAll: RosterRow[] = driverSnap.docs.map((doc) => {
     const raw = (doc.data() ?? {}) as Dict;
     const zoneId = asString(raw["zone_id"]);
@@ -606,7 +611,11 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
       zoneId,
       zoneName: zoneId ? (zoneNames.get(zoneId) ?? asString(raw["zone_name"])) : null,
       projectKey,
-      nationality: asString(raw["nationality"]),
+      nationality: nationalityLabel(
+        raw["nationality_category_keys"],
+        nationalityLabels,
+        asString(raw["nationality"]),
+      ),
       riderCategory: asString(raw["rider_category"]),
       sourceCompany: asString(raw["source_company"]),
       status: asString(raw["status"]),
@@ -620,7 +629,7 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
           ? (restaurantClientIds.get(resolvedRestaurantId) ?? null)
           : null),
       restaurantName:
-        projectKey === "keeta" || !resolvedRestaurantId
+        isKeetaProjectKey(projectKey) || !resolvedRestaurantId
           ? null
           : (restaurantNames.get(resolvedRestaurantId) ?? null),
     };
@@ -833,9 +842,9 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
       mgId: d.driverCode ?? "—",
       name: d.name,
       restaurant:
-        d.projectKey === "keeta" || !trimmedOrNull(d.restaurantName)
-          ? "(Pool)"
-          : (d.restaurantName as string),
+        isKeetaProjectKey(d.projectKey)
+          ? "Keeta"
+          : trimmedOrNull(d.restaurantName) ?? "—",
       restaurantId: d.restaurantId,
       restaurantClientId: d.restaurantClientId,
       zone: d.zoneName ?? "—",
@@ -877,7 +886,7 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
   const sourceCompanies = new Set<string>();
   for (const row of rosterAll) {
     if (row.zoneId && row.zoneName) zoneOptions.set(row.zoneId, row.zoneName);
-    if (row.restaurantId && row.restaurantName && row.projectKey !== "keeta") {
+    if (row.restaurantId && row.restaurantName && !isKeetaProjectKey(row.projectKey)) {
       restaurantOptions.set(row.restaurantId, row.restaurantName);
     }
     if (row.nationality) nationalities.add(row.nationality);
@@ -958,7 +967,7 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
 
 function partnerLabel(projectKey: string | null): string {
   if (projectKey === "americana") return "Americana";
-  if (projectKey === "keeta") return "Keeta";
+  if (isKeetaProjectKey(projectKey)) return "Keeta";
   return "—";
 }
 

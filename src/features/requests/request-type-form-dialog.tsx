@@ -183,7 +183,7 @@ export function RequestTypeFormDialog({
                   patch({ key: e.target.value.trim() });
                 }}
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {existing ? t("keyLocked") : t("keyHint")}
               </p>
             </div>
@@ -204,7 +204,7 @@ export function RequestTypeFormDialog({
                 value={draft.icon_key ?? ""}
                 onChange={(e) => patch({ icon_key: e.target.value || null })}
               />
-              <p className="text-[10px] text-muted-foreground">{t("iconHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("iconHint")}</p>
             </div>
           </div>
 
@@ -230,7 +230,7 @@ export function RequestTypeFormDialog({
                   {t("terminalSolved")}
                 </SegmentOption>
               </div>
-              <p className="text-[10px] text-muted-foreground">{t("terminalHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("terminalHint")}</p>
             </div>
             <div className="space-y-1">
               <Label className="text-xs">{t("fieldMinAttachments")}</Label>
@@ -243,7 +243,7 @@ export function RequestTypeFormDialog({
                   patch({ min_attachments: Math.max(0, Number(e.target.value) || 0) })
                 }
               />
-              <p className="text-[10px] text-muted-foreground">{t("minAttachmentsHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("minAttachmentsHint")}</p>
             </div>
           </div>
 
@@ -273,7 +273,7 @@ export function RequestTypeFormDialog({
               <span className={ackDisabled ? "text-muted-foreground" : undefined}>
                 {t("toggleAck")}
                 {ackDisabled ? (
-                  <span className="ms-1 text-[10px]">({t("ackNotApplicable")})</span>
+                  <span className="ms-1 text-xs">({t("ackNotApplicable")})</span>
                 ) : null}
               </span>
               <Switch

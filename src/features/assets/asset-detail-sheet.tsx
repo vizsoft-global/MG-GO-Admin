@@ -151,15 +151,15 @@ export function AssetDetailSheet({
             <>
               <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-lg border border-border p-3 text-center">
-                  <p className="text-[10px] uppercase text-muted-foreground">{t("colInStock")}</p>
+                  <p className="text-xs uppercase text-muted-foreground">{t("colInStock")}</p>
                   <p className="text-lg font-semibold tabular-nums">{display.total_quantity}</p>
                 </div>
                 <div className="rounded-lg border border-border p-3 text-center">
-                  <p className="text-[10px] uppercase text-muted-foreground">{t("colAssigned")}</p>
+                  <p className="text-xs uppercase text-muted-foreground">{t("colAssigned")}</p>
                   <p className="text-lg font-semibold tabular-nums">{display.assigned_qty}</p>
                 </div>
                 <div className="rounded-lg border border-border p-3 text-center">
-                  <p className="text-[10px] uppercase text-muted-foreground">{t("colAvailable")}</p>
+                  <p className="text-xs uppercase text-muted-foreground">{t("colAvailable")}</p>
                   <p
                     className={`text-lg font-semibold tabular-nums ${
                       display.is_low_stock ? "text-amber-600" : ""
@@ -172,7 +172,7 @@ export function AssetDetailSheet({
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-lg border border-border px-3 py-2">
-                  <p className="text-[10px] uppercase text-muted-foreground">
+                  <p className="text-xs uppercase text-muted-foreground">
                     {t("colCategory")}
                   </p>
                   {display.category ? (
@@ -184,7 +184,7 @@ export function AssetDetailSheet({
                   )}
                 </div>
                 <div className="rounded-lg border border-border px-3 py-2">
-                  <p className="text-[10px] uppercase text-muted-foreground">
+                  <p className="text-xs uppercase text-muted-foreground">
                     {t("colPenalty")}
                   </p>
                   <p
@@ -304,7 +304,7 @@ export function AssetDetailSheet({
                                   ) : (
                                     <span className="font-medium">{row.holder_name}</span>
                                   )}
-                                  <p className="text-[11px] text-muted-foreground">
+                                  <p className="text-xs text-muted-foreground">
                                     {[row.holder_code, row.partner_name].filter(Boolean).join(" · ")}
                                   </p>
                                 </div>
@@ -345,7 +345,7 @@ export function AssetDetailSheet({
                       >
                         <div>
                           <p className="font-medium">{row.holder_name}</p>
-                          <p className="text-[11px] text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             {row.returned_at
                               ? formatDate(row.returned_at, locale)
                               : "—"}

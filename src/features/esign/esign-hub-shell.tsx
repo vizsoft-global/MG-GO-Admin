@@ -87,8 +87,8 @@ export function EsignHubShell() {
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">{t("newRequest")}</p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">{t("newRequestBody")}</p>
-          <p className="mt-1 text-[10px] font-medium text-primary">{t("newRequestMeta")}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t("newRequestBody")}</p>
+          <p className="mt-1 text-xs font-medium text-primary">{t("newRequestMeta")}</p>
         </div>
         <ChevronRight className="h-4 w-4 shrink-0 text-primary" />
       </Link>
@@ -107,11 +107,11 @@ export function EsignHubShell() {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{t(`tiles.${tile.key}`)}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   {t(`tilesDesc.${tile.key}`)}
                 </p>
                 {meta ? (
-                  <p className="mt-1 text-[10px] text-muted-foreground/80">{meta}</p>
+                  <p className="mt-1 text-xs text-muted-foreground/80">{meta}</p>
                 ) : null}
               </div>
               <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />

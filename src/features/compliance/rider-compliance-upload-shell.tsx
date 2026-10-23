@@ -341,12 +341,12 @@ export function RiderComplianceUploadShell() {
             </div>
 
             {preview.rows.length > PREVIEW_LIMIT ? (
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("previewTruncated", { shown: PREVIEW_LIMIT, total: preview.rows.length })}
               </p>
             ) : null}
             {sheet && sheet.rows.length >= COMPLIANCE_MAX_ROWS ? (
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("rowLimitReached", { max: COMPLIANCE_MAX_ROWS })}
               </p>
             ) : null}

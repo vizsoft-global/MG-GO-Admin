@@ -234,12 +234,12 @@ function ActivityRow({
 
   return (
     <div className="flex items-start gap-3 px-4 py-2">
-      <span className="w-[92px] shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground">
+      <span className="w-[92px] shrink-0 pt-0.5 text-xs tabular-nums text-muted-foreground">
         {formatEventTime(event.occurredAt, locale)}
       </span>
       <span
         className={cn(
-          "shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+          "shrink-0 rounded-md border px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide",
           TONE_CHIP[tone],
         )}
       >
@@ -250,13 +250,13 @@ function ActivityRow({
       <p className="min-w-0 flex-1 truncate text-xs font-medium">
         {label}
         {event.success ? null : (
-          <span className="ms-1.5 text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+          <span className="ms-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">
             {event.errorCode ? humanizeErrorCode(event.errorCode) : t("activityFailed")}
           </span>
         )}
       </p>
       {event.sourceName ? (
-        <span className="hidden w-[168px] shrink-0 truncate text-end text-[10px] text-muted-foreground sm:block">
+        <span className="hidden w-[168px] shrink-0 truncate text-end text-xs text-muted-foreground sm:block">
           {event.sourceName}
         </span>
       ) : null}

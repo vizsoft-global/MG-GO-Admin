@@ -329,7 +329,7 @@ export function EsignBatchDetailShell({ batchId }: { batchId: string }) {
                 {t("sentBanner", { count: sentCount })}
               </p>
             ) : null}
-            <span className="shrink-0 rounded-md bg-[#FFFAEB] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B54708]">
+            <span className="shrink-0 rounded-md bg-[#FFFAEB] px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[#B54708]">
               {tRcm("youSend")}
             </span>
           </div>
@@ -505,7 +505,7 @@ export function EsignBatchDetailShell({ batchId }: { batchId: string }) {
         )}
       </AppListCard>
 
-      <p className="text-[11px] text-muted-foreground">{t("auditFooter")}</p>
+      <p className="text-xs text-muted-foreground">{t("auditFooter")}</p>
 
       <FixRowDialog
         row={fixRow}
@@ -602,7 +602,7 @@ function Row({
         {line.signer_display_name ?? "—"}
       </TableCell>
       <TableCell className="font-mono text-xs">{line.employee_id ?? "—"}</TableCell>
-      <TableCell className="text-[11px] tabular-nums text-muted-foreground">
+      <TableCell className="text-xs tabular-nums text-muted-foreground">
         {formatEsignTrackerDate(sentAt)}
       </TableCell>
       <TableCell>
@@ -628,7 +628,7 @@ function Row({
           </StatusPill>
         )}
       </TableCell>
-      <TableCell className="text-[11px] tabular-nums text-muted-foreground">
+      <TableCell className="text-xs tabular-nums text-muted-foreground">
         {line.recipient_signed_at ? formatEsignTrackerDate(line.recipient_signed_at) : "—"}
       </TableCell>
       <TableCell className="text-end">
@@ -798,7 +798,7 @@ function FixRowDialog({
         closeOutside
       >
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4 pt-4">
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t("repairSubtitle", { row: (row?.row_index ?? 0) + 1 })}
           </p>
 
@@ -819,7 +819,7 @@ function FixRowDialog({
 
             {row?.error ? (
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
-                <p className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-destructive">
+                <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-destructive">
                   <Info className="h-3 w-3" />
                   {t("rowError")}
                 </p>
@@ -828,7 +828,7 @@ function FixRowDialog({
             ) : null}
 
             <div className="space-y-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("rowSheetValues")}
               </p>
               {loadingFields ? (
@@ -845,7 +845,7 @@ function FixRowDialog({
                     <div key={field.id} className="space-y-1">
                       <Label
                         htmlFor={`esign-repair-${field.id}`}
-                        className="text-[11px] text-muted-foreground"
+                        className="text-xs text-muted-foreground"
                       >
                         {field.label_en || field.field_key}
                       </Label>
@@ -955,7 +955,7 @@ function DeclinedReasonDialog({
           <DialogDescription>{meta || t("declinedSubtitle")}</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-4">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("reasonGiven")}
           </p>
           <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5">

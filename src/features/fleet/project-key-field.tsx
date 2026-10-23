@@ -66,7 +66,7 @@ export function ProjectKeyField({
           {unsetLabel}
         </SegmentOption>
       </div>
-      {hint ? <p className="text-[10px] leading-tight text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="text-xs leading-tight text-muted-foreground">{hint}</p> : null}
     </FieldBlock>
   );
 }

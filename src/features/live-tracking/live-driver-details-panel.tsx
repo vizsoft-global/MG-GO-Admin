@@ -126,21 +126,21 @@ export function LiveDriverDetailsPanel({
                 <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
                   {driver.driverName}
                 </p>
-                <Pill tone={dutyTone} variant="solid" className="text-[9px]">
+                <Pill tone={dutyTone} variant="solid" className="text-xs">
                   {dutyLabel}
                 </Pill>
               </div>
-              <p className="truncate text-[11px] text-slate-500 dark:text-slate-300">
+              <p className="truncate text-xs text-slate-500 dark:text-slate-300">
                 {driver.driverCode} · {meta?.zoneName ?? "—"}
               </p>
               {deliveryMotion ? (
-                <p className="truncate text-[10px] font-medium text-slate-600 dark:text-slate-300">
+                <p className="truncate text-xs font-medium text-slate-600 dark:text-slate-300">
                   {t("statusDeliverySubmit")} · {deliveryMotion}
                 </p>
               ) : null}
               {address ? (
                 <p
-                  className="truncate text-[10px] text-slate-500 dark:text-slate-300"
+                  className="truncate text-xs text-slate-500 dark:text-slate-300"
                   title={`${t("streetAddress")}: ${address}`}
                 >
                   {address}
@@ -164,7 +164,7 @@ export function LiveDriverDetailsPanel({
 
         <div className="border-t border-slate-200 px-3 py-2 dark:border-slate-700/80">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <h4 className="text-[11px] font-semibold text-slate-900 dark:text-slate-100">
+            <h4 className="text-xs font-semibold text-slate-900 dark:text-slate-100">
               {t("recentOrders")}
             </h4>
             <SignalBars value={signalBars} />
@@ -172,31 +172,31 @@ export function LiveDriverDetailsPanel({
           {latestOrder ? (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 dark:border-slate-700 dark:bg-slate-800/60">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[11px] font-semibold text-slate-900 dark:text-slate-100">
+                <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
                   #{latestOrder.shortId}
                 </p>
                 <Pill
                   tone={deliveryStatusTone(latestOrder.status, latestOrder.deliveredAt)}
-                  className="text-[9px]"
+                  className="text-xs"
                 >
                   {deliveryStatusLabel(t, latestOrder.status, latestOrder.deliveredAt)}
                 </Pill>
               </div>
-              <p className="mt-0.5 truncate text-[10px] text-slate-500 dark:text-slate-300">
+              <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-300">
                 {latestOrder.partnerName}
               </p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-300">
+              <p className="text-xs text-slate-500 dark:text-slate-300">
                 {formatDurationSince(latestOrder.deliveredAt)}
               </p>
             </div>
           ) : (
-            <p className="text-[10px] text-slate-500 dark:text-slate-300">{t("noRecentOrders")}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-300">{t("noRecentOrders")}</p>
           )}
         </div>
 
         {restaurantPins.length > 0 ? (
           <div className="border-t border-slate-200 px-3 py-2 dark:border-slate-700/80">
-            <h4 className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold text-slate-900 dark:text-slate-100">
+            <h4 className="mb-1.5 flex items-center gap-1 text-xs font-semibold text-slate-900 dark:text-slate-100">
               <MapPin className="h-3 w-3" />
               {t("assignedRestaurants")}
             </h4>
@@ -205,7 +205,7 @@ export function LiveDriverDetailsPanel({
                 <li key={pin.id}>
                   <Link
                     href={`/restaurants/${pin.id}`}
-                    className="block truncate text-[10px] text-primary hover:underline"
+                    className="block truncate text-xs text-primary hover:underline"
                   >
                     {pin.name}
                   </Link>
@@ -264,19 +264,19 @@ export function LiveDriverDetailsPanel({
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-300">{meta?.zoneName ?? "—"}</p>
               {deliveryMotion ? (
-                <p className="text-[10px] font-medium text-slate-600 dark:text-slate-300">
+                <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
                   {t("statusDeliverySubmit")} · {deliveryMotion}
                 </p>
               ) : null}
               {address ? (
                 <p
-                  className="truncate text-[10px] text-slate-500 dark:text-slate-300"
+                  className="truncate text-xs text-slate-500 dark:text-slate-300"
                   title={`${t("streetAddress")}: ${address}`}
                 >
                   {address}
                 </p>
               ) : null}
-              <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                 {driver.vehicleType === "car" ? (
                   <Car className="h-3 w-3" />
                 ) : (
@@ -299,13 +299,13 @@ export function LiveDriverDetailsPanel({
 
           <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-white p-2 text-xs dark:border-slate-700 dark:bg-slate-900">
             <div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-300">{t("lastGpsUpdate")}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-300">{t("lastGpsUpdate")}</p>
               <p className="mt-0.5 font-semibold text-slate-900 dark:text-slate-100">
                 {formatDurationSince(driver.updatedAt)}
               </p>
             </div>
             <div className="text-end">
-              <p className="text-[11px] text-slate-500 dark:text-slate-300">{t("gpsQuality")}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-300">{t("gpsQuality")}</p>
               <p className="mt-0.5 font-semibold text-slate-900 dark:text-slate-100">
                 {t(`gpsQualityLevel.${gpsQuality}`)}
               </p>
@@ -327,7 +327,7 @@ export function LiveDriverDetailsPanel({
             <MiniMetric label={t("gpsQuality")} value={t(`gpsQualityLevel.${gpsQuality}`)} />
             <MiniMetric label={t("colAccuracy")} value={formatAccuracyMeters(driver.accuracyMeters)} />
           </div>
-          <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-300">
+          <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-300">
             <StatusDot
               tone={
                 driver.pinStatus === "alert"
@@ -363,10 +363,10 @@ export function LiveDriverDetailsPanel({
                       {deliveryStatusLabel(t, order.status, order.deliveredAt)}
                     </Pill>
                   </div>
-                  <p className="mt-1 truncate text-[11px] text-slate-500 dark:text-slate-300">
+                  <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-300">
                     {order.partnerName}
                   </p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-300">
+                  <p className="text-xs text-slate-500 dark:text-slate-300">
                     {formatDurationSince(order.deliveredAt)}
                   </p>
                 </li>
@@ -424,7 +424,7 @@ function CompactStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 dark:border-slate-700 dark:bg-slate-800/60">
       <p className={COMPACT_STAT_LABEL_CLASS}>{label}</p>
-      <p className="truncate text-[11px] font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+      <p className="truncate text-xs font-semibold tabular-nums text-slate-900 dark:text-slate-100">
         {value}
       </p>
     </div>
@@ -434,7 +434,7 @@ function CompactStat({ label, value }: { label: string; value: string }) {
 function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 dark:border-slate-700 dark:bg-slate-800/60">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
         {label}
       </p>
       <p className="mt-0.5 text-base font-semibold tabular-nums text-slate-900 dark:text-slate-100">

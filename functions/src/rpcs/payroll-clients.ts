@@ -38,6 +38,7 @@ const PAYROLL_COLUMN_KEYS = [
   "zoneCategory",
   "partner",
   "vehicleKind",
+  "status",
   "finalOrders",
   "actualHours",
   "appTotalHours",

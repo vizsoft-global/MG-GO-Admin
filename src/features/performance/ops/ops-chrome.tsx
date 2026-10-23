@@ -110,7 +110,7 @@ export function OpsViewByPills({
   if (options.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {t("viewBy.label")}
       </span>
       {options.map((id) => (
@@ -155,7 +155,7 @@ export function OpsTopBottomShowPills({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         <ListOrdered className="size-3 opacity-70" aria-hidden />
         {t("show.label")}
       </span>
@@ -197,10 +197,10 @@ export function OpsTopBottomShowPills({
         onKeyDown={(e) => {
           if (e.key === "Enter") e.currentTarget.blur();
         }}
-        className="h-9 w-14 px-2 text-center text-[11px]"
+        className="h-9 w-14 px-2 text-center text-xs"
       />
       {invalid ? (
-        <span className="text-[10px] text-destructive">{t("show.invalid")}</span>
+        <span className="text-xs text-destructive">{t("show.invalid")}</span>
       ) : null}
     </div>
   );
@@ -306,7 +306,7 @@ export function OpsSlicerBar({
     <div className={cn("rounded-xl border border-border bg-card p-4 shadow-sm", LAYOUT.stackGap)}>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
         <div className="min-w-0">
-          <p className="mb-1 flex items-center gap-1 truncate text-[10px] font-medium text-muted-foreground">
+          <p className="mb-1 flex items-center gap-1 truncate text-xs font-medium text-muted-foreground">
             <ClipboardCheck className="size-3 shrink-0 opacity-70" />
             {t("slicer.orderStatus")}
           </p>
@@ -436,7 +436,7 @@ export function OpsSlicerBar({
             {exportLabel ?? t("exportTab")}
           </button>
         ) : null}
-        <span className="ms-auto hidden text-[10px] text-muted-foreground lg:inline">
+        <span className="ms-auto hidden text-xs text-muted-foreground lg:inline">
           {t("slicerHint")}
         </span>
       </div>

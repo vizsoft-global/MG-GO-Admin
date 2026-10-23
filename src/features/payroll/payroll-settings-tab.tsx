@@ -456,7 +456,7 @@ export function PayrollSettingsTab({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-border bg-card px-4 py-3 text-[12px] leading-5 shadow-sm">
+      <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-5 shadow-sm">
         <b>{t("bannerTitle")}</b> {t("bannerBody", { month: month.label })}
       </div>
 
@@ -474,7 +474,7 @@ export function PayrollSettingsTab({
             {client.name}
             <span className="tabular-nums opacity-70"> · {client.riderCount}</span>
             {client.hasRulesForMonth ? null : (
-              <span className="rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-800">
+              <span className="rounded bg-amber-100 px-1 text-xs font-bold text-amber-800">
                 {t("noRulesYet")}
               </span>
             )}
@@ -499,7 +499,7 @@ export function PayrollSettingsTab({
         <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
           <div className="flex flex-wrap items-end gap-2">
             <div className="space-y-1">
-              <Label htmlFor="payroll-new-client" className="text-[11px]">
+              <Label htmlFor="payroll-new-client" className="text-xs">
                 {t("addClient.name")}
               </Label>
               <Input
@@ -511,7 +511,7 @@ export function PayrollSettingsTab({
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-[11px]">{t("addClient.copyFrom")}</Label>
+              <Label className="text-xs">{t("addClient.copyFrom")}</Label>
               <Select value={addCopy} onValueChange={(value) => setAddCopy(value ?? "none")}>
                 <SelectTrigger className="h-9 w-52">
                   <SelectValue />
@@ -600,20 +600,20 @@ export function PayrollSettingsTab({
           <div className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <h3 className="text-[13px] font-semibold">{clientDraft.name}</h3>
-                <span className="rounded-sm bg-primary/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-primary">
+                <h3 className="text-sm font-semibold">{clientDraft.name}</h3>
+                <span className="rounded-sm bg-primary/10 px-1.5 py-px text-xs font-bold uppercase tracking-wide text-primary">
                   {t("clientRulesTag")}
                 </span>
                 {saveFlash === "saving" || busy ? (
-                  <span className="text-[10px] text-muted-foreground">{t("autosave.saving")}</span>
+                  <span className="text-xs text-muted-foreground">{t("autosave.saving")}</span>
                 ) : saveFlash === "saved" ? (
-                  <span className="text-[10px] text-emerald-700">{t("autosave.saved")}</span>
+                  <span className="text-xs text-emerald-700">{t("autosave.saved")}</span>
                 ) : null}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
               <div className="space-y-1 lg:col-span-2">
-                <Label htmlFor="payroll-client-name" className="text-[11px]">
+                <Label htmlFor="payroll-client-name" className="text-xs">
                   {t("criteria.name")}
                 </Label>
                 <Input
@@ -689,8 +689,8 @@ export function PayrollSettingsTab({
           <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h3 className="text-[13px] font-semibold">{t("rules.title", { month: month.label })}</h3>
-                <p className="text-[10px] text-muted-foreground">{t("rules.hint")}</p>
+                <h3 className="text-sm font-semibold">{t("rules.title", { month: month.label })}</h3>
+                <p className="text-xs text-muted-foreground">{t("rules.hint")}</p>
               </div>
               {canManage ? (
                 <div className="flex flex-wrap gap-2">
@@ -742,7 +742,7 @@ export function PayrollSettingsTab({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-max min-w-full border-collapse text-[12px]">
+              <table className="w-max min-w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-border">
                     <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.order")}</th>
@@ -841,7 +841,7 @@ export function PayrollSettingsTab({
                                     })
                                   }
                                 />
-                                <span className="text-[10px] text-muted-foreground">–</span>
+                                <span className="text-xs text-muted-foreground">–</span>
                                 <Input
                                   className="h-9 w-16"
                                   inputMode="numeric"
@@ -896,7 +896,7 @@ export function PayrollSettingsTab({
                               ) : null}
                             </div>
                           </td>
-                          <td className="max-w-[220px] px-2 py-2 text-[11px] leading-4 text-muted-foreground">
+                          <td className="max-w-[220px] px-2 py-2 text-xs leading-4 text-muted-foreground">
                             {readsAs(row, uses) || "—"}
                           </td>
                           <td className="px-2 py-2">
@@ -936,7 +936,7 @@ export function PayrollSettingsTab({
                     })
                   )}
                   <tr className="bg-muted/20">
-                    <td className="px-2 py-2 text-[11px] font-semibold" colSpan={uses.usesZone ? 3 : 1}>
+                    <td className="px-2 py-2 text-xs font-semibold" colSpan={uses.usesZone ? 3 : 1}>
                       {t("rules.defaultRow")}
                     </td>
                     {uses.usesHours ? <td /> : null}
@@ -960,7 +960,7 @@ export function PayrollSettingsTab({
                         </SelectContent>
                       </Select>
                     </td>
-                    <td className="px-2 py-2 text-[11px] text-muted-foreground">{t("criteria.defaultHint")}</td>
+                    <td className="px-2 py-2 text-xs text-muted-foreground">{t("criteria.defaultHint")}</td>
                     <td />
                   </tr>
                 </tbody>
@@ -971,12 +971,12 @@ export function PayrollSettingsTab({
           <div className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center gap-1.5">
               <FlaskConical className="size-3.5 text-primary" />
-              <h3 className="text-[13px] font-semibold">{t("simulator.title")}</h3>
+              <h3 className="text-sm font-semibold">{t("simulator.title")}</h3>
             </div>
-            <p className="text-[10px] leading-4 text-muted-foreground">{t("simulator.hint")}</p>
+            <p className="text-xs leading-4 text-muted-foreground">{t("simulator.hint")}</p>
             <div className="flex flex-wrap items-end gap-2">
               <div className="space-y-1">
-                <Label className="text-[11px]">{t("simulator.zone")}</Label>
+                <Label className="text-xs">{t("simulator.zone")}</Label>
                 <Select
                   value={simZoneName}
                   onValueChange={(value) => {
@@ -1000,7 +1000,7 @@ export function PayrollSettingsTab({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-[11px]">{t("simulator.zoneCategory")}</Label>
+                <Label className="text-xs">{t("simulator.zoneCategory")}</Label>
                 <Select value={simZone} onValueChange={(v) => setSimZone(v as ZoneCategory)}>
                   <SelectTrigger className="h-9 w-40">
                     <SelectValue />
@@ -1015,7 +1015,7 @@ export function PayrollSettingsTab({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label htmlFor="payroll-sim-orders" className="text-[11px]">
+                <Label htmlFor="payroll-sim-orders" className="text-xs">
                   {t("simulator.orders")}
                 </Label>
                 <Input
@@ -1027,7 +1027,7 @@ export function PayrollSettingsTab({
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="payroll-sim-hours" className="text-[11px]">
+                <Label htmlFor="payroll-sim-hours" className="text-xs">
                   {t("simulator.hours")}
                 </Label>
                 <Input
@@ -1040,7 +1040,7 @@ export function PayrollSettingsTab({
               </div>
             </div>
             {simulator ? (
-              <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/50 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-900">
+              <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/50 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
                 <span className="font-semibold">
                   {simulator.via === "rule"
                     ? t("simulator.rulePill", { n: simulator.n, hours: simulator.hours })
@@ -1048,7 +1048,7 @@ export function PayrollSettingsTab({
                       ? t("simulator.decidedByDefault")
                       : t("simulator.decidedByLegacy")}
                 </span>
-                <span className="text-[11px]">
+                <span className="text-xs">
                   {t("simulator.outcome", {
                     status: tDayStatus(simulator.status),
                     hours: simulator.hours,
@@ -1063,11 +1063,11 @@ export function PayrollSettingsTab({
       <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
         <div className="flex items-center gap-1.5">
           <History className="size-3.5 text-primary" />
-          <h3 className="text-[13px] font-semibold">{t("audit.title")}</h3>
+          <h3 className="text-sm font-semibold">{t("audit.title")}</h3>
         </div>
-        <p className="text-[10px] text-muted-foreground">{t("audit.hint")}</p>
+        <p className="text-xs text-muted-foreground">{t("audit.hint")}</p>
         <div className="max-h-[min(320px,38dvh)] overflow-auto">
-          <table className="w-max min-w-full border-collapse text-[12px]">
+          <table className="w-max min-w-full border-collapse text-xs">
             <thead className="sticky top-0 bg-card">
               <tr className="border-b border-border">
                 <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("audit.when")}</th>
@@ -1087,7 +1087,7 @@ export function PayrollSettingsTab({
                   <tr key={row.id} className="border-b border-border/60">
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">{row.createdAt}</td>
                     <td className="whitespace-nowrap px-2 py-1.5">{row.actorName}</td>
-                    <td className="px-2 py-1.5 text-[11px] text-muted-foreground">
+                    <td className="px-2 py-1.5 text-xs text-muted-foreground">
                       {summariseAudit({
                         entity: row.entity,
                         action: row.action,
@@ -1150,7 +1150,7 @@ function HoursRangeInputs({
         disabled={disabled}
         onChange={(e) => onChange({ hoursMin: e.target.value === "" ? null : Number(e.target.value) })}
       />
-      <span className="text-[10px] text-muted-foreground">and</span>
+      <span className="text-xs text-muted-foreground">and</span>
       <Select
         value={row.hoursMaxOp}
         onValueChange={(op) => onChange({ hoursMaxOp: (op as "lt" | "lte") ?? "lt" })}
@@ -1244,8 +1244,8 @@ function ZonesView({
     <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-[13px] font-semibold">{t("zones.title")}</h3>
-          <p className="text-[10px] text-muted-foreground">{t("zones.hint")}</p>
+          <h3 className="text-sm font-semibold">{t("zones.title")}</h3>
+          <p className="text-xs text-muted-foreground">{t("zones.hint")}</p>
         </div>
         {canManage ? (
           <Button type="button" variant="outline" className="h-9" disabled={busy} onClick={onRecompute}>
@@ -1256,7 +1256,7 @@ function ZonesView({
       </div>
       <div className="flex flex-wrap items-end gap-2">
         <div className="space-y-1">
-          <Label className="text-[11px]">{t("zones.targetDpd")}</Label>
+          <Label className="text-xs">{t("zones.targetDpd")}</Label>
           <div className="flex items-center gap-1.5">
             <Input
               className="h-9 w-24"
@@ -1267,7 +1267,7 @@ function ZonesView({
               onChange={(e) => setTargetDraft(e.target.value)}
               onBlur={commitSettings}
             />
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {t("zones.autoEq", {
                 value: settings?.autoTargetDpd == null ? "—" : settings.autoTargetDpd.toFixed(2),
               })}
@@ -1304,7 +1304,7 @@ function ZonesView({
         />
       </div>
       <div className="overflow-x-auto">
-        <table className="w-max min-w-full border-collapse text-[12px]">
+        <table className="w-max min-w-full border-collapse text-xs">
           <thead>
             <tr className="border-b border-border">
               <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("zones.zone")}</th>
@@ -1365,7 +1365,7 @@ function ZonesView({
                     </td>
                     <td className="px-2 py-1.5">
                       {readOnly || !canManage ? (
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           {zone.categoryOverride ? tZoneCategory(zone.categoryOverride) : t("zones.auto")}
                         </span>
                       ) : (
@@ -1399,7 +1399,7 @@ function ZonesView({
                       <div className="flex items-center gap-1.5">
                         <ZoneCategoryPillSmall category={finalCat} label={tZoneCategory(finalCat)} />
                         {zone.categoryOverride ? (
-                          <span className="rounded-sm bg-amber-100 px-1 text-[9px] font-bold uppercase text-amber-800">
+                          <span className="rounded-sm bg-amber-100 px-1 text-xs font-bold uppercase text-amber-800">
                             {t("zones.manualTag")}
                           </span>
                         ) : null}
@@ -1412,7 +1412,7 @@ function ZonesView({
           </tbody>
         </table>
       </div>
-      <p className="text-[10px] text-muted-foreground">{t("zones.monthNote", { month: month.label })}</p>
+      <p className="text-xs text-muted-foreground">{t("zones.monthNote", { month: month.label })}</p>
     </div>
   );
 }
@@ -1451,12 +1451,12 @@ function EfficiencyUsedEditor({
       />
       {zone.efficiencyOverride != null ? (
         <>
-          <span className="rounded-sm bg-amber-100 px-1 text-[9px] font-bold uppercase text-amber-800">
+          <span className="rounded-sm bg-amber-100 px-1 text-xs font-bold uppercase text-amber-800">
             {t("zones.editedTag")}
           </span>
           <button
             type="button"
-            className="inline-flex h-7 items-center rounded-md px-1.5 text-[10px] font-semibold text-primary hover:bg-primary/10"
+            className="inline-flex h-7 items-center rounded-md px-1.5 text-xs font-semibold text-primary hover:bg-primary/10"
             onClick={() => onSave(null)}
           >
             <RotateCcw className="size-3" />
@@ -1504,7 +1504,7 @@ function ZoneCategoryPillSmall({ category, label }: { category: ZoneCategory; la
           ? "bg-red-100 text-red-700"
           : "bg-muted text-muted-foreground";
   return (
-    <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold", tone)}>
+    <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", tone)}>
       {label}
     </span>
   );
@@ -1531,7 +1531,7 @@ function NumberField({
   }, [value]);
   return (
     <div className="space-y-1">
-      <Label htmlFor={id} className="text-[11px]">
+      <Label htmlFor={id} className="text-xs">
         {label}
       </Label>
       <Input

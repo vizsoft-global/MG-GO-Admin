@@ -80,7 +80,7 @@ export function HistoryPlaybackControls({
                 onClick={() => onSpeedChange(value)}
                 disabled={disabled}
                 className={cn(
-                  "min-w-[2rem] cursor-pointer rounded-md px-2 py-1 text-[10px] font-semibold tabular-nums transition-colors",
+                  "min-w-[2rem] cursor-pointer rounded-md px-2 py-1 text-xs font-semibold tabular-nums transition-colors",
                   selected
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -94,10 +94,10 @@ export function HistoryPlaybackControls({
         </div>
 
         <div className="ms-auto min-w-0 text-end">
-          <p className="truncate text-[11px] font-semibold tabular-nums text-foreground">
+          <p className="truncate text-xs font-semibold tabular-nums text-foreground">
             {currentLabel}
           </p>
-          <p className="truncate text-[10px] tabular-nums text-muted-foreground">
+          <p className="truncate text-xs tabular-nums text-muted-foreground">
             {pointLabel} · {durationLabel}
           </p>
         </div>

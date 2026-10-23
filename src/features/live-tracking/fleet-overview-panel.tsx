@@ -211,7 +211,7 @@ export function FleetOverviewPanel({
                 {chip.label}
               </ToggleChip>
             ))}
-            <span className="ms-auto inline-flex items-center text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            <span className="ms-auto inline-flex items-center text-xs font-medium text-slate-500 dark:text-slate-400">
               {t("selectedCount", { count: selectedChipCount })}
             </span>
           </div>
@@ -282,7 +282,7 @@ export function FleetOverviewPanel({
             <SelectTrigger className="h-8 cursor-not-allowed rounded-lg text-xs opacity-80">
               <div className="flex w-full items-center justify-between gap-2">
                 <span className="truncate">{t("filterSpeedAlerts")}</span>
-                <Badge variant="secondary" className="h-5 rounded-full px-2 text-[10px]">
+                <Badge variant="secondary" className="h-5 rounded-full px-2 text-xs">
                   {t("comingSoon")}
                 </Badge>
               </div>

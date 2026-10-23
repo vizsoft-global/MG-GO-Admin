@@ -46,6 +46,8 @@ export const COLLECTIONS = {
   adminRolePermissions: "admin_role_permissions",
   adminUserPermissions: "admin_user_permissions",
   authEpochs: "auth_epochs",
+  pageReadSnapshots: "page_read_snapshots",
+  pageReadGenerations: "page_read_generations",
   driverEarningsDaily: "driver_earnings_daily",
   driverWalletEntries: "driver_wallet_entries",
   driverPayouts: "driver_payouts",
@@ -66,6 +68,7 @@ export const COLLECTIONS = {
   /** Per rider-day GPS totals written by the Worker flush (`{driverId}_{day}`). */
   riderDayStats: "rider_day_stats",
   driverOffStructure: "driver_off_structure",
+  driverLeavePlans: "driver_leave_plans",
   /** Operations-uploaded Invalid / Rejected / Cancelled rows, keyed `{driverId}_{day}`. */
   riderComplianceDaily: "rider_compliance_daily",
   orderReconRows: "order_recon_rows",
@@ -84,6 +87,8 @@ export const COLLECTIONS = {
   payrollZoneMetrics: "payroll_zone_metrics",
   payrollZoneSettings: "payroll_zone_settings",
   payrollManualAdjustments: "payroll_manual_adjustments",
+  payrollOrderOverrides: "payroll_order_overrides",
+  payrollRiderStatuses: "payroll_rider_statuses",
   payrollColumnConfig: "payroll_column_config",
   /** `payroll_rule_audit_logs` — the before/after trail behind the Settings tab. */
   payrollRuleAuditLogs: "payroll_rule_audit_logs",

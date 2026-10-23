@@ -475,7 +475,7 @@ export function ZoneFormBody({
     <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden lg:grid-cols-[minmax(340px,380px)_minmax(0,1fr)]">
       <aside className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <header className="space-y-1 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
             <Link href="/zones" className="hover:text-primary hover:underline">
               {t("geofence.pageTitle")}
             </Link>
@@ -538,7 +538,7 @@ export function ZoneFormBody({
                     >
                       {t("geofence.descriptionOptional")}
                     </Label>
-                    <span className="text-[10px] tabular-nums text-slate-400">
+                    <span className="text-xs tabular-nums text-slate-400">
                       {descriptionUsed}/{DESCRIPTION_MAX}
                     </span>
                   </div>
@@ -736,7 +736,7 @@ export function ZoneFormBody({
               />
               <span
                 className={cn(
-                  "hidden rounded-lg border px-3 py-1.5 text-[11px] font-medium shadow-sm md:inline-flex",
+                  "hidden rounded-lg border px-3 py-1.5 text-xs font-medium shadow-sm md:inline-flex",
                   activeTool === "blocks" && blocksZoomCapped
                     ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
                     : "border-slate-200 bg-white/95 text-slate-600 dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-300",
@@ -768,7 +768,7 @@ export function ZoneFormBody({
           <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-3 md:hidden">
             <span
               className={cn(
-                "pointer-events-auto rounded-lg border px-3 py-1.5 text-[11px] font-medium shadow-sm",
+                "pointer-events-auto rounded-lg border px-3 py-1.5 text-xs font-medium shadow-sm",
                 activeTool === "blocks" && blocksZoomCapped
                   ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
                   : "border-slate-200 bg-white/95 text-slate-600 dark:border-slate-700 dark:bg-slate-900/95 dark:text-slate-300",
@@ -811,7 +811,7 @@ export function ZoneFormBody({
               <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
                 {name.trim() || t("geofence.unnamed")}
               </p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t("geofence.colArea")}: {draftArea}
               </p>
             </div>

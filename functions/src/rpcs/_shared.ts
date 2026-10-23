@@ -38,6 +38,14 @@ export function textOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
+/**
+ * The Keeta fleet's `drivers.project_key`. Stored lowercase by the Admin driver
+ * form, but compared case-insensitively so a hand-edited row is still Keeta.
+ */
+export function isKeetaProjectKey(value: unknown): boolean {
+  return typeof value === "string" && value.trim().toLowerCase() === "keeta";
+}
+
 export function pickText(data: Dict, ...names: string[]): string | null {
   return textOrNull(pick(data, ...names));
 }

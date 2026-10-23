@@ -20,6 +20,7 @@ type AuthContextValue = {
   isSuperAdmin: boolean;
   isManager: boolean;
   accessKind: StaffAccessKind | null;
+  partnerProjectKey: string | null;
   adminRoleSlug: string;
   permissions: string[];
   can: (permission: Permission) => boolean;

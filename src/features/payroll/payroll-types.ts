@@ -36,10 +36,13 @@ export type PayrollDayInfo = {
   /** Daily final adjusted orders (Order Reconciliation) — rule engine input. */
   orders: number;
   /**
-   * Grid / CSV only. Recon when present; otherwise that day's completed
-   * deliveries. Never feed this into `evalDay`.
+   * Grid / CSV. Recon when present; otherwise that day's completed deliveries.
+   * A manual order override copies the same number into `orders`, so the rule
+   * engine sees the correction too.
    */
   displayOrders?: number;
+  /** True when a payroll order override replaced recon and verified for this day. */
+  ordersOverridden?: boolean;
   /** Kuwait check-in → check-out hours. */
   loggedHours: number;
   source: DaySource;
@@ -94,6 +97,8 @@ export type PayrollRiderRow = {
   nationality: string;
   nationalityCode: string | null;
   status: "Active" | "Inactive";
+  /** A hand-set Status column value. Absent means today's cell (or the account) decides. */
+  statusOverride?: { key: string; label: string } | null;
   vehicleKey: string | null;
   sourceType: string | null;
   sourceCompany: string | null;

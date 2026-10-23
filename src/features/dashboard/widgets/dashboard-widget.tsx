@@ -126,7 +126,7 @@ export function DashboardWidget({
             <div className="min-w-0">
               <CardTitle className="text-sm font-semibold leading-tight">{title}</CardTitle>
               {badge !== undefined ? (
-                <p className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
+                <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
                   {badge}
                 </p>
               ) : null}

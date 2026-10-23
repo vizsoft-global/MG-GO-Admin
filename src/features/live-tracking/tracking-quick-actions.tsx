@@ -46,11 +46,11 @@ export function TrackingQuickActions({ className }: { className?: string }) {
               <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/20 dark:text-blue-200">
                 <action.icon className="h-3.5 w-3.5 shrink-0" />
               </span>
-              <span className="truncate text-[11px] leading-tight text-slate-700 dark:text-slate-200">
+              <span className="truncate text-xs leading-tight text-slate-700 dark:text-slate-200">
                 {action.label}
               </span>
               {!action.enabled ? (
-                <Badge variant="secondary" className="h-4 rounded-full px-1.5 text-[9px]">
+                <Badge variant="secondary" className="h-4 rounded-full px-1.5 text-xs">
                   Soon
                 </Badge>
               ) : null}

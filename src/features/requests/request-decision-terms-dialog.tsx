@@ -171,7 +171,7 @@ export function RequestDecisionTermsDialog({
             </div>
           ) : null}
 
-          <p className="text-[10px] text-muted-foreground sm:col-span-2">{t("hint")}</p>
+          <p className="text-xs text-muted-foreground sm:col-span-2">{t("hint")}</p>
         </div>
 
         <div className="px-2 pb-2 pt-3">

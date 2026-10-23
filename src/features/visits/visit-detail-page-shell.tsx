@@ -53,7 +53,7 @@ import {
 } from "./visit-status-utils";
 
 const SECTION_LABEL =
-  "text-[10px] font-semibold uppercase tracking-wide text-muted-foreground";
+  "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
 type StepState = "done" | "current" | "pending" | "failed";
 
@@ -391,7 +391,7 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
           <div className="flex items-center gap-2">
             <span
               className={cn(
-                "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
                 departmentBadgeClass(visit.department_key),
               )}
             >
@@ -428,7 +428,7 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
                 </span>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{visit.driver_name}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">
+                  <p className="truncate text-xs text-muted-foreground">
                     {visit.driver_phone ?? "—"}
                     {visit.driver_code
                       ? ` · ${t("detail.driverCode")} ${visit.driver_code}`
@@ -461,7 +461,7 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
                 <p className="text-xl font-semibold tabular-nums tracking-tight">
                   {visit.booking_code}
                 </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   {t("detail.checkInCodeHint")}
                 </p>
               </div>
@@ -542,7 +542,7 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
                     >
                       {step.label}
                     </p>
-                    <p className="text-[11px] tabular-nums text-muted-foreground">
+                    <p className="text-xs tabular-nums text-muted-foreground">
                       {step.sub}
                     </p>
                   </div>
@@ -666,14 +666,14 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
                     className="rounded-lg border border-border bg-muted/30 p-2"
                   >
                     <p className="text-sm">{note.body}</p>
-                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       {note.author_name ?? "—"} · {stamp(note.created_at)}
                     </p>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 text-[11px] italic text-muted-foreground">
+              <p className="mt-3 text-xs italic text-muted-foreground">
                 {t("detail.internalNotesEmpty")}
               </p>
             )}
@@ -759,7 +759,7 @@ export function VisitDetailPageShell({ bookingId }: { bookingId: string }) {
                 </SelectContent>
               </Select>
               {rescheduleDate && !slotsQuery.isLoading && slotOptions.length === 0 ? (
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t("detail.rescheduleNoSlots")}
                 </p>
               ) : null}

@@ -668,7 +668,7 @@ export function VisitsPageShell() {
                         className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
                       >
                         {group.label}
-                        <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                        <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
                           {group.rows.length}
                         </span>
                       </TableCell>
@@ -702,7 +702,7 @@ export function VisitsPageShell() {
                     <div className="flex items-center gap-2">
                       <span
                         className={cn(
-                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                           avatarTintClass(row.driver_name),
                         )}
                       >
@@ -710,7 +710,7 @@ export function VisitsPageShell() {
                       </span>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{row.driver_name}</p>
-                        <p className="truncate text-[11px] text-muted-foreground">
+                        <p className="truncate text-xs text-muted-foreground">
                           {row.driver_phone ?? row.driver_code}
                         </p>
                       </div>
@@ -722,7 +722,7 @@ export function VisitsPageShell() {
                   <TableCell>
                     <span
                       className={cn(
-                        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
                         departmentBadgeClass(row.department_key),
                       )}
                     >
@@ -829,7 +829,7 @@ function KpiTile({
         >
           {icon}
         </span>
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
         </p>
       </div>
@@ -838,7 +838,7 @@ function KpiTile({
       </p>
       <p
         className={cn(
-          "mt-0.5 text-[11px]",
+          "mt-0.5 text-xs",
           accent === "warning" && "text-warning",
           accent === "danger" && "text-danger",
           !accent && "text-muted-foreground",

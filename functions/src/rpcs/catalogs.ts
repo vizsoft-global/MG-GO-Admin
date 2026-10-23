@@ -744,6 +744,7 @@ const EMPLOYEE_CATALOG: Record<string, string> = {
   employee_sections: COLLECTIONS.employeeSections,
   nationality_categories: COLLECTIONS.nationalityCategories,
   bank_codes: COLLECTIONS.bankCodes,
+  sponsorships: COLLECTIONS.sponsorships,
 };
 
 /** `admin_upsert_employee_catalog` — HR catalogs. Gate is `drivers.manage`. */
@@ -779,6 +780,11 @@ export const adminUpsertEmployeeCatalog = onCall(async (request) => {
       sort_order: readNumber(data, "sortOrder") ?? 100,
       color: optionalString(data, "color"),
       is_nbk: kind === "bank_codes" && (key === "nbk" || readBool(data, "isNbk", false)),
+      // Sections only, and only when the caller actually answered: an older
+      // client must not flip a non-operational section back on by omission.
+      ...(kind === "employee_sections" && typeof data.isOperational === "boolean"
+        ? { is_operational: data.isOperational }
+        : {}),
       updated_at: FieldValue.serverTimestamp(),
     },
     { merge: true },

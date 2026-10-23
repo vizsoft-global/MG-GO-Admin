@@ -19,16 +19,24 @@ import { PartnerHealthWidget } from "./widgets/partner-health-widget";
 import { WorkforceQueueWidget } from "./widgets/workforce-queue-widget";
 
 export function DashboardPageShell({
-  initialSnapshot,
   locale,
+  initialSnapshot,
 }: {
-  initialSnapshot: DashboardSnapshot;
   locale: string;
+  initialSnapshot?: DashboardSnapshot;
 }) {
   const t = useTranslations("pages.dashboard");
-  const { data, isFetching, refetch } = useDashboardSnapshot(initialSnapshot, locale);
+  const { data, isFetching, refetch } = useDashboardSnapshot(locale, initialSnapshot);
 
   const snapshot = data ?? initialSnapshot;
+  if (!snapshot) {
+    return (
+      <AppPage className="space-y-4">
+        <AppPageHeader title={t("title")} description={t("subtitle")} />
+        <div className="h-24 rounded-xl bg-muted" />
+      </AppPage>
+    );
+  }
   const perms = snapshot.permissions;
 
   return (

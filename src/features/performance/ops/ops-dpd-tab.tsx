@@ -155,11 +155,11 @@ export function OpsDpdTab({
             onClick={() => exportBucket(b)}
             className="rounded-xl border border-border bg-card p-3 text-start shadow-sm hover:bg-muted/30"
           >
-            <p className="text-[10px] font-semibold uppercase text-muted-foreground">
+            <p className="text-xs font-semibold uppercase text-muted-foreground">
               {t(`bucket.${b}`)}
             </p>
             <p className="text-xl font-semibold tabular-nums">{formatInt(counts[b])}</p>
-            <p className="text-[10px] text-primary">{t("exportBucket")}</p>
+            <p className="text-xs text-primary">{t("exportBucket")}</p>
           </button>
         ))}
       </div>

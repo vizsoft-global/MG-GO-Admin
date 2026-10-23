@@ -72,7 +72,7 @@ export function PerformanceComponentBreakdown({
     <div className={`rounded-lg border border-border ${className ?? ""}`}>
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
         <p className="text-xs font-medium">{t("title")}</p>
-        <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">
+        <span className="text-xs font-semibold tabular-nums text-muted-foreground">
           {compliance == null ? t("unmeasured") : `${Math.round(compliance)}%`}
         </span>
       </div>
@@ -87,12 +87,12 @@ export function PerformanceComponentBreakdown({
               className="flex items-center gap-2 px-3 py-1.5"
             >
               <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-[11px]">
+              <span className="min-w-0 flex-1 truncate text-xs">
                 {componentLabel(component, locale)}
               </span>
               {!counted ? (
                 <span
-                  className="shrink-0 rounded-md border border-border bg-muted/30 px-1.5 text-[10px] text-muted-foreground"
+                  className="shrink-0 rounded-md border border-border bg-muted/30 px-1.5 text-xs text-muted-foreground"
                   title={t("notCountedHint")}
                 >
                   {t("notCounted")}
@@ -106,7 +106,7 @@ export function PerformanceComponentBreakdown({
                   />
                 )}
               </div>
-              <span className="w-12 shrink-0 text-end text-[11px] font-semibold tabular-nums">
+              <span className="w-12 shrink-0 text-end text-xs font-semibold tabular-nums">
                 {value == null ? (
                   <span
                     className="text-muted-foreground"
@@ -122,7 +122,7 @@ export function PerformanceComponentBreakdown({
           );
         })}
       </ul>
-      <p className="px-3 py-1.5 text-[10px] text-muted-foreground">
+      <p className="px-3 py-1.5 text-xs text-muted-foreground">
         {t("hint")}
       </p>
     </div>

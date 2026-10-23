@@ -703,7 +703,7 @@ function RestaurantsPageContent() {
                               className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
                             >
                               {group.label}
-                              <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                              <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
                                 {group.rows.length}
                               </span>
                             </TableCell>
@@ -737,7 +737,7 @@ function RestaurantsPageContent() {
                                 className="h-full w-full object-contain p-0.5"
                               />
                             ) : (
-                              <span className="text-[9px] font-medium text-muted-foreground">
+                              <span className="text-xs font-medium text-muted-foreground">
                                 {row.name.slice(0, 2).toUpperCase()}
                               </span>
                             )}

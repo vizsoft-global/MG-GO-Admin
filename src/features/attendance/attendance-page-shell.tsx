@@ -454,7 +454,7 @@ function AttendancePageContent() {
             <div className="flex flex-col gap-0.5">
               <span>{formatTimeKuwait(row.check_out_at)}</span>
               {isAutoCheckoutReason(row.check_out_reason) ? (
-                <span className="w-fit rounded border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                <span className="w-fit rounded border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
                   {t("autoCheckoutBadge")}
                 </span>
               ) : null}
@@ -895,7 +895,7 @@ function AttendancePageContent() {
                   {section.label ? (
                     <p className="text-xs font-semibold text-foreground">
                       {section.label}
-                      <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                      <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
                         {section.rows.length}
                       </span>
                     </p>

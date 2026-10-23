@@ -278,7 +278,7 @@ export function DepartmentsSettingsPanel() {
                   {dept.label_en}
                   <span
                     className={cn(
-                      "rounded-full px-1.5 py-0.5 text-[10px]",
+                      "rounded-full px-1.5 py-0.5 text-xs",
                       dept.id === activeDeptId
                         ? "bg-primary/10 text-primary"
                         : "bg-muted text-muted-foreground",
@@ -429,14 +429,14 @@ export function DepartmentsSettingsPanel() {
                           <TableCell>
                             <div className="flex items-center gap-2.5">
                               <Avatar className="h-8 w-8">
-                                <AvatarFallback className="text-[10px]">
+                                <AvatarFallback className="text-xs">
                                   {initialsOf(member.profile_name)}
                                 </AvatarFallback>
                               </Avatar>
                               <div className="min-w-0">
                                 <div className="text-sm font-medium">{member.profile_name}</div>
                                 {member.profile_email ? (
-                                  <div className="text-[10px] text-muted-foreground">
+                                  <div className="text-xs text-muted-foreground">
                                     {member.profile_email}
                                   </div>
                                 ) : null}

@@ -45,10 +45,10 @@ function Metric({
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-lg font-semibold tabular-nums">{value}</p>
       {hint ? (
-        <p className="text-[10px] text-muted-foreground">{hint}</p>
+        <p className="text-xs text-muted-foreground">{hint}</p>
       ) : null}
     </div>
   );
@@ -129,7 +129,7 @@ export function DriverPerformanceTab({
             {t(`report.presets.${option}`)}
           </Button>
         ))}
-        <span className="text-[10px] tabular-nums text-muted-foreground">
+        <span className="text-xs tabular-nums text-muted-foreground">
           {range.from} → {range.to}
         </span>
       </div>
@@ -143,7 +143,7 @@ export function DriverPerformanceTab({
         <>
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("kpiOverall")}
               </p>
               <div className="flex items-center gap-2">
@@ -152,7 +152,7 @@ export function DriverPerformanceTab({
                 </p>
                 <span
                   className={cn(
-                    "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold",
+                    "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold",
                     BAND_CHIP_CLASS[row.score_band],
                   )}
                 >
@@ -162,14 +162,14 @@ export function DriverPerformanceTab({
               </div>
             </div>
             <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("colRank")}
               </p>
               <p className="flex items-center gap-1 text-lg font-semibold tabular-nums">
                 <Trophy className="size-3.5 text-amber-500" />
                 {standing?.rank ?? "—"}
               </p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {standing?.rank == null
                   ? tDriver("performanceRankUnavailable")
                   : tDriver("performanceRankHint", {

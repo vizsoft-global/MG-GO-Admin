@@ -245,11 +245,11 @@ export function DocumentExpiryPageShell() {
                 <TableCell>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{row.driverName}</p>
-                    <p className="text-[11px] text-muted-foreground">{row.driverCode}</p>
+                    <p className="text-xs text-muted-foreground">{row.driverCode}</p>
                     {row.driverId ? (
                       <Link
                         href={`/drivers/${row.driverId}`}
-                        className="text-[10px] text-primary hover:underline"
+                        className="text-xs text-primary hover:underline"
                         onClick={(event) => event.stopPropagation()}
                       >
                         {t("viewDriver")}
@@ -272,7 +272,7 @@ export function DocumentExpiryPageShell() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 cursor-pointer gap-1 px-2 text-[11px] text-primary hover:bg-primary/10"
+                      className="h-7 cursor-pointer gap-1 px-2 text-xs text-primary hover:bg-primary/10"
                       onClick={() => void openView(row)}
                     >
                       <ExternalLink className="h-3 w-3" />
@@ -284,7 +284,7 @@ export function DocumentExpiryPageShell() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-7 cursor-pointer gap-1 px-2 text-[11px] text-primary hover:bg-primary/10"
+                          className="h-7 cursor-pointer gap-1 px-2 text-xs text-primary hover:bg-primary/10"
                           onClick={() => {
                             setActiveRow(row);
                             setSheetMode("date");
@@ -297,7 +297,7 @@ export function DocumentExpiryPageShell() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-7 cursor-pointer gap-1 px-2 text-[11px] text-primary hover:bg-primary/10"
+                          className="h-7 cursor-pointer gap-1 px-2 text-xs text-primary hover:bg-primary/10"
                           onClick={() => {
                             setActiveRow(row);
                             setSheetMode("replace");

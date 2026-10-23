@@ -122,7 +122,7 @@ export function OpsHeaderFilter({
       <PopoverContent align="start" className="w-56 origin-(--transform-origin) space-y-2 p-2">
         {numeric ? (
           <div className="grid grid-cols-2 gap-1.5">
-            <label className="text-[10px] text-muted-foreground">
+            <label className="text-xs text-muted-foreground">
               {minLabel}
               <Input
                 type="number"
@@ -131,7 +131,7 @@ export function OpsHeaderFilter({
                 className="mt-0.5 h-9"
               />
             </label>
-            <label className="text-[10px] text-muted-foreground">
+            <label className="text-xs text-muted-foreground">
               {maxLabel}
               <Input
                 type="number"

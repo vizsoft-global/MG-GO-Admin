@@ -809,7 +809,7 @@ export const EsignStampPlacer = forwardRef<
                       <button
                         type="button"
                         aria-label={label}
-                        className="absolute inset-0 cursor-grab border border-primary bg-white/80 text-left text-[10px] leading-tight text-foreground select-none touch-none active:cursor-grabbing"
+                        className="absolute inset-0 cursor-grab border border-primary bg-white/80 text-left text-xs leading-tight text-foreground select-none touch-none active:cursor-grabbing"
                         onPointerDown={(event) => beginGesture(event, piece, null)}
                         onPointerMove={onGestureMove}
                         onPointerUp={onGestureUp}
@@ -871,22 +871,22 @@ export const EsignStampPlacer = forwardRef<
         ) : null}
         </div>
       </div>
-      <p className="text-[10px] text-muted-foreground">{t("placeHint")}</p>
-      {editing ? <p className="text-[10px] text-muted-foreground">{t("formDeleteHint")}</p> : null}
+      <p className="text-xs text-muted-foreground">{t("placeHint")}</p>
+      {editing ? <p className="text-xs text-muted-foreground">{t("formDeleteHint")}</p> : null}
       {autoStatus === "done" ? (
-        <p className="text-[10px] text-muted-foreground">{t("autoMatchDone")}</p>
+        <p className="text-xs text-muted-foreground">{t("autoMatchDone")}</p>
       ) : null}
       {autoStatus === "fallback" ? (
-        <p className="text-[10px] text-amber-700">{t("autoMatchFallback")}</p>
+        <p className="text-xs text-amber-700">{t("autoMatchFallback")}</p>
       ) : null}
       {formStatus === "saving" ? (
-        <p className="text-[10px] text-muted-foreground">{t("formSaving")}</p>
+        <p className="text-xs text-muted-foreground">{t("formSaving")}</p>
       ) : null}
       {formStatus === "saved" ? (
-        <p className="text-[10px] text-muted-foreground">{t("formSaved")}</p>
+        <p className="text-xs text-muted-foreground">{t("formSaved")}</p>
       ) : null}
       {formStatus === "error" ? (
-        <p className="text-[10px] text-destructive">
+        <p className="text-xs text-destructive">
           {formReason === "not_signed" || formReason === "document_locked"
             ? t("formSaveLocked")
             : formReason === "invalid_sheet"
@@ -895,13 +895,13 @@ export const EsignStampPlacer = forwardRef<
         </p>
       ) : null}
       {status === "saving" ? (
-        <p className="text-[10px] text-muted-foreground">{t("placeSaving")}</p>
+        <p className="text-xs text-muted-foreground">{t("placeSaving")}</p>
       ) : null}
       {status === "saved" ? (
-        <p className="text-[10px] text-muted-foreground">{t("placeSaved")}</p>
+        <p className="text-xs text-muted-foreground">{t("placeSaved")}</p>
       ) : null}
       {status === "error" ? (
-        <p className="text-[10px] text-destructive">
+        <p className="text-xs text-destructive">
           {reason === "staff_slot_missing"
             ? t("staffSlotMissing")
             : reason === "staff_signature_unavailable"

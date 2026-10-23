@@ -155,7 +155,7 @@ export function IncentiveRuleDetailPageShell({
 
       <Card className="rounded-xl border-border shadow-sm">
         <CardContent className="p-4">
-          <p className="mb-2 text-xs font-semibold text-accent">
+          <p className="mb-2 text-xs font-semibold text-[#A73C24]">
             {t("fields.tieredTargets")}
           </p>
           {rule.target_mode !== "tiered" || rule.tiers.length === 0 ? (

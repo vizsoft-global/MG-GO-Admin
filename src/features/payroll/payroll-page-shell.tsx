@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Calculator, CalendarOff, Download, FilterX, Loader2 } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
@@ -34,6 +34,9 @@ import {
   PayrollZoneCategoryChips,
 } from "./payroll-chrome";
 import { PayrollAdjustProvider } from "./payroll-adjust-context";
+import { PayrollStatusContextProvider } from "./payroll-status-context";
+import { statusFilterLabels } from "./payroll-status-options";
+import { listPayrollRiderStatuses, savePayrollRiderStatus } from "./payroll-actions";
 import { PayrollLegend } from "./payroll-grid";
 import { PayrollTab } from "./payroll-tab";
 import { CombinedPayrollTab } from "./combined-tab";
@@ -106,8 +109,44 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
   const fallbackLabel = useCallback((key: string) => t(`riderCols.${key}`), [t]);
 
-  const slicedRiders = useMemo(() => {
+  const statusQuery = useQuery({
+    queryKey: queryKeys.payroll.riderStatuses(),
+    queryFn: listPayrollRiderStatuses,
+    staleTime: 60_000,
+  });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const rosterRiders = useMemo(() => {
     const all = data?.riders ?? [];
+    const byDriver = statusQuery.data?.byDriver;
+    if (!byDriver) return all;
+    return all.map((row) => {
+      const override = byDriver[row.driverId];
+      return override ? { ...row, statusOverride: override } : row;
+    });
+  }, [data?.riders, statusQuery.data]);
+  const statusLabels = useMemo(
+    () =>
+      statusFilterLabels(
+        statusQuery.data?.customs ?? [],
+        Object.values(statusQuery.data?.byDriver ?? {}).map((entry) => entry.label),
+      ),
+    [statusQuery.data],
+  );
+  const saveStatus = useCallback(
+    async (driverId: string, choice: { key: string; label: string } | null) => {
+      setSavingId(driverId);
+      try {
+        const next = await savePayrollRiderStatus(driverId, choice);
+        queryClient.setQueryData(queryKeys.payroll.riderStatuses(), next);
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [queryClient],
+  );
+
+  const slicedRiders = useMemo(() => {
+    const all = rosterRiders;
     if (!hasSlicers(slicers)) return all;
     return all.filter((rider) =>
       riderMatchesSlicers(
@@ -124,7 +163,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
         slicers,
       ),
     );
-  }, [data?.riders, slicers]);
+  }, [rosterRiders, slicers]);
 
   const filteredRiders = useMemo(() => {
     const byStatus = filterRidersByStatus(slicedRiders, statusFilter);
@@ -227,12 +266,15 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
       dates: month.dates,
       riders: filteredRiders,
       requests,
-      options: view
-        ? {
-            labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
-            hidden: hiddenSetFor(view, headingConfig),
-          }
-        : undefined,
+      options: {
+        ...(view
+          ? {
+              labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
+              hidden: hiddenSetFor(view, headingConfig),
+            }
+          : {}),
+        today,
+      },
       tileLabel: (key) => t(`tiles.${key}`),
       statusLabel: (status) => t(`status.${status}`),
     });
@@ -243,6 +285,9 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
   }
 
   return (
+    <PayrollStatusContextProvider
+      value={{ canEdit: canManage, labels: statusLabels, savingId, save: saveStatus }}
+    >
     <AppPage className="space-y-2">
       <PayrollAdjustProvider>
       <AppPageHeader
@@ -306,7 +351,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
       </div>
       <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50/40 p-4 shadow-sm">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-amber-900">{t("slicerCardTitle")}</span>
+          <span className="text-xs font-semibold text-amber-900">{t("slicerCardTitle")}</span>
         </div>
         <PayrollPartnerView
           clients={data?.clients ?? []}
@@ -347,6 +392,8 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           kpis={payrollKpis}
           riders={filteredRiders}
           canExport={canExport}
+          canManage={canManage}
+          today={today}
         />
       ) : tab === "combined" ? (
         <CombinedPayrollTab
@@ -354,6 +401,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           riders={filteredRiders}
           canExport={canExport}
           canManage={canManage}
+          today={today}
         />
       ) : tab === "attendance-orders" ? (
         <PayrollAttendanceOrdersTab
@@ -361,6 +409,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           riders={filteredRiders}
           canExport={canExport}
           canManage={canManage}
+          today={today}
         />
       ) : tab === "app-attendance" ? (
         <ApplicationAttendanceTab
@@ -368,6 +417,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           riders={filteredRiders}
           canExport={canExport}
           canManage={canManage}
+          today={today}
         />
       ) : tab === "requests" ? (
         <RequestsTab
@@ -396,6 +446,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
       ) : null}
       </PayrollAdjustProvider>
     </AppPage>
+    </PayrollStatusContextProvider>
   );
 }
 

@@ -76,7 +76,7 @@ export function OpsCustomRangePopover({
     >
       <PopoverTrigger
         className={cn(
-          "inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-[11px] font-semibold transition-colors",
+          "inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border px-2 text-xs font-semibold transition-colors",
           selected
             ? "border-emerald-500 bg-emerald-100 text-emerald-900 shadow-sm ring-1 ring-emerald-400/50"
             : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -88,7 +88,7 @@ export function OpsCustomRangePopover({
       <PopoverContent align="start" className="w-[min(340px,92vw)] origin-(--transform-origin) p-3">
         <p className="mb-2 text-xs font-semibold">{t("customTitle")}</p>
         <div className="grid grid-cols-2 gap-2">
-          <label className="min-w-0 text-[10px] font-medium text-muted-foreground">
+          <label className="min-w-0 text-xs font-medium text-muted-foreground">
             {t("customFrom")}
             <Input
               type="date"
@@ -98,7 +98,7 @@ export function OpsCustomRangePopover({
               className="mt-1 h-9"
             />
           </label>
-          <label className="min-w-0 text-[10px] font-medium text-muted-foreground">
+          <label className="min-w-0 text-xs font-medium text-muted-foreground">
             {t("customTo")}
             <Input
               type="date"
@@ -125,7 +125,7 @@ export function OpsCustomRangePopover({
             </ToggleChip>
           ))}
         </div>
-        {err ? <p className="mt-2 text-[11px] text-destructive">{err}</p> : null}
+        {err ? <p className="mt-2 text-xs text-destructive">{err}</p> : null}
         <div className="mt-3 flex justify-end gap-2">
           <button
             type="button"

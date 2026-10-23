@@ -75,7 +75,7 @@ export function DriverArchiveDialog({
               autoFocus
             />
             {submittedEmpty ? (
-              <p className="text-[10px] text-destructive">{t("archiveReasonRequired")}</p>
+              <p className="text-xs text-destructive">{t("archiveReasonRequired")}</p>
             ) : null}
           </div>
         </div>

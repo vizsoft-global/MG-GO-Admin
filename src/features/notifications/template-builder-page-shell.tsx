@@ -176,8 +176,8 @@ export function TemplateBuilderPageShell({ templateId }: { templateId?: string }
         title={isEdit ? t("templateEditTitle") : t("templateCreateTitle")}
         description={t("templateBuilderSubtitle")}
         breadcrumbs={[
-          { label: t("title"), href: `/${locale}/notifications` },
-          { label: t("navTemplates"), href: `/${locale}/notifications/templates` },
+          { label: t("title"), href: "/notifications" },
+          { label: t("navTemplates"), href: "/notifications/templates" },
           { label: isEdit ? name || t("templateEditTitle") : t("templateCreateTitle") },
         ]}
       />
@@ -266,7 +266,7 @@ export function TemplateBuilderPageShell({ templateId }: { templateId?: string }
                     >
                       {t("restrictScreenshot")}
                     </ToggleChip>
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {t("restrictScreenshotHint")}
                     </span>
                   </div>
@@ -322,7 +322,7 @@ export function TemplateBuilderPageShell({ templateId }: { templateId?: string }
           {section === "preview" ? (
             <div className="space-y-3">
               <div className="rounded-lg border border-border bg-muted/20 p-3">
-                <p className="text-xs font-semibold text-accent">{t("previewMessage")}</p>
+                <p className="text-xs font-semibold text-[#A73C24]">{t("previewMessage")}</p>
                 <p className="mt-1 text-sm font-semibold">
                   {titleTemplate || t("previewTitlePlaceholder")}
                 </p>
@@ -331,7 +331,7 @@ export function TemplateBuilderPageShell({ templateId }: { templateId?: string }
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-muted/20 p-3">
-                <p className="text-xs font-semibold text-accent">{t("previewPayload")}</p>
+                <p className="text-xs font-semibold text-[#A73C24]">{t("previewPayload")}</p>
                 <pre className="mt-2 overflow-x-auto text-xs">{payloadPreview}</pre>
               </div>
             </div>

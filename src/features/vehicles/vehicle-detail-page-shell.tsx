@@ -37,7 +37,7 @@ function parseTab(value: string | null | undefined): DetailTab {
 function MetaCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1 truncate text-sm font-medium text-foreground">{value}</p>
     </div>
   );
@@ -179,7 +179,7 @@ export function VehicleDetailPageShell({
               {vehicle.car_type ? <CarTypeBadge value={vehicle.car_type} /> : null}
               {vehicle.assigned_on_duty ? (
                 <span
-                  className="inline-flex items-center gap-1 rounded-md border border-emerald-500 bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-900 ring-1 ring-emerald-400/50"
+                  className="inline-flex items-center gap-1 rounded-md border border-emerald-500 bg-emerald-100 px-1.5 py-0.5 text-xs font-semibold text-emerald-900 ring-1 ring-emerald-400/50"
                   title={
                     vehicle.assigned_shift_label
                       ? t("shiftPlan", { range: vehicle.assigned_shift_label })

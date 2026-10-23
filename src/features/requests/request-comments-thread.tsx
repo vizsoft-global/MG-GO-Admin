@@ -70,14 +70,14 @@ export function RequestCommentsThread({
               <li key={row.id} className="flex gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2">
                 <span
                   className={cn(
-                    "flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+                    "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     avatarTintFromName(name),
                   )}
                 >
                   {initials(name)}
                 </span>
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold">
+                  <p className="text-xs font-semibold">
                     {name}
                     {stamp ? <span className="ms-2 font-normal text-muted-foreground">{stamp}</span> : null}
                   </p>

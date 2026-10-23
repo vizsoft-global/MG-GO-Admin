@@ -144,7 +144,7 @@ export function IncomingUploadDialog({
         </DialogHeader>
         <div className="space-y-3 overflow-y-auto px-5 py-4">
           <div className="space-y-1.5">
-            <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("category")}
             </Label>
             <Select
@@ -170,7 +170,7 @@ export function IncomingUploadDialog({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("employeeId")}
             </Label>
             <SearchSelect
@@ -182,7 +182,7 @@ export function IncomingUploadDialog({
               recentsKey="incoming-upload-driver"
             />
             {selectedDriver ? (
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {tRcm("fromSystem", {
                   name: selectedDriver.full_name,
                   role: t("driver"),
@@ -192,13 +192,13 @@ export function IncomingUploadDialog({
             ) : null}
           </div>
           <div className="space-y-1.5">
-            <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("subject")}
             </Label>
             <Input className="h-9" value={subject} onChange={(event) => setSubject(event.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("receivedOn")}
             </Label>
             <div className="relative">
@@ -212,7 +212,7 @@ export function IncomingUploadDialog({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("files")}
             </Label>
             <input
@@ -243,7 +243,7 @@ export function IncomingUploadDialog({
                   >
                     <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate">{file.name}</span>
-                    <span className="shrink-0 text-[11px] text-muted-foreground">{formatBytes(file.size)}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(file.size)}</span>
                     <button
                       type="button"
                       className="cursor-pointer rounded-md p-1 text-muted-foreground hover:bg-muted"
@@ -257,7 +257,7 @@ export function IncomingUploadDialog({
                 <li>
                   <button
                     type="button"
-                    className="cursor-pointer text-[12px] font-medium text-foreground underline"
+                    className="cursor-pointer text-xs font-medium text-foreground underline"
                     onClick={() => fileRef.current?.click()}
                   >
                     {t("browse")}
@@ -269,7 +269,7 @@ export function IncomingUploadDialog({
           <div className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2">
             <div className="min-w-0">
               <p className="text-sm font-medium">{t("startRoute")}</p>
-              <p className="text-[10px] text-muted-foreground">{t("routeHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("routeHint")}</p>
             </div>
             <Switch
               checked={startRoute}

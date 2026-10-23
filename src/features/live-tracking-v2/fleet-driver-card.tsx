@@ -133,7 +133,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
       <div className="flex items-start gap-2">
         <span
           className={cn(
-            "grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold",
+            "grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold",
             avatarTintFromName(name),
           )}
           aria-hidden
@@ -146,7 +146,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
             <p className="min-w-0 flex-1 truncate text-xs font-semibold">{name}</p>
             <span
               className={cn(
-                "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold",
+                "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-semibold",
                 FLEET_TONE_BADGE[statusTone],
               )}
             >
@@ -155,7 +155,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
             </span>
           </div>
 
-          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="rounded border border-primary/20 bg-primary/10 px-1 font-mono tabular-nums text-primary">
               {meta.driverCode}
             </span>
@@ -167,7 +167,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
             used, so the sub-label cannot contradict the pill beside it.
           */}
           {driver.status === "on_delivery" ? (
-            <p className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+            <p className="mt-0.5 text-xs font-medium text-muted-foreground">
               {t("status.on_delivery")} ·{" "}
               {fleetMotion(driver) === "moving"
                 ? `${t("status.moving")} • ${speedLabel}`
@@ -183,7 +183,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
             <span
               key={flag}
               className={cn(
-                "inline-flex items-center rounded border px-1 py-px text-[9px] font-semibold",
+                "inline-flex items-center rounded border px-1 py-px text-xs font-semibold",
                 FLEET_TONE_BADGE[fleetFlagTone(flag)],
               )}
             >
@@ -201,13 +201,13 @@ export const FleetDriverCard = memo(function FleetDriverCard({
               style={{ width: `${deliveryProgress}%` }}
             />
           </div>
-          <p className="mt-0.5 text-[9px] text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {t("rail.progress")} · {meta.deliveriesCompletedToday}/{meta.deliveriesToday}
           </p>
         </div>
       ) : null}
 
-      <div className="mt-1.5 grid grid-cols-3 gap-1 text-[10px]">
+      <div className="mt-1.5 grid grid-cols-3 gap-1 text-xs">
         <Stat
           icon={<Navigation className="size-3" aria-hidden />}
           label={t("rail.speed")}
@@ -226,7 +226,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
       </div>
 
       <div className="mt-1.5 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
           {onDutyFor ? (
             <span className="inline-flex items-center gap-1">
               <Clock className="size-3" aria-hidden />
@@ -299,7 +299,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
           <Link
             href={`/drivers/${driverId}?from=live-tracking-v2&driver=${driverId}`}
             onClick={(event) => event.stopPropagation()}
-            className="rounded px-1 text-[10px] font-medium text-primary transition-colors duration-150 hover:bg-primary/10"
+            className="rounded px-1 text-xs font-medium text-primary transition-colors duration-150 hover:bg-primary/10"
           >
             {t("rail.viewDetails")}
           </Link>
@@ -320,11 +320,11 @@ function Stat({
 }) {
   return (
     <div className="rounded border border-border/60 bg-muted/30 px-1 py-0.5">
-      <p className="flex items-center gap-0.5 text-[9px] leading-tight text-muted-foreground">
+      <p className="flex items-center gap-0.5 text-xs leading-tight text-muted-foreground">
         {icon}
         <span className="truncate">{label}</span>
       </p>
-      <p className="truncate text-[10px] font-semibold tabular-nums">{value}</p>
+      <p className="truncate text-xs font-semibold tabular-nums">{value}</p>
     </div>
   );
 }

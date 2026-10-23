@@ -83,6 +83,20 @@ export function validateBankDetails(
 
   if (!bankCode) return { ok: false, error: "bank_required" };
 
+  // Cash is a complete answer, not a half-filled bank: no account, no IBAN.
+  if (bankCode === "cash") {
+    return {
+      ok: true,
+      value: {
+        beneficiary_civil_id: beneficiary || null,
+        bank_code: "cash",
+        account_number: null,
+        iban: null,
+        currency,
+      },
+    };
+  }
+
   if (nbk) {
     if (!account) return { ok: false, error: "account_required" };
     if (!ACCOUNT_RE.test(account)) return { ok: false, error: "invalid_account_number" };

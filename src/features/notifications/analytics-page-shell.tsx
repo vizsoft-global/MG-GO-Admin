@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { AppListCard } from "@/components/app/app-list-card";
@@ -25,7 +25,6 @@ import { useNotificationAnalyticsDaily, useNotificationDashboard } from "./use-n
 
 export function AnalyticsPageShell() {
   const t = useTranslations("pages.notifications");
-  const locale = useLocale();
   const { data: kpis, isLoading: kpisLoading } = useNotificationDashboard();
 
   const [fromDate, setFromDate] = useState("");
@@ -55,7 +54,7 @@ export function AnalyticsPageShell() {
         title={t("navAnalytics")}
         description={t("analyticsSubtitle")}
         breadcrumbs={[
-          { label: t("title"), href: `/${locale}/notifications` },
+          { label: t("title"), href: "/notifications" },
           { label: t("navAnalytics") },
         ]}
       />

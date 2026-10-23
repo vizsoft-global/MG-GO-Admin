@@ -71,7 +71,7 @@ export function LiveDriverList({
                     <AvatarImage src={avatarByDriverId.get(loc.driverId)!} alt="" />
                   ) : null}
                   <AvatarFallback
-                    className={cn("text-[10px] font-semibold", avatarTintFromName(loc.driverName))}
+                    className={cn("text-xs font-semibold", avatarTintFromName(loc.driverName))}
                   >
                     {loc.driverName.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
@@ -98,14 +98,14 @@ export function LiveDriverList({
               {zone !== "unknown" ? (
                 <Badge
                   variant={zone === "out_of_zone" ? "destructive" : "secondary"}
-                  className="text-[10px]"
+                  className="text-xs"
                 >
                   {t(`zoneStatus.${zone}`)}
                 </Badge>
               ) : null}
             </div>
 
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("colLastSeen")}:{" "}
               {new Date(loc.lastSeenAt).toLocaleTimeString([], {
                 hour: "2-digit",

@@ -134,7 +134,7 @@ export function DriverAvatarUpload({
           </Button>
         ) : null}
       </div>
-      <p className={cn("text-center text-muted-foreground", compact ? "text-[10px]" : "text-xs")}>
+      <p className={cn("text-center text-muted-foreground", compact ? "text-xs" : "text-xs")}>
         {hint}
       </p>
     </div>

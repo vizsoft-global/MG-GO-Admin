@@ -30,7 +30,7 @@ export function NotificationWizardStepper({
           <li key={step.id} className="flex items-center gap-2">
             <span
               className={cn(
-                "inline-flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold",
+                "inline-flex h-6 w-6 items-center justify-center rounded-full border text-xs font-semibold",
                 isCurrent && "border-primary bg-primary text-primary-foreground",
                 showComplete && "border-emerald-500 bg-emerald-500 text-white",
                 !isCurrent && !showComplete && "border-border text-muted-foreground",

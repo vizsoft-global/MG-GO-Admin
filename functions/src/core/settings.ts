@@ -70,6 +70,13 @@ export async function loadAppSettings(): Promise<AppSettings> {
  */
 export type HomeSnapshotFlags = { enabled: boolean; shadow: boolean };
 
+export function homeSnapshotFlagsFrom(data: Record<string, unknown> | undefined): HomeSnapshotFlags {
+  return {
+    enabled: data?.["home_snapshot_enabled"] === true,
+    shadow: data?.["home_snapshot_shadow"] === true,
+  };
+}
+
 const homeSnapshotFlags = createConfigCache<HomeSnapshotFlags>();
 
 export async function loadHomeSnapshotFlags(configEpoch = 0): Promise<HomeSnapshotFlags> {
@@ -79,11 +86,7 @@ export async function loadHomeSnapshotFlags(configEpoch = 0): Promise<HomeSnapsh
         .collection(COLLECTIONS.appSettings)
         .doc(APP_SETTINGS_DOC_ID)
         .get();
-      const data = (snap.data() ?? {}) as Record<string, unknown>;
-      return {
-        enabled: data["home_snapshot_enabled"] === true,
-        shadow: data["home_snapshot_shadow"] === true,
-      };
+      return homeSnapshotFlagsFrom((snap.data() ?? {}) as Record<string, unknown>);
     });
   } catch {
     return { enabled: false, shadow: false };

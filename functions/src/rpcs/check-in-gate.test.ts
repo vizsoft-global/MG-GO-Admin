@@ -2,6 +2,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   isCheckInPhotoKeyForKey,
+  isKeetaDriver,
+  isKeetaZoneRestaurantName,
+  keetaZoneVerdict,
+  usesKeetaZoneGate,
   matchCheckInRestaurant,
   nearestCheckInRestaurant,
   needsCheckIn,
@@ -101,6 +105,148 @@ describe("check-in gate", () => {
       isCheckInPhotoKeyForKey("u1", "drivers/u1/check_in/2026-10-19/../../other.jpg"),
       false,
     );
+  });
+});
+
+describe("Keeta zone gate", () => {
+  const ZONE = {
+    id: "z1",
+    name: "Salmiya",
+    geometry: SQUARE.geometry,
+    zone_type: "polygon",
+  };
+
+  it("identifies a Keeta rider regardless of case or padding", () => {
+    assert.equal(isKeetaDriver({ project_key: "keeta" }), true);
+    assert.equal(isKeetaDriver({ project_key: " Keeta " }), true);
+    assert.equal(isKeetaDriver({ project_key: "americana" }), false);
+    assert.equal(isKeetaDriver({ project_key: "" }), false);
+    assert.equal(isKeetaDriver({ project_key: 7 }), false);
+    assert.equal(isKeetaDriver({}), false);
+  });
+
+  it("uses the zone gate for a Keeta partner or a Keeta / pool restaurant", () => {
+    assert.equal(
+      usesKeetaZoneGate({
+        projectKey: "keeta",
+        partnerName: "",
+        partnerKey: "",
+        restaurantNames: [],
+      }),
+      true,
+    );
+    assert.equal(
+      usesKeetaZoneGate({
+        projectKey: "americana",
+        partnerName: "Keeta",
+        partnerKey: "",
+        restaurantNames: ["KFC"],
+      }),
+      true,
+    );
+    assert.equal(
+      usesKeetaZoneGate({
+        projectKey: "",
+        partnerName: "",
+        partnerKey: "keeta",
+        restaurantNames: [],
+      }),
+      true,
+    );
+    assert.equal(isKeetaZoneRestaurantName("(Pool)"), true);
+    assert.equal(isKeetaZoneRestaurantName("pool"), true);
+    assert.equal(isKeetaZoneRestaurantName("Keeta - Jahra"), true);
+    assert.equal(
+      usesKeetaZoneGate({
+        projectKey: "americana",
+        partnerName: "Americana",
+        partnerKey: "americana",
+        restaurantNames: ["(Pool)"],
+      }),
+      true,
+    );
+    assert.equal(
+      usesKeetaZoneGate({
+        projectKey: "americana",
+        partnerName: "Americana",
+        partnerKey: "americana",
+        restaurantNames: ["Hardee's Fahaheel"],
+      }),
+      false,
+    );
+    assert.equal(
+      usesKeetaZoneGate({
+        projectKey: "",
+        partnerName: "",
+        partnerKey: "",
+        restaurantNames: [],
+      }),
+      false,
+    );
+  });
+
+  it("accepts a rider inside the assigned zone", () => {
+    const verdict = keetaZoneVerdict({ lat: 29.375, lng: 47.978, zone: ZONE });
+    assert.equal(verdict.outcome, "in_range");
+    assert.deepEqual(verdict.zone, { id: "z1", name: "Salmiya" });
+  });
+
+  it("refuses a rider outside the zone and still names it", () => {
+    const verdict = keetaZoneVerdict({ lat: 29.45, lng: 47.978, zone: ZONE });
+    assert.equal(verdict.outcome, "outside_zone");
+    assert.equal(verdict.zone?.name, "Salmiya");
+  });
+
+  it("treats a missing zone or missing shape as no_zone", () => {
+    assert.deepEqual(keetaZoneVerdict({ lat: 29.375, lng: 47.978, zone: null }), {
+      outcome: "no_zone",
+      zone: null,
+    });
+    const noShape = keetaZoneVerdict({
+      lat: 29.375,
+      lng: 47.978,
+      zone: { ...ZONE, geometry: null },
+    });
+    // No shape is the administrator case, so the phone is given no zone name to
+    // blame on the rider's location.
+    assert.equal(noShape.outcome, "no_zone");
+    assert.equal(noShape.zone, null);
+  });
+
+  it("reads a circle zone from its centre and radius", () => {
+    const circle = {
+      id: "z2",
+      name: "Circle",
+      zone_type: "circle",
+      geometry: {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [47.978, 29.375] },
+        properties: { radiusMeters: 300 },
+      },
+    };
+    assert.equal(keetaZoneVerdict({ lat: 29.376, lng: 47.978, zone: circle }).outcome, "in_range");
+    assert.equal(
+      keetaZoneVerdict({ lat: 29.395, lng: 47.978, zone: circle }).outcome,
+      "outside_zone",
+    );
+  });
+
+  /**
+   * The zone gate replaces the *restaurant* proof, not the selfie: the photo key
+   * check is shared with every rider, so a Keeta clock-in must still carry a key
+   * that belongs to that rider.
+   */
+  it("still binds a Keeta selfie key to that rider", () => {
+    const uid = "keeta-rider-1";
+    assert.equal(
+      isCheckInPhotoKeyForKey(uid, `drivers/${uid}/check_in/2026-10-23/abc.jpg`),
+      true,
+    );
+    assert.equal(
+      isCheckInPhotoKeyForKey(uid, "drivers/other-rider/check_in/2026-10-23/abc.jpg"),
+      false,
+    );
+    assert.equal(isCheckInPhotoKeyForKey(uid, `drivers/${uid}/check_in/../secret.jpg`), false);
   });
 });
 

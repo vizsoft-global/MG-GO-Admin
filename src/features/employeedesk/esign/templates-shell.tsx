@@ -223,7 +223,7 @@ export function TemplatesShell() {
             <div className={`${LAYOUT.stackGap} flex flex-col`}>
               <div className="flex items-start justify-between gap-3">
                 <h2 className="text-lg font-semibold">{selected.name_en}</h2>
-                <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                <span className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-800">
                   {t(bulkSubtitleKey(selected.bulk_mode))}
                 </span>
               </div>
@@ -242,7 +242,7 @@ export function TemplatesShell() {
               </p>
 
               <div className="space-y-1.5">
-                <p className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-sky-800">
+                <p className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-sky-800">
                   <Building2 className="size-3" aria-hidden />
                   {t("chips.filledFromSystem")}
                 </p>
@@ -250,7 +250,7 @@ export function TemplatesShell() {
                   {systemChipLabels.map((label) => (
                     <span
                       key={label}
-                      className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-800"
+                      className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800"
                     >
                       {label}
                     </span>
@@ -259,12 +259,12 @@ export function TemplatesShell() {
               </div>
 
               <div className="space-y-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-[#C2410C]">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#C2410C]">
                   {t("youAddExample")}
                 </p>
                 {exampleSheet ? (
                   <div className="overflow-x-auto rounded-md border border-border">
-                    <table className="w-full text-[11px]">
+                    <table className="w-full text-xs">
                       <thead className="bg-muted/40">
                         <tr>
                           {exampleSheet.headers.map((header) => (
@@ -301,14 +301,14 @@ export function TemplatesShell() {
               </div>
 
               <div className="space-y-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-800">
+                <p className="text-xs font-semibold uppercase tracking-wide text-violet-800">
                   {t("signedOrDecidedBy")}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {signedLabels.map((label) => (
                     <span
                       key={label}
-                      className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-medium text-violet-800"
+                      className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-800"
                     >
                       {label}
                     </span>
@@ -316,7 +316,7 @@ export function TemplatesShell() {
                 </div>
               </div>
 
-              <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
                 {detail?.document_kind === "payslip" ? t("libraryNotePayslip") : t("libraryNote")}
               </p>
 

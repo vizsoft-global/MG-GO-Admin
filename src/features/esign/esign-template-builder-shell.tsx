@@ -272,7 +272,7 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
           <SectionHeading icon={UserRound} accent="success">
             {t("employeeBlock")}
           </SectionHeading>
-          <p className="text-[10px] text-muted-foreground">{t("employeeBlockHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("employeeBlockHint")}</p>
           <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="rounded-md border border-border bg-muted/30 px-2 py-1.5">{t("company")}</div>
             <div className="rounded-md border border-border bg-muted/30 px-2 py-1.5">{t("employeeName")}</div>
@@ -339,7 +339,7 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
           </Button>
         </div>
         {template.fields.length === 0 ? (
-          <div className="px-4 pb-4 text-[11px] text-muted-foreground">{t("noFields")}</div>
+          <div className="px-4 pb-4 text-xs text-muted-foreground">{t("noFields")}</div>
         ) : (
           <AppDataTable
             columns={[
@@ -356,7 +356,7 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
                 <TableCell className="text-sm">
                   {field.label_en}
                   {field.label_ar ? (
-                    <div className="text-[11px] text-muted-foreground">{field.label_ar}</div>
+                    <div className="text-xs text-muted-foreground">{field.label_ar}</div>
                   ) : null}
                 </TableCell>
                 <TableCell className="text-sm">{field.field_type}</TableCell>
@@ -392,7 +392,7 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
                 onChange={(e) => setFieldKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
                 placeholder="penalty_amount"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("reservedHint", { keys: ESIGN_RESERVED_FIELD_KEYS.join(", ") })}
               </p>
             </div>

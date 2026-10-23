@@ -26,6 +26,7 @@ import type {
   DriverRiderCategory,
 } from "./types";
 import { listCustomFieldDefinitions } from "@/features/custom-fields/custom-fields-actions";
+import { listEmployeeCatalog } from "@/features/employees/employee-catalogs-actions";
 import { validateCustomFieldValues } from "@/lib/custom-fields/validate";
 import { resolveCountryInput } from "@/lib/geo/countries";
 import {
@@ -34,7 +35,7 @@ import {
   clientValueTooLong,
   normalizeClientValue,
 } from "./driver-client-fields";
-import { hasOpsAssignment } from "./driver-assignment";
+import { hasOpsAssignment, requiresOpsAssignment } from "./driver-assignment";
 import {
   flattenProfileSnapshot,
   loadIntakeProfileSnapshot,
@@ -61,6 +62,13 @@ import {
   parseRiderCategory,
 } from "./import/parse";
 import { isDriverProjectKey, type DriverProjectKey } from "@/features/fleet/fleet-labels";
+import { isPaymentCurrency } from "@/lib/currencies";
+import {
+  isHiringType,
+  isJobEndDescription,
+  isJobPosition,
+  normalizeMoney,
+} from "./driver-private-fields";
 import {
   DRIVER_IMPORT_EXPIRY_FIELDS,
   type DriverImportExpiryField,
@@ -71,6 +79,15 @@ import {
   resolveCompanyInput,
   type SourceCompany,
 } from "./source-companies";
+import { buildImportWritePatch, writesCell } from "./import/driver-import-patch";
+import {
+  readImportSnapshot,
+  syncImportAssets,
+  syncImportExpiries,
+  syncImportRestaurants,
+} from "./import/driver-import-write";
+import type { DriverImportJournal } from "./import/driver-import-stack";
+import { clearRedo } from "./import/driver-import-stack";
 import {
   buildEmployeeCatalogIndex,
   buildPartnerIndex,
@@ -140,7 +157,7 @@ export async function fetchDriverImportLookups(): Promise<
 }
 
 export type ApproveDriverResult =
-  | { success: true; driverId: string; passcode: string }
+  | { success: true; driverId: string; passcode: string; createdAuthUserId: string | null }
   | { error: string };
 
 function syntheticDriverEmail(driverCode: string): string {
@@ -322,10 +339,14 @@ export async function approveDriverIntake(
     context: { note: "approve" },
   });
 
+  const adoptedExisting = Boolean(
+    createdAuthUser && payload.driver_id && payload.driver_id !== userId,
+  );
   return {
     success: true,
     driverId: payload.driver_id ?? userId,
     passcode: payload.app_passcode ?? "",
+    createdAuthUserId: createdAuthUser && !adoptedExisting ? userId : null,
   };
 }
 
@@ -335,6 +356,9 @@ export async function resolveDriverImportPreview(
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
   const db = await staffClient();
+  // The catalogue answers which sections need no zone or restaurant, so the
+  // sheet gate uses the same answer the employee form does.
+  const sections = await listEmployeeCatalog("employee_sections");
 
   const [
     { data: partners },
@@ -349,6 +373,8 @@ export async function resolveDriverImportPreview(
     { data: sectionRows },
     { data: nationalityCategoryRows },
     { data: bankRows },
+    { data: sponsorshipRows },
+    { data: assetRows },
   ] = await Promise.all([
     db.from("partners").select("id, name"),
     db.from("zones").select("id, name, code"),
@@ -360,7 +386,7 @@ export async function resolveDriverImportPreview(
       .eq("is_active", true),
     db
       .from("driver_intakes")
-      .select("id, phone, civil_id, employee_id")
+      .select("id, phone, civil_id, employee_id, linked_profile_id")
       .is("archived_at", null),
     db.from("drivers").select("id, employee_id, civil_id").is("archived_at", null),
     db.from("profiles").select("id, phone").eq("role", "rider"),
@@ -373,6 +399,8 @@ export async function resolveDriverImportPreview(
     db.from("employee_sections").select("key, label_en, label_ar, is_active"),
     db.from("nationality_categories").select("key, label_en, label_ar, is_active"),
     db.from("bank_codes").select("key, label_en, label_ar, is_active"),
+    db.from("sponsorships").select("key, label_en, label_ar, is_active"),
+    db.from("asset_catalog").select("id, name, code, is_active"),
   ]);
   const companies: SourceCompany[] = companyRows ?? [];
   const catalog = (rows: Array<{ key: string; label_en: string; label_ar: string }> | null) =>
@@ -385,6 +413,16 @@ export async function resolveDriverImportPreview(
   const sectionIndex = buildEmployeeCatalogIndex(catalog(sectionRows));
   const nationalityCategoryIndex = buildEmployeeCatalogIndex(catalog(nationalityCategoryRows));
   const bankIndex = buildEmployeeCatalogIndex(catalog(bankRows));
+  const sponsorshipIndex = buildEmployeeCatalogIndex(catalog(sponsorshipRows));
+  const assetIndex = buildEmployeeCatalogIndex(
+    (assetRows ?? [])
+      .filter((row) => row.is_active !== false)
+      .map((row) => ({
+        key: row.id,
+        name: row.name ?? row.code ?? row.id,
+        name_ar: row.code,
+      })),
+  );
 
   const partnerIndex = buildPartnerIndex(
     (partners ?? []).map((p) => ({ id: p.id, name: p.name })),
@@ -418,11 +456,20 @@ export async function resolveDriverImportPreview(
     phoneToEmployee: new Map(),
     civilToEmployee: new Map(),
   };
+  const peopleByEmployee = new Map<string, Set<string>>();
+  const rememberPerson = (raw: string | null | undefined, person: string) => {
+    if (!raw) return;
+    const key = employeeIdKey(raw);
+    const set = peopleByEmployee.get(key) ?? new Set<string>();
+    set.add(person);
+    peopleByEmployee.set(key, set);
+  };
   const driverEmpById = new Map<string, string>();
   for (const driver of drivers ?? []) {
     if (!driver.employee_id) continue;
     const key = employeeIdKey(driver.employee_id);
     roster.employeeIds.add(key);
+    rememberPerson(driver.employee_id, driver.id);
     driverEmpById.set(driver.id, key);
     if (driver.civil_id) {
       roster.civilToEmployee.set(normalizeCivilId(driver.civil_id) ?? driver.civil_id, key);
@@ -432,6 +479,7 @@ export async function resolveDriverImportPreview(
     if (!intake.employee_id) continue;
     const key = employeeIdKey(intake.employee_id);
     roster.employeeIds.add(key);
+    rememberPerson(intake.employee_id, intake.linked_profile_id ?? `intake:${intake.id}`);
     if (intake.phone) {
       roster.phoneToEmployee.set(normalizeKuwaitPhone(intake.phone) ?? intake.phone, key);
     }
@@ -479,7 +527,19 @@ export async function resolveDriverImportPreview(
     let nationality_category_names: string[] = [];
     let project_key: DriverProjectKey | null = null;
     let accommodation: string | null = null;
-    let joined_at: string | null = null;
+    let work_start_date: string | null = null;
+    let sponsorship_key: string | null = null;
+    let job_position: string | null = null;
+    let hiring_type: string | null = null;
+    let job_end_date: string | null = null;
+    let job_end_description: string | null = null;
+    let residency_expiry_date: string | null = null;
+    let fixed_salary: number | null = null;
+    let work_permit_salary: number | null = null;
+    let last_increment_date: string | null = null;
+    let currency: string | null = null;
+    let asset_ids: string[] = [];
+    let asset_names: string[] = [];
     let screenshots_allowed: boolean | null = null;
     let login_verification_exempt: boolean | null = null;
     let bank_code: string | null = null;
@@ -513,14 +573,25 @@ export async function resolveDriverImportPreview(
       else status = "unmatched_zone";
     }
 
-    if (lookupStillOpen()) {
-      const label = row.vehicle_label?.trim().toLowerCase() ?? "";
-      const matched = label ? vehicleByLabel.get(label) : undefined;
-      vehicle_id = matched?.id ?? null;
-      // An unknown plate is not a rejection: the row keeps the type it named
-      // (or the matched vehicle's, or one bike) and imports without a link.
-      vehicle_type_key =
-        parseImportVehicleType(row.vehicle_type) ?? matched?.typeKey ?? "bike";
+    if (lookupStillOpen() && row.present.vehicle_label) {
+      if (row.cleared?.vehicle_label) {
+        vehicle_id = null;
+      } else {
+        const label = row.vehicle_label?.trim().toLowerCase() ?? "";
+        const matched = label ? vehicleByLabel.get(label) : undefined;
+        if (label && !matched) status = "unmatched_vehicle";
+        else vehicle_id = matched?.id ?? null;
+      }
+    }
+
+    if (lookupStillOpen() && row.present.vehicle_type) {
+      if (row.cleared?.vehicle_type) {
+        vehicle_type_key = null;
+      } else if (row.vehicle_type?.trim()) {
+        const parsed = parseImportVehicleType(row.vehicle_type);
+        if (!parsed) status = "invalid_vehicle_type";
+        else vehicle_type_key = parsed;
+      }
     }
 
     if (lookupStillOpen()) {
@@ -536,10 +607,6 @@ export async function resolveDriverImportPreview(
       } else {
         status = "unmatched_restaurant";
       }
-    }
-
-    if (lookupStillOpen() && !existingByEmployeeId && !hasOpsAssignment(zone_id, restaurant_ids)) {
-      status = "missing_assignment";
     }
 
     if (lookupStillOpen() && row.nationality?.trim()) {
@@ -591,7 +658,7 @@ export async function resolveDriverImportPreview(
     }
 
     if (lookupStillOpen() && row.present.passport_number) {
-      if (isClearToken(row.passport_number)) {
+      if (row.cleared?.passport_number) {
         passport_number = null;
       } else {
         const normalized = normalizeImportPassport(row.passport_number);
@@ -605,7 +672,7 @@ export async function resolveDriverImportPreview(
     }
 
     if (lookupStillOpen() && row.present.employee_status_key) {
-      if (isClearToken(row.employee_status_key)) {
+      if (row.cleared?.employee_status_key) {
         employee_status_key = null;
       } else {
         const hit = resolveEmployeeCatalogToken(row.employee_status_key, statusIndex);
@@ -619,7 +686,7 @@ export async function resolveDriverImportPreview(
     }
 
     if (lookupStillOpen() && row.present.section_keys) {
-      if (isClearToken(row.section_keys)) {
+      if (row.cleared?.section_keys) {
         section_keys = [];
       } else {
         const hit = resolveEmployeeCatalogTokens(row.section_keys, sectionIndex);
@@ -633,7 +700,7 @@ export async function resolveDriverImportPreview(
     }
 
     if (lookupStillOpen() && row.present.nationality_category_keys) {
-      if (isClearToken(row.nationality_category_keys)) {
+      if (row.cleared?.nationality_category_keys) {
         nationality_category_keys = [];
       } else {
         const hit = resolveEmployeeCatalogTokens(
@@ -650,7 +717,7 @@ export async function resolveDriverImportPreview(
     }
 
     if (lookupStillOpen() && row.present.project_key) {
-      if (isClearToken(row.project_key)) {
+      if (row.cleared?.project_key) {
         project_key = null;
       } else {
         const normalized = (row.project_key ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -660,22 +727,22 @@ export async function resolveDriverImportPreview(
     }
 
     if (lookupStillOpen() && row.present.accommodation) {
-      accommodation = isClearToken(row.accommodation)
+      accommodation = row.cleared?.accommodation
         ? null
         : (row.accommodation ?? "").trim() || null;
     }
 
-    if (lookupStillOpen() && row.present.joined_at) {
-      if (isClearToken(row.joined_at)) {
-        joined_at = null;
-      } else {
-        joined_at = parseImportDate(row.joined_at);
-        if (!joined_at) status = "invalid_date";
+    if (lookupStillOpen() && row.present.work_start_date) {
+      if (row.cleared?.work_start_date) {
+        work_start_date = null;
+      } else if (row.work_start_date?.trim()) {
+        work_start_date = parseImportDate(row.work_start_date);
+        if (!work_start_date) status = "invalid_date";
       }
     }
 
     if (lookupStillOpen() && row.present.screenshots_allowed) {
-      if (isClearToken(row.screenshots_allowed)) {
+      if (row.cleared?.screenshots_allowed) {
         screenshots_allowed = null;
       } else {
         const parsed = parseImportYesNo(row.screenshots_allowed);
@@ -685,7 +752,7 @@ export async function resolveDriverImportPreview(
     }
 
     if (lookupStillOpen() && row.present.login_verification_exempt) {
-      if (isClearToken(row.login_verification_exempt)) {
+      if (row.cleared?.login_verification_exempt) {
         login_verification_exempt = null;
       } else {
         const parsed = parseImportYesNo(row.login_verification_exempt);
@@ -695,7 +762,7 @@ export async function resolveDriverImportPreview(
     }
 
     if (lookupStillOpen() && row.present.bank_code) {
-      if (isClearToken(row.bank_code)) {
+      if (row.cleared?.bank_code) {
         bank_code = null;
       } else {
         const hit = resolveEmployeeCatalogToken(row.bank_code, bankIndex);
@@ -709,7 +776,7 @@ export async function resolveDriverImportPreview(
     }
 
     if (lookupStillOpen() && row.present.account_number) {
-      if (isClearToken(row.account_number)) {
+      if (row.cleared?.account_number) {
         account_number = null;
       } else {
         account_number = normalizeImportAccountNumber(row.account_number);
@@ -720,7 +787,7 @@ export async function resolveDriverImportPreview(
     }
 
     if (lookupStillOpen() && row.present.iban) {
-      if (isClearToken(row.iban)) {
+      if (row.cleared?.iban) {
         iban = null;
       } else {
         iban = normalizeImportIban(row.iban);
@@ -729,7 +796,7 @@ export async function resolveDriverImportPreview(
     }
 
     if (lookupStillOpen() && row.present.beneficiary_civil_id) {
-      if (isClearToken(row.beneficiary_civil_id)) {
+      if (row.cleared?.beneficiary_civil_id) {
         beneficiary_civil_id = null;
       } else {
         const rawCivil = (row.beneficiary_civil_id ?? "").trim();
@@ -742,7 +809,7 @@ export async function resolveDriverImportPreview(
       for (const field of DRIVER_IMPORT_EXPIRY_FIELDS) {
         if (!row.present[field]) continue;
         const raw = row[field];
-        if (isClearToken(raw)) {
+        if (row.cleared?.[field]) {
           expiries[field] = null;
           continue;
         }
@@ -756,14 +823,107 @@ export async function resolveDriverImportPreview(
       }
     }
 
-    if (lookupStillOpen() && existingByEmployeeId) {
-      status = "duplicate_employee_id";
+    const opsRequired = requiresOpsAssignment(section_keys, sections);
+    if (
+      lookupStillOpen() &&
+      !existingByEmployeeId &&
+      opsRequired &&
+      !hasOpsAssignment(zone_id, restaurant_ids)
+    ) {
+      status = "missing_assignment";
     }
+
+    if (lookupStillOpen() && row.present.sponsorship_key) {
+      if (row.cleared?.sponsorship_key) sponsorship_key = null;
+      else if (row.sponsorship_key?.trim()) {
+        const hit = resolveEmployeeCatalogToken(row.sponsorship_key, sponsorshipIndex);
+        if (hit.status === "ok") sponsorship_key = hit.key;
+        else status = "invalid_sponsorship";
+      }
+    }
+    if (lookupStillOpen() && row.present.job_position && !row.cleared?.job_position && row.job_position?.trim()) {
+      const key = row.job_position.trim().toLowerCase().replace(/[\s-]+/g, "_");
+      if (isJobPosition(key)) job_position = key;
+      else status = "invalid_job_position";
+    }
+    if (lookupStillOpen() && row.present.hiring_type && !row.cleared?.hiring_type && row.hiring_type?.trim()) {
+      const key = row.hiring_type.trim().toLowerCase().replace(/[\s-]+/g, "_");
+      if (isHiringType(key)) hiring_type = key;
+      else status = "invalid_hiring_type";
+    }
+    if (lookupStillOpen() && row.present.job_end_date) {
+      if (row.cleared?.job_end_date) job_end_date = null;
+      else if (row.job_end_date?.trim()) {
+        job_end_date = parseImportDate(row.job_end_date);
+        if (!job_end_date) status = "invalid_date";
+      }
+    }
+    if (
+      lookupStillOpen() &&
+      row.present.job_end_description &&
+      !row.cleared?.job_end_description &&
+      row.job_end_description?.trim()
+    ) {
+      const key = row.job_end_description.trim().toLowerCase().replace(/[\s-]+/g, "_");
+      if (isJobEndDescription(key)) job_end_description = key;
+      else status = "invalid_job_end_description";
+    }
+    if (lookupStillOpen() && row.present.residency_expiry_date) {
+      if (row.cleared?.residency_expiry_date) residency_expiry_date = null;
+      else if (row.residency_expiry_date?.trim()) {
+        residency_expiry_date = parseImportDate(row.residency_expiry_date);
+        if (!residency_expiry_date) status = "invalid_date";
+      }
+    }
+    if (lookupStillOpen() && row.present.fixed_salary && !row.cleared?.fixed_salary && row.fixed_salary?.trim()) {
+      fixed_salary = normalizeMoney(row.fixed_salary);
+      if (fixed_salary == null) status = "invalid_money";
+    }
+    if (
+      lookupStillOpen() &&
+      row.present.work_permit_salary &&
+      !row.cleared?.work_permit_salary &&
+      row.work_permit_salary?.trim()
+    ) {
+      work_permit_salary = normalizeMoney(row.work_permit_salary);
+      if (work_permit_salary == null) status = "invalid_money";
+    }
+    if (lookupStillOpen() && row.present.last_increment_date) {
+      if (row.cleared?.last_increment_date) last_increment_date = null;
+      else if (row.last_increment_date?.trim()) {
+        last_increment_date = parseImportDate(row.last_increment_date);
+        if (!last_increment_date) status = "invalid_date";
+      }
+    }
+    if (lookupStillOpen() && row.present.currency && !row.cleared?.currency && row.currency?.trim()) {
+      const code = row.currency.trim().toUpperCase();
+      if (isPaymentCurrency(code)) currency = code;
+      else status = "invalid_currency";
+    }
+    if (lookupStillOpen() && row.present.asset_ids) {
+      if (row.cleared?.asset_ids) {
+        asset_ids = [];
+      } else if (row.asset_ids?.trim()) {
+        const hit = resolveEmployeeCatalogTokens(row.asset_ids, assetIndex);
+        if (hit.status === "ok") {
+          asset_ids = hit.keys;
+          asset_names = hit.names;
+        } else status = "invalid_asset";
+      }
+    }
+
+    const people = row.employee_id
+      ? peopleByEmployee.get(employeeIdKey(row.employee_id))
+      : undefined;
+    const ambiguousEmployee = (people?.size ?? 0) > 1;
+    if (ambiguousEmployee) status = "ambiguous_employee_id";
+    else if (lookupStillOpen() && existingByEmployeeId) status = "duplicate_employee_id";
 
     return {
       ...row,
       status,
-      existingByEmployeeId,
+      existingByEmployeeId: ambiguousEmployee ? false : existingByEmployeeId,
+      ops_required: opsRequired,
       partner_id,
       partner_name,
       zone_id,
@@ -788,7 +948,7 @@ export async function resolveDriverImportPreview(
       nationality_category_names,
       project_key,
       accommodation,
-      joined_at,
+      work_start_date,
       screenshots_allowed,
       login_verification_exempt,
       bank_code,
@@ -797,6 +957,18 @@ export async function resolveDriverImportPreview(
       iban,
       beneficiary_civil_id,
       expiries,
+      sponsorship_key,
+      job_position,
+      hiring_type,
+      job_end_date,
+      job_end_description,
+      residency_expiry_date,
+      fixed_salary,
+      work_permit_salary,
+      last_increment_date,
+      currency,
+      asset_ids,
+      asset_names,
     };
   });
 }
@@ -829,6 +1001,7 @@ export async function applyOneImportRow(
   approved: 0 | 1;
   failure?: { rowIndex: number; reason: string };
   credential?: DriverImportCredential;
+  journal?: Omit<DriverImportJournal, "batch_id">;
 }> {
   const events: DriverImportLogEvent[] = [];
   const who = logWho(row);
@@ -853,6 +1026,7 @@ export async function applyOneImportRow(
   const carriesAssignment = Boolean(row.present.zone_id || row.present.restaurant_ids);
   if (
     carriesAssignment &&
+    row.ops_required !== false &&
     !hasOpsAssignment(row.zone_id, row.restaurant_ids)
   ) {
     return fail("missing_assignment");
@@ -864,6 +1038,7 @@ export async function applyOneImportRow(
   let alreadyLinked = false;
   let linkedDriverId: string | null = null;
   let beforeSnap = {};
+  let journalBefore: Awaited<ReturnType<typeof readImportSnapshot>> | null = null;
 
   const matchExisting = () =>
     ctx.db
@@ -897,26 +1072,22 @@ export async function applyOneImportRow(
       alreadyLinked = Boolean(existing.linked || existing.linked_profile_id);
       const prior = await loadIntakeProfileSnapshot(ctx.db, existing.id);
       beforeSnap = prior?.snapshot ?? {};
-      // Only the columns the sheet actually carries are written. A blank cell
-      // (or an unmapped column) leaves the stored value alone; `-` arrives as
-      // null and clears it on purpose.
-      const intakePatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      const put = (field: keyof typeof row.present, column: string, value: unknown) => {
-        if (row.present[field]) intakePatch[column] = value;
-      };
-      put("phone", "phone", phone);
-      put("full_name", "full_name", row.full_name?.trim() ?? null);
-      put("civil_id", "civil_id", civilId);
+      journalBefore = await readImportSnapshot(
+        ctx.db,
+        existing.id,
+        existing.linked_profile_id ?? null,
+      );
+      const { intake: intakePatch, profile: profilePatch } = buildImportWritePatch({
+        row: { ...row, phone, civil_id: civilId, employee_id: employeeId },
+        mode: "update",
+        existingCustom: (journalBefore.intake?.custom_fields as Record<string, unknown> | null) ?? null,
+        existingBank:
+          (journalBefore.intake?.bank_details as Parameters<
+            typeof buildImportWritePatch
+          >[0]["existingBank"]) ?? null,
+      });
       intakePatch.employee_id = employeeId;
-      put("partner_id", "partner_id", row.partner_id);
-      put("zone_id", "zone_id", row.zone_id);
-      put("vehicle_label", "vehicle_id", row.vehicle_id);
-      put("vehicle_type", "vehicle_type_key", row.vehicle_type_key ?? "bike");
-      put("nationality", "nationality", row.nationality);
-      put("rider_category", "rider_category", row.rider_category);
-      put("source_company", "source_company", row.source_company);
-      put("client_id", "client_id", row.client_id);
-      put("client_name", "client_name", row.client_name);
+      intakePatch.updated_at = new Date().toISOString();
       const { error: updErr } = await ctx.db
         .from("driver_intakes")
         .update(intakePatch)
@@ -926,67 +1097,29 @@ export async function applyOneImportRow(
       intakeId = existing.id;
       driverCode = existing.driver_code;
       updated = true;
-      if (row.present.restaurant_ids) {
-        await ctx.db
-          .from("driver_intake_restaurants")
-          .delete()
-          .eq("intake_id", intakeId);
+      if (writesCell(row, "restaurant_ids", row.restaurant_ids.length > 0, "update")) {
+        const linkError = await syncImportRestaurants(
+          ctx.db,
+          existing.id,
+          existing.linked_profile_id ?? null,
+          row.cleared?.restaurant_ids ? [] : row.restaurant_ids,
+        );
+        if (linkError) return fail(linkError);
       }
 
       if (existing.linked_profile_id) {
         const linkedId = existing.linked_profile_id;
         linkedDriverId = linkedId;
-        const driverPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-        const putDriver = (field: keyof typeof row.present, column: string, value: unknown) => {
-          if (row.present[field]) driverPatch[column] = value;
-        };
-        putDriver("partner_id", "partner_id", row.partner_id);
-        putDriver("zone_id", "zone_id", row.zone_id);
-        putDriver("vehicle_label", "vehicle_id", row.vehicle_id);
-        putDriver("vehicle_type", "vehicle_type_key", row.vehicle_type_key ?? "bike");
-        putDriver("civil_id", "civil_id", civilId);
-        driverPatch.employee_id = employeeId;
-        putDriver("nationality", "nationality", row.nationality);
-        putDriver("rider_category", "rider_category", row.rider_category);
-        putDriver("source_company", "source_company", row.source_company);
-        putDriver("client_id", "client_id", row.client_id);
-        putDriver("client_name", "client_name", row.client_name);
         const { error: driverErr } = await ctx.db
           .from("drivers")
-          .update(driverPatch)
+          .update({ ...intakePatch, employee_id: employeeId, updated_at: new Date().toISOString() })
           .eq("id", linkedId);
         if (driverErr) return fail(driverErr.message);
-        const profilePatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-        if (row.present.full_name) profilePatch.full_name = row.full_name?.trim() ?? null;
-        if (row.present.phone) profilePatch.phone = phone;
         const { error: profileErr } = await ctx.db
           .from("profiles")
-          .update(profilePatch)
+          .update({ ...profilePatch, updated_at: new Date().toISOString() })
           .eq("id", linkedId);
         if (profileErr) return fail(profileErr.message);
-        if (row.present.restaurant_ids) {
-          const { data: existingLinks } = await ctx.db
-            .from("driver_restaurants")
-            .select("restaurant_id")
-            .eq("driver_id", linkedId);
-        const have = new Set((existingLinks ?? []).map((r) => r.restaurant_id));
-        const want = new Set(row.restaurant_ids);
-        const toAdd = row.restaurant_ids.filter((id) => !have.has(id));
-        const toRemove = [...have].filter((id) => !want.has(id));
-        if (toAdd.length > 0) {
-          const { error: addErr } = await ctx.db.from("driver_restaurants").insert(
-            toAdd.map((restaurant_id) => ({ driver_id: linkedId, restaurant_id })),
-          );
-          if (addErr) return fail(addErr.message);
-        }
-        if (toRemove.length > 0) {
-          await ctx.db
-            .from("driver_restaurants")
-            .delete()
-            .eq("driver_id", linkedId)
-            .in("restaurant_id", toRemove);
-        }
-        }
       }
     }
   } else {
@@ -1024,27 +1157,21 @@ export async function applyOneImportRow(
     if (customErrors.length > 0) {
       return fail(`custom_fields: ${customErrors.map((e) => e.key).join(",")}`);
     }
+    const { intake: createPatch } = buildImportWritePatch({
+      row: { ...row, phone, civil_id: civilId, employee_id: employeeId, custom_fields: customValues as Record<string, string | null> },
+      mode: "create",
+    });
     const { error: insErr } = await ctx.db.from("driver_intakes").insert({
       id: newId,
-      phone,
-      full_name: row.full_name!.trim(),
-      civil_id: civilId,
-      employee_id: employeeId,
       driver_code: code,
-      partner_id: row.partner_id,
-      zone_id: row.zone_id,
-      vehicle_id: row.vehicle_id,
-      vehicle_type_key: row.vehicle_type_key ?? "bike",
-      nationality: row.nationality,
-      rider_category: row.rider_category,
-      source_company: row.source_company,
-      client_id: row.client_id,
-      client_name: row.client_name,
       status: "awaiting_app_link",
       workflow_status: "pending",
       linked: false,
       assets_issued: {},
-      custom_fields: customValues as unknown as Json,
+      ...createPatch,
+      employee_id: employeeId,
+      full_name: row.full_name!.trim(),
+      custom_fields: (createPatch.custom_fields as Json | undefined) ?? (customValues as unknown as Json),
     });
 
     if (insErr) return fail(insErr.message);
@@ -1052,14 +1179,13 @@ export async function applyOneImportRow(
     driverCode = String(code);
   }
 
-  if (row.present.restaurant_ids && row.restaurant_ids.length > 0) {
-    const { error: linkErr } = await ctx.db.from("driver_intake_restaurants").insert(
-      row.restaurant_ids.map((restaurant_id) => ({
-        intake_id: intakeId!,
-        restaurant_id,
-      })),
-    );
-    if (linkErr) return fail(linkErr.message);
+  if (
+    !updated &&
+    writesCell(row, "restaurant_ids", row.restaurant_ids.length > 0, "create") &&
+    row.restaurant_ids.length > 0
+  ) {
+    const linkError = await syncImportRestaurants(ctx.db, intakeId!, null, row.restaurant_ids);
+    if (linkError) return fail(linkError);
   }
 
   events.push({
@@ -1097,6 +1223,7 @@ export async function applyOneImportRow(
 
   let approved: 0 | 1 = 0;
   let approvedDriverId: string | null = null;
+  let createdAuthUserId: string | null = null;
   let credential: DriverImportCredential | undefined;
   const approveRow = shouldApproveImportRow(
     row.active ?? ctx.approveImmediately,
@@ -1107,6 +1234,7 @@ export async function applyOneImportRow(
     if ("success" in result && result.success) {
       approved = 1;
       approvedDriverId = result.driverId;
+      createdAuthUserId = result.createdAuthUserId;
       events.push({
         at: nowIso(),
         kind: "approved",
@@ -1166,7 +1294,46 @@ export async function applyOneImportRow(
     if (offErr) return fail(offErr.message);
   }
 
-  return { events, applied: 1, approved, credential };
+  const mode = updated ? "update" : "create";
+  const driverForLinks = approvedDriverId ?? linkedDriverId;
+  if (intakeId) {
+    const assetError = await syncImportAssets(
+      row,
+      intakeId,
+      driverForLinks,
+      mutationAuth.session.id,
+      mode,
+    );
+    if (assetError) return fail(assetError);
+    const expiryError = await syncImportExpiries(
+      row,
+      intakeId,
+      driverForLinks,
+      mode,
+      journalBefore?.tracking ?? [],
+    );
+    if (expiryError) return fail(expiryError);
+  }
+  const journalAfter = intakeId
+    ? await readImportSnapshot(ctx.db, intakeId, driverForLinks)
+    : null;
+
+  return {
+    events,
+    applied: 1,
+    approved,
+    credential,
+    journal: {
+      row_index: row.rowIndex,
+      outcome: updated ? "update" : "create",
+      intake_id: intakeId,
+      driver_id: driverForLinks,
+      created_auth_uid: createdAuthUserId,
+      passcode: credential?.passcode ?? null,
+      before: journalBefore,
+      after: journalAfter,
+    },
+  };
 }
 
 export async function applyDriverImportChunk(payload: {
@@ -1218,11 +1385,29 @@ export async function applyDriverImportChunk(payload: {
         approved_count: 0,
         status: "previewed",
         uploaded_by: auth.session.id,
+        undo_seq: 0,
+        redoable: true,
       })
       .select("id")
       .single();
     if (batchError || !batch?.id) return { error: "save_failed" };
     batchId = String(batch.id);
+    const { data: openRedo } = await db
+      .from("driver_import_batches")
+      .select("id, status, redoable")
+      .eq("status", "undone");
+    const retire = clearRedo(
+      (openRedo ?? []).map((batch) => ({
+        id: String(batch.id),
+        status: String(batch.status),
+        createdAt: "",
+        undoSeq: 0,
+        redoable: batch.redoable !== false,
+      })),
+    );
+    if (retire.length > 0) {
+      await db.from("driver_import_batches").update({ redoable: false }).in("id", retire);
+    }
   }
 
   const customFieldDefs = await listCustomFieldDefinitions("driver");
@@ -1245,6 +1430,13 @@ export async function applyDriverImportChunk(payload: {
     applied += result.applied;
     approved += result.approved;
     if (result.credential) credentials.push(result.credential);
+    if (result.journal && result.applied === 1) {
+      const { error: journalError } = await db.from("driver_import_rows").insert({
+        ...result.journal,
+        batch_id: batchId,
+      });
+      if (journalError) return { error: journalError.message };
+    }
     if (result.failure) {
       failures.push(result.failure);
       if (result.applied === 0) skipped += 1;

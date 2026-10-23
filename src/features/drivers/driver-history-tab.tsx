@@ -189,7 +189,7 @@ export function DriverHistoryTab({ intakeId }: { intakeId: string }) {
                   </td>
                   <td className="px-3 py-2 font-medium text-foreground">{row.actor_name}</td>
                   <td className="px-3 py-2">
-                    <span className="inline-flex rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[11px] font-semibold">
+                    <span className="inline-flex rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-xs font-semibold">
                       {DRIVER_CHANGE_SOURCES.includes(row.source)
                         ? t(`source.${row.source}`)
                         : row.source}

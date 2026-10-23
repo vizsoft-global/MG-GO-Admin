@@ -109,7 +109,7 @@ function HubTileLink({
         />
         <Icon className="relative h-10 w-10 text-white" strokeWidth={1.6} />
       </span>
-      <span className="text-center text-[13px] font-medium text-zinc-100">{label}</span>
+      <span className="text-center text-sm font-medium text-zinc-100">{label}</span>
       {count != null && count > 0 ? (
         <span className="absolute end-2 top-0 inline-flex items-center justify-center rounded-full border border-amber-200 bg-amber-50 px-[7px] py-0.5 text-xs font-semibold text-amber-700">
           {count > 999 ? "999+" : count}
@@ -152,13 +152,13 @@ export function VisitsHubShell() {
   return (
     <div className="-m-3 flex min-h-[calc(100%+1.5rem)] flex-col items-center gap-8 bg-gradient-to-b from-[#2a2a40] via-[#35354f] via-55% to-[#1f1f32] px-12 pb-10 pt-16">
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-[30px] font-semibold text-white">{t("title")}</h1>
+        <h1 className="text-2xl font-semibold text-white">{t("title")}</h1>
         <p className="text-sm text-zinc-300">{t("hub.subtitle")}</p>
       </div>
 
       {groups.map((group) => (
         <section key={group.id} className="flex flex-col items-center gap-[18px]">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[1px] text-zinc-400">
+          <h2 className="text-xs font-semibold uppercase tracking-[1px] text-zinc-400">
             {group.heading}
           </h2>
           <div

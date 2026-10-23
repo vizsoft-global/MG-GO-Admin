@@ -169,6 +169,21 @@ describe("staff permission cache", () => {
     }
   });
 
+  it("lets a super admin through a slug the catalog does not list", async () => {
+    clearPermissionCache();
+    const rows = staffRows();
+    const fake = createFakeFirestore(rows);
+    setFirestoreFactoryForTests(() => fake.db);
+    try {
+      const staff = await requireStaff(request("u1", true), "operations_dashboard.view");
+      assert.equal(staff.isSuperAdmin, true);
+      assert.equal(staff.permissionSlugs.has("operations_dashboard.view"), false);
+    } finally {
+      setFirestoreFactoryForTests(null);
+      clearPermissionCache();
+    }
+  });
+
   it("refuses an archived profile without touching permissions", async () => {
     clearPermissionCache();
     const rows = staffRows();

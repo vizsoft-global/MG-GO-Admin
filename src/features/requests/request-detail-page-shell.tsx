@@ -462,7 +462,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-800">
+              <span className="inline-flex items-center rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-orange-800">
                 {tRcm("youReceive")}
               </span>
               <StatusPill
@@ -497,7 +497,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
       )}
 
       {request.is_confidential ? (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
           {wave4Layout && isComplaint
             ? tRcm("decision.confidentialBanner")
             : t("detail.confidentialBanner")}
@@ -505,7 +505,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
       ) : null}
 
       {showApprovedBanner && !wave4Layout ? (
-        <p className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-800">
+        <p className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
           {t("status.approved")}
           {nextStep?.step_name ? ` — ${nextStep.step_name}` : null}
@@ -519,7 +519,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
               <h2 className="mb-3 text-sm font-semibold">{t("detail.fields")}</h2>
               <div className="mb-3 grid gap-3 sm:grid-cols-2">
                 <div className="min-w-0">
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {tRcm("access.sender")}
                   </p>
                   <RequesterHeader
@@ -528,20 +528,20 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                     requestId={request.id}
                     requester={request.requester}
                   />
-                  <p className="mt-1 text-[11px] text-muted-foreground">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {["Rider", request.requester?.zone, request.requester?.code]
                       .filter(Boolean)
                       .join(" · ") || "—"}
                   </p>
                 </div>
                 <div className="min-w-0">
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {tRcm("access.receiver")}
                   </p>
                   <p className="text-sm font-semibold">
                     {tRcm("decision.youRole", { role: viewerRole() })}
                   </p>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {nextStep?.step_name
                       ? tRcm("decision.next", { step: nextStep.step_name })
                       : "—"}
@@ -554,7 +554,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                     const row = allDetailRows.find((item) => item.key === key);
                     return (
                       <div key={key} className="min-w-0">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {row?.label ?? key}
                         </p>
                         <p
@@ -569,7 +569,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                     );
                   })}
                   <div className="min-w-0">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {tRcm("decision.against")}
                     </p>
                     <p className="text-sm font-medium">{complaintAgainst(request.payload)}</p>
@@ -601,7 +601,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                             muted={row.value === "—" && !row.gatedKey}
                           >
                             {row.gatedKey ? (
-                              <span className="text-[11px] font-normal text-warning">
+                              <span className="text-xs font-normal text-warning">
                                 {t(`detail.${row.gatedKey}` as "detail.categoryGated")}
                               </span>
                             ) : (
@@ -613,7 +613,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                     ) : null}
                     {boxed && boxed.value !== "—" ? (
                       <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {boxed.label}
                         </p>
                         <p className="mt-1 whitespace-pre-wrap text-sm">{boxed.value}</p>
@@ -626,11 +626,11 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 );
               })()}
               <div className="mt-3 space-y-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("detail.attachments")}
                 </p>
                 {attachments.length === 0 ? (
-                  <p className="text-[11px] text-muted-foreground">{t("detail.noAttachments")}</p>
+                  <p className="text-xs text-muted-foreground">{t("detail.noAttachments")}</p>
                 ) : (
                   <div className="grid gap-2 sm:grid-cols-2">
                     {attachments.map((item) => (
@@ -698,7 +698,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
                   <span>
                     <span className="block">{tRcm("decision.youApproved")}</span>
-                    <span className="block text-[11px] font-normal text-muted-foreground">
+                    <span className="block text-xs font-normal text-muted-foreground">
                       {approvedStamp ?? "—"}
                     </span>
                   </span>
@@ -712,12 +712,12 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                   {isComplaint ? tRcm("decision.yourResponse") : tRcm("decision.yourDecision")}
                 </h2>
                 {awaitingClarification ? (
-                  <p className="mb-2 flex items-start gap-1.5 rounded-md border border-warning/30 bg-warning-bg px-2 py-1.5 text-[10px] text-warning">
+                  <p className="mb-2 flex items-start gap-1.5 rounded-md border border-warning/30 bg-warning-bg px-2 py-1.5 text-xs text-warning">
                     <MessageCircleQuestion className="mt-px h-3.5 w-3.5 shrink-0" />
                     <span>{t("detail.awaitingClarification")}</span>
                   </p>
                 ) : null}
-                <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {isComplaint ? tRcm("decision.responseLabel") : tRcm("decision.commentLabel")}
                 </Label>
                 <Textarea
@@ -732,7 +732,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 />
                 {isComplaint ? (
                   <div className="mt-3">
-                    <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {tRcm("decision.closingRemark")}
                     </Label>
                     <Textarea
@@ -832,7 +832,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                     </>
                   ) : null}
                 </div>
-                <p className="mt-2 text-[10px] text-muted-foreground">{tRcm("decision.auditFootnote")}</p>
+                <p className="mt-2 text-xs text-muted-foreground">{tRcm("decision.auditFootnote")}</p>
                 {stepActions.filter(
                   (action) =>
                     action !== "reject" &&
@@ -891,7 +891,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <h2 className="text-sm font-semibold">{t("detail.closeRequest.title")}</h2>
-                    <p className="text-[10px] text-muted-foreground">{t("detail.closeRequest.hint")}</p>
+                    <p className="text-xs text-muted-foreground">{t("detail.closeRequest.hint")}</p>
                   </div>
                   <Button
                     type="button"
@@ -932,7 +932,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                       label={t(`detail.terms.${row.key}` as "detail.terms.approvedAmount")}
                       muted={row.value == null}
                     >
-                      <span className={cn(row.value == null && "text-[11px] text-warning")}>
+                      <span className={cn(row.value == null && "text-xs text-warning")}>
                         {row.value ?? t("detail.terms.notSet")}
                       </span>
                     </RequestFieldRow>
@@ -1015,7 +1015,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
               allDetailRows.map((row) => (
                 <FleetDetailRow key={row.key} label={row.label} muted={row.value === "—" && !row.gatedKey}>
                   {row.gatedKey ? (
-                    <span className="text-[11px] font-normal text-warning">
+                    <span className="text-xs font-normal text-warning">
                       {t(`detail.${row.gatedKey}` as "detail.categoryGated")}
                     </span>
                   ) : (
@@ -1028,7 +1028,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
         }
         evidence={
           attachments.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">{t("detail.noAttachments")}</p>
+            <p className="text-xs text-muted-foreground">{t("detail.noAttachments")}</p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
               {attachments.map((item) => (
@@ -1107,7 +1107,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
           <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
             <h2 className="mb-2 text-sm font-semibold">{t("detail.actions")}</h2>
             {awaitingClarification ? (
-              <p className="mb-2 flex items-start gap-1.5 rounded-md border border-warning/30 bg-warning-bg px-2 py-1.5 text-[10px] text-warning">
+              <p className="mb-2 flex items-start gap-1.5 rounded-md border border-warning/30 bg-warning-bg px-2 py-1.5 text-xs text-warning">
                 <MessageCircleQuestion className="mt-px h-3.5 w-3.5 shrink-0" />
                 <span>{t("detail.awaitingClarification")}</span>
               </p>
@@ -1230,7 +1230,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold">{t("detail.closeRequest.title")}</h2>
-                <p className="text-[10px] text-muted-foreground">{t("detail.closeRequest.hint")}</p>
+                <p className="text-xs text-muted-foreground">{t("detail.closeRequest.hint")}</p>
               </div>
               <Button
                 type="button"
@@ -1271,7 +1271,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                   label={t(`detail.terms.${row.key}` as "detail.terms.approvedAmount")}
                   muted={row.value == null}
                 >
-                  <span className={cn(row.value == null && "text-[11px] text-warning")}>
+                  <span className={cn(row.value == null && "text-xs text-warning")}>
                     {row.value ?? t("detail.terms.notSet")}
                   </span>
                 </RequestFieldRow>
@@ -1287,7 +1287,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             >
               <p
                 className={cn(
-                  "flex items-center gap-1.5 text-[10px]",
+                  "flex items-center gap-1.5 text-xs",
                   acknowledged ? "text-success" : "text-warning",
                 )}
               >
@@ -1308,7 +1308,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             </div>
             {acknowledged && (parsedAck.text || parsedAck.keys.length > 0) ? (
               <div className="mt-2 rounded-lg border border-border bg-muted/30 px-2.5 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("detail.terms.riderNote")}
                 </p>
                 {parsedAck.text ? (
@@ -1377,7 +1377,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             <DialogDescription>{tRcm("decision.approveConsequence")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5 px-5 py-4">
-            <Label htmlFor="approve-comment" className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Label htmlFor="approve-comment" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {tRcm("decision.yourComment")}
             </Label>
             <Textarea
@@ -1420,7 +1420,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5 px-5 py-4">
-            <Label htmlFor="reject-comment" className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Label htmlFor="reject-comment" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {tRcm("decision.yourComment")}
               <span className="ms-0.5 text-destructive">*</span>
             </Label>

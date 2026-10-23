@@ -63,12 +63,14 @@ export async function verifyStaffSessionCookie(
   const checkRevoked = options.checkRevoked === true;
   if (!cookie) return { uid: null, claims: null, unavailable: false, authTimeMs: null };
 
-  const auth = await getFirebaseAuth();
-  if (!auth) return { uid: null, claims: null, unavailable: true, authTimeMs: null };
-
-  const attempt: Promise<StaffProbe> = auth
-    .verifySessionCookie(cookie, checkRevoked)
-    .then((decoded): StaffProbe => {
+  // Admin init sits inside the same deadline as verify. A cold `getFirebaseAuth`
+  // used to run unbounded, so a slow first hop blew past the page budget and
+  // `requireAuth` threw into the locale error boundary.
+  const attempt: Promise<StaffProbe> = (async () => {
+    const auth = await getFirebaseAuth();
+    if (!auth) return { uid: null, claims: null, unavailable: true, authTimeMs: null };
+    try {
+      const decoded = await auth.verifySessionCookie(cookie, checkRevoked);
       const claims = decoded as unknown as StaffClaims & { uid: string };
       const authTime = (decoded as { auth_time?: number }).auth_time;
       return {
@@ -77,8 +79,7 @@ export async function verifyStaffSessionCookie(
         unavailable: false,
         authTimeMs: typeof authTime === "number" ? authTime * 1000 : null,
       };
-    })
-    .catch((error: unknown): StaffProbe => {
+    } catch (error: unknown) {
       // The verifier rejects a bad/expired/revoked cookie with a specific
       // Firebase error. Those are facts about the session.
       const code = (error as { code?: string })?.code ?? "";
@@ -86,7 +87,8 @@ export async function verifyStaffSessionCookie(
         return { uid: null, claims: null, unavailable: false, authTimeMs: null };
       }
       return { uid: null, claims: null, unavailable: true, authTimeMs: null };
-    });
+    }
+  })();
 
   const ms = options.timeoutMs;
   if (ms === undefined) return attempt;

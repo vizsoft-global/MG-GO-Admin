@@ -1,6 +1,7 @@
 "use client";
 
 import { SearchSelect } from "@/components/ui/search-select";
+import { cn } from "@/lib/utils";
 
 type SearchableSelectItem = {
   value: string;
@@ -16,6 +17,7 @@ export function SearchableSelect({
   recentsKey = "driver-form-searchable-select",
   disabled,
   invalid,
+  className,
 }: {
   value: string;
   onValueChange: (next: string) => void;
@@ -25,6 +27,7 @@ export function SearchableSelect({
   recentsKey?: string;
   disabled?: boolean;
   invalid?: boolean;
+  className?: string;
 }) {
   return (
     <SearchSelect
@@ -35,7 +38,7 @@ export function SearchableSelect({
       searchPlaceholder={searchPlaceholder}
       disabled={disabled}
       recentsKey={recentsKey}
-      className={invalid ? "border-destructive/70" : undefined}
+      className={cn(invalid ? "border-destructive/70" : undefined, className)}
     />
   );
 }

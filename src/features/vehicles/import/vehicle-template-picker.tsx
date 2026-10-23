@@ -37,7 +37,7 @@ export function VehicleTemplateColumnPicker({
       <DropdownMenuTrigger className="inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-input bg-background px-3 text-xs font-medium hover:bg-accent">
         <Columns3 className="h-4 w-4" />
         {t("templateColumns")}
-        <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+        <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
           {included}/{VEHICLE_IMPORT_COLUMNS.length}
         </span>
       </DropdownMenuTrigger>

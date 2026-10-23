@@ -11,6 +11,7 @@
 import { onCall, type CallableRequest } from "firebase-functions/v2/https";
 import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
+import { bumpOperationsDashboards } from "../router/read-snapshot";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireRider, riderError, type RiderContext } from "../core/rider";
 import { stampStoredRow } from "../core/search-text";
@@ -334,6 +335,7 @@ export const driverCreateRequest = onCall(async (request) => {
     },
   });
 
+  if (type === "leave" || type === "sick_leave") await bumpOperationsDashboards();
   return { ok: true, id: reqRef.id, request_code: code };
 });
 

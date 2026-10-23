@@ -40,7 +40,7 @@ export function UpdateRequiredDialog({
           {process.env.NODE_ENV === "development" &&
           clientBuildId &&
           serverBuildId ? (
-            <p className="font-mono text-[10px] text-muted-foreground/80">
+            <p className="font-mono text-xs text-muted-foreground/80">
               client: {clientBuildId.slice(0, 12)}… → server:{" "}
               {serverBuildId.slice(0, 12)}…
             </p>

@@ -134,12 +134,12 @@ export function DriverBlockEditor({
 
         {isBlocked && blockedReason ? (
           <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-destructive">
+            <p className="text-xs font-medium uppercase tracking-wide text-destructive">
               {t("reasonLabel")}
             </p>
             <p className="mt-1 text-sm text-foreground">{blockedReason}</p>
             {blockedAt ? (
-              <p className="mt-2 text-[10px] text-muted-foreground">
+              <p className="mt-2 text-xs text-muted-foreground">
                 {t("blockedAt", { date: new Date(blockedAt).toLocaleString() })}
               </p>
             ) : null}

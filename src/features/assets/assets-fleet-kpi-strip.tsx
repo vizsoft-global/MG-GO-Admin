@@ -31,12 +31,12 @@ export function AssetsFleetKpiStrip({
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <Icon className="h-3.5 w-3.5" />
               </span>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {item.name}
               </p>
             </div>
             <p className="mt-1 text-xl font-semibold tabular-nums">{item.total}</p>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {usedLabel} {item.used} · {remainingLabel} {item.remaining}
             </p>
           </div>

@@ -87,7 +87,7 @@ export function LoginForm() {
                 <Label htmlFor="password">{t("password")}</Label>
                 <Link
                   href={`/${locale}/forgot-password`}
-                  className="text-xs font-medium text-accent hover:underline"
+                  className="text-xs font-medium text-primary hover:underline"
                 >
                   {t("forgotPassword")}
                 </Link>
@@ -117,7 +117,7 @@ export function LoginForm() {
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             {t("noAccount")}{" "}
-            <Link href={`/${locale}/signup`} className="font-medium text-accent hover:underline">
+            <Link href={`/${locale}/signup`} className="font-medium text-primary hover:underline">
               {t("signUp")}
             </Link>
           </p>

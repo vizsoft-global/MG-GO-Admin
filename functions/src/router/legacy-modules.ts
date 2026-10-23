@@ -125,6 +125,17 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   "./rpcs/employees-dashboard": [
     "adminEmployeesDashboard"
   ],
+  "./rpcs/leave-plans": [
+    "adminListLeavePlans",
+    "adminUpsertLeavePlan",
+    "adminDeleteLeavePlan",
+    "adminSetLeavePlanStatus",
+    "adminImportLeavePlans"
+  ],
+  "./rpcs/operations-dashboard": [
+    "adminOperationsDashboard",
+    "adminClientPortalDashboard"
+  ],
   "./rpcs/rules": [
     "adminInsertDeliveryRuleWithScope",
     "adminUpsertSourceCompany",
@@ -284,6 +295,12 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
     "adminSavePayrollZoneSettings",
     "adminSavePayrollZoneOverride",
     "adminRecomputePayrollZoneMetrics"
+  ],
+  "./rpcs/payroll-edits": [
+    "adminSavePayrollIdentity",
+    "adminSavePayrollOrders",
+    "adminListPayrollRiderStatuses",
+    "adminSavePayrollRiderStatus"
   ],
   "./rpcs/payouts": [
     "getEarningsOverview",

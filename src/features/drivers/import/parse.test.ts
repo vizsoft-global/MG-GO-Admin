@@ -49,7 +49,8 @@ describe("guessColumnMapping", () => {
     assert.equal(mapping.partner_id, "Partner");
     assert.equal(mapping.zone_id, "Zone");
     assert.equal(mapping.restaurant_ids, "Restaurant IDs (name, RST code, or UUID)");
-    assert.equal(mapping.nationality, "Nationality");
+    assert.equal(mapping.nationality_category_keys, "Nationality");
+    assert.equal(mapping.nationality, undefined);
     assert.equal(mapping.rider_category, "Rider Category");
     assert.equal(mapping.source_company, "Source Company");
   });

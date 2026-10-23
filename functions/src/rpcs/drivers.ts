@@ -19,6 +19,8 @@ import { getFirestore, Timestamp, type Firestore } from "../core/fs";
 import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { COLLECTIONS } from "../core/collections";
 import { requireStaff, requireStaffFresh } from "../core/staff";
+import { maskDriverForPartner } from "../core/partner-mask";
+import { riderIsNonOperational } from "../core/operational-sections";
 import { digitSubsequenceMatch, textContainsMatch } from "../core/search-text";
 import {
   logDriverOperation,
@@ -684,6 +686,15 @@ type DriverKpis = {
   suspended: number;
 };
 
+function rowsForCaller(
+  rows: Dict[],
+  staff: { isPartner: boolean; partnerProjectKey: string | null },
+): Dict[] {
+  if (!staff.isPartner) return rows;
+  const project = staff.partnerProjectKey ?? "";
+  return rows.filter((row) => String(row["project_key"] ?? "").trim().toLowerCase() === project);
+}
+
 function kpisFromRows(base: Dict[]): DriverKpis {
   return rosterKpis(
     base.map((row) => ({
@@ -886,7 +897,7 @@ async function loadDriversForList(
 export const adminListDriversPage = measureOnCall("adminListDriversPage", async (request) => {
   const phases: PhaseMarks = {};
   try {
-  await timedPhase(phases, "requireStaffMs", () => requireStaff(request, "drivers.view"));
+  const staff = await timedPhase(phases, "requireStaffMs", () => requireStaff(request, "drivers.view"));
 
   const data = (request.data ?? {}) as Dict;
   const tab = (pickText(data, "tab", "p_tab") ?? "all").toLowerCase();
@@ -912,7 +923,8 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
   });
 
   const loaded = await loadDriversForList(tab === "archived", search, phases, deferLive);
-  const base = loaded.rows;
+  const base = rowsForCaller(loaded.rows, staff);
+  const rosterKpi = staff.isPartner ? kpisFromRows(base) : loaded.kpis;
   const tabbed = base.filter((row) => tabMatches(row, tab));
   const filtered = tabbed.filter(
     (row) => searchMatches(row, search, searchField) && rowMatches(row, filters),
@@ -958,14 +970,14 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
   if (deferLive) await hydrateDeferredPage(pageRows, phases);
 
   return {
-    rows: pageRows,
+    rows: staff.isPartner ? pageRows.map((row) => maskDriverForPartner(row)) : pageRows,
     filtered_total: filtered.length,
-    tab_total: loaded.kpis
+    tab_total: rosterKpi
       ? tab === "multi_device"
         ? tabbed.length
-        : tabTotalOf(tab, loaded.kpis)
+        : tabTotalOf(tab, rosterKpi)
       : tabbed.length,
-    kpis: loaded.kpis ?? kpisFromRows(base),
+    kpis: rosterKpi ?? kpisFromRows(base),
     group_by: groupBy,
     group_counts: groupCounts,
   };
@@ -982,7 +994,7 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
  * ago has no rider linked to it yet and would otherwise be unpickable.
  */
 export const adminDriversFilterValues = measureOnCall("adminDriversFilterValues", async (request) => {
-  await requireStaff(request, "drivers.view");
+  const staff = await requireStaff(request, "drivers.view");
 
   const data = (request.data ?? {}) as Dict;
   const column = pickText(data, "column", "p_column");
@@ -1000,7 +1012,7 @@ export const adminDriversFilterValues = measureOnCall("adminDriversFilterValues"
   const filters = validateFilters(data["filters"] ?? data["p_filters"] ?? {});
 
   const loaded = await loadDriversForList(tab === "archived", search);
-  const base = loaded.rows;
+  const base = rowsForCaller(loaded.rows, staff);
   const scoped = base.filter(
     (row) =>
       tabMatches(row, tab) &&
@@ -1184,7 +1196,11 @@ export const setDriverAccountStatus = onCall(async (request) => {
   const driverSnap = await driverRef.get();
   if (!driverSnap.exists) return { ok: false, error: "driver_not_found" };
 
-  if (status === "active" && !(await hasOpsAssignment(driverId))) {
+  if (
+    status === "active" &&
+    !(await hasOpsAssignment(driverId)) &&
+    !(await riderIsNonOperational((driverSnap.data() ?? {}) as Record<string, unknown>))
+  ) {
     return { ok: false, error: "driver_missing_assignment" };
   }
 

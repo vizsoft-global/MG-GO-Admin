@@ -43,7 +43,7 @@ const CAPACITY_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10];
 const BOOKING_WINDOW_OPTIONS = [7, 14, 21, 30, 60];
 
 const FIELD_LABEL_CLASS =
-  "text-[10px] font-semibold uppercase tracking-wide text-muted-foreground";
+  "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
 
 type ConfigDraft = {
   working_dows: number[];
@@ -684,7 +684,7 @@ export function VisitsSlotsShell() {
                           {row.blocked_date}
                         </span>
                         {row.reason ? (
-                          <span className="block truncate text-[11px] text-muted-foreground">
+                          <span className="block truncate text-xs text-muted-foreground">
                             {row.reason}
                           </span>
                         ) : null}

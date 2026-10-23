@@ -276,7 +276,7 @@ export function PerformancePageShell() {
           />
         </div>
         {overCap && preset !== "all" ? (
-          <p className="text-[10px] text-muted-foreground">{t("ops.allTimeCapped")}</p>
+          <p className="text-xs text-muted-foreground">{t("ops.allTimeCapped")}</p>
         ) : null}
 
         <OpsSlicerBar

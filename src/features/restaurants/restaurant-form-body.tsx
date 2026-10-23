@@ -364,7 +364,7 @@ export function RestaurantFormBody({
     >
       <aside className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <header className="space-y-1 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
-          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
             <Link href="/restaurants" className="hover:text-primary hover:underline">
               {t("title")}
             </Link>
@@ -391,7 +391,7 @@ export function RestaurantFormBody({
                     className="h-full w-full object-contain p-1"
                   />
                 ) : (
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {t("noLogo")}
                   </span>
                 )}
@@ -432,7 +432,7 @@ export function RestaurantFormBody({
                 ) : null}
               </div>
             </div>
-            <p className="text-[11px] text-muted-foreground">{t("hints.logo")}</p>
+            <p className="text-xs text-muted-foreground">{t("hints.logo")}</p>
           </div>
 
           <RestaurantFormFields
@@ -458,18 +458,18 @@ export function RestaurantFormBody({
           />
 
           {wantsToPublishWithoutLocation ? (
-            <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-snug text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
               {t("hints.publishRequiresLocation")}
             </p>
           ) : null}
 
           {!partnersLoading && partners.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("errors.noPartners")}
             </p>
           ) : null}
           {!zonesLoading && zones.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("errors.noZones")}
             </p>
           ) : null}

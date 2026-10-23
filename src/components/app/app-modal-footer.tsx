@@ -23,26 +23,26 @@ export function AppModalFooter({
         <div className="min-w-0">
           {asPage ? (
             <>
-              <p className="truncate text-sm font-semibold leading-tight text-foreground">{title}</p>
+              <p className="truncate text-base font-bold leading-tight text-foreground">{title}</p>
               {subtitle ? (
-                <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+                <p className="mt-0.5 line-clamp-2 text-xs font-normal leading-snug text-muted-foreground">
                   {subtitle}
                 </p>
               ) : null}
             </>
           ) : (
             <>
-              <DialogTitle className="truncate text-sm font-semibold leading-tight text-foreground">
+              <DialogTitle className="truncate text-base font-bold leading-tight text-foreground">
                 {title}
               </DialogTitle>
               {subtitle ? (
-                <DialogDescription className="mt-0.5 line-clamp-1 text-[11px] leading-snug">
+                <DialogDescription className="mt-0.5 line-clamp-1 text-xs font-normal leading-snug">
                   {subtitle}
                 </DialogDescription>
               ) : null}
             </>
           )}
-          {meta ? <div className="mt-1 text-[11px] text-muted-foreground">{meta}</div> : null}
+          {meta ? <div className="mt-1 text-xs font-normal text-muted-foreground">{meta}</div> : null}
         </div>
         {children ? (
           <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div>

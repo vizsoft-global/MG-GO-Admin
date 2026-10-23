@@ -626,14 +626,14 @@ export function EsignSendShell({
               {field.is_required ? <span className="text-destructive"> *</span> : null}
             </span>
             {code ? (
-              <span className="rounded border border-border bg-muted/50 px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className="rounded border border-border bg-muted/50 px-1 py-px text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {code}
               </span>
             ) : null}
           </Label>
           <button
             type="button"
-            className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
+            className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
             onClick={() => setHiddenKeys((prev) => [...prev, field.field_key])}
           >
             <Trash2 className="size-3" aria-hidden />
@@ -728,7 +728,7 @@ export function EsignSendShell({
           }
           breadcrumbs={breadcrumbs}
           actions={
-            <span className="inline-flex items-center rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+            <span className="inline-flex items-center rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-primary">
               {tRcm("youSend")}
             </span>
           }
@@ -818,7 +818,7 @@ export function EsignSendShell({
       </div>
       <div
         className={cn(
-          "flex flex-wrap gap-3 text-[11px] text-muted-foreground",
+          "flex flex-wrap gap-3 text-xs text-muted-foreground",
           isV2 && "shrink-0 px-4 pb-2",
         )}
       >
@@ -860,7 +860,7 @@ export function EsignSendShell({
                 <p className="text-xs text-muted-foreground">{t("createSubtitle")}</p>
               </div>
             </div>
-            <span className="shrink-0 rounded-md bg-[#FFFAEB] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#B54708]">
+            <span className="shrink-0 rounded-md bg-[#FFFAEB] px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-[#B54708]">
               {tRcm("youSend")}
             </span>
           </div>
@@ -912,7 +912,7 @@ export function EsignSendShell({
                 className="w-full"
               />
               {initialCategoryKey && categoryTemplates.length === 0 && templatesData ? (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t("emptyCategory")}{" "}
                   <Link href={templatesHref} className="font-medium text-primary hover:underline">
                     {t("openLibrary")}
@@ -938,7 +938,7 @@ export function EsignSendShell({
           </div>
 
           <div className="space-y-3 rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-3">
-            <p className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-[#1D4ED8]">
+            <p className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-[#1D4ED8]">
               {isV2 ? <Building2 className="size-3" aria-hidden /> : null}
               {t("fromTheSystem")}
             </p>
@@ -1031,7 +1031,7 @@ export function EsignSendShell({
                 {sheetGroups.map((group) => (
                   <div key={group.key} className="space-y-1.5">
                     {group.key !== "fields" ? (
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {t(`groups.${group.key}`)}
                       </p>
                     ) : null}
@@ -1087,7 +1087,7 @@ export function EsignSendShell({
                       {hiddenCheckKeys.length > 0 ? (
                         <button
                           type="button"
-                          className="inline-flex h-7 items-center rounded-md px-1.5 text-[11px] font-medium text-primary hover:bg-primary/10"
+                          className="inline-flex h-7 items-center rounded-md px-1.5 text-xs font-medium text-primary hover:bg-primary/10"
                           onClick={() => setHiddenCheckKeys([])}
                         >
                           {t("showHiddenOptions")}
@@ -1144,7 +1144,7 @@ export function EsignSendShell({
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-xs font-semibold">{t("addDocuments")}</p>
-                <p className="text-[10px] text-muted-foreground">{t("documentsHint")}</p>
+                <p className="text-xs text-muted-foreground">{t("documentsHint")}</p>
               </div>
               <Button
                 type="button"
@@ -1254,7 +1254,7 @@ export function EsignSendShell({
 function SystemFact({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <div className="text-[10px] text-[#1D4ED8]">{label}</div>
+      <div className="text-xs text-[#1D4ED8]">{label}</div>
       <div className="truncate text-xs font-medium text-[#0A0A0A]">{value}</div>
     </div>
   );

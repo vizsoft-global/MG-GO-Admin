@@ -78,7 +78,7 @@ export function VehicleBulkBar({
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
-      <p className="text-[12px] font-semibold text-foreground">{t("bulkSelected", { count: rows.length })}</p>
+      <p className="text-xs font-semibold text-foreground">{t("bulkSelected", { count: rows.length })}</p>
       <Button type="button" variant="outline" className="h-9" disabled={pending} onClick={() => setAssignOpen(true)}>
         {t("bulkAssign")}
       </Button>
@@ -226,13 +226,13 @@ function VehicleBulkAssignDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showCloseButton closeOutside className="w-[min(720px,96vw)] gap-0 p-0">
         <div className="max-h-[min(520px,60dvh)] space-y-3 overflow-auto px-5 py-4">
-          <p className="text-[12px] text-muted-foreground">{t("bulkAssignHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("bulkAssignHint")}</p>
           {rows.map((row) => {
             const driverId = picks[row.id] === undefined ? row.assigned_driver_id : picks[row.id];
             const project = driverId ? projectByDriver.get(driverId) ?? row.assigned_project_key : null;
             return (
               <div key={row.id} className="grid items-center gap-2 sm:grid-cols-[160px_1fr_auto]">
-                <p className="truncate text-[13px] font-medium">{row.reg_number || row.bike_id}</p>
+                <p className="truncate text-sm font-medium">{row.reg_number || row.bike_id}</p>
                 <SearchSelect
                   items={driverItems}
                   value={driverId}
@@ -244,12 +244,12 @@ function VehicleBulkAssignDialog({
                   className="h-9"
                 />
                 {isDriverProjectKey(project) ? (
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {t("bulkProject", { project })}
                     <ProjectBadge value={project} />
                   </span>
                 ) : (
-                  <span className="text-[11px] text-muted-foreground">—</span>
+                  <span className="text-xs text-muted-foreground">—</span>
                 )}
               </div>
             );

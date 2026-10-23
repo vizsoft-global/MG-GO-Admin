@@ -293,7 +293,7 @@ export function EsignCategoriesShell() {
                   <TableCell>
                     <div className="flex items-center gap-2.5">
                       <span
-                        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold text-white ${slotTint(row.key)}`}
+                        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold text-white ${slotTint(row.key)}`}
                       >
                         {slotLabel(row)}
                       </span>

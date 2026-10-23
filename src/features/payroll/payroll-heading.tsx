@@ -49,7 +49,7 @@ export function PayrollHeadingLabel({
     return (
       <Input
         autoFocus
-        className="h-7 w-[7.5rem] px-1.5 text-[11px]"
+        className="h-7 w-[7.5rem] px-1.5 text-xs"
         value={draft}
         aria-label={t("rename")}
         onChange={(e) => setDraft(e.target.value)}
@@ -120,13 +120,13 @@ export function PayrollColumnsMenu({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-[11px] font-semibold hover:bg-muted/50">
+      <PopoverTrigger className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs font-semibold hover:bg-muted/50">
         <Columns3 className="size-3.5" />
         {t("columns")}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[min(280px,92vw)] origin-(--transform-origin) p-3">
         <p className="text-xs font-semibold">{t("title")}</p>
-        <p className="mb-2 text-[10px] text-muted-foreground">{t("hint")}</p>
+        <p className="mb-2 text-xs text-muted-foreground">{t("hint")}</p>
         <div className="max-h-64 space-y-1 overflow-y-auto">
           {rows.map((row) => {
             const current = config.get(row.key);
@@ -155,7 +155,7 @@ export function PayrollColumnsMenu({
                 >
                   <Check className="size-3" />
                 </button>
-                <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{row.label}</span>
+                <span className="min-w-0 flex-1 truncate text-xs font-medium">{row.label}</span>
               </div>
             );
           })}
