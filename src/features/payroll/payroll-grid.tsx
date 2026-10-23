@@ -30,6 +30,7 @@ import {
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { cn } from "@/lib/utils";
+import { PayrollIdentityCell, payrollIdentityField, payrollIdentityValue } from "./payroll-identity-cell";
 import {
   countDaysByStatus,
   countedRiderDays,
@@ -713,7 +714,7 @@ export function PayrollDayGrid({
         </div>
       ) : null}
       {editable && selectedMeta ? (
-        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-3 py-2 text-[11px]">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/20 px-3 py-2 text-xs">
           <span className="font-semibold">
             {t("adjust.selectionBar", {
               cells: selectedMeta.count,
@@ -751,7 +752,7 @@ export function PayrollDayGrid({
           editable && "focus-visible:ring-2 focus-visible:ring-primary/40",
         )}
       >
-        <table className="w-max min-w-full border-collapse text-[12px]">
+        <table className="w-max min-w-full border-collapse text-xs">
           <colgroup>
             {Array.from({ length: colCount }, (_, i) => (
               <col key={i} className={i >= identityCount ? "min-w-[52px]" : undefined} />
@@ -844,7 +845,7 @@ export function PayrollDayGrid({
                           )}
                           style={sticky?.style}
                         >
-                          {renderIdentityCell(row, column, today)}
+                          {renderIdentityCell(row, column, today, editable)}
                         </td>
                         );
                       })}
@@ -917,7 +918,7 @@ export function PayrollDayGrid({
                                 : undefined
                             }
                         className={cn(
-                              "relative min-w-[52px] px-1 py-1.5 text-center text-[11px] font-semibold select-none",
+                              "relative min-w-[52px] px-1 py-1.5 text-center text-xs font-semibold select-none",
                               dayClass(st),
                               selected && "ring-2 ring-inset ring-primary/60",
                               isFillTarget(item.index, columnIndex) && "outline-dashed outline-1 outline-emerald-500",
@@ -982,12 +983,12 @@ export function PayrollDayGrid({
           </tbody>
         </table>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
         <span>{footer}</span>
         <button
           type="button"
           onClick={() => onExport(visibleRows)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] font-semibold text-foreground transition-colors hover:bg-muted/50"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted/50"
         >
           <Download className="size-3.5" />
           {exportLabel}
@@ -1056,16 +1057,48 @@ function setFiltersFor(
   });
 }
 
-function renderIdentityCell(row: PayrollRiderRow, column: PayrollRiderColumn, today?: string) {
+function renderIdentityCell(
+  row: PayrollRiderRow,
+  column: PayrollRiderColumn,
+  today?: string,
+  canEdit = false,
+) {
   if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
   if (column.id === "status") return <RiderStatusPill row={row} today={today} />;
+  const field = payrollIdentityField(column.id);
+  if (field) {
+    return (
+      <PayrollIdentityCell
+        driverId={row.driverId}
+        field={field}
+        value={payrollIdentityValue(row, field)}
+        canEdit={canEdit}
+      />
+    );
+  }
   const value = riderColumnValue(row, column.id, today);
   return value == null || value === "" ? "—" : String(value);
 }
 
-function renderSummaryCell(row: PayrollRiderRow, column: PayrollRiderColumn, today?: string) {
+function renderSummaryCell(
+  row: PayrollRiderRow,
+  column: PayrollRiderColumn,
+  today?: string,
+  canEdit = false,
+) {
   if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
   if (column.id === "status") return <RiderStatusPill row={row} today={today} />;
+  const field = payrollIdentityField(column.id);
+  if (field) {
+    return (
+      <PayrollIdentityCell
+        driverId={row.driverId}
+        field={field}
+        value={payrollIdentityValue(row, field)}
+        canEdit={canEdit}
+      />
+    );
+  }
   if (column.id === "efficiency" || column.id === "zoneEff") {
     const raw = column.id === "efficiency" ? row.efficiency : row.zoneEfficiency;
     if (raw == null) return <span className="text-muted-foreground/50">—</span>;
@@ -1084,7 +1117,7 @@ function renderSummaryCell(row: PayrollRiderRow, column: PayrollRiderColumn, tod
   }
   if (column.id === "reduced3") {
     return row.reducedDays > 0 ? (
-      <span className="inline-flex rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
+      <span className="inline-flex rounded-md bg-amber-100 px-1.5 py-0.5 text-xs font-bold text-amber-900">
         {row.reducedDays}
       </span>
     ) : (
@@ -1105,7 +1138,7 @@ export function ZoneCategoryPill({ category }: { category: string }) {
     return <span className="text-muted-foreground/60">{t("not_set")}</span>;
   }
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium">
       <span className="size-2.5 rounded-sm" style={{ background: categoryHex(category) }} />
       {t(category)}
     </span>
@@ -1126,6 +1159,7 @@ export function PayrollSummaryTable({
   rangeLabel,
   visibleColumnIds,
   today,
+  canManage = false,
 }: {
   rows: readonly PayrollRiderRow[];
   empty: string;
@@ -1136,6 +1170,7 @@ export function PayrollSummaryTable({
   visibleColumnIds?: readonly string[];
   /** Kuwait date the page calls today; drives the Rider Status column. */
   today?: string;
+  canManage?: boolean;
 }) {
   const t = useTranslations("pages.payroll");
   const [filters, setFilters] = useState<ColumnFilters>({});
@@ -1199,7 +1234,7 @@ export function PayrollSummaryTable({
         </div>
       ) : null}
       <div className="max-h-[min(420px,46dvh)] overflow-auto">
-        <table className="w-max min-w-full border-collapse text-[12px]">
+        <table className="w-max min-w-full border-collapse text-xs">
           <thead className="sticky top-0 z-10 bg-card">
             <tr>
               {columns.map((column, index) => (
@@ -1233,7 +1268,7 @@ export function PayrollSummaryTable({
                       key={column.id}
                       className={cn("whitespace-nowrap px-2 py-1.5", stickyClass(index), index === 2 && "font-medium")}
                     >
-                      {renderSummaryCell(row, column, today)}
+                      {renderSummaryCell(row, column, today, canManage)}
                     </td>
                   ))}
                 </tr>
@@ -1244,7 +1279,7 @@ export function PayrollSummaryTable({
       </div>
       {onExport && exportLabel ? (
         <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t("tableFootRange", {
               shown: visibleRows.length,
               total: rows.length,
@@ -1254,7 +1289,7 @@ export function PayrollSummaryTable({
           <button
             type="button"
             onClick={() => onExport(visibleRows)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-[11px] font-semibold transition-colors hover:bg-muted/50"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold transition-colors hover:bg-muted/50"
           >
             <Download className="size-3.5" />
             {exportLabel}
@@ -1262,7 +1297,7 @@ export function PayrollSummaryTable({
         </div>
       ) : (
         <div className="border-t border-border px-3 py-2">
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t("tableFootRange", {
               shown: visibleRows.length,
               total: rows.length,

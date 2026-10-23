@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   aoShownOrders,
+  foldPayrollDayOrders,
   lookupReconCount,
   lookupReconOrders,
   reconLookupKeys,
@@ -25,6 +26,24 @@ describe("lookupReconCount", () => {
   it("reads employee_id|day then driver_code|day", () => {
     const map = new Map([["10001|2026-10-01", { orders: 4 }]]);
     assert.equal(lookupReconCount(map, "2026-10-01", "108899", "10001"), 4);
+  });
+});
+
+describe("foldPayrollDayOrders", () => {
+  it("lets a manual 0 replace recon and verified", () => {
+    assert.deepEqual(foldPayrollDayOrders({ o: 4, do: 12, mo: 0 }), {
+      orders: 0,
+      displayOrders: 0,
+      overridden: true,
+    });
+  });
+
+  it("keeps recon display when there is no override", () => {
+    assert.deepEqual(foldPayrollDayOrders({ o: 4, do: 12, mo: null }), {
+      orders: 4,
+      displayOrders: 12,
+      overridden: false,
+    });
   });
 });
 

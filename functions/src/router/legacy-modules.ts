@@ -285,6 +285,10 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
     "adminSavePayrollZoneOverride",
     "adminRecomputePayrollZoneMetrics"
   ],
+  "./rpcs/payroll-edits": [
+    "adminSavePayrollIdentity",
+    "adminSavePayrollOrders"
+  ],
   "./rpcs/payouts": [
     "getEarningsOverview",
     "listEarningsGrouped",

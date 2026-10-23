@@ -51,6 +51,79 @@ export function isKeetaDriver(driver: Dict): boolean {
   return typeof key === "string" && key.trim().toLowerCase() === "keeta";
 }
 
+/** Partner name or key stored as Keeta, ignoring case and surrounding space. */
+export function isKeetaLabel(value: unknown): boolean {
+  return typeof value === "string" && value.trim().toLowerCase() === "keeta";
+}
+
+/**
+ * A restaurant name that means this rider clocks in on a zone.
+ * `(Pool)` is the employees-list label for an unassigned Keeta store, and
+ * `Keeta - Jahra` is a real restaurant row whose name starts with Keeta.
+ */
+export function isKeetaZoneRestaurantName(name: string): boolean {
+  const trimmed = name.trim().toLowerCase();
+  return trimmed === "(pool)" || trimmed === "pool" || /^keeta\b/.test(trimmed);
+}
+
+/**
+ * Zone gate, not a restaurant pin.
+ * True when the project is Keeta, the partner is Keeta, or any assigned
+ * restaurant is a Keeta / pool store. A zone on an Americana rider does not
+ * qualify — that fleet still matches a restaurant.
+ */
+export function usesKeetaZoneGate(input: {
+  projectKey: unknown;
+  partnerName: unknown;
+  partnerKey: unknown;
+  restaurantNames: readonly string[];
+}): boolean {
+  if (isKeetaDriver({ project_key: input.projectKey })) return true;
+  if (isKeetaLabel(input.partnerName) || isKeetaLabel(input.partnerKey)) return true;
+  return input.restaurantNames.some((name) => isKeetaZoneRestaurantName(name));
+}
+
+function restaurantNamesOf(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+/**
+ * The check-in decision for one rider document.
+ * Denormalized restaurant names decide first. Partner is read only when those
+ * names and the project key do not already match. Assigned restaurants are
+ * loaded only when the driver has no denormalized names at all, so an
+ * Americana rider with real store names does not pay a second candidate read.
+ */
+export async function riderUsesKeetaZoneGate(driverId: string, driver: Dict): Promise<boolean> {
+  const names = restaurantNamesOf(driver["restaurant_names"]);
+  let partnerName: unknown = driver["partner_name"];
+  let partnerKey: unknown = driver["partner_key"] ?? driver["partner_slug"];
+  const projectKey = driver["project_key"];
+  if (usesKeetaZoneGate({ projectKey, partnerName, partnerKey, restaurantNames: names })) return true;
+
+  const partnerId = typeof driver["partner_id"] === "string" ? driver["partner_id"].trim() : "";
+  if (partnerId) {
+    const snap = await getFirestore().collection(COLLECTIONS.partners).doc(partnerId).get();
+    const row = snap.data() ?? {};
+    partnerName = row["name"];
+    partnerKey = row["key"] ?? row["slug"];
+    if (usesKeetaZoneGate({ projectKey, partnerName, partnerKey, restaurantNames: names })) return true;
+  }
+
+  if (names.length > 0) return false;
+
+  const candidates = await loadCheckInCandidates(driverId, driver);
+  return usesKeetaZoneGate({
+    projectKey,
+    partnerName,
+    partnerKey,
+    restaurantNames: candidates.map((item) =>
+      typeof item.restaurant["name"] === "string" ? item.restaurant["name"] : "",
+    ),
+  });
+}
+
 /** The rider's assigned zone, as the check-in gate needs it. */
 export type CheckInZone = {
   id: string;

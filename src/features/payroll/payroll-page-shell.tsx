@@ -350,6 +350,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           kpis={payrollKpis}
           riders={filteredRiders}
           canExport={canExport}
+          canManage={canManage}
           today={today}
         />
       ) : tab === "combined" ? (

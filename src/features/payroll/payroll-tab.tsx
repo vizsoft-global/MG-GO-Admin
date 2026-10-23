@@ -28,12 +28,14 @@ export function PayrollTab({
   kpis,
   riders,
   canExport,
+  canManage = false,
   today,
 }: {
   month: PayrollPeriod;
   kpis: PayrollKpis;
   riders: readonly PayrollRiderRow[];
   canExport: boolean;
+  canManage?: boolean;
   /** Kuwait date the page calls today; drives the Rider Status column. */
   today: string;
 }) {
@@ -141,6 +143,7 @@ export function PayrollTab({
             rangeLabel={month.label}
             visibleColumnIds={visibleColumnIds}
             today={today}
+            canManage={canManage}
             exportLabel={canExport ? t("downloadTable") : undefined}
             onExport={
               canExport

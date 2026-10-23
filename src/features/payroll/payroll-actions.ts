@@ -1091,3 +1091,33 @@ export async function savePayrollColumnConfig(input: {
   });
   return { ok: true };
 }
+
+export type PayrollIdentityField = "employeeId" | "fullName" | "clientId" | "restaurantName";
+
+export async function savePayrollIdentity(
+  driverId: string,
+  field: PayrollIdentityField,
+  value: string,
+): Promise<void> {
+  await requirePayrollPermission("payroll.manage");
+  const { error } = await callRpc("admin_save_payroll_identity", {
+    p_driver_id: driverId,
+    p_field: field,
+    p_value: value,
+  });
+  if (error) throw new Error(error.message || "save_failed");
+}
+
+export async function savePayrollOrders(
+  driverId: string,
+  date: string,
+  orders: number | null,
+): Promise<void> {
+  await requirePayrollPermission("payroll.manage");
+  const { error } = await callRpc("admin_save_payroll_orders", {
+    p_driver_id: driverId,
+    p_date: date,
+    p_orders: orders,
+  });
+  if (error) throw new Error(error.message || "save_failed");
+}

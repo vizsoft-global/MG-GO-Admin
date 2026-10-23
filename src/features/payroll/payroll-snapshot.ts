@@ -44,7 +44,7 @@ import {
   type ZoneCategory,
 } from "./payroll-rules-engine";
 import { categoryForZone } from "./payroll-zone-metrics";
-import { aoShownOrders, lookupReconOrders } from "./payroll-orders-display";
+import { aoShownOrders, foldPayrollDayOrders, lookupReconOrders } from "./payroll-orders-display";
 import type {
   OffStructureSource,
   PayrollAdjustmentCell,
@@ -206,6 +206,8 @@ type RawDayRow = {
   o: number | string | null;
   /** Display-only completed orders when recon is missing. */
   do?: number | string | null;
+  /** Manual order override. Null when recon / verified still apply. `0` is a real correction. */
+  mo?: number | string | null;
   /** Operations cover on the date, from a request. */
   c: string | null;
   /** True when that cover is approved (a pending request covers nothing). */
@@ -375,6 +377,7 @@ type DayFactsInput = {
   elapsedHours?: number;
   orders: number;
   displayOrders?: number;
+  ordersOverridden?: boolean;
   cover: "off" | "sick" | "accident" | null;
   coverApproved: boolean;
   hasCheckIn: boolean;
@@ -418,6 +421,7 @@ function dayInfoFrom(
       autoSource: auto.source,
       orders: facts.orders,
       displayOrders: facts.displayOrders ?? facts.orders,
+      ordersOverridden: facts.ordersOverridden,
       loggedHours: Math.round(facts.loggedHours * 100) / 100,
       source: outcome.source,
       ruleLabel: outcome.ruleLabel,
@@ -1017,6 +1021,7 @@ export function snapshotFromRpc(
       const cover =
         day.c === "off" || day.c === "sick" || day.c === "accident" ? day.c : null;
       const adjustmentStatus = parseAdjustmentStatus(day.x);
+      const counted = foldPayrollDayOrders(day);
       const facts: DayFactsInput = {
         date: String(day.d),
         loggedHours: logged,
@@ -1024,8 +1029,9 @@ export function snapshotFromRpc(
           openElapsed && String(day.d) === today
             ? openElapsed.get(row.driverId)
             : undefined,
-        orders: num(day.o),
-        displayOrders: day.do == null ? num(day.o) : num(day.do),
+        orders: counted.orders,
+        displayOrders: counted.displayOrders,
+        ordersOverridden: counted.overridden,
         cover,
         coverApproved: Boolean(day.ca),
         hasCheckIn: Boolean(day.k) || logged > 0,

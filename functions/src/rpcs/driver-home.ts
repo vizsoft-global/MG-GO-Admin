@@ -43,8 +43,8 @@ import {
 } from "./_shared";
 import {
   isCheckInPhotoKeyForKey,
-  isKeetaDriver,
   keetaZoneVerdict,
+  riderUsesKeetaZoneGate,
   loadCheckInCandidates,
   loadCheckInZone,
   matchCheckInRestaurant,
@@ -2058,7 +2058,7 @@ export const driverSetDutyState = measureOnCall("driverSetDutyState", async (req
     distanceM: number | null;
   };
   let checkInStamp: CheckInStamp | null = null;
-  const keeta = isKeetaDriver(driver);
+  const keeta = await riderUsesKeetaZoneGate(ctx.uid, driver);
 
   if (freshCheckIn) {
     const safety = await loadDriverAppSafetySettings();
@@ -2403,7 +2403,7 @@ export const driverCheckInContext = measureOnCall("driverCheckInContext", async 
   // Keeta has no store to match: `gate` names the location gate (the assigned
   // zone) and `zone` carries the name so the refusal can say which zone was
   // missed. The photo requirement below is shared with every other rider.
-  const keeta = isKeetaDriver(ctx.driver);
+  const keeta = await riderUsesKeetaZoneGate(ctx.uid, ctx.driver);
   const base = {
     day,
     requires_check_in: requiresCheckIn,

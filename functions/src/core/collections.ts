@@ -84,6 +84,7 @@ export const COLLECTIONS = {
   payrollZoneMetrics: "payroll_zone_metrics",
   payrollZoneSettings: "payroll_zone_settings",
   payrollManualAdjustments: "payroll_manual_adjustments",
+  payrollOrderOverrides: "payroll_order_overrides",
   payrollColumnConfig: "payroll_column_config",
   /** `payroll_rule_audit_logs` — the before/after trail behind the Settings tab. */
   payrollRuleAuditLogs: "payroll_rule_audit_logs",

@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   isCheckInPhotoKeyForKey,
   isKeetaDriver,
+  isKeetaZoneRestaurantName,
   keetaZoneVerdict,
+  usesKeetaZoneGate,
   matchCheckInRestaurant,
   nearestCheckInRestaurant,
   needsCheckIn,
@@ -121,6 +123,66 @@ describe("Keeta zone gate", () => {
     assert.equal(isKeetaDriver({ project_key: "" }), false);
     assert.equal(isKeetaDriver({ project_key: 7 }), false);
     assert.equal(isKeetaDriver({}), false);
+  });
+
+  it("uses the zone gate for a Keeta partner or a Keeta / pool restaurant", () => {
+    assert.equal(
+      usesKeetaZoneGate({
+        projectKey: "keeta",
+        partnerName: "",
+        partnerKey: "",
+        restaurantNames: [],
+      }),
+      true,
+    );
+    assert.equal(
+      usesKeetaZoneGate({
+        projectKey: "americana",
+        partnerName: "Keeta",
+        partnerKey: "",
+        restaurantNames: ["KFC"],
+      }),
+      true,
+    );
+    assert.equal(
+      usesKeetaZoneGate({
+        projectKey: "",
+        partnerName: "",
+        partnerKey: "keeta",
+        restaurantNames: [],
+      }),
+      true,
+    );
+    assert.equal(isKeetaZoneRestaurantName("(Pool)"), true);
+    assert.equal(isKeetaZoneRestaurantName("pool"), true);
+    assert.equal(isKeetaZoneRestaurantName("Keeta - Jahra"), true);
+    assert.equal(
+      usesKeetaZoneGate({
+        projectKey: "americana",
+        partnerName: "Americana",
+        partnerKey: "americana",
+        restaurantNames: ["(Pool)"],
+      }),
+      true,
+    );
+    assert.equal(
+      usesKeetaZoneGate({
+        projectKey: "americana",
+        partnerName: "Americana",
+        partnerKey: "americana",
+        restaurantNames: ["Hardee's Fahaheel"],
+      }),
+      false,
+    );
+    assert.equal(
+      usesKeetaZoneGate({
+        projectKey: "",
+        partnerName: "",
+        partnerKey: "",
+        restaurantNames: [],
+      }),
+      false,
+    );
   });
 
   it("accepts a rider inside the assigned zone", () => {

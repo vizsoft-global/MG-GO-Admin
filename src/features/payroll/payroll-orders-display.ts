@@ -84,3 +84,31 @@ export function aoShownOrders(
   }
   return info.orders;
 }
+
+function finiteOrder(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+/** Trust a server `mo` flag. `0` is a correction, not a missing count. */
+export function foldPayrollDayOrders(day: {
+  o?: unknown;
+  do?: unknown;
+  mo?: unknown;
+}): { orders: number; displayOrders: number; overridden: boolean } {
+  const overridden = day.mo != null && day.mo !== "";
+  if (overridden) {
+    const orders = finiteOrder(day.mo, 0);
+    return { orders, displayOrders: orders, overridden: true };
+  }
+  const orders = finiteOrder(day.o, 0);
+  return {
+    orders,
+    displayOrders: day.do == null || day.do === "" ? orders : finiteOrder(day.do, orders),
+    overridden: false,
+  };
+}
