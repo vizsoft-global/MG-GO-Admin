@@ -85,7 +85,7 @@ export function DeliveryGpsAuditPanel({
           {t("title")}
         </p>
         {isLoading ? (
-          <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             <Loader2 className="size-3 animate-spin" />
             {t("loading")}
           </span>

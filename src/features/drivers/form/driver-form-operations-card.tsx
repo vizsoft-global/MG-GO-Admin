@@ -89,7 +89,7 @@ export function DriverFormOperationsCard({
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         ) : catalogItems.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground">{emptyCatalogHint}</p>
+          <p className="text-xs text-muted-foreground">{emptyCatalogHint}</p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {catalogItems.map((item) => {

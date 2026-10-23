@@ -43,13 +43,13 @@ export function AlertsCenterWidget({ snapshot }: { snapshot: DashboardSnapshot }
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-medium">{t(`alerts.${alert.messageKey}`)}</p>
                 {alert.isLive ? (
-                  <span className="rounded-full bg-success-bg px-1.5 py-0.5 text-[10px] font-medium text-success">
+                  <span className="rounded-full bg-success-bg px-1.5 py-0.5 text-xs font-medium text-success">
                     {t("liveBadge")}
                   </span>
                 ) : null}
               </div>
               <p className="text-xs text-muted-foreground">{alert.detail}</p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 {new Date(alert.at).toLocaleTimeString()}
               </p>
             </div>

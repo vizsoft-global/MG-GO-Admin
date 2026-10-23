@@ -131,7 +131,7 @@ function tiersFromRule(rule: IncentiveRuleRow | null): TierDraft[] {
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return (
-    <p className="text-[11px] text-destructive" role="alert">
+    <p className="text-xs text-destructive" role="alert">
       {message}
     </p>
   );

@@ -116,7 +116,7 @@ export function EsignAssetsLinkShell() {
                 ))}
               </SelectContent>
             </Select>
-            <span className="ms-auto text-[11px] text-muted-foreground">
+            <span className="ms-auto text-xs text-muted-foreground">
               {visibleRows ? t("assetCount", { count: visibleRows.length }) : ""}
             </span>
           </div>
@@ -153,7 +153,7 @@ export function EsignAssetsLinkShell() {
                         </span>
                         <div>
                           <p className="text-sm font-medium">{row.name}</p>
-                          <p className="text-[10px] text-muted-foreground">{row.code}</p>
+                          <p className="text-xs text-muted-foreground">{row.code}</p>
                         </div>
                       </div>
                     </TableCell>

@@ -826,7 +826,7 @@ export function ZoneMapGoogleInner({
           {drawMode === "polygon" && !blocksMode && draftVertexCount > 0 ? (
             <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
               <div className="flex max-w-lg flex-wrap items-center justify-center gap-2">
-                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-900 shadow-sm dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900 shadow-sm dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
                   {t("polygonFinishHint")}
                 </p>
                 {draftVertexCount >= 3 ? (

@@ -10,7 +10,12 @@ import {
 import { selectOptionsFrom } from "@/lib/select-items";
 import { useTranslations } from "next-intl";
 import { STAFF_DEPARTMENTS, type StaffDepartment } from "@/lib/auth/app-access";
-import type { StaffAccessKind } from "@/lib/auth/staff-access";
+import {
+  parsePartnerProjectKey,
+  PARTNER_PROJECT_KEYS,
+  type PartnerProjectKey,
+  type StaffAccessKind,
+} from "@/lib/auth/staff-access";
 import type { StaffLastChanged } from "@/features/settings/staff-access-actions";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +35,8 @@ export function UserAccessHeader({
   onDepartment,
   accessKind,
   onAccessKind,
+  partnerProjectKey = null,
+  onPartnerProject,
   disabled,
 }: {
   name: string;
@@ -41,9 +48,20 @@ export function UserAccessHeader({
   onDepartment: (value: StaffDepartment | null) => void;
   accessKind: StaffAccessKind;
   onAccessKind: (kind: StaffAccessKind) => void;
+  partnerProjectKey?: PartnerProjectKey | null;
+  onPartnerProject?: (key: PartnerProjectKey) => void;
   disabled?: boolean;
 }) {
   const t = useTranslations("pages.settings.accessControl");
+  const projectLabel: Record<PartnerProjectKey, string> = {
+    keeta: "Keeta",
+    americana: "Americana",
+  };
+  const projectItems = selectOptionsFrom(
+    PARTNER_PROJECT_KEYS,
+    (value) => value,
+    (value) => projectLabel[value],
+  );
   const deptItems = selectOptionsFrom(
     ["none", ...STAFF_DEPARTMENTS],
     (value) => value,
@@ -67,25 +85,25 @@ export function UserAccessHeader({
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#ECECEE] bg-white px-4 pt-4 pb-3.5">
       <div className="flex min-w-0 items-center gap-3">
-        <span className="flex size-[46px] shrink-0 items-center justify-center rounded-full bg-[#FDE68A] text-[15px] font-semibold text-[#4F3F01]">
+        <span className="flex size-[46px] shrink-0 items-center justify-center rounded-full bg-[#FDE68A] text-sm font-semibold text-[#4F3F01]">
           {initials(name)}
         </span>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="truncate text-base font-bold text-[#111827]">{name}</p>
             {roleTag ? (
-              <span className="shrink-0 rounded-md bg-[#F4F4F5] px-[7px] py-[3px] text-[10px] font-medium text-[#52525B]">
+              <span className="shrink-0 rounded-md bg-[#F4F4F5] px-[7px] py-[3px] text-xs font-medium text-[#52525B]">
                 {roleTag}
               </span>
             ) : null}
           </div>
-          <p className="mt-0.5 truncate text-[10.5px] text-[#71717A]">
+          <p className="mt-0.5 truncate text-xs text-[#71717A]">
             {[email, changed].filter(Boolean).join(" · ")}
           </p>
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-start gap-2">
         <Select
           items={deptItems}
           value={department ?? "none"}
@@ -94,7 +112,7 @@ export function UserAccessHeader({
           }
           disabled={disabled}
         >
-          <SelectTrigger className="h-9 w-[184px] rounded-lg border-[#E4E4E7] bg-white text-[12.5px]">
+          <SelectTrigger className="h-9 w-[184px] rounded-lg border-[#E4E4E7] bg-white text-xs">
             <SelectValue placeholder={t("department")} />
           </SelectTrigger>
           <SelectContent>
@@ -106,11 +124,13 @@ export function UserAccessHeader({
             ))}
           </SelectContent>
         </Select>
+        <div className="flex flex-col items-end gap-2">
         <div className="flex h-9 items-center gap-px rounded-lg bg-[#F1F3F5] p-[3px]">
           {(
             [
               { id: "manager" as const, label: t("fullAccessManager") },
               { id: "user" as const, label: t("kindUser") },
+              { id: "partner" as const, label: t("kindPartner") },
             ]
           ).map((seg) => {
             const active = accessKind === seg.id;
@@ -122,7 +142,7 @@ export function UserAccessHeader({
                 disabled={disabled}
                 onClick={() => onAccessKind(seg.id)}
                 className={cn(
-                  "inline-flex h-[30px] cursor-pointer items-center rounded-md px-2.5 text-[11px] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+                  "inline-flex h-[30px] cursor-pointer items-center rounded-md px-2.5 text-xs transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
                   active
                     ? "bg-[#18181B] font-medium text-white"
                     : "text-[#6B7280] hover:text-[#18181B]",
@@ -132,6 +152,29 @@ export function UserAccessHeader({
               </button>
             );
           })}
+        </div>
+        {accessKind === "partner" ? (
+          <Select
+            items={projectItems}
+            value={partnerProjectKey ?? undefined}
+            onValueChange={(value) => {
+              const key = parsePartnerProjectKey(value);
+              if (key) onPartnerProject?.(key);
+            }}
+            disabled={disabled}
+          >
+            <SelectTrigger className="h-9 w-[184px] rounded-lg border-[#E4E4E7] bg-white text-xs">
+              <SelectValue placeholder="Keeta" />
+            </SelectTrigger>
+            <SelectContent>
+              {PARTNER_PROJECT_KEYS.map((key) => (
+                <SelectItem key={key} value={key}>
+                  {projectLabel[key]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
         </div>
       </div>
     </div>

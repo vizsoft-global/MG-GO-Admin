@@ -175,7 +175,7 @@ function SidebarCollapseTrigger({ className }: { className?: string }) {
       title={t("collapseSidebar")}
       onClick={toggleSidebar}
     >
-      <PanelLeftClose className="h-4 w-4" />
+      <PanelLeftClose className="size-5" />
       <span className="sr-only">{t("collapseSidebar")}</span>
     </Button>
   );
@@ -192,27 +192,27 @@ function NavItemLink({
   const badges = useContext(NavBadgeContext);
   const queryClient = useQueryClient();
   if (!node.href) return null;
-  const href = node.href;
   const isActive = node.id === activeLeafId;
   const badge = badges[node.id];
+  const href = node.href;
 
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         isActive={isActive}
         tooltip={label}
-        className="h-8 cursor-pointer rounded-md px-2.5 text-[13px] font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-semibold data-active:text-slate-900 data-active:shadow-sm"
+        className="h-8 cursor-pointer rounded-md px-2.5 text-sm font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-normal data-active:text-slate-900 data-active:shadow-sm"
         render={
           <Link href={href} prefetch onMouseEnter={() => prefetchAdminRoute(queryClient, href)}>
             <span
-              className="grid size-5 shrink-0 place-items-center rounded-md"
+              className="grid size-6 shrink-0 place-items-center rounded-md"
               style={moduleChipStyle(node.id)}
             >
-              <MenuIcon name={node.icon} className="h-3 w-3" />
+              <MenuIcon name={node.icon} className="size-5" />
             </span>
             <span>{label}</span>
             {badge ? (
-              <span className="ms-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-semibold tabular-nums text-white group-data-[collapsible=icon]:hidden">
+              <span className="ms-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-xs font-normal tabular-nums text-white group-data-[collapsible=icon]:hidden">
                 {badge > 999 ? "999+" : badge}
               </span>
             ) : null}
@@ -232,7 +232,7 @@ function NavGroupLabel({ label }: { label: string }) {
       data-slot="sidebar-menu-item"
       className="group/menu-item relative px-2.5 pt-2 pb-0.5"
     >
-      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+      <span className="text-xs font-normal uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </span>
     </li>
@@ -269,10 +269,10 @@ function NavGroup({
         <SidebarMenuButton
           isActive={isActive}
           tooltip={groupLabel}
-          className="h-8 cursor-pointer rounded-md px-2.5 text-[13px] font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-semibold data-active:text-slate-900 data-active:shadow-sm"
+          className="h-8 cursor-pointer rounded-md px-2.5 text-sm font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-normal data-active:text-slate-900 data-active:shadow-sm"
           render={
             <Link href={href} prefetch onMouseEnter={() => prefetchAdminRoute(queryClient, href)}>
-              <MenuIcon name={node.icon} className="h-3.5 w-3.5 shrink-0" />
+              <MenuIcon name={node.icon} className="size-5 shrink-0" />
               <span>{groupLabel}</span>
             </Link>
           }
@@ -367,13 +367,13 @@ function PanelGroupChildren({
           className="flex w-full cursor-pointer items-center gap-1 text-start hover:text-foreground"
           aria-expanded={showChildren}
         >
-          <MenuIcon name={groupIcon} className="h-3 w-3 shrink-0 text-muted-foreground" />
-          <span className="flex-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+          <MenuIcon name={groupIcon} className="size-5 shrink-0 text-muted-foreground" />
+          <span className="flex-1 text-xs font-normal uppercase tracking-[0.08em] text-muted-foreground">
             {groupLabel}
           </span>
           <ChevronRight
             className={cn(
-              "h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-200",
+              "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
               showChildren && "rotate-90",
             )}
           />
@@ -465,7 +465,7 @@ function SidebarBrand() {
           aria-label={t("expandSidebar")}
           className="flex size-7 cursor-pointer items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
         >
-          <PanelLeftOpen className="size-3.5" aria-hidden />
+          <PanelLeftOpen className="size-5" aria-hidden />
         </button>
       </div>
     );
@@ -510,7 +510,7 @@ function ThemeSubmenu() {
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger className="cursor-pointer gap-2">
-        <TriggerIcon className="size-4 text-muted-foreground" />
+        <TriggerIcon className="size-5 text-muted-foreground" />
         {t("theme")}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-40">
@@ -520,10 +520,10 @@ function ThemeSubmenu() {
             className="cursor-pointer gap-2"
             onClick={() => setTheme(value)}
           >
-            <Icon className="size-4 text-muted-foreground" />
+            <Icon className="size-5 text-muted-foreground" />
             <span className="flex-1">{t(labelKey)}</span>
             {mounted && current === value ? (
-              <Check className="size-3.5 text-muted-foreground" />
+              <Check className="size-4 text-muted-foreground" />
             ) : null}
           </DropdownMenuItem>
         ))}
@@ -552,17 +552,17 @@ function SidebarUserMenu() {
           )}
         >
           <Avatar className="h-7 w-7 shrink-0">
-            <AvatarFallback className="bg-sidebar-accent text-[10px] font-semibold text-sidebar-accent-foreground">
+            <AvatarFallback className="bg-sidebar-accent text-xs font-normal text-sidebar-accent-foreground">
               {initials}
             </AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="min-w-0 flex-1 text-start">
-              <p className="truncate text-[13px] font-medium text-sidebar-foreground">
+              <p className="truncate text-sm font-medium text-sidebar-foreground">
                 {fullName ?? "Admin"}
               </p>
-              <p className="truncate text-[11px] text-muted-foreground">{email}</p>
-              <p className="truncate text-[10px] text-muted-foreground/80">{roleLabel}</p>
+              <p className="truncate text-xs text-muted-foreground">{email}</p>
+              <p className="truncate text-xs text-muted-foreground/80">{roleLabel}</p>
             </div>
           )}
         </DropdownMenuTrigger>

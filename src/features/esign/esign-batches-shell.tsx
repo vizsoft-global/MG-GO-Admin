@@ -253,7 +253,7 @@ export function EsignBatchesShell() {
 
   const batchFilters = (
     <aside className="flex flex-col gap-2 border-b border-border p-3 lg:border-b-0 lg:border-e">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {t("scopeBatch")}
       </p>
       <Input
@@ -281,7 +281,7 @@ export function EsignBatchesShell() {
         recentsKey="esign-batch-sender"
         className="w-full"
       />
-      <label className="block space-y-1 text-[10px] font-medium text-muted-foreground">
+      <label className="block space-y-1 text-xs font-medium text-muted-foreground">
         {t("dateFrom")}
         <Input
           type="date"
@@ -290,7 +290,7 @@ export function EsignBatchesShell() {
           onChange={(event) => setDateFrom(event.target.value)}
         />
       </label>
-      <label className="block space-y-1 text-[10px] font-medium text-muted-foreground">
+      <label className="block space-y-1 text-xs font-medium text-muted-foreground">
         {t("dateTo")}
         <Input
           type="date"
@@ -551,7 +551,7 @@ function BatchRow({
       </TableCell>
       <TableCell className="text-xs">
         <span className="block font-medium">{batch.title}</span>
-        <span className="block text-[10px] text-muted-foreground">
+        <span className="block text-xs text-muted-foreground">
           {batch.template_name ?? batch.category_label ?? "—"}
         </span>
       </TableCell>
@@ -560,7 +560,7 @@ function BatchRow({
       </TableCell>
       <TableCell>
         <div className="flex min-w-[140px] flex-col gap-1">
-          <span className="text-[11px] tabular-nums text-muted-foreground">
+          <span className="text-xs tabular-nums text-muted-foreground">
             {t("progressSlash", { signed: progress.signed, total: progress.total })}
           </span>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">

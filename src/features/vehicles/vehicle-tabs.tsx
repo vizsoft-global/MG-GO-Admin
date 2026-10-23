@@ -307,7 +307,7 @@ function DocumentsTab({ vehicle, canManage }: { vehicle: VehicleListRow; canMana
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {onRecord.map((row) => (
           <div key={row.key} className="rounded-xl border border-border bg-card px-3 py-2">
-            <p className="text-[10px] font-medium text-muted-foreground">{row.label}</p>
+            <p className="text-xs font-medium text-muted-foreground">{row.label}</p>
             <p
               className={
                 row.expired
@@ -320,7 +320,7 @@ function DocumentsTab({ vehicle, canManage }: { vehicle: VehicleListRow; canMana
           </div>
         ))}
       </div>
-      <p className="text-[10px] text-muted-foreground">{t("docsOnRecordHint")}</p>
+      <p className="text-xs text-muted-foreground">{t("docsOnRecordHint")}</p>
       {canManage ? <AddButton onClick={() => setOpen(true)} label={t("addDocument")} /> : null}
       {rows.length === 0 ? (
         <AppEmptyState title={t("emptyDocuments")} />
@@ -331,7 +331,7 @@ function DocumentsTab({ vehicle, canManage }: { vehicle: VehicleListRow; canMana
             <span key={`${row.id}-type`} className="inline-flex items-center gap-1.5">
               {docTypeLabel(row.doc_type)}
               {isLegacyVehicleDocType(row.doc_type) ? (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                   {t("docType.legacy")}
                 </span>
               ) : null}
@@ -342,7 +342,7 @@ function DocumentsTab({ vehicle, canManage }: { vehicle: VehicleListRow; canMana
         />
       )}
       {hasLegacyRows ? (
-        <p className="text-[10px] text-muted-foreground">{t("docType.legacyDocHint")}</p>
+        <p className="text-xs text-muted-foreground">{t("docType.legacyDocHint")}</p>
       ) : null}
       <LedgerDialog
         open={open}

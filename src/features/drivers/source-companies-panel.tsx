@@ -388,7 +388,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                           className="hidden"
                           onChange={(event) => pickLogo(event.target.files?.[0] ?? null)}
                         />
-                        <p className="text-[10px] text-muted-foreground">{t("logoHint")}</p>
+                        <p className="text-xs text-muted-foreground">{t("logoHint")}</p>
                       </div>
                     </div>
                     <div className="space-y-1.5">
@@ -408,7 +408,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                         onChange={(event) => setDraft({ ...draft, name: event.target.value })}
                       />
                       {draft.isNew && draftKey ? (
-                        <p className="text-[10px] text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           {t("keyHint", { key: draftKey })}
                         </p>
                       ) : null}
@@ -426,7 +426,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                           setDraft({ ...draft, clientCode: event.target.value.toUpperCase() })
                         }
                       />
-                      <p className="text-[10px] text-muted-foreground">{t("clientIdHint")}</p>
+                      <p className="text-xs text-muted-foreground">{t("clientIdHint")}</p>
                     </div>
 
                     {!draft.isSystem ? (
@@ -444,7 +444,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                                 setDraft({ ...draft, dpdTarget: event.target.value.replace(/\D/g, "") })
                               }
                             />
-                            <p className="text-[10px] text-muted-foreground">{t("dpdTargetHint")}</p>
+                            <p className="text-xs text-muted-foreground">{t("dpdTargetHint")}</p>
                           </div>
                           <div className="space-y-1.5">
                             <Label htmlFor="source-company-effective">{t("effectiveFrom")}</Label>
@@ -458,7 +458,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                                 setDraft({ ...draft, effectiveFrom: event.target.value })
                               }
                             />
-                            <p className="text-[10px] text-muted-foreground">{t("effectiveFromHint")}</p>
+                            <p className="text-xs text-muted-foreground">{t("effectiveFromHint")}</p>
                           </div>
                         </div>
 
@@ -474,7 +474,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                               {t("incentiveSchemeOn")}
                             </ToggleChip>
                           </div>
-                          <p className="text-[10px] text-muted-foreground">{t("incentiveSchemeHint")}</p>
+                          <p className="text-xs text-muted-foreground">{t("incentiveSchemeHint")}</p>
                         </div>
 
                         {draft.incentiveEnabled ? (
@@ -508,7 +508,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                           </div>
                         ) : null}
 
-                        <p className="text-[10px] text-muted-foreground">{t("companyConfigNote")}</p>
+                        <p className="text-xs text-muted-foreground">{t("companyConfigNote")}</p>
                       </>
                     ) : null}
 
@@ -532,12 +532,12 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                         </SegmentOption>
                       </div>
                       {!draft.isNew && draft.driverCount > 0 ? (
-                        <p className="text-[10px] text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           {t("inUseHint", { count: draft.driverCount })}
                         </p>
                       ) : null}
                       {draft.isSystem ? (
-                        <p className="text-[10px] text-muted-foreground">{t("systemHint")}</p>
+                        <p className="text-xs text-muted-foreground">{t("systemHint")}</p>
                       ) : null}
                     </div>
                   </div>
@@ -563,17 +563,17 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                           <TableBody>
                             {previewRows.map((row) => (
                               <TableRow key={row.orders}>
-                                <TableCell className="font-mono text-[10px] tabular-nums">
+                                <TableCell className="font-mono text-xs tabular-nums">
                                   {row.orders}
                                 </TableCell>
-                                <TableCell className="text-end font-mono text-[10px] tabular-nums text-emerald-700">
+                                <TableCell className="text-end font-mono text-xs tabular-nums text-emerald-700">
                                   {row.incentiveKwd.toFixed(3)}
                                 </TableCell>
-                                <TableCell className="text-end font-mono text-[10px] tabular-nums text-destructive">
+                                <TableCell className="text-end font-mono text-xs tabular-nums text-destructive">
                                   {row.deductionKwd.toFixed(3)}
                                 </TableCell>
                                 <TableCell
-                                  className={`text-end font-mono text-[10px] tabular-nums ${
+                                  className={`text-end font-mono text-xs tabular-nums ${
                                     row.netKwd < 0 ? "text-destructive" : "text-emerald-700"
                                   }`}
                                 >
@@ -585,7 +585,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                         </Table>
                       </div>
                     ) : (
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {draft.isSystem ? t("systemHint") : t("incentiveSchemeHint")}
                       </p>
                     )}
@@ -654,13 +654,13 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                     </Badge>
                   )}
                 </div>
-                <DialogDescription className="text-[10px] text-muted-foreground">
+                <DialogDescription className="text-xs text-muted-foreground">
                   {t("keyHint", { key: viewing.key })}
                 </DialogDescription>
 
                 <dl className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-lg border border-border bg-card p-3">
-                    <dt className="text-[10px] text-muted-foreground">{t("colClientId")}</dt>
+                    <dt className="text-xs text-muted-foreground">{t("colClientId")}</dt>
                     <dd className="mt-1 font-mono text-sm">
                       {viewing.client_code ? (
                         viewing.client_code
@@ -670,11 +670,11 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                     </dd>
                   </div>
                   <div className="rounded-lg border border-border bg-card p-3">
-                    <dt className="text-[10px] text-muted-foreground">{t("colDrivers")}</dt>
+                    <dt className="text-xs text-muted-foreground">{t("colDrivers")}</dt>
                     <dd className="mt-1 text-sm tabular-nums">{viewing.driver_count}</dd>
                   </div>
                   <div className="rounded-lg border border-border bg-card p-3">
-                    <dt className="text-[10px] text-muted-foreground">{t("dpdTarget")}</dt>
+                    <dt className="text-xs text-muted-foreground">{t("dpdTarget")}</dt>
                     <dd className="mt-1 text-sm tabular-nums">
                       {viewing.dpd_target != null ? (
                         <Badge variant="outline" className="border-primary/20 bg-primary/10 font-mono text-primary">
@@ -686,7 +686,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                     </dd>
                   </div>
                   <div className="rounded-lg border border-border bg-card p-3">
-                    <dt className="text-[10px] text-muted-foreground">{t("incentiveScheme")}</dt>
+                    <dt className="text-xs text-muted-foreground">{t("incentiveScheme")}</dt>
                     <dd className="mt-1 text-sm">
                       {viewing.incentive_enabled ? (
                         <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
@@ -700,7 +700,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                   {viewing.incentive_enabled ? (
                     <>
                       <div className="rounded-lg border border-border bg-card p-3">
-                        <dt className="text-[10px] text-muted-foreground">{t("aboveKwd")}</dt>
+                        <dt className="text-xs text-muted-foreground">{t("aboveKwd")}</dt>
                         <dd className="mt-1 font-mono text-sm tabular-nums text-emerald-700">
                           {viewing.incentive_above_kwd != null
                             ? viewing.incentive_above_kwd.toFixed(3)
@@ -708,7 +708,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                         </dd>
                       </div>
                       <div className="rounded-lg border border-border bg-card p-3">
-                        <dt className="text-[10px] text-muted-foreground">{t("belowKwd")}</dt>
+                        <dt className="text-xs text-muted-foreground">{t("belowKwd")}</dt>
                         <dd className="mt-1 font-mono text-sm tabular-nums text-destructive">
                           {viewing.incentive_below_kwd != null
                             ? viewing.incentive_below_kwd.toFixed(3)
@@ -716,7 +716,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                         </dd>
                       </div>
                       <div className="rounded-lg border border-border bg-card p-3 sm:col-span-2">
-                        <dt className="text-[10px] text-muted-foreground">{t("effectiveFrom")}</dt>
+                        <dt className="text-xs text-muted-foreground">{t("effectiveFrom")}</dt>
                         <dd className="mt-1 text-sm tabular-nums">
                           {viewing.effective_from ?? (
                             <span className="text-muted-foreground">{t("notSet")}</span>
@@ -727,7 +727,7 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
                   ) : null}
                 </dl>
 
-                <p className="text-[10px] text-muted-foreground">{t("companyConfigNote")}</p>
+                <p className="text-xs text-muted-foreground">{t("companyConfigNote")}</p>
               </div>
 
               <AppModalFooter title={t("viewTitle")} subtitle={viewing.name}>

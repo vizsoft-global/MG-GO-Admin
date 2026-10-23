@@ -56,14 +56,14 @@ export function StaffUserList({
   return (
     <aside className="flex min-h-0 flex-col bg-white lg:border-e lg:border-[#E4E4E7]">
       <div className="flex shrink-0 flex-col gap-3 px-4 pt-4 pb-3">
-        <p className="text-[10.5px] text-[#71717A]">{t("breadcrumb")}</p>
+        <p className="text-xs text-[#71717A]">{t("breadcrumb")}</p>
         <p className="text-base font-bold text-[#111827]">{t("usersTitle")}</p>
         <SearchField
           value={search}
           onChange={onSearch}
           placeholder={t("searchUsers")}
           clearLabel={t("clearSearch")}
-          inputClassName="h-[38px] rounded-lg border-[#E4E4E7] bg-[#FAFAFA] text-[12.5px] ps-8"
+          inputClassName="h-[38px] rounded-lg border-[#E4E4E7] bg-[#FAFAFA] text-xs ps-8"
         />
         <div className="flex flex-wrap gap-1.5">
           {DEPT_KEYS.map((chip) => {
@@ -75,7 +75,7 @@ export function StaffUserList({
                 aria-pressed={active}
                 onClick={() => onDepartment(chip.id)}
                 className={cn(
-                  "inline-flex h-[26px] cursor-pointer items-center gap-1 rounded-full border px-2.5 text-[10.5px] font-medium transition-colors duration-150",
+                  "inline-flex h-[26px] cursor-pointer items-center gap-1 rounded-full border px-2.5 text-xs font-medium transition-colors duration-150",
                   active
                     ? "border-[#18181B] bg-[#18181B] text-white"
                     : "border-[#E4E4E7] bg-white text-[#4B5563] hover:bg-[#F4F4F5]",
@@ -111,24 +111,24 @@ export function StaffUserList({
                         : "border-s-transparent hover:bg-[#FAFAFA]",
                     )}
                   >
-                    <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[#FDE68A] text-[11px] font-semibold text-[#574500]">
+                    <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[#FDE68A] text-xs font-semibold text-[#574500]">
                       {initials(row.fullName)}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1">
-                        <span className="truncate text-[13px] font-semibold text-[#18181B]">
+                        <span className="truncate text-sm font-semibold text-[#18181B]">
                           {name}
                         </span>
                         <ChevronRight className="size-3.5 shrink-0 text-[#9CA3AF]" aria-hidden />
                       </span>
-                      <span className="block truncate text-[11px] text-[#6B7280]">
+                      <span className="block truncate text-xs text-[#6B7280]">
                         {[row.email, row.staffDepartment ? t(`dept.${row.staffDepartment}`) : null]
                           .filter(Boolean)
                           .join(" · ")}
                       </span>
                       <span
                         className={cn(
-                          "mt-0.5 flex items-center gap-1 text-[10.5px] font-medium",
+                          "mt-0.5 flex items-center gap-1 text-xs font-medium",
                           selected ? "text-[#B54708]" : "text-[#6B7280]",
                         )}
                       >

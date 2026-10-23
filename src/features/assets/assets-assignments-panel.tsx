@@ -129,7 +129,7 @@ export function AssetsAssignmentsPanel() {
                 <TableCell className="whitespace-nowrap">
                   <p className="font-medium">{row.driver_name}</p>
                   {row.employee_id ? (
-                    <p className="text-[11px] text-muted-foreground">{row.employee_id}</p>
+                    <p className="text-xs text-muted-foreground">{row.employee_id}</p>
                   ) : null}
                 </TableCell>
                 <TableCell className="whitespace-nowrap">{row.employee_company ?? "—"}</TableCell>

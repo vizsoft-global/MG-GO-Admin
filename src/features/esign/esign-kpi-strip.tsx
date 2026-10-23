@@ -39,7 +39,7 @@ export function EsignDotKpis({ items }: { items: EsignDotKpi[] }) {
             {item.label}
           </p>
           <p className="mt-1 text-2xl font-semibold tabular-nums leading-none">{item.value}</p>
-          {item.unit ? <p className="mt-1 text-[11px] text-muted-foreground">{item.unit}</p> : null}
+          {item.unit ? <p className="mt-1 text-xs text-muted-foreground">{item.unit}</p> : null}
         </div>
       ))}
     </div>

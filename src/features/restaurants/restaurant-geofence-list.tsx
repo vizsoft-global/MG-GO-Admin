@@ -29,16 +29,16 @@ export function RestaurantGeofenceList({
         <Label className="text-xs font-semibold text-foreground">
           {t("title")}
         </Label>
-        <span className="text-[10px] tabular-nums text-muted-foreground">
+        <span className="text-xs tabular-nums text-muted-foreground">
           {geofences.length}
         </span>
       </div>
-      <p className="text-[11px] leading-snug text-muted-foreground">
+      <p className="text-xs leading-snug text-muted-foreground">
         {t("subtitle")}
       </p>
 
       {geofences.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-[11px] text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
           {t("empty")}
         </div>
       ) : (
@@ -83,7 +83,7 @@ export function RestaurantGeofenceList({
                           · {t(`shape.${geofence.zone_type}`)}
                         </span>
                       </span>
-                      <span className="block text-[10px] text-muted-foreground">
+                      <span className="block text-xs text-muted-foreground">
                         {area}
                       </span>
                     </span>

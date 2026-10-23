@@ -246,7 +246,7 @@ export function OrderReconPageShell() {
             </Button>
           </>
         ) : null}
-        <p className="text-[10px] text-muted-foreground">{t("matchNote")}</p>
+        <p className="text-xs text-muted-foreground">{t("matchNote")}</p>
       </div>
 
       {overSpan ? (
@@ -290,9 +290,9 @@ export function OrderReconPageShell() {
                   )}
                   style={!selected ? { backgroundColor: tone.bg, color: tone.fg } : undefined}
                 >
-                  <p className="text-[10px] font-semibold uppercase tracking-wide">{t(`result.${card.result}`)}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide">{t(`result.${card.result}`)}</p>
                   <p className="text-lg font-semibold">{card.count}</p>
-                  <p className="text-[10px]">
+                  <p className="text-xs">
                     {formatPct(card.share)} · AM {card.am} · MGGO {card.mggo}
                   </p>
                 </button>
@@ -353,7 +353,7 @@ export function OrderReconPageShell() {
                 dayIndex != null ? (
                   <button
                     type="button"
-                    className="h-8 rounded-md border border-border px-2 text-[11px]"
+                    className="h-8 rounded-md border border-border px-2 text-xs"
                     onClick={() => setDayIndex(null)}
                   >
                     {t("clearDay", { day: days[dayIndex]?.slice(8) ?? "" })}
@@ -368,7 +368,7 @@ export function OrderReconPageShell() {
               {chips.map((chip) => (
                 <span
                   key={chip.id}
-                  className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-muted/40 px-2 text-[11px]"
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-muted/40 px-2 text-xs"
                 >
                   {filterChipLabel(chip.id, chip.value, colLabels)}
                   <button
@@ -384,7 +384,7 @@ export function OrderReconPageShell() {
                   </button>
                 </span>
               ))}
-              <button type="button" className="h-7 text-[11px] text-primary" onClick={() => setColumns({})}>
+              <button type="button" className="h-7 text-xs text-primary" onClick={() => setColumns({})}>
                 {t("clearColumnFilters")}
               </button>
             </div>

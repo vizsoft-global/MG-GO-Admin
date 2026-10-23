@@ -4,7 +4,8 @@ export type EmployeeCatalogKind =
   | "employee_statuses"
   | "employee_sections"
   | "nationality_categories"
-  | "bank_codes";
+  | "bank_codes"
+  | "sponsorships";
 
 export type EmployeeCatalogRow = {
   key: string;
@@ -58,6 +59,9 @@ export const DEFAULT_EMPLOYEE_STATUSES: readonly EmployeeCatalogRow[] = [
   { key: "training", label_en: "Training", label_ar: "تدريب", is_active: true, is_system: true, sort_order: 70, color: "#06B6D4" },
   { key: "extension", label_en: "Extension", label_ar: "تمديد", is_active: true, is_system: true, sort_order: 80, color: "#0EA5E9" },
   { key: "accident", label_en: "Accident", label_ar: "حادث", is_active: true, is_system: true, sort_order: 90, color: "#EF4444" },
+  { key: "cancelled", label_en: "Cancelled", label_ar: "ملغي", is_active: true, is_system: true, sort_order: 100, color: "#94A3B8" },
+  { key: "leave", label_en: "Leave", label_ar: "إجازة", is_active: true, is_system: true, sort_order: 110, color: "#60A5FA" },
+  { key: "leave_return", label_en: "Leave Return", label_ar: "عودة من الإجازة", is_active: true, is_system: true, sort_order: 120, color: "#22C55E" },
 ];
 
 export const DEFAULT_EMPLOYEE_SECTIONS: readonly EmployeeCatalogRow[] = [
@@ -72,7 +76,44 @@ export const DEFAULT_EMPLOYEE_SECTIONS: readonly EmployeeCatalogRow[] = [
   },
 ];
 
-export const DEFAULT_NATIONALITY_CATEGORIES: readonly EmployeeCatalogRow[] = [];
+/**
+ * The nationality catalog HR files a rider under. Seeded so the Profile's
+ * Nationality picker is usable on day one; an operator edit to any row
+ * wins, and a stored list keeps its own order.
+ */
+export const DEFAULT_NATIONALITY_CATEGORIES: readonly EmployeeCatalogRow[] = [
+  { key: "bangladeshi", label_en: "Bangladeshi", label_ar: "بنغلاديشي", is_active: true, is_system: true, sort_order: 10 },
+  { key: "benin", label_en: "Benin", label_ar: "بنيني", is_active: true, is_system: true, sort_order: 20 },
+  { key: "burkina_faso", label_en: "Burkina Faso", label_ar: "بوركيني", is_active: true, is_system: true, sort_order: 30 },
+  { key: "chad", label_en: "Chad", label_ar: "تشادي", is_active: true, is_system: true, sort_order: 40 },
+  { key: "egyptian", label_en: "Egyptian", label_ar: "مصري", is_active: true, is_system: true, sort_order: 50 },
+  { key: "ethiopia", label_en: "Ethiopia", label_ar: "إثيوبي", is_active: true, is_system: true, sort_order: 60 },
+  { key: "filipino", label_en: "Filipino", label_ar: "فلبيني", is_active: true, is_system: true, sort_order: 70 },
+  { key: "ghana", label_en: "Ghana", label_ar: "غاني", is_active: true, is_system: true, sort_order: 80 },
+  { key: "indian", label_en: "Indian", label_ar: "هندي", is_active: true, is_system: true, sort_order: 90 },
+  { key: "kenya", label_en: "Kenya", label_ar: "كيني", is_active: true, is_system: true, sort_order: 100 },
+  { key: "mali", label_en: "Mali", label_ar: "مالي", is_active: true, is_system: true, sort_order: 110 },
+  { key: "nepalese", label_en: "Nepalese", label_ar: "نيبالي", is_active: true, is_system: true, sort_order: 120 },
+  { key: "nigeria", label_en: "Nigeria", label_ar: "نيجيري", is_active: true, is_system: true, sort_order: 130 },
+  { key: "pakistani", label_en: "Pakistani", label_ar: "باكستاني", is_active: true, is_system: true, sort_order: 140 },
+  { key: "sierra_leone", label_en: "Sierra Leone", label_ar: "سيراليوني", is_active: true, is_system: true, sort_order: 150 },
+  { key: "sri_lankan", label_en: "Sri Lankan", label_ar: "سريلانكي", is_active: true, is_system: true, sort_order: 160 },
+  { key: "sudan", label_en: "Sudan", label_ar: "سوداني", is_active: true, is_system: true, sort_order: 170 },
+  { key: "syrian", label_en: "Syrian", label_ar: "سوري", is_active: true, is_system: true, sort_order: 180 },
+  { key: "togo", label_en: "Togo", label_ar: "توغولي", is_active: true, is_system: true, sort_order: 190 },
+  { key: "ugandan", label_en: "Ugandan", label_ar: "أوغندي", is_active: true, is_system: true, sort_order: 200 },
+];
+
+/**
+ * Who sponsors the rider's residency. A global catalog rather than a fixed
+ * enum so HR can add a new sponsor company without a deploy.
+ */
+export const DEFAULT_SPONSORSHIPS: readonly EmployeeCatalogRow[] = [
+  { key: "in_house", label_en: "In-house", label_ar: "داخلي", is_active: true, is_system: true, sort_order: 10 },
+  { key: "partner", label_en: "Partner", label_ar: "شريك", is_active: true, is_system: true, sort_order: 20 },
+  { key: "outsourced", label_en: "Outsourced", label_ar: "مُسنَد لجهة خارجية", is_active: true, is_system: true, sort_order: 30 },
+  { key: "government", label_en: "Government", label_ar: "حكومي", is_active: true, is_system: true, sort_order: 40 },
+];
 
 export const DEFAULT_BANK_CODES: readonly EmployeeCatalogRow[] = [
   { key: "nbk", label_en: "National Bank of Kuwait", label_ar: "بنك الكويت الوطني", is_active: true, is_system: true, sort_order: 10, is_nbk: true },
@@ -139,6 +180,8 @@ export function seedsForKind(kind: EmployeeCatalogKind): readonly EmployeeCatalo
       return DEFAULT_NATIONALITY_CATEGORIES;
     case "bank_codes":
       return DEFAULT_BANK_CODES;
+    case "sponsorships":
+      return DEFAULT_SPONSORSHIPS;
     default: {
       const _never: never = kind;
       return _never;

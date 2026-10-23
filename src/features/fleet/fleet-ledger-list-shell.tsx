@@ -262,7 +262,7 @@ function LedgerRow({
         <p className="font-medium">{plate ?? "—"}</p>
         <Link
           href={href}
-          className="inline-flex items-center gap-1 text-[11px] text-primary hover:bg-primary/10"
+          className="inline-flex items-center gap-1 text-xs text-primary hover:bg-primary/10"
           onClick={(event) => event.stopPropagation()}
         >
           <ExternalLink className="h-3 w-3" />

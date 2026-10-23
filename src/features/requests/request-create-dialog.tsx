@@ -413,7 +413,7 @@ export function RequestCreateDialog({
           </div>
 
           {blocked ? (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
               <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>{t(`create.gated.${blocked}` as "create.gated.tenure")}</span>
             </div>
@@ -781,7 +781,7 @@ export function RequestCreateDialog({
                             set(key, checked === true ? "true" : "")
                           }
                         />
-                        <span className="text-[11px] text-muted-foreground">{label}</span>
+                        <span className="text-xs text-muted-foreground">{label}</span>
                       </label>
                     );
                   }
@@ -855,7 +855,7 @@ export function RequestCreateDialog({
 
             {kindSpecs.length > 0 ? (
               <div className="space-y-2 sm:col-span-2">
-                <p className="text-[11px] font-semibold text-foreground">
+                <p className="text-xs font-semibold text-foreground">
                   {t("create.kinds.heading")}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
@@ -868,7 +868,7 @@ export function RequestCreateDialog({
                           {spec.required ? (
                             <span className="text-destructive"> *</span>
                           ) : (
-                            <span className="ms-1 text-[10px] font-normal text-muted-foreground">
+                            <span className="ms-1 text-xs font-normal text-muted-foreground">
                               {t("create.kinds.optional")}
                             </span>
                           )}
@@ -932,7 +932,7 @@ export function RequestCreateDialog({
                   checked={declaration}
                   onCheckedChange={(checked) => setDeclaration(checked === true)}
                 />
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {t("create.declaration")} <span className="text-destructive">*</span>
                 </span>
               </label>

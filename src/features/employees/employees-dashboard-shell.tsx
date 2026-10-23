@@ -40,7 +40,7 @@ function BucketGrid({
           buckets.map((bucket, index) => (
             <Card key={bucket.key} className={`rounded-xl border-0 shadow-sm ${TILE[index % TILE.length]}`}>
               <CardContent className="p-4">
-                <p className="text-[10px] font-medium uppercase tracking-wide opacity-80">
+                <p className="text-xs font-medium uppercase tracking-wide opacity-80">
                   {labels(bucket.key)}
                 </p>
                 <p className="mt-1 text-2xl font-bold tabular-nums">{bucket.count}</p>
@@ -80,13 +80,13 @@ export function EmployeesDashboardShell() {
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         <Card className="rounded-xl border-border bg-card shadow-sm">
           <CardContent className="p-4">
-            <p className="text-[10px] text-muted-foreground">{t("live")}</p>
+            <p className="text-xs text-muted-foreground">{t("live")}</p>
             <p className="text-2xl font-bold tabular-nums">{data?.total ?? "—"}</p>
           </CardContent>
         </Card>
         <Card className="rounded-xl border-border bg-card shadow-sm">
           <CardContent className="p-4">
-            <p className="text-[10px] text-muted-foreground">{t("archived")}</p>
+            <p className="text-xs text-muted-foreground">{t("archived")}</p>
             <p className="text-2xl font-bold tabular-nums">{data?.archived ?? "—"}</p>
           </CardContent>
         </Card>

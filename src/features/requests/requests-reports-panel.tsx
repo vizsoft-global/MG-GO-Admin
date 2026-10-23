@@ -269,7 +269,7 @@ export function RequestsReportsPanel() {
               {t("export")}
             </Button>
             {totalCount > rows.length ? (
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("exportTruncated", {
                   shown: `${rows.length}`,
                   total: `${totalCount}`,
@@ -332,7 +332,7 @@ export function RequestsReportsPanel() {
             <AppListCard className="h-full space-y-1 p-3 lg:col-span-2">
               <div className="flex items-baseline gap-2">
                 <h3 className="text-sm font-semibold">{t("volumeTitle")}</h3>
-                <p className="truncate text-[11px] text-muted-foreground">
+                <p className="truncate text-xs text-muted-foreground">
                   {t("volumeSubtitle")}
                 </p>
               </div>
@@ -346,7 +346,7 @@ export function RequestsReportsPanel() {
                       className="flex h-full flex-1 flex-col items-center justify-end gap-1"
                       title={t("volumeTooltip", { week: bucket.label, count: bucket.count })}
                     >
-                      <span className="text-[10px] tabular-nums text-muted-foreground">
+                      <span className="text-xs tabular-nums text-muted-foreground">
                         {bucket.count > 0 ? bucket.count : ""}
                       </span>
                       <div
@@ -355,7 +355,7 @@ export function RequestsReportsPanel() {
                           height: `${Math.max(2, Math.round((bucket.count / maxVolume) * 80))}%`,
                         }}
                       />
-                      <span className="text-[10px] text-muted-foreground">{bucket.label}</span>
+                      <span className="text-xs text-muted-foreground">{bucket.label}</span>
                     </div>
                   ))}
                 </div>
@@ -365,12 +365,12 @@ export function RequestsReportsPanel() {
             <AppListCard className="h-full space-y-1 p-3">
               <div className="flex items-baseline gap-2">
                 <h3 className="text-sm font-semibold">{t("stepTimeTitle")}</h3>
-                <p className="truncate text-[11px] text-muted-foreground">
+                <p className="truncate text-xs text-muted-foreground">
                   {t("stepTimeSubtitle")}
                 </p>
               </div>
               {maxStepSeconds === 0 ? (
-                <p className="py-6 text-center text-[11px] text-muted-foreground">
+                <p className="py-6 text-center text-xs text-muted-foreground">
                   {t("stepTimeEmpty")}
                 </p>
               ) : (
@@ -531,19 +531,19 @@ export function RequestsReportsPanel() {
                     <p className="text-base font-semibold tabular-nums text-emerald-700">
                       {esignCounts?.signed ?? "—"}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">{t("esignSigned")}</p>
+                    <p className="text-xs text-muted-foreground">{t("esignSigned")}</p>
                   </div>
                   <div>
                     <p className="text-base font-semibold tabular-nums text-warning">
                       {esignCounts?.pending ?? "—"}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">{t("esignPending")}</p>
+                    <p className="text-xs text-muted-foreground">{t("esignPending")}</p>
                   </div>
                   <div>
                     <p className="text-base font-semibold tabular-nums text-muted-foreground">
                       {esignCounts?.expired ?? "—"}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">{t("esignExpired")}</p>
+                    <p className="text-xs text-muted-foreground">{t("esignExpired")}</p>
                   </div>
                 </div>
               </AppListCard>
@@ -556,15 +556,15 @@ export function RequestsReportsPanel() {
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <p className="text-base font-semibold tabular-nums">{pendingAck}</p>
-                    <p className="text-[10px] text-muted-foreground">{t("ackPending")}</p>
+                    <p className="text-xs text-muted-foreground">{t("ackPending")}</p>
                   </div>
                   <div title={t("ackGapNote")}>
                     <p className="text-base font-semibold tabular-nums text-muted-foreground">—</p>
-                    <p className="text-[10px] text-muted-foreground">{t("ackRate")}</p>
+                    <p className="text-xs text-muted-foreground">{t("ackRate")}</p>
                   </div>
                   <div title={t("ackGapNote")}>
                     <p className="text-base font-semibold tabular-nums text-muted-foreground">—</p>
-                    <p className="text-[10px] text-muted-foreground">{t("ackAvgTime")}</p>
+                    <p className="text-xs text-muted-foreground">{t("ackAvgTime")}</p>
                   </div>
                 </div>
                 {/* Explains the two "—" values above without spending a third line on
@@ -582,19 +582,19 @@ export function RequestsReportsPanel() {
                     <p className="text-base font-semibold tabular-nums text-emerald-700">
                       {appointmentCounts?.accepted ?? "—"}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">{t("appointmentsAccepted")}</p>
+                    <p className="text-xs text-muted-foreground">{t("appointmentsAccepted")}</p>
                   </div>
                   <div>
                     <p className="text-base font-semibold tabular-nums text-warning">
                       {appointmentCounts?.pending ?? "—"}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">{t("appointmentsPending")}</p>
+                    <p className="text-xs text-muted-foreground">{t("appointmentsPending")}</p>
                   </div>
                   <div>
                     <p className="text-base font-semibold tabular-nums text-destructive">
                       {appointmentCounts?.rejected ?? "—"}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">{t("appointmentsRejected")}</p>
+                    <p className="text-xs text-muted-foreground">{t("appointmentsRejected")}</p>
                   </div>
                 </div>
               </AppListCard>

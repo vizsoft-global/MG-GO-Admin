@@ -61,15 +61,15 @@ export function NotificationMobilePreview({
           {view === "collapsed" ? (
             <div className="space-y-2 p-3">
               <div className="flex items-start gap-2 rounded-xl bg-white p-2.5 shadow-sm dark:bg-zinc-900">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-[10px] font-bold text-primary-foreground">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
                   DPD
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-xs font-semibold">{title || t("previewTitlePlaceholder")}</p>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">{t("previewNow")}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{t("previewNow")}</span>
                   </div>
-                  <p className="line-clamp-2 text-[11px] text-muted-foreground">
+                  <p className="line-clamp-2 text-xs text-muted-foreground">
                     {body || t("previewBodyPlaceholder")}
                   </p>
                 </div>
@@ -94,14 +94,14 @@ export function NotificationMobilePreview({
                 <div className="h-20 rounded-t-[1.25rem] bg-gradient-to-r from-primary/20 to-primary/5" />
               )}
               <div className="space-y-2 p-4">
-                <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                <span className="inline-flex rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                   {t(`categories.${category}`)}
                 </span>
                 <p className="text-sm font-semibold">{title || t("previewTitlePlaceholder")}</p>
                 <p className="whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
                   {body || t("previewBodyPlaceholder")}
                 </p>
-                <p className="rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground">
+                <p className="rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs text-muted-foreground">
                   {actionSummary}
                 </p>
               </div>

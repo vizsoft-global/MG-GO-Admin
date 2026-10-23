@@ -15,7 +15,7 @@ export function DemoDataBadge({ tooltipKey }: { tooltipKey?: string }) {
     <TooltipProvider delay={200}>
       <Tooltip>
         <TooltipTrigger
-          className="cursor-default rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+          className="cursor-default rounded-full bg-muted px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground"
         >
           {t("demoBadge")}
         </TooltipTrigger>

@@ -98,14 +98,14 @@ function DeltaChip({
   const t = useTranslations("pages.performance.analysis");
   if (suppressed) {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
         <ArrowRight className="size-3" />
         {t("deltaUnavailable")}
       </span>
     );
   }
   if (value == null) {
-    return <span className="text-[11px] text-muted-foreground">—</span>;
+    return <span className="text-xs text-muted-foreground">—</span>;
   }
   const up = value > 0;
   const flat = value === 0;
@@ -113,7 +113,7 @@ function DeltaChip({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 text-[11px] font-medium",
+        "inline-flex items-center gap-1 text-xs font-medium",
         flat && "text-muted-foreground",
         !flat && up && "text-emerald-700",
         !flat && !up && "text-destructive",
@@ -310,7 +310,7 @@ export function PerformanceAnalysisPanel() {
                 tone="down"
               />
             </div>
-            <p className="mt-auto text-[10px] leading-snug text-muted-foreground">
+            <p className="mt-auto text-xs leading-snug text-muted-foreground">
               {t("bandsHint")}
             </p>
           </CardContent>
@@ -341,7 +341,7 @@ export function PerformanceAnalysisPanel() {
         <Card className="rounded-xl border-border shadow-sm">
           <CardContent className="flex h-full flex-col p-4">
             <p className="text-sm font-semibold">{t("byTeam")}</p>
-            <p className="mb-2 text-[10px] leading-snug text-muted-foreground">
+            <p className="mb-2 text-xs leading-snug text-muted-foreground">
               {t("byTeamHint")}
             </p>
             <GroupBars
@@ -378,7 +378,7 @@ function MoveStat({
       >
         {value}
       </p>
-      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
     </div>
   );
 }
@@ -419,7 +419,7 @@ function ComparabilityNotice({
       <AlertTriangle className="mt-0.5 size-4 shrink-0" />
       <div className="space-y-0.5">
         <p className="text-xs font-semibold">{t("coverageTitle")}</p>
-        <p className="text-[11px] leading-snug">
+        <p className="text-xs leading-snug">
           {t("coverageBody")} {parts.join(" ")}
         </p>
       </div>

@@ -534,7 +534,7 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
       ) : (
         <span className="w-5 shrink-0" />
       )}
-      <span className="w-6 shrink-0 text-center text-[10px] font-medium tabular-nums text-muted-foreground">
+      <span className="w-6 shrink-0 text-center text-xs font-medium tabular-nums text-muted-foreground">
         {orderNum}
       </span>
       <IconPicker
@@ -610,7 +610,7 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
           <p className="mb-2 text-xs font-medium text-foreground">{t("copySectionTitle")}</p>
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-[120px] flex-1 space-y-1">
-              <Label className="text-[11px] text-muted-foreground">{t("copyFrom")}</Label>
+              <Label className="text-xs text-muted-foreground">{t("copyFrom")}</Label>
               <Select
                 items={roleSelectItems}
                 value={copyFromRole}
@@ -630,7 +630,7 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
             </div>
             <ArrowRight className="mb-1.5 hidden size-3.5 shrink-0 text-muted-foreground sm:block" />
             <div className="min-w-[120px] flex-1 space-y-1">
-              <Label className="text-[11px] text-muted-foreground">{t("copyTo")}</Label>
+              <Label className="text-xs text-muted-foreground">{t("copyTo")}</Label>
               <Select
                 items={roleSelectItems}
                 value={copyToRole}
@@ -675,7 +675,7 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
               </Button>
             )}
           </div>
-          <p className="mt-1.5 text-[11px] text-muted-foreground">{t("copySectionHint")}</p>
+          <p className="mt-1.5 text-xs text-muted-foreground">{t("copySectionHint")}</p>
         </div>
       )}
 
@@ -705,7 +705,7 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
                       >
                         {({ attributes, listeners }) => (
                           <div>
-                            <span className="mb-0.5 block px-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <span className="mb-0.5 block px-0.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                               {orderNum}. {t("topLevel")}
                             </span>
                             {renderRowControls(r, orderNum, { attributes, listeners })}
@@ -732,7 +732,7 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
                               attributes={attributes}
                               listeners={listeners}
                             />
-                            <span className="w-5 text-center text-[10px] font-medium tabular-nums text-muted-foreground">
+                            <span className="w-5 text-center text-xs font-medium tabular-nums text-muted-foreground">
                               {orderNum}
                             </span>
                             <IconPicker
@@ -748,9 +748,9 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
                             <Input
                               value={g.label}
                               onChange={(e) => renameGroup(g.id, e.target.value)}
-                              className="h-7 max-w-[160px] text-[10px] font-semibold uppercase tracking-wide"
+                              className="h-7 max-w-[160px] text-xs font-semibold uppercase tracking-wide"
                             />
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="text-xs text-muted-foreground">
                               ({sectionRows.length})
                             </span>
                             <div className="ms-auto flex items-center gap-1">
@@ -760,7 +760,7 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
                                 variant={isPanel ? "default" : "outline"}
                                 onClick={() => toggleGroupMode(g.id)}
                                 title={isPanel ? t("modeHintPanel") : t("modeHintInline")}
-                                className="h-6 gap-1 px-2 text-[10px] cursor-pointer"
+                                className="h-6 gap-1 px-2 text-xs cursor-pointer"
                               >
                                 <PanelRight className="size-3" />
                                 {isPanel ? t("panel") : t("inline")}

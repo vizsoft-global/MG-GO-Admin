@@ -67,7 +67,7 @@ export function EsignIndividualSentPanel() {
   return (
     <div className="grid min-w-0 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
       <aside className="flex flex-col gap-2 border-b border-border p-3 lg:border-b-0 lg:border-e">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {tTracker("scopeIndividual")}
         </p>
         <SearchSelect
@@ -114,7 +114,7 @@ export function EsignIndividualSentPanel() {
               >
                 {t(`filters.${tab}`)}
                 {count != null ? (
-                  <span className="rounded-full bg-muted px-1.5 text-[10px] tabular-nums">
+                  <span className="rounded-full bg-muted px-1.5 text-xs tabular-nums">
                     {count}
                   </span>
                 ) : null}
@@ -154,7 +154,7 @@ export function EsignIndividualSentPanel() {
                   {row.request_code}
                   <Link
                     href={`/requests/esign/${row.id}`}
-                    className="mt-0.5 flex items-center gap-1 font-sans text-[10px] text-primary hover:underline"
+                    className="mt-0.5 flex items-center gap-1 font-sans text-xs text-primary hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <ExternalLink className="h-3 w-3" />
@@ -163,7 +163,7 @@ export function EsignIndividualSentPanel() {
                 </TableCell>
                 <TableCell className="text-sm">
                   <div>{row.driver_name}</div>
-                  <div className="text-[11px] text-muted-foreground">{row.driver_code}</div>
+                  <div className="text-xs text-muted-foreground">{row.driver_code}</div>
                 </TableCell>
                 <TableCell
                   className="max-w-[320px] truncate text-sm font-medium"

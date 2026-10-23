@@ -165,15 +165,15 @@ export function OpsRidersTab({
           { label: t("kpi.tgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
         ]}
       />
-      <p className="text-[10px] text-muted-foreground">{t("tableFiltersHint")}</p>
+      <p className="text-xs text-muted-foreground">{t("tableFiltersHint")}</p>
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="flex items-center justify-end gap-2 border-b border-border px-3 py-2">
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {t("showingRiders", { count: filtered.length })}
           </span>
           <button
             type="button"
-            className="h-8 text-[11px] text-primary"
+            className="h-8 text-xs text-primary"
             onClick={() =>
               downloadCsv(
                 "ops-riders",

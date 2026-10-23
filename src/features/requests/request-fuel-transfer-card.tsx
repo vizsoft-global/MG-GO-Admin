@@ -60,15 +60,15 @@ export function RequestFuelTransferCard({
       </div>
       {compact ? (
         value != null ? (
-          <p className="mt-1 text-[10px] text-muted-foreground">{t("hint")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{t("hint")}</p>
         ) : null
       ) : value == null ? (
-        <p className="mt-2 flex items-center gap-1.5 text-[10px] text-warning">
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-warning">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           {t("notSet")}
         </p>
       ) : (
-        <p className="mt-2 text-[10px] text-muted-foreground">{t("hint")}</p>
+        <p className="mt-2 text-xs text-muted-foreground">{t("hint")}</p>
       )}
     </div>
   );

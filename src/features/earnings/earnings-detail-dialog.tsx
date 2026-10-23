@@ -205,7 +205,7 @@ export function EarningsDetailDialog({
                             <p className="truncate font-medium text-foreground">
                               {rule.rule_name ?? "—"}
                             </p>
-                            <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                            <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                               {rule.period ? (
                                 <Pill tone="primary" variant="soft">
                                   {rule.period}
@@ -273,7 +273,7 @@ export function EarningsDetailDialog({
                               <span className="block truncate text-foreground">
                                 {d.partner_name ?? "—"}
                               </span>
-                              <span className="block truncate text-[11px] text-muted-foreground">
+                              <span className="block truncate text-xs text-muted-foreground">
                                 {d.restaurant_name ?? "—"}
                               </span>
                             </TableCell>

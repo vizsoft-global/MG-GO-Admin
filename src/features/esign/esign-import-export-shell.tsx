@@ -230,11 +230,11 @@ export function EsignImportExportShell() {
         <AppListCard className="h-full space-y-3 p-4 lg:col-span-2">
           <div>
             <p className="text-sm font-semibold">{t("filtersTitle")}</p>
-            <p className="text-[11px] text-muted-foreground">{t("filtersBody")}</p>
+            <p className="text-xs text-muted-foreground">{t("filtersBody")}</p>
           </div>
 
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-muted-foreground">
+            <Label className="text-xs uppercase text-muted-foreground">
               {t("filterPreset")}
             </Label>
             <Select
@@ -257,7 +257,7 @@ export function EsignImportExportShell() {
 
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label className="text-[10px] uppercase text-muted-foreground">
+              <Label className="text-xs uppercase text-muted-foreground">
                 {t("dateRange")}
               </Label>
               <Select
@@ -283,7 +283,7 @@ export function EsignImportExportShell() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-[10px] uppercase text-muted-foreground">
+              <Label className="text-xs uppercase text-muted-foreground">
                 {t("statusLabel")}
               </Label>
               <Select
@@ -315,7 +315,7 @@ export function EsignImportExportShell() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <Info className="h-3.5 w-3.5 shrink-0" />
             {isLoading ? t("matchLoading") : t("matchCount", { count: rows.length })}
           </div>
@@ -324,7 +324,7 @@ export function EsignImportExportShell() {
         <AppListCard className="flex h-full flex-col gap-3 p-4">
           <div>
             <p className="text-sm font-semibold">{t("columnsTitle")}</p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("columnsSelected", {
                 selected: activeColumns.length,
                 total: TOTAL_COLUMNS,
@@ -358,7 +358,7 @@ export function EsignImportExportShell() {
           </div>
 
           <div className="mt-auto space-y-2 border-t border-border pt-3">
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("sizeHint", { kb: approxKb })}
             </p>
             <div className="flex flex-wrap gap-2">

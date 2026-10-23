@@ -78,7 +78,7 @@ function WeightField({
         onChange={(e) => onChange(e.target.value)}
       />
       {hint ? (
-        <p className="text-[10px] text-muted-foreground">{hint}</p>
+        <p className="text-xs text-muted-foreground">{hint}</p>
       ) : null}
     </div>
   );
@@ -186,7 +186,7 @@ function WeightsSection() {
 
       <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2">
         <Gauge className="size-3.5 text-primary" />
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {t("preview", { rated: previewRated, unrated: previewUnrated })}
         </p>
       </div>
@@ -389,7 +389,7 @@ function ComponentsSection() {
               );
             })}
           </ul>
-          <p className="mt-2 text-[10px] text-muted-foreground">
+          <p className="mt-2 text-xs text-muted-foreground">
             {t("componentsDropNote")}
           </p>
         </div>
@@ -423,7 +423,7 @@ function ComponentsSection() {
           </div>
 
           <div className="rounded-xl border border-border bg-muted/20 p-3">
-            <p className="text-[11px] font-medium">
+            <p className="text-xs font-medium">
               {t("componentsPreviewTitle", {
                 days: PREVIEW_DAYS,
                 drivers: rows.length,
@@ -436,7 +436,7 @@ function ComponentsSection() {
             ) : (
               <div className="mt-2 grid grid-cols-3 gap-2 text-center">
                 <div className="rounded-lg border border-border bg-card p-2">
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {t("previewLegacy")}
                   </p>
                   <p className="text-lg font-semibold tabular-nums">
@@ -444,7 +444,7 @@ function ComponentsSection() {
                   </p>
                 </div>
                 <div className="rounded-lg border border-border bg-card p-2">
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {t("previewSaved")}
                   </p>
                   <p className="text-lg font-semibold tabular-nums">
@@ -452,7 +452,7 @@ function ComponentsSection() {
                   </p>
                 </div>
                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-2">
-                  <p className="text-[10px] text-primary">
+                  <p className="text-xs text-primary">
                     {t("previewEdited")}
                   </p>
                   <p className="text-lg font-semibold tabular-nums text-primary">
@@ -461,7 +461,7 @@ function ComponentsSection() {
                 </div>
               </div>
             )}
-            <p className="mt-2 text-[10px] text-muted-foreground">
+            <p className="mt-2 text-xs text-muted-foreground">
               {t("componentsPreviewNote")}
             </p>
           </div>
@@ -548,14 +548,14 @@ function TeamsSection() {
                   <Star className="size-3.5 text-amber-500" />
                   <p className="text-sm font-semibold">{label}</p>
                 </div>
-                <span className="rounded-md border border-primary/20 bg-primary/10 px-1.5 text-[10px] font-semibold tabular-nums text-primary">
+                <span className="rounded-md border border-primary/20 bg-primary/10 px-1.5 text-xs font-semibold tabular-nums text-primary">
                   {t("teamWeight", { weight: team.weight })}
                 </span>
               </div>
 
               <ul className="mt-3 min-h-0 flex-1 space-y-1">
                 {team.members.length === 0 ? (
-                  <li className="rounded-lg border border-dashed border-border px-2 py-3 text-center text-[10px] text-muted-foreground">
+                  <li className="rounded-lg border border-dashed border-border px-2 py-3 text-center text-xs text-muted-foreground">
                     {t("noMembers")}
                   </li>
                 ) : (
@@ -569,7 +569,7 @@ function TeamsSection() {
                           {m.full_name}
                         </p>
                         {m.email ? (
-                          <p className="truncate text-[10px] text-muted-foreground">
+                          <p className="truncate text-xs text-muted-foreground">
                             {m.email}
                           </p>
                         ) : null}
@@ -597,7 +597,7 @@ function TeamsSection() {
 
               <div className="mt-3 flex items-end gap-2">
                 <div className="min-w-0 flex-1 space-y-1">
-                  <Label className="flex items-center gap-1 text-[10px]">
+                  <Label className="flex items-center gap-1 text-xs">
                     <Users className="size-3" />
                     {t("addMember")}
                   </Label>
@@ -628,7 +628,7 @@ function TeamsSection() {
                 </Button>
               </div>
               {alreadyMember ? (
-                <p className="mt-1 text-[10px] text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {t("alreadyMember")}
                 </p>
               ) : null}
@@ -740,7 +740,7 @@ function CriteriaCard({ team }: { team: PerformanceRatingTeamConfig }) {
 
       <ul className="mt-3 min-h-0 flex-1 space-y-1">
         {team.criteria.length === 0 ? (
-          <li className="rounded-lg border border-dashed border-border px-2 py-3 text-center text-[10px] text-muted-foreground">
+          <li className="rounded-lg border border-dashed border-border px-2 py-3 text-center text-xs text-muted-foreground">
             {t("noCriteria")}
           </li>
         ) : (
@@ -753,7 +753,7 @@ function CriteriaCard({ team }: { team: PerformanceRatingTeamConfig }) {
                 <p className="truncate text-xs font-medium">
                   {isArabic ? criterion.label_ar : criterion.label_en}
                 </p>
-                <p className="truncate text-[10px] text-muted-foreground">
+                <p className="truncate text-xs text-muted-foreground">
                   {t("criterionRatings", { count: criterion.rating_count })}
                 </p>
               </div>
@@ -776,7 +776,7 @@ function CriteriaCard({ team }: { team: PerformanceRatingTeamConfig }) {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-8 shrink-0 px-2 text-[10px]"
+                className="h-8 shrink-0 px-2 text-xs"
                 disabled={pendingId === criterion.id}
                 onClick={() =>
                   void persist(criterion, { is_active: !criterion.is_active })
@@ -814,7 +814,7 @@ function CriteriaCard({ team }: { team: PerformanceRatingTeamConfig }) {
 
       <div className="mt-3 flex items-end gap-2">
         <div className="min-w-0 flex-1 space-y-1">
-          <Label className="text-[10px]">{t("addCriterion")}</Label>
+          <Label className="text-xs">{t("addCriterion")}</Label>
           <Input
             className="h-9 text-xs"
             value={draftLabel}
@@ -824,7 +824,7 @@ function CriteriaCard({ team }: { team: PerformanceRatingTeamConfig }) {
           />
         </div>
         <div className="w-16 shrink-0 space-y-1">
-          <Label className="text-[10px]">{t("criterionWeight")}</Label>
+          <Label className="text-xs">{t("criterionWeight")}</Label>
           <Input
             type="number"
             min="0"

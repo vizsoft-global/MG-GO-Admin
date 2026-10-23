@@ -744,6 +744,7 @@ const EMPLOYEE_CATALOG: Record<string, string> = {
   employee_sections: COLLECTIONS.employeeSections,
   nationality_categories: COLLECTIONS.nationalityCategories,
   bank_codes: COLLECTIONS.bankCodes,
+  sponsorships: COLLECTIONS.sponsorships,
 };
 
 /** `admin_upsert_employee_catalog` — HR catalogs. Gate is `drivers.manage`. */

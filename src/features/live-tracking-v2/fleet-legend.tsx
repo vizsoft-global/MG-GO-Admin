@@ -29,7 +29,7 @@ export function FleetLegend() {
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex h-7 w-full cursor-pointer items-center gap-1.5 px-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors duration-150 hover:text-foreground"
+        className="flex h-7 w-full cursor-pointer items-center gap-1.5 px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors duration-150 hover:text-foreground"
       >
         {open ? (
           <ChevronDown className="size-3" aria-hidden />
@@ -44,7 +44,7 @@ export function FleetLegend() {
           {FLEET_FILTER_STATUSES.map((status) => (
             <span
               key={status}
-              className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
             >
               <span
                 className={cn("size-2 rounded-full", FLEET_TONE_DOT[fleetStatusTone(status)])}
@@ -53,7 +53,7 @@ export function FleetLegend() {
               {t(`status.${status}`)}
             </span>
           ))}
-          <span className="col-span-2 pt-1 text-[9px] leading-tight text-muted-foreground/80">
+          <span className="col-span-2 pt-1 text-xs leading-tight text-muted-foreground/80">
             {t("legend.flagsNote")}
           </span>
         </div>

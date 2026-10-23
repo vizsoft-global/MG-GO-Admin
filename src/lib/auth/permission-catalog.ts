@@ -153,6 +153,7 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   },
   { slug: "payroll.requests", label: "Payroll requests tab", category: "payroll" },
   { slug: "payroll.settings", label: "Payroll settings tab", category: "payroll" },
+  { slug: "payroll.hr_payroll", label: "HR Payroll tab", category: "payroll" },
   {
     slug: "performance.view",
     label: "View performance dashboard",

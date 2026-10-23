@@ -101,7 +101,7 @@ export function WrongActionDetailPageShell({
               <Badge variant={severityTone(incident.severity)}>
                 {t(`severity.${incident.severity}` as "severity.low")}
               </Badge>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {t("severityWeightHint", {
                   weight: WRONG_ACTION_SEVERITY_WEIGHT[incident.severity],
                 })}

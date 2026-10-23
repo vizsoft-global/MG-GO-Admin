@@ -70,7 +70,7 @@ export function DataCleanupFilteredPanel() {
       <div className="rounded-xl border border-border p-3">
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-[220px] flex-1">
-            <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">
               {t("panelModule")}
             </p>
             <Select
@@ -102,7 +102,7 @@ export function DataCleanupFilteredPanel() {
           </Button>
         </div>
 
-        <p className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+        <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <span className="font-medium">{t("panelColumns")}</span>
           {columns.map((column) => (
             <span

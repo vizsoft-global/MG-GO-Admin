@@ -31,9 +31,9 @@ export function SectionHeading({
           ACCENT_CHIP[accent],
         )}
       >
-        <Icon className="h-3.5 w-3.5" />
+        <Icon className="size-4" />
       </span>
-      <p className="text-xs font-semibold uppercase tracking-wide text-foreground">{children}</p>
+      <p data-slot="section-heading" className="text-xs font-bold uppercase tracking-wide text-foreground">{children}</p>
     </div>
   );
 }
@@ -76,7 +76,7 @@ export function FieldBlock({
 export function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return (
-    <p className="text-[11px] text-destructive" role="alert">
+    <p className="text-xs text-destructive" role="alert">
       {message}
     </p>
   );
@@ -92,7 +92,7 @@ export function MetadataBadge({
   return (
     <div className="flex h-9 flex-col justify-center rounded-md border border-primary/20 bg-primary/10 px-2.5">
       <p className="truncate font-mono text-xs font-semibold tabular-nums text-primary">{code}</p>
-      <p className="truncate text-[10px] text-primary/70">{label}</p>
+      <p className="truncate text-xs text-primary/70">{label}</p>
     </div>
   );
 }

@@ -270,7 +270,7 @@ export function WrongActionsPageShell({
                         className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
                       >
                         {group.label}
-                        <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                        <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
                           {group.rows.length}
                         </span>
                       </TableCell>
@@ -310,12 +310,12 @@ function WrongActionListRow({ row, onOpen }: { row: WrongActionRow; onOpen: () =
         <div className="flex items-center gap-2">
           <p className="font-medium">{row.driver_name ?? "—"}</p>
           {row.driver_code ? (
-            <span className="rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            <span className="rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
               {row.driver_code}
             </span>
           ) : null}
         </div>
-        <p className="text-[11px] text-primary">{t("viewDetails")}</p>
+        <p className="text-xs text-primary">{t("viewDetails")}</p>
       </TableCell>
       <TableCell>{t(`type.${row.action_type}` as "type.delay")}</TableCell>
       <TableCell>

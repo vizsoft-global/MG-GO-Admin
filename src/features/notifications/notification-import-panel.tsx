@@ -251,7 +251,7 @@ export function NotificationImportPanel({
                 <button
                   key={col}
                   type="button"
-                  className="cursor-pointer rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-primary/20"
+                  className="cursor-pointer rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
                   onClick={() => {
                     navigator.clipboard.writeText(`{{${col}}}`);
                     toast.success(t("placeholderCopied", { name: col }));
@@ -315,7 +315,7 @@ export function NotificationImportPanel({
                 </Table>
               </div>
               {previewRows.length > 50 ? (
-                <p className="text-[10px] text-muted-foreground">{t("importPreviewTruncated")}</p>
+                <p className="text-xs text-muted-foreground">{t("importPreviewTruncated")}</p>
               ) : null}
             </div>
           ) : null}

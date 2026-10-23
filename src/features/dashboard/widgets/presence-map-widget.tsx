@@ -58,7 +58,7 @@ export function PresenceMapWidget({ locale }: { locale: string }) {
             <div className="min-w-0 flex-1">
               <p className="font-medium">{pin.driverName}</p>
               <p className="text-muted-foreground">{pin.restaurantName}</p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("lastSeen")}: {new Date(pin.lastSeenAt).toLocaleTimeString()}
               </p>
             </div>

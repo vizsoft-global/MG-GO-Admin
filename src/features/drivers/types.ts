@@ -1,5 +1,6 @@
 import type { DriverBankDetails } from "@/features/employees/bank-details";
 import type { DriverProjectKey } from "@/features/fleet/fleet-labels";
+import type { DriverPrivateInfo } from "./driver-private-fields";
 
 export const DOCUMENT_TYPES = [
   "license",
@@ -240,6 +241,13 @@ export type DriverDetailModel = {
   nationality_category_keys: string[];
   archive_reason: string | null;
   bank_details: DriverBankDetails | null;
+  /** HR-owned Profile fields (sponsorship, position, dates, salaries). */
+  private_info: DriverPrivateInfo;
+  /**
+   * Contracted OFF days for the current Kuwait month (`driver_off_structure`).
+   * Null means no row, which payroll reads as the 2-day default.
+   */
+  offs_structure_days: number | null;
   nationality: string | null;
   rider_category: DriverRiderCategory;
   client_id: string | null;

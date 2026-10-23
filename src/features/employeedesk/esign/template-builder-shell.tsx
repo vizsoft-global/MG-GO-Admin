@@ -582,7 +582,7 @@ export function TemplateBuilderShell({
                   document block. It is a fact about the template rather than a
                   control, so it takes the metadata badge treatment instead of a
                   toggle's emerald — nothing here is selectable. */}
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-primary">
                 <Send className="size-3" aria-hidden />
                 {t("youSend")}
               </span>
@@ -632,7 +632,7 @@ export function TemplateBuilderShell({
                      * show the draft's raw key, which is how `penalty` — a category
                      * that does not exist — ended up painted in this control.
                      */
-                    <p className="flex h-9 items-center text-[11px] text-muted-foreground">
+                    <p className="flex h-9 items-center text-xs text-muted-foreground">
                       {t("noCategories")}
                     </p>
                   )}
@@ -728,7 +728,7 @@ export function TemplateBuilderShell({
                     column left empty. Hidden at zero rather than printing
                     "0 required". */}
                 {visibleFields.some((f) => f.is_required) ? (
-                  <span className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                  <span className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-xs font-normal text-muted-foreground">
                     {t("requiredCount", {
                       count: visibleFields.filter((f) => f.is_required).length,
                     })}
@@ -760,7 +760,7 @@ export function TemplateBuilderShell({
               <div className="space-y-2 border-b border-border px-4 py-3">
                 <div>
                   <p className="text-sm font-medium">{t("penaltyChecklistTitle")}</p>
-                  <p className="text-[10px] text-muted-foreground">{t("penaltyOptionsHint")}</p>
+                  <p className="text-xs text-muted-foreground">{t("penaltyOptionsHint")}</p>
                 </div>
                 <div className="space-y-1.5">
                   {penaltyAction.options.map((option, index) => (
@@ -819,8 +819,8 @@ export function TemplateBuilderShell({
                   counted in the field total. */}
               {section === "employee" ? (
                 <div className="bg-muted/20 px-4 py-2">
-                  <p className="text-[11px] font-semibold">{t("systemRowsTitle")}</p>
-                  <p className="text-[10px] text-muted-foreground">{t("systemRowsHint")}</p>
+                  <p className="text-xs font-semibold">{t("systemRowsTitle")}</p>
+                  <p className="text-xs text-muted-foreground">{t("systemRowsHint")}</p>
                 </div>
               ) : null}
               {section === "employee"
@@ -839,7 +839,7 @@ export function TemplateBuilderShell({
                             </span>
                           ) : null}
                         </span>
-                        <span className="truncate font-mono text-[10px] text-muted-foreground">
+                        <span className="truncate font-mono text-xs text-muted-foreground">
                           {`{{${row.key}}}`}
                         </span>
                       </div>
@@ -853,7 +853,7 @@ export function TemplateBuilderShell({
                 </p>
               ) : null}
               {tabFields.length === 0 && section === "employee" ? (
-                <p className="px-4 py-4 text-center text-[11px] text-muted-foreground">
+                <p className="px-4 py-4 text-center text-xs text-muted-foreground">
                   {t("noEmployeeFieldsHint")}
                 </p>
               ) : null}
@@ -883,13 +883,13 @@ export function TemplateBuilderShell({
                             {field.label_en || t("untitledField")}
                           </span>
                           {field.is_required ? (
-                            <span className="shrink-0 text-[10px] font-semibold text-destructive">
+                            <span className="shrink-0 text-xs font-semibold text-destructive">
                               {t("required")}
                             </span>
                           ) : null}
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          <span className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-xs text-muted-foreground">
                             {t(`types.${field.field_type}`)}
                           </span>
                         </div>
@@ -1136,7 +1136,7 @@ export function TemplateBuilderShell({
                           <Plus className="size-3.5" aria-hidden />
                           {t("addOption")}
                         </Button>
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           {t(
                             isPenaltyActionFieldKey(selected.field_key)
                               ? "penaltyOptionsHint"
@@ -1177,7 +1177,7 @@ export function TemplateBuilderShell({
                 </label>
 
                 {pairError ? (
-                  <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
                     {t(`errors.${pairError}`)}
                   </p>
                 ) : null}
@@ -1216,7 +1216,7 @@ export function TemplateBuilderShell({
               />
             </div>
             <Separator className="my-3" />
-            <p className="text-[10px] leading-relaxed text-muted-foreground">
+            <p className="text-xs leading-relaxed text-muted-foreground">
               {t("previewHint")}
             </p>
             {/* The reference puts "Send for e-signature" under the preview rather
@@ -1243,7 +1243,7 @@ export function TemplateBuilderShell({
               </Button>
             </div>
             {isNew ? (
-              <p className="mt-2 text-[10px] text-muted-foreground">
+              <p className="mt-2 text-xs text-muted-foreground">
                 {t("saveBeforeSending")}
               </p>
             ) : null}
@@ -1267,7 +1267,7 @@ function Field({
 }) {
   return (
     <div className="min-w-0 space-y-1.5">
-      <Label className="flex items-center gap-1 text-[11px] text-muted-foreground">
+      <Label className="flex items-center gap-1 text-xs text-muted-foreground">
         {Icon ? <Icon className="size-3" aria-hidden /> : null}
         {label}
         {required ? <span className="text-destructive">*</span> : null}

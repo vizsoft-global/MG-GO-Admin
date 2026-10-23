@@ -134,7 +134,7 @@ export function EmployeeCatalogPanel({
                   <span className="inline-flex items-center gap-1.5">
                     {row.is_system ? t("system") : t("custom")}
                     {isSections && row.is_operational === false ? (
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                         {t("nonOperational")}
                       </span>
                     ) : null}
@@ -194,7 +194,7 @@ export function EmployeeCatalogPanel({
               <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3">
                 <div className="space-y-0.5">
                   <Label htmlFor="catalog-operational">{t("operational")}</Label>
-                  <p className="text-[11px] leading-4 text-muted-foreground">
+                  <p className="text-xs leading-4 text-muted-foreground">
                     {t("operationalHint")}
                   </p>
                 </div>

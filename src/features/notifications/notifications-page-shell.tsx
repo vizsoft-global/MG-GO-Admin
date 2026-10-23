@@ -208,7 +208,7 @@ export function NotificationsPageShell() {
                           {row.title}
                         </Link>
                         {row.screenshot_restricted ? (
-                          <span className="inline-flex items-center gap-0.5 rounded-md border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                          <span className="inline-flex items-center gap-0.5 rounded-md border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800">
                             <ShieldOff className="size-3" aria-hidden />
                             {t("screenshotRestrictedBadge")}
                           </span>

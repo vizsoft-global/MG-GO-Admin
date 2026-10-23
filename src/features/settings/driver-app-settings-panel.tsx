@@ -846,7 +846,7 @@ export function DriverAppSettingsPanel({
                       className="tabular-nums"
                       required={forceUpdate}
                     />
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {t("forceUpdateMinVersionCodeHint")}
                     </p>
                   </div>
@@ -862,7 +862,7 @@ export function DriverAppSettingsPanel({
                       placeholder="1.1.21"
                       maxLength={32}
                     />
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {t("forceUpdateMinVersionNameHint")}
                     </p>
                   </div>
@@ -921,9 +921,9 @@ export function DriverAppSettingsPanel({
                   </div>
                   {installStats.versions.length > 0 ? (
                     <div className="mt-2 overflow-hidden rounded-lg border border-border">
-                      <table className="w-full text-[11px] tabular-nums">
+                      <table className="w-full text-xs tabular-nums">
                         <thead>
-                          <tr className="border-b border-border bg-muted/30 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <tr className="border-b border-border bg-muted/30 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             <th className="px-2 py-1 text-start">{t("buildsColBuild")}</th>
                             <th className="px-2 py-1 text-end">{t("buildsColInstalls")}</th>
                             <th className="px-2 py-1 text-end">{t("buildsColRecent")}</th>
@@ -1002,7 +1002,7 @@ export function DriverAppSettingsPanel({
                       </table>
                     </div>
                   ) : null}
-                  <p className="mt-2 text-[10px] text-muted-foreground">{t("installsHint")}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{t("installsHint")}</p>
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                     <Link
                       href="/driver-devices"
@@ -1013,7 +1013,7 @@ export function DriverAppSettingsPanel({
                     </Link>
                     <span
                       className={cn(
-                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
                         installStats.sentry.connected
                           ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                           : "border-border bg-muted/30 text-muted-foreground",
@@ -1095,7 +1095,7 @@ export function DriverAppSettingsPanel({
                       disabled={notifyPending}
                       className="min-h-[72px] resize-none"
                     />
-                    <p className="text-[10px] text-muted-foreground">{t("notifyOutdatedBodyHint")}</p>
+                    <p className="text-xs text-muted-foreground">{t("notifyOutdatedBodyHint")}</p>
                   </div>
                 </div>
                 <AppModalFooter

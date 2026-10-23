@@ -280,7 +280,7 @@ export function FuelDriverPageShell({ driverId }: { driverId: string }) {
               </div>
             )}
             {rangeError ? (
-              <p className="text-[10px] text-destructive">
+              <p className="text-xs text-destructive">
                 {rangeError === "span" ? t("rangeTooLong") : t("rangeOrder")}
               </p>
             ) : null}

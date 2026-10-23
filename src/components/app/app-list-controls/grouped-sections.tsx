@@ -20,7 +20,7 @@ export function GroupedSections<T>({
         <section key={group.key} className="space-y-2">
           <header className="flex items-center gap-2 px-1">
             <h3 className="text-xs font-semibold text-foreground">{group.label}</h3>
-            <span className="rounded-full bg-muted px-1.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+            <span className="rounded-full bg-muted px-1.5 text-xs font-semibold tabular-nums text-muted-foreground">
               {group.rows.length}
             </span>
           </header>

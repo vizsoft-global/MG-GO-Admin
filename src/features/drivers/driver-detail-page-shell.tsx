@@ -1,37 +1,18 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import {
-  AlertTriangle,
-  Archive,
   ArchiveRestore,
   ArrowLeft,
-  Banknote,
-  Bike,
-  CalendarClock,
   Check,
   CheckCircle2,
-  ClipboardList,
   Copy,
   Eye,
   EyeOff,
-  Camera,
-  FileText,
-  ListChecks,
   Loader2,
-  MapPin,
-  Minus,
-  Package,
-  Pencil,
-  Phone,
   RefreshCw,
-  Gauge,
-  History,
-  Shield,
-  Smartphone,
-  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { TabBar, type TabItem } from "@/components/dashboard/tab-bar";
@@ -40,7 +21,6 @@ import { AppPage } from "@/components/app/app-page";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
-import { MetricTile, type Tone } from "@/components/ui/metric-tile";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { hasOpsAssignment } from "./driver-assignment";
@@ -61,27 +41,16 @@ import { DriverHistoryTab } from "./driver-history-tab";
 import { DriverPerformanceTab } from "./driver-performance-tab";
 import { DriverWrongActionsTab } from "@/features/wrong-actions/driver-wrong-actions-tab";
 import { DriverArchiveDialog } from "./driver-archive-dialog";
-import { DriverLevelBadge, DriverLevelOverrideDialog } from "./driver-level-badge";
+import { DriverLevelOverrideDialog } from "./driver-level-badge";
 import { DriverEditSheet } from "./driver-edit-sheet";
-import { useDriverLevel, useDriverLevelOverride } from "./use-driver-levels";
-import { getCountryLabel } from "@/lib/geo/countries";
-import { riderCategoryMessageKey } from "./driver-rider-category";
-import { avatarTintFromName } from "./form/driver-form-primitives";
+import { useDriverLevelOverride } from "./use-driver-levels";
 import {
-  LinkedBadge,
-  WorkflowStatusPill,
   isLinkedDriver,
-  resolveWorkflowPillStatus,
   showsMobileAppLink,
 } from "./driver-workflow-ui";
 import { formatPhoneDisplay } from "./driver-phone";
 import { AssetCatalogIcon } from "@/features/assets/asset-catalog-icon";
-import type { DriverWorkflowStatus } from "./types";
-import {
-  AccountStatusPill,
-  AttendancePill,
-  formatDriverCodeDisplay,
-} from "./driver-list-ui";
+import type { DriverAccountStatus, DriverWorkflowStatus } from "./types";
 import {
   useApproveDriverIntake,
   useArchiveDriverIntake,
@@ -92,12 +61,13 @@ import {
 import { isDriverErrorKey } from "./driver-errors";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import { queryKeys } from "@/lib/query/query-keys";
-import { DriverDetailGroups } from "./driver-detail-groups";
+import { PrivateInformationTab } from "./detail/private-information-tab";
+import { ProjectTab } from "./detail/project-tab";
 import { DRIVERS_TABS, driverDetailHref } from "./drivers-list-query";
-import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
-import { formatCustomFieldDisplay } from "@/lib/custom-fields/validate";
 
 type DetailTabId =
+  | "private-information"
+  | "project"
   | "history"
   | "attendance"
   | "performance"
@@ -148,30 +118,24 @@ function DetailSkeleton() {
   return (
     <AppPage className="space-y-4 animate-pulse">
       <div className="h-8 w-32 rounded-md bg-muted" />
-      <div className="rounded-xl border border-border bg-card p-5">
-        <div className="flex gap-4">
-          <div className="h-16 w-16 shrink-0 rounded-xl bg-muted" />
+      <div className="rounded-[14px] border border-border bg-card px-6 py-[22px]">
+        <div className="flex gap-[18px]">
+          <div className="size-[60px] shrink-0 rounded-xl bg-muted" />
           <div className="flex-1 space-y-2">
             <div className="h-6 w-48 rounded-md bg-muted" />
             <div className="h-4 w-32 rounded-md bg-muted" />
             <div className="h-4 w-64 rounded-md bg-muted" />
           </div>
         </div>
-        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-14 rounded-lg bg-muted/70" />
+        <div className="mt-[18px] grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-14 rounded-[10px] bg-muted/70" />
           ))}
         </div>
       </div>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="space-y-3">
-          <div className="h-10 rounded-lg bg-muted/70" />
-          <div className="h-48 rounded-xl bg-muted/50" />
-        </div>
-        <div className="space-y-3">
-          <div className="h-36 rounded-xl bg-muted/50" />
-          <div className="h-48 rounded-xl bg-muted/50" />
-        </div>
+      <div className="space-y-3">
+        <div className="h-10 rounded-lg bg-muted/70" />
+        <div className="h-48 rounded-xl bg-muted/50" />
       </div>
     </AppPage>
   );
@@ -220,11 +184,9 @@ function PasscodeCard({
   };
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <div className="border-b border-border px-4 py-3">
-        <p className="text-sm font-semibold text-foreground">{t("title")}</p>
-      </div>
-      <div className="space-y-3 px-4 py-4">
+    <div className="rounded-[14px] border border-border bg-card px-6 py-5">
+      <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">{t("title")}</p>
+      <div className="mt-3 space-y-3">
         {!isActive ? (
           <p className="text-sm text-muted-foreground">{t("inactiveHint")}</p>
         ) : (
@@ -293,16 +255,61 @@ function PasscodeCard({
   );
 }
 
+function headerIdentity(
+  employeeId: string | null,
+  fullName: string | null | undefined,
+): { mark: string; title: string } {
+  const stored = (employeeId ?? "").trim();
+  const prefix = stored.replace(/^emp/i, "") || stored;
+  const name = (fullName ?? "").trim();
+  const title = prefix && !name.startsWith(prefix) ? `${prefix} ${name}` : name;
+  const letter = (name.replace(/^\d+\s*/, "").match(/[A-Za-z\u0600-\u06FF]/)?.[0] ?? name[0] ?? "").toUpperCase();
+  const lead = (prefix[0] ?? "").toUpperCase();
+  const mark = `${lead}${letter}`.trim().slice(0, 2) || name.slice(0, 2).toUpperCase();
+  return { mark, title };
+}
+
+function headerPillClass(tone: "ok" | "warn" | "mute"): string {
+  if (tone === "ok") return "bg-[#E3F1E6] text-[#1F5C2E]";
+  if (tone === "warn") return "bg-[#FCEFD9] text-[#7A4A00]";
+  return "bg-[#F2F2F5] text-[#565868]";
+}
+
+function headerStatusTone(
+  archived: boolean,
+  blocked: boolean,
+  linked: boolean,
+  account: DriverAccountStatus,
+): "ok" | "warn" | "mute" {
+  if (archived) return "mute";
+  if (blocked) return "warn";
+  if (!linked) return "warn";
+  switch (account) {
+    case "active":
+      return "ok";
+    case "suspended":
+      return "warn";
+    case "pending":
+      return "mute";
+    default: {
+      const unreachable: never = account;
+      return unreachable;
+    }
+  }
+}
+
+const HEADER_BUTTON =
+  "h-auto min-h-10 cursor-pointer rounded-lg border border-[#D7D7DF] bg-card px-3.5 text-sm font-medium shadow-none hover:bg-[#F2F2F5]";
+
 function DriverDetailContent({ id }: { id: string }) {
   const t = useTranslations("pages.driverDetail");
   const tBlock = useTranslations("pages.driverDetail.block");
   const tFreeze = useTranslations("pages.driverDetail.freeze");
-  const tNew = useTranslations("pages.driverNew");
   const tList = useTranslations("pages.drivers");
   const router = useRouter();
-  const { can } = useAuth();
+  const { can, accessKind } = useAuth();
+  const isPartner = accessKind === "partner";
   const canManage = can("drivers.manage");
-  const { data: levelRow } = useDriverLevel(id);
   const { sweep, pending: levelSweepPending } = useDriverLevelOverride();
   const [levelOverrideOpen, setLevelOverrideOpen] = useState(false);
   const canViewOps = can("driver_ops.view");
@@ -310,21 +317,14 @@ function DriverDetailContent({ id }: { id: string }) {
   const canViewWrongActions = can("wrong_actions.view");
   const canExportOps = can("driver_ops.export");
   const { data: driver, isLoading, isError } = useDriverDetail(id);
-  const { data: customFieldDefs = [] } = useCustomFieldDefinitions({
-    includeInactive: true,
-  });
-  const customFieldLabelByKey = useMemo(() => {
-    const m = new Map<string, { label: string; field_type: (typeof customFieldDefs)[number]["field_type"]; options: (typeof customFieldDefs)[number]["options"] }>();
-    for (const d of customFieldDefs) {
-      m.set(d.key, { label: d.label, field_type: d.field_type, options: d.options });
-    }
-    return m;
-  }, [customFieldDefs]);
+  const sectionsQuery = useEmployeeSections();
   const searchParams = useSearchParams();
   const archiveDriver = useArchiveDriverIntake();
   const restoreDriver = useRestoreDriverIntake();
   const approveDriver = useApproveDriverIntake();
-  const [activeTab, setActiveTab] = useState<DetailTabId>("assets");
+  const [activeTab, setActiveTab] = useState<DetailTabId>(
+    isPartner ? "project" : "private-information",
+  );
   const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [holdApproveSlot, setHoldApproveSlot] = useState(false);
@@ -365,7 +365,17 @@ function DriverDetailContent({ id }: { id: string }) {
   }, [driver, canManage, id, router, searchParams]);
 
   useEffect(() => {
+    if (isPartner) {
+      setActiveTab(searchParams.get("tab") === "documents" ? "documents" : "project");
+      return;
+    }
     const tab = searchParams.get("tab");
+    if (tab === "private-information") {
+      setActiveTab("private-information");
+    }
+    if (tab === "project") {
+      setActiveTab("project");
+    }
     if (tab === "history") {
       setActiveTab("history");
     }
@@ -396,6 +406,7 @@ function DriverDetailContent({ id }: { id: string }) {
     driver?.linked_profile_id,
     canViewOps,
     canViewPerformance,
+    isPartner,
   ]);
 
   /*
@@ -453,28 +464,35 @@ function DriverDetailContent({ id }: { id: string }) {
     }
   };
 
-  const tabs: TabItem[] = [
-    { id: "history", label: t("tabHistory"), icon: History },
-    { id: "attendance", label: t("tabAttendance"), icon: CalendarClock },
+  const tabs: TabItem[] = isPartner
+    ? [
+        { id: "project", label: t("tabProject") },
+        { id: "documents", label: t("tabDocuments") },
+      ]
+    : [
+    { id: "private-information", label: t("tabPrivateInformation") },
+    { id: "project", label: t("tabProject") },
+    { id: "history", label: t("tabHistory") },
+    { id: "attendance", label: t("tabAttendance") },
     ...(canViewPerformance && driver?.linked_profile_id
-      ? [{ id: "performance" as const, label: t("tabPerformance"), icon: Gauge }]
+      ? [{ id: "performance" as const, label: t("tabPerformance") }]
       : []),
     ...(driver?.linked_profile_id
-      ? [{ id: "location" as const, label: t("tabLocation"), icon: MapPin }]
+      ? [{ id: "location" as const, label: t("tabLocation") }]
       : []),
     ...(canViewOps && driver?.linked_profile_id
-      ? [{ id: "activity" as const, label: t("tabActivity"), icon: ListChecks }]
+      ? [{ id: "activity" as const, label: t("tabActivity") }]
       : []),
-    { id: "documents", label: t("tabDocuments"), icon: FileText },
-    { id: "login-verification", label: t("tabLoginVerification"), icon: Camera },
-    { id: "devices", label: t("tabDevices"), icon: Smartphone },
-    { id: "assets", label: t("tabAssets"), icon: Package },
-    { id: "earnings", label: t("tabEarnings"), icon: Wallet },
-    { id: "deductions", label: t("tabDeductions"), icon: Banknote },
-    { id: "loan", label: t("tabLoan"), icon: Banknote },
-    { id: "complaint", label: t("tabComplaint"), icon: AlertTriangle },
+    { id: "documents", label: t("tabDocuments") },
+    { id: "login-verification", label: t("tabLoginVerification") },
+    { id: "devices", label: t("tabDevices") },
+    { id: "assets", label: t("tabAssets") },
+    { id: "earnings", label: t("tabEarnings") },
+    { id: "deductions", label: t("tabDeductions") },
+    { id: "loan", label: t("tabLoan") },
+    { id: "complaint", label: t("tabComplaint") },
     ...(canViewWrongActions
-      ? [{ id: "wrong-actions" as const, label: t("tabWrongActions"), icon: Shield }]
+      ? [{ id: "wrong-actions" as const, label: t("tabWrongActions") }]
       : []),
   ];
 
@@ -521,10 +539,10 @@ function DriverDetailContent({ id }: { id: string }) {
     return tList("statusPending");
   };
 
-  const sectionsQuery = useEmployeeSections();
   // MG Head Office staff have no zone or store by design, so a missing
   // assignment must not hide Approve/Activate from them.
-  const opsNotRequired = isNonOperationalOnly(driver.section_keys ?? [], sectionsQuery.data ?? []);
+  const sectionKeys = Array.isArray(driver.section_keys) ? driver.section_keys : [];
+  const opsNotRequired = isNonOperationalOnly(sectionKeys, sectionsQuery.data ?? []);
 
   const canApprove =
     canManage &&
@@ -535,73 +553,156 @@ function DriverDetailContent({ id }: { id: string }) {
 
   const showApproveButton = canApprove || holdApproveSlot;
 
-  const initials = driver.full_name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const identity = headerIdentity(driver.employee_id, driver.full_name);
+  const headerStatusLabel = isArchived
+    ? t("archivedBadge")
+    : driver.is_blocked
+      ? tBlock("statusBlocked")
+      : workflowLabel(driver.workflow_status);
+  const headerTone = headerStatusTone(
+    isArchived,
+    driver.is_blocked,
+    isLinkedDriver(driver),
+    driver.account_status,
+  );
 
   const showLinked = showsMobileAppLink(driver);
 
   const metaFields: { label: string; value: string }[] = [
-    { label: t("fieldPhone"), value: formatPhoneDisplay(driver.phone) },
-    ...(showLinked
-      ? [
-          {
-            label: t("fieldLinked"),
-            value: driver.linked ? tList("linkedYes") : tList("linkedNo"),
-          },
-        ]
-      : []),
-    { label: t("fieldEmail"), value: driver.email ?? "—" },
+    { label: tList("employeeId"), value: driver.employee_id ?? "—" },
     { label: t("fieldCivilId"), value: driver.civil_id },
+    { label: t("fieldPhone"), value: formatPhoneDisplay(driver.phone) },
     {
-      label: tList("employeeId"),
-      value: driver.employee_id ?? "—",
+      label: t("fieldLinked"),
+      value: showLinked && driver.linked ? tList("linkedYes") : tList("linkedNo"),
     },
-    {
-      label: t("fieldNationality"),
-      value: getCountryLabel(driver.nationality) ?? "—",
-    },
-    {
-      label: t("fieldRiderCategory"),
-      value: tList(`riderCategory.${riderCategoryMessageKey(driver.rider_category)}`),
-    },
-    { label: t("fieldClientId"), value: driver.client_id ?? "—" },
-    { label: t("fieldClientName"), value: driver.client_name ?? "—" },
-    { label: t("fieldZone"), value: driver.zone_label },
-    {
-      label: t("fieldBaseEarnings"),
-      value:
-        driver.base_earnings_kwd != null
-          ? `${driver.base_earnings_kwd} KD`
-          : "—",
-    },
-    { label: t("fieldPartner"), value: driver.partner_name },
-    {
-      label: t("fieldRestaurants"),
-      value:
-        driver.restaurant_names.length > 0
-          ? driver.restaurant_names.join(", ")
-          : "—",
-    },
-    { label: t("fieldBike"), value: driver.vehicle_label ?? "—" },
-    { label: t("fieldJoined"), value: driver.joined_at ?? "—" },
-    ...Object.entries(driver.custom_fields ?? {}).map(([key, value]) => {
-      const def = customFieldLabelByKey.get(key);
-      return {
-        label: def?.label ?? key,
-        value: def
-          ? formatCustomFieldDisplay(def.field_type, value, def.options) || "—"
-          : value == null || value === ""
-            ? "—"
-            : String(value),
-      };
-    }),
   ];
 
+  /**
+   * App access, login checks and the security controls for this driver. They
+   * live in the Login Verification details tab (one home, not the aside) so the
+   * Profile reads: what the rider is, then how the rider signs in.
+   */
+  const securityControls = (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {driver.linked_profile_id && !isArchived && canManage ? (
+        <div className="rounded-[14px] border border-border bg-card px-6 py-5">
+          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+            {tBlock("title")}
+          </p>
+          <div className="mt-3">
+            <DriverBlockEditor
+              driverId={driver.linked_profile_id}
+              intakeId={driver.intake_id ?? driver.id}
+              isBlocked={driver.is_blocked}
+              blockedReason={driver.blocked_reason}
+              blockedAt={driver.blocked_at}
+              canManage={canManage}
+            />
+          </div>
+        </div>
+      ) : null}
+      {driver.linked_profile_id && !isArchived && canManage ? (
+        <div className="rounded-[14px] border border-border bg-card px-6 py-5">
+          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+            {tFreeze("title")}
+          </p>
+          <div className="mt-3">
+            <DriverFreezeEditor
+              driverId={driver.linked_profile_id}
+              intakeId={driver.intake_id ?? driver.id}
+              frozenFrom={driver.frozen_from}
+              frozenUntil={driver.frozen_until}
+              freezeReason={driver.freeze_reason}
+              frozenAt={driver.frozen_at}
+              canManage={canManage}
+            />
+          </div>
+        </div>
+      ) : null}
+      {driver.linked_profile_id && !isArchived && canManage ? (
+        <div className="rounded-[14px] border border-border bg-card px-6 py-5">
+          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+            {t("loginVerificationExemptTitle")}
+          </p>
+          <div className="mt-3">
+            <DriverLoginVerificationExemptEditor
+              driverId={driver.linked_profile_id}
+              intakeId={driver.intake_id ?? driver.id}
+              exempt={driver.login_verification_exempt}
+              canManage={canManage}
+            />
+          </div>
+        </div>
+      ) : null}
+      {driver.linked_profile_id && !isArchived && canManage ? (
+        <div className="rounded-[14px] border border-border bg-card px-6 py-5">
+          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+            {t("screenshotsAllowedTitle")}
+          </p>
+          <div className="mt-3">
+            <DriverScreenshotsAllowedEditor
+              driverId={driver.linked_profile_id}
+              intakeId={driver.intake_id ?? driver.id}
+              allowed={driver.screenshots_allowed}
+              canManage={canManage}
+            />
+          </div>
+        </div>
+      ) : null}
+      {!isArchived && canManage ? (
+        <div className="rounded-[14px] border border-border bg-card px-6 py-5">
+          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+            {t("accountStatus.title")}
+          </p>
+          <div className="mt-3">
+            {driver.linked_profile_id ? (
+              <DriverAccountStatusEditor
+                driverId={driver.linked_profile_id}
+                intakeId={driver.intake_id ?? driver.id}
+                status={driver.account_status}
+                canActivate={
+                  opsNotRequired ||
+                  hasOpsAssignment(driver.zone_id, driver.has_published_restaurant ? 1 : 0)
+                }
+                canManage={canManage}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">{t("approvePendingHint")}</p>
+            )}
+            {opsNotRequired ? (
+              <p className="mt-2 text-xs text-muted-foreground">{t("opsNotRequired")}</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      {!isArchived ? (
+        <PasscodeCard
+          driverId={driver.linked_profile_id ?? ""}
+          intakeId={driver.intake_id ?? driver.id}
+          passcode={driver.app_passcode}
+          isActive={driver.account_status === "active"}
+          canManage={canManage && Boolean(driver.linked_profile_id)}
+        />
+      ) : null}
+    </div>
+  );
+
   const renderTabPanel = () => {
+    if (activeTab === "private-information") {
+      return <PrivateInformationTab driver={driver} canManage={canManage} />;
+    }
+
+    if (activeTab === "project") {
+      return (
+        <ProjectTab
+          driver={driver}
+          canManage={canManage}
+          opsNotRequired={opsNotRequired}
+        />
+      );
+    }
+
     if (activeTab === "history") {
       if (!driver.intake_id) {
         return (
@@ -698,7 +799,10 @@ function DriverDetailContent({ id }: { id: string }) {
 
     if (activeTab === "login-verification" && driver.linked_profile_id) {
       return (
-        <DriverLoginVerificationTab driverId={driver.linked_profile_id} />
+        <DriverLoginVerificationTab
+          driverId={driver.linked_profile_id}
+          controls={securityControls}
+        />
       );
     }
 
@@ -767,7 +871,7 @@ function DriverDetailContent({ id }: { id: string }) {
                         iconClassName="h-4 w-4"
                       />
                     </span>
-                    <p className="text-[11px] font-medium text-foreground">{asset.name}</p>
+                    <p className="text-xs font-medium text-foreground">{asset.name}</p>
                     <Check className="h-4 w-4 text-emerald-600" aria-label={t("issued")} />
                   </div>
                 ))}
@@ -807,67 +911,36 @@ function DriverDetailContent({ id }: { id: string }) {
         <span className="text-sm text-muted-foreground">{t(backTarget.labelKey)}</span>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-border p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
-            <div className="flex gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted/30">
-                {driver.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={driver.avatar_url}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="text-lg font-semibold text-muted-foreground">
-                    {initials}
-                  </span>
-                )}
+      <section
+        aria-label={identity.title}
+        className="flex flex-col gap-[18px] rounded-[14px] border border-border bg-card px-6 py-[22px]"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-4">
+              <div className="grid size-[60px] shrink-0 place-items-center rounded-xl border border-[#E4E3E8] bg-[#F2F2F5] text-[19px] font-bold text-[#1E1F2E]">
+                {identity.mark}
               </div>
-              <div className="min-w-0">
+              <div className="flex min-w-0 flex-col gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-semibold text-foreground">
-                    {driver.full_name}
+                  <h1 className="text-[21px] font-bold tracking-[-0.01em] text-foreground">
+                    {identity.title}
                   </h1>
-                  <DriverLevelBadge level={levelRow?.level} />
-                  <WorkflowStatusPill
-                    status={resolveWorkflowPillStatus(driver)}
-                    label={
-                      driver.is_blocked
-                        ? tBlock("statusBlocked")
-                        : workflowLabel(driver.workflow_status)
-                    }
-                  />
-                  {showLinked ? (
-                    <LinkedBadge
-                      linked={driver.linked}
-                      yesLabel={tList("linkedYes")}
-                      noLabel={tList("linkedNo")}
-                    />
-                  ) : null}
-                  {isArchived ? (
-                    <span className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                      {t("archivedBadge")}
-                    </span>
-                  ) : null}
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                      headerPillClass(headerTone),
+                    )}
+                  >
+                    {headerStatusLabel}
+                  </span>
                 </div>
-                {levelRow ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {tList("levelRequired", { count: levelRow.metrics.required_orders })}
-                    {" · "}
-                    {tList("levelVerified", { count: levelRow.metrics.mtd_verified_deliveries })}
-                    {" · "}
-                    {tList("levelGap", { count: levelRow.metrics.gap })}
-                    {" · "}
-                    {levelRow.override_level != null ? tList("levelSet") : tList("levelAuto")}
-                  </p>
-                ) : null}
+                <p className="text-[13px] text-muted-foreground">{driver.zone_label}</p>
                 {canManage ? (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-9"
+                      className={HEADER_BUTTON}
                       onClick={() => setLevelOverrideOpen(true)}
                     >
                       {tList("levelOverrideTitle")}
@@ -875,7 +948,7 @@ function DriverDetailContent({ id }: { id: string }) {
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-9"
+                      className={HEADER_BUTTON}
                       disabled={levelSweepPending}
                       onClick={() => {
                         void sweep().then((result) => {
@@ -888,26 +961,6 @@ function DriverDetailContent({ id }: { id: string }) {
                     </Button>
                   </div>
                 ) : null}
-                <p className="mt-1 font-mono text-sm text-muted-foreground">
-                  {formatDriverCodeDisplay(driver.driver_code)}
-                </p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin className="h-3.5 w-3.5" />
-                    {driver.zone_label}
-                  </span>
-                  <span>·</span>
-                  <span>{driver.partner_name}</span>
-                </p>
-                <DriverDetailGroups driverId={driver.linked_profile_id} />
-                {driver.is_blocked ? null : (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <AccountStatusPill
-                      status={driver.account_status}
-                      label={accountStatusLabel(driver.account_status)}
-                    />
-                  </div>
-                )}
               </div>
             </div>
             {canManage && driver.intake_id && !isArchived ? (
@@ -961,27 +1014,14 @@ function DriverDetailContent({ id }: { id: string }) {
                 ) : null}
                 <Button
                   type="button"
-                  size="sm"
                   variant="outline"
-                  className="cursor-pointer rounded-lg"
-                  onClick={openEditSheet}
-                >
-                  <Pencil className="me-2 h-3.5 w-3.5" />
-                  {t("editDriver")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="cursor-pointer rounded-lg text-destructive hover:text-destructive"
+                  className={cn(HEADER_BUTTON, "border-[#E8C4B6] text-[#B5401F] hover:bg-[#F7E9E4] hover:text-[#B5401F]")}
                   disabled={archiveDriver.isPending}
                   onClick={() => setArchiveOpen(true)}
                 >
                   {archiveDriver.isPending ? (
                     <Loader2 className="me-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Archive className="me-2 h-4 w-4" />
-                  )}
+                  ) : null}
                   {t("archiveDriver")}
                 </Button>
                 <DriverArchiveDialog
@@ -1059,28 +1099,28 @@ function DriverDetailContent({ id }: { id: string }) {
             ) : null}
           </div>
 
-          <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-3 lg:grid-cols-6 sm:p-5">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             {metaFields.map((field) => (
               <div
                 key={field.label}
-                className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5"
+                className="flex flex-col gap-[3px] rounded-[10px] border border-border px-3.5 py-3"
               >
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
                   {field.label}
                 </p>
-                <p className="mt-1 truncate text-sm font-medium text-foreground">{field.value}</p>
+                <p className="truncate text-base font-semibold text-foreground">{field.value}</p>
               </div>
             ))}
           </div>
-      </div>
+      </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="min-w-0 space-y-3">
+      <div className="min-w-0 space-y-4">
           <TabBar
-            items={tabs}
+            items={tabs.map(({ id: tabId, label }) => ({ id: tabId, label }))}
             activeId={activeTab}
-            className="gap-3 overflow-x-auto border-b border-border pb-0 sm:gap-4"
-            onSelect={(id) => setActiveTab(id as DetailTabId)}
+            className="gap-0.5"
+            markerClassName="border-accent"
+            onSelect={(tabId) => setActiveTab(tabId as DetailTabId)}
           />
           <div
             role="tabpanel"
@@ -1089,153 +1129,6 @@ function DriverDetailContent({ id }: { id: string }) {
           >
             {renderTabPanel()}
           </div>
-        </div>
-
-        <aside className="space-y-3">
-          {driver.linked_profile_id && !isArchived && canManage ? (
-            <div className="rounded-xl border border-border bg-card shadow-sm">
-              <div className="border-b border-border px-4 py-3">
-                <p className="text-sm font-semibold text-foreground">{tBlock("title")}</p>
-              </div>
-              <div className="px-4 py-4">
-                <DriverBlockEditor
-                  driverId={driver.linked_profile_id}
-                  intakeId={driver.intake_id ?? driver.id}
-                  isBlocked={driver.is_blocked}
-                  blockedReason={driver.blocked_reason}
-                  blockedAt={driver.blocked_at}
-                  canManage={canManage}
-                />
-              </div>
-            </div>
-          ) : null}
-          {driver.linked_profile_id && !isArchived && canManage ? (
-            <div className="rounded-xl border border-border bg-card shadow-sm">
-              <div className="border-b border-border px-4 py-3">
-                <p className="text-sm font-semibold text-foreground">{tFreeze("title")}</p>
-              </div>
-              <div className="px-4 py-4">
-                <DriverFreezeEditor
-                  driverId={driver.linked_profile_id}
-                  intakeId={driver.intake_id ?? driver.id}
-                  frozenFrom={driver.frozen_from}
-                  frozenUntil={driver.frozen_until}
-                  freezeReason={driver.freeze_reason}
-                  frozenAt={driver.frozen_at}
-                  canManage={canManage}
-                />
-              </div>
-            </div>
-          ) : null}
-          {driver.linked_profile_id && !isArchived && canManage ? (
-            <div className="rounded-xl border border-border bg-card shadow-sm">
-              <div className="border-b border-border px-4 py-3">
-                <p className="text-sm font-semibold text-foreground">
-                  {t("loginVerificationExemptTitle")}
-                </p>
-              </div>
-              <div className="px-4 py-4">
-                <DriverLoginVerificationExemptEditor
-                  driverId={driver.linked_profile_id}
-                  intakeId={driver.intake_id ?? driver.id}
-                  exempt={driver.login_verification_exempt}
-                  canManage={canManage}
-                />
-              </div>
-            </div>
-          ) : null}
-          {driver.linked_profile_id && !isArchived && canManage ? (
-            <div className="rounded-xl border border-border bg-card shadow-sm">
-              <div className="border-b border-border px-4 py-3">
-                <p className="text-sm font-semibold text-foreground">
-                  {t("screenshotsAllowedTitle")}
-                </p>
-              </div>
-              <div className="px-4 py-4">
-                <DriverScreenshotsAllowedEditor
-                  driverId={driver.linked_profile_id}
-                  intakeId={driver.intake_id ?? driver.id}
-                  allowed={driver.screenshots_allowed}
-                  canManage={canManage}
-                />
-              </div>
-            </div>
-          ) : null}
-          {!isArchived && canManage ? (
-            <div className="rounded-xl border border-border bg-card shadow-sm">
-              <div className="border-b border-border px-4 py-3">
-                <p className="text-sm font-semibold text-foreground">{t("accountStatus.title")}</p>
-              </div>
-              <div className="px-4 py-4">
-                {driver.linked_profile_id ? (
-                  <DriverAccountStatusEditor
-                    driverId={driver.linked_profile_id}
-                    intakeId={driver.intake_id ?? driver.id}
-                    status={driver.account_status}
-                    canActivate={
-                      opsNotRequired ||
-                      hasOpsAssignment(driver.zone_id, driver.has_published_restaurant ? 1 : 0)
-                    }
-                    canManage={canManage}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground">{t("approvePendingHint")}</p>
-                )}
-                {opsNotRequired ? (
-                  <p className="mt-2 text-[11px] text-muted-foreground">{t("opsNotRequired")}</p>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-          {!isArchived ? (
-            <PasscodeCard
-              driverId={driver.linked_profile_id ?? ""}
-              intakeId={driver.intake_id ?? driver.id}
-              passcode={driver.app_passcode}
-              isActive={driver.account_status === "active"}
-              canManage={canManage && Boolean(driver.linked_profile_id)}
-            />
-          ) : null}
-          <div className="rounded-xl border border-border bg-card shadow-sm">
-            <div className="border-b border-border px-4 py-3">
-              <p className="text-sm font-semibold text-foreground">{t("quickStats")}</p>
-            </div>
-            <div className="grid grid-cols-2 gap-2 p-3">
-              {(
-                [
-                  { label: t("statAttendance"), value: "—", tone: "success", icon: CalendarClock },
-                  {
-                    label: t("statDeliveriesToday"),
-                    value: String(driver.deliveries_today),
-                    tone: "primary",
-                    icon: Package,
-                  },
-                  {
-                    label: t("statDeliveriesWeek"),
-                    value: String(driver.deliveries_week),
-                    tone: "primary",
-                    icon: Bike,
-                  },
-                  { label: t("statEarnings"), value: "—", tone: "warning", icon: Wallet },
-                ] satisfies Array<{
-                  label: string;
-                  value: string;
-                  tone: Tone;
-                  icon: typeof CalendarClock;
-                }>
-              ).map((stat) => (
-                <MetricTile
-                  key={stat.label}
-                  label={stat.label}
-                  value={stat.value}
-                  tone={stat.tone}
-                  icon={stat.icon}
-                  className="min-h-[88px]"
-                />
-              ))}
-            </div>
-          </div>
-        </aside>
       </div>
       <DriverLevelOverrideDialog
         driverId={id}

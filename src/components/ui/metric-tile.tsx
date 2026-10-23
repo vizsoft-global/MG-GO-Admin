@@ -58,7 +58,7 @@ export function MetricTile({
         <p
           className={cn(
             "min-w-0 flex-1 font-semibold uppercase tracking-wide text-muted-foreground",
-            compact ? "text-[10px] leading-tight" : "text-[11px]",
+            compact ? "text-xs leading-tight" : "text-xs",
           )}
         >
           {label}
@@ -99,7 +99,7 @@ export function MetricTile({
       ) : null}
 
       {hint ? (
-        <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
       ) : null}
     </article>
   );
@@ -173,7 +173,7 @@ export function Pill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
         variant === "solid" ? toneStyle.solidPill : toneStyle.softPill,
         className,
       )}

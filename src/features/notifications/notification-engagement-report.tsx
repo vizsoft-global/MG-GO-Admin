@@ -151,7 +151,7 @@ export function NotificationEngagementReport({
           { label: t("engagementPushSkipped"), value: String(stats.noApp) },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-            <p className="text-[10px] text-muted-foreground">{kpi.label}</p>
+            <p className="text-xs text-muted-foreground">{kpi.label}</p>
             <p className="text-lg font-semibold">{kpi.value}</p>
           </div>
         ))}
@@ -224,7 +224,7 @@ export function NotificationEngagementReport({
                         {item.engagement_seen ? t("engagementYes") : t("engagementNo")}
                       </StatusPill>
                       {item.opened_at ? (
-                        <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
                           {new Date(item.opened_at).toLocaleString()}
                         </span>
                       ) : null}

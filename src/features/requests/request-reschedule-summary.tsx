@@ -30,7 +30,7 @@ export function RequestRescheduleSummary({ payload }: { payload: unknown }) {
         </h2>
         <span
           className={cn(
-            "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+            "inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold",
             STATUS_TONE[parsed.status],
           )}
         >

@@ -351,7 +351,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
       </div>
       <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50/40 p-4 shadow-sm">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-amber-900">{t("slicerCardTitle")}</span>
+          <span className="text-xs font-semibold text-amber-900">{t("slicerCardTitle")}</span>
         </div>
         <PayrollPartnerView
           clients={data?.clients ?? []}

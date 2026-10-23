@@ -44,7 +44,7 @@ function Pill({
   return (
     <span
       className={cn(
-        "inline-flex h-5 max-w-full items-center gap-1 rounded-md border px-1.5 text-[10px] font-semibold leading-none",
+        "inline-flex h-5 max-w-full items-center gap-1 rounded-md border px-1.5 text-xs font-semibold leading-none",
         className,
       )}
     >
@@ -58,7 +58,7 @@ function SoftPill({ className, children }: { className?: string; children: strin
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center rounded-[12px] px-[9px] py-[3px] text-[11px] font-medium leading-none",
+        "inline-flex max-w-full items-center rounded-[12px] px-[9px] py-[3px] text-xs font-medium leading-none",
         className,
       )}
     >
@@ -79,7 +79,7 @@ export function CarTypeBadge({ value }: { value: VehicleCarType | null | undefin
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center rounded-[4px] px-[9px] py-[3px] text-[11px] font-medium leading-none text-white",
+        "inline-flex max-w-full items-center rounded-[4px] px-[9px] py-[3px] text-xs font-medium leading-none text-white",
         CAR_TYPE_CLASS[value],
       )}
     >

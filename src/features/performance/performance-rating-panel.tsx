@@ -107,11 +107,11 @@ function CriterionRow({
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="truncate text-[11px] text-muted-foreground">
+        <span className="truncate text-xs text-muted-foreground">
           {label}
         </span>
         {criterion.score != null ? (
-          <span className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-[10px] font-semibold tabular-nums text-emerald-800">
+          <span className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-xs font-semibold tabular-nums text-emerald-800">
             {criterion.score}/{RATING_SCALE_MAX}
           </span>
         ) : null}
@@ -190,11 +190,11 @@ function TeamRatingSection({
           <UserCheck className="size-3.5 shrink-0 text-primary" />
           <span className="truncate text-xs font-medium">{label}</span>
           {team.score != null ? (
-            <span className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-[10px] font-semibold tabular-nums text-emerald-800">
+            <span className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 text-xs font-semibold tabular-nums text-emerald-800">
               {team.score.toFixed(1)}/{RATING_SCALE_MAX}
             </span>
           ) : (
-            <span className="shrink-0 rounded-md border border-border bg-muted/30 px-1.5 text-[10px] text-muted-foreground">
+            <span className="shrink-0 rounded-md border border-border bg-muted/30 px-1.5 text-xs text-muted-foreground">
               {t("notRated")}
             </span>
           )}
@@ -202,7 +202,7 @@ function TeamRatingSection({
       </div>
 
       {criteria.length === 0 ? (
-        <p className="text-[10px] text-muted-foreground">{t("noCriteria")}</p>
+        <p className="text-xs text-muted-foreground">{t("noCriteria")}</p>
       ) : (
         <div className="space-y-1">
           {criteria.map((criterion) => (
@@ -228,10 +228,10 @@ function TeamRatingSection({
           onBlur={() => void submitNote()}
         />
       ) : team.comment ? (
-        <p className="text-[10px] text-muted-foreground">{team.comment}</p>
+        <p className="text-xs text-muted-foreground">{team.comment}</p>
       ) : null}
 
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {team.rated_at
           ? t("ratedBy", {
               name: team.rated_by_name ?? "—",
@@ -290,7 +290,7 @@ export function PerformanceRatingPanel({
           <Star className="size-3.5 text-amber-500" />
           <p className="text-xs font-medium">{t("title")}</p>
           {rangeScore != null ? (
-            <span className="rounded-md border border-primary/20 bg-primary/10 px-1.5 text-[10px] font-semibold tabular-nums text-primary">
+            <span className="rounded-md border border-primary/20 bg-primary/10 px-1.5 text-xs font-semibold tabular-nums text-primary">
               {t("rangeScore", {
                 score: rangeScore,
                 teams: rangeTeamCount ?? 0,
@@ -298,7 +298,7 @@ export function PerformanceRatingPanel({
             </span>
           ) : null}
         </div>
-        <span className="text-[10px] tabular-nums text-muted-foreground">
+        <span className="text-xs tabular-nums text-muted-foreground">
           {t("period", { month: periodMonth.slice(0, 7) })}
         </span>
       </div>
@@ -308,7 +308,7 @@ export function PerformanceRatingPanel({
           <Loader2 className="size-4 animate-spin text-muted-foreground" />
         </div>
       ) : teams.length === 0 ? (
-        <p className="px-3 py-4 text-[10px] text-muted-foreground">
+        <p className="px-3 py-4 text-xs text-muted-foreground">
           {t("noTeams")}
         </p>
       ) : (

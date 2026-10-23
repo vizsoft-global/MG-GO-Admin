@@ -27,7 +27,7 @@ function stringKeys(value: unknown): string[] {
  * separately and never enter the live buckets.
  */
 export const adminEmployeesDashboard = onCall(async (request) => {
-  await requireStaff(request, "drivers.view");
+  const staff = await requireStaff(request, "drivers.view");
 
   const db = getFirestore();
   const [driversSnap, intakesSnap] = await Promise.all([
@@ -68,6 +68,12 @@ export const adminEmployeesDashboard = onCall(async (request) => {
     nationalityKeys: unknown,
     sectionKeys: unknown,
   ) => {
+    if (
+      staff.isPartner &&
+      String(projectKey ?? "").trim().toLowerCase() !== staff.partnerProjectKey
+    ) {
+      return;
+    }
     if (seen.has(id)) return;
     seen.add(id);
     if (archivedAt) {

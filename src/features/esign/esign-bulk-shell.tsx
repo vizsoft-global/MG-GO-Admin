@@ -408,7 +408,7 @@ export function EsignBulkShell({
             </div>
             {visiblePenaltyChildren.length > 0 ? (
               <div className="space-y-1 rounded-lg border border-border bg-muted/20 p-3">
-                <p className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-normal uppercase tracking-wide text-muted-foreground">
                   {tRcm("penaltyCategory")}
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -497,7 +497,7 @@ export function EsignBulkShell({
             />
           </label>
         </div>
-        <p className="text-[10px] text-muted-foreground">{t("employeeOnlyHint")}</p>
+        <p className="text-xs text-muted-foreground">{t("employeeOnlyHint")}</p>
       </AppListCard>
 
       <AppListCard className="p-0">
@@ -543,7 +543,7 @@ export function EsignBulkShell({
           {t("draftsLink")}
         </Button>
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t("readyCount", { ok: okRows.length, total: preview.length })}
           </p>
           <Button

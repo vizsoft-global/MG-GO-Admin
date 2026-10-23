@@ -73,7 +73,7 @@ export function AdminActionQueueWidget({
               </StatusPill>
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>
-            <p className="mt-1 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+            <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="size-3" />
               {new Date(item.at).toLocaleString()}
             </p>

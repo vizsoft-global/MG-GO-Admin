@@ -130,7 +130,7 @@ export function DriverFormAssignmentCard({
           <FieldError message={errors.zoneId} />
         </FieldBlock>
       </div>
-      <p className="text-[10px] text-muted-foreground">{assignmentHint}</p>
+      <p className="text-xs text-muted-foreground">{assignmentHint}</p>
       <FieldBlock>
         <Label className="inline-flex items-center gap-1.5">
           <Car className="h-3.5 w-3.5 text-muted-foreground" />
@@ -239,4 +239,6 @@ export function DriverFormAssignmentCard({
     </section>
   );
 }
+
+
 

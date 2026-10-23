@@ -10,6 +10,8 @@ import { getMenuConfigServer } from "@/services/menu-config-server";
 import { DashboardFrame } from "@/components/layout/dashboard-frame";
 import { SentryUserSync } from "@/components/system/sentry-user-sync";
 
+export const maxDuration = 60;
+
 export default async function DashboardLayout({
   children,
   params,
@@ -44,6 +46,7 @@ export default async function DashboardLayout({
         isSuperAdmin: session.isSuperAdmin,
         isManager: session.isManager,
         accessKind: session.accessKind,
+        partnerProjectKey: session.partnerProjectKey,
         adminRoleSlug: session.adminRoleSlug,
         permissions: Array.from(session.permissions),
       }}

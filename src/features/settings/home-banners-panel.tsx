@@ -85,7 +85,7 @@ function TargetPicks({
           })}
         </div>
       ) : (
-        <p className="text-[10px] text-muted-foreground">All drivers</p>
+        <p className="text-xs text-muted-foreground">All drivers</p>
       )}
     </div>
   );
@@ -139,7 +139,7 @@ export function HomeBannersPanel({
                   <p className="truncate text-sm font-semibold">
                     {banner.caption_en || banner.caption_ar || t("untitled")}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {banner.is_active ? t("active") : t("inactive")}
                     {banner.zone_ids.length +
                       banner.partner_ids.length +

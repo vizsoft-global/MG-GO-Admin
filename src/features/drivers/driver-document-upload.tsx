@@ -64,7 +64,7 @@ function DocumentViewButton({
       variant="ghost"
       size="sm"
       className={cn(
-        "h-6 cursor-pointer gap-1 rounded-md px-2 text-[11px] font-medium text-primary hover:bg-primary/10 hover:text-primary",
+        "h-6 cursor-pointer gap-1 rounded-md px-2 text-xs font-medium text-primary hover:bg-primary/10 hover:text-primary",
         className,
       )}
       nativeButton={false}
@@ -93,7 +93,7 @@ function DocumentRemoveButton({
       variant="ghost"
       size="sm"
       className={cn(
-        "h-6 cursor-pointer gap-1 rounded-md px-2 text-[11px] font-medium text-destructive hover:bg-destructive/10 hover:text-destructive",
+        "h-6 cursor-pointer gap-1 rounded-md px-2 text-xs font-medium text-destructive hover:bg-destructive/10 hover:text-destructive",
         className,
       )}
       disabled={disabled}
@@ -392,7 +392,7 @@ function InlineDocumentUploadCard({
         type="button"
         disabled={disabled || isSubmitting}
         onClick={() => inputRef.current?.click()}
-        className="flex h-7 w-full cursor-pointer items-center justify-center gap-1 rounded-md border border-dashed border-border bg-background text-[11px] text-muted-foreground transition-colors hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-7 w-full cursor-pointer items-center justify-center gap-1 rounded-md border border-dashed border-border bg-background text-xs text-muted-foreground transition-colors hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Upload className="h-3 w-3" />
         {file ? t("replaceDocument") : t("uploadDocument")}
@@ -400,7 +400,7 @@ function InlineDocumentUploadCard({
 
       {file ? (
         <div className="mt-1.5 flex items-center justify-between gap-1 rounded border border-emerald-200/80 bg-emerald-50/50 px-1.5 py-1">
-          <p className="min-w-0 truncate text-[10px] font-medium text-foreground">{file.name}</p>
+          <p className="min-w-0 truncate text-xs font-medium text-foreground">{file.name}</p>
           <DocumentRemoveButton
             label={t("removeDocument")}
             disabled={disabled || isSubmitting}
@@ -985,63 +985,96 @@ function RemoteDocumentUploadCard({
     }
   };
 
+  const label = tErr(`documents.${docType}`);
+  const uploadedPill = t("documentUploaded", { size: "" }).trim();
+
   return (
     <div
       className={cn(
-        "rounded-md border p-2",
-        displayError
-          ? "border-destructive/60 bg-destructive/5"
-          : remote
-            ? "border-emerald-200 bg-emerald-50/40"
-            : "border-border bg-muted/10",
+        "flex flex-col gap-3.5 rounded-[14px] border bg-card p-[18px]",
+        displayError ? "border-destructive/60" : "border-border",
       )}
     >
-      <div className="mb-1.5 flex items-center gap-1.5">
-        {isImageMime(remote?.contentType ?? null) ? (
-          <ImageIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        )}
-        <p className="truncate text-xs font-medium text-foreground">{tErr(`documents.${docType}`)}</p>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#F7E9E4] text-sidebar-primary">
+            <FileText className="h-[18px] w-[18px]" aria-hidden />
+          </span>
+          <h3 className="truncate text-sm font-semibold text-foreground">{label}</h3>
+        </div>
+        <span
+          className={cn(
+            "shrink-0 rounded-full px-2.5 py-[3px] text-xs font-semibold",
+            remote
+              ? "bg-[#E3F1E6] text-[#1F5C2E]"
+              : "bg-[#FCEFD9] text-[#7A4A00]",
+          )}
+        >
+          {remote ? uploadedPill : t("documentsNotUploaded")}
+        </span>
       </div>
 
-      <button
-        type="button"
-        disabled={disabled || busy}
-        onClick={() => inputRef.current?.click()}
-        className="flex h-7 w-full cursor-pointer items-center justify-center gap-1 rounded-md border border-dashed border-border bg-background text-[11px] text-muted-foreground transition-colors hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <Upload className="h-3 w-3" />
-        {remote ? tErr("replaceDocument") : tErr("uploadDocument")}
-      </button>
-
       {remote ? (
-        <div className="mt-1.5 space-y-1 rounded border border-emerald-200/80 bg-emerald-50/50 px-1.5 py-1">
-          <p className="truncate text-[10px] font-medium text-foreground">
-            {basenameFromKey(remote.objectKey)}
-          </p>
-          <div className="flex items-center gap-1">
-            <DocumentViewButton href={remote.signedUrl} label={t("viewDocument")} />
+        <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col gap-0.5 rounded-[10px] border border-border bg-[#F2F2F5] px-3.5 py-3 break-all">
+            <strong className="text-sm font-semibold text-foreground">
+              {basenameFromKey(remote.objectKey)}
+            </strong>
+            <span className="text-sm text-muted-foreground">
+              {sizeLabelFromRemote(remote, t)}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 min-h-10 cursor-pointer rounded-lg px-3.5"
+              disabled={disabled || busy}
+              onClick={() => inputRef.current?.click()}
+            >
+              {busy ? <Loader2 className="me-1.5 h-4 w-4 animate-spin" /> : null}
+              {tErr("replaceDocument")}
+            </Button>
+            <DocumentViewButton
+              href={remote.signedUrl}
+              label={t("viewDocument")}
+              className="h-10 min-h-10 rounded-lg px-3.5 text-sm"
+            />
             <DocumentRemoveButton
               label={tErr("removeDocument")}
               disabled={disabled || busy}
               onClick={() => void removeRemote()}
+              className="h-10 min-h-10 rounded-lg px-3.5 text-sm"
             />
           </div>
+          <DocumentExpiryFields
+            compact
+            value={mergeDocumentExpiry(resolvedExpiry)}
+            disabled={disabled || busy}
+            onChange={(next) => {
+              onExpiryChange?.(next);
+              void persistExpiry(next);
+            }}
+          />
         </div>
-      ) : null}
-
-      {remote ? (
-        <DocumentExpiryFields
-          compact
-          value={mergeDocumentExpiry(resolvedExpiry)}
+      ) : (
+        <button
+          type="button"
           disabled={disabled || busy}
-          onChange={(next) => {
-            onExpiryChange?.(next);
-            void persistExpiry(next);
-          }}
-        />
-      ) : null}
+          onClick={() => inputRef.current?.click()}
+          className="flex w-full cursor-pointer flex-col items-center gap-1.5 rounded-[10px] border-[1.5px] border-dashed border-[#D7D7DF] bg-[#F7F6F4] px-3.5 py-[22px] text-center hover:border-[#292A3F] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? (
+            <Loader2 className="h-[22px] w-[22px] animate-spin text-sidebar-primary" />
+          ) : (
+            <Upload className="h-[22px] w-[22px] text-sidebar-primary" />
+          )}
+          <strong className="font-semibold text-[#292A3F]">
+            {tErr("uploadDocument")} {label}
+          </strong>
+          <span className="text-sm text-muted-foreground">{tErr("uploadFormats")}</span>
+        </button>
+      )}
 
       <ReplaceExpiryPrompt
         open={replacePromptOpen}
@@ -1162,7 +1195,7 @@ function EmptyDropzone({
     >
       <Upload className="h-4 w-4 text-muted-foreground" />
       <span className="text-xs text-muted-foreground">{uploadLabel}</span>
-      <span className="text-[10px] text-muted-foreground">{formatsLabel}</span>
+      <span className="text-xs text-muted-foreground">{formatsLabel}</span>
     </button>
   );
 }
@@ -1213,7 +1246,7 @@ function FileCard({
           <p className="truncate text-xs font-medium">{name}</p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">{status}</div>
           {hint ? (
-            <p className="mt-0.5 text-[10px] text-muted-foreground">{hint}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
           ) : null}
         </div>
         <Button

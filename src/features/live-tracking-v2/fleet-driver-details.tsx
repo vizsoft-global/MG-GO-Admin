@@ -221,7 +221,7 @@ export function FleetDriverDetails({
         <div className="flex items-start gap-2 border-b border-border/60 px-2 py-2">
           <span
             className={cn(
-              "grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold",
+              "grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold",
               avatarTintFromName(name),
             )}
             aria-hidden
@@ -233,7 +233,7 @@ export function FleetDriverDetails({
               <p className="min-w-0 flex-1 truncate text-xs font-semibold">{name}</p>
               <span
                 className={cn(
-                  "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold",
+                  "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-semibold",
                   FLEET_TONE_BADGE[statusTone],
                 )}
               >
@@ -241,10 +241,10 @@ export function FleetDriverDetails({
                 {t(`status.${driver.status}`)}
               </span>
             </div>
-            <p className="mt-0.5 font-mono text-[10px] text-primary">{meta.driverCode}</p>
+            <p className="mt-0.5 font-mono text-xs text-primary">{meta.driverCode}</p>
             {/* QA #48: the motion half of On Delivery, from the same source as the status. */}
             {driver.status === "on_delivery" ? (
-              <p className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+              <p className="mt-0.5 text-xs font-medium text-muted-foreground">
                 {t("status.on_delivery")} ·{" "}
                 {fleetMotion(driver) === "moving"
                   ? `${t("status.moving")} • ${speedLabel}`
@@ -256,7 +256,7 @@ export function FleetDriverDetails({
 
         <section className="space-y-1.5 border-b border-border/60 px-2 py-2">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("details.location")}
             </p>
             <Button
@@ -270,11 +270,11 @@ export function FleetDriverDetails({
               <RefreshCw className="size-3.5" aria-hidden />
             </Button>
           </div>
-          <p className="text-[11px] leading-snug">{locationLabel}</p>
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-xs leading-snug">{locationLabel}</p>
+          <p className="text-xs text-muted-foreground">
             {t("rail.zone")}: {meta.currentZoneName ?? meta.zoneName ?? t("rail.noZone")}
           </p>
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t("details.plate")}: {meta.vehicleLabel ?? "—"}
           </p>
         </section>
@@ -291,22 +291,22 @@ export function FleetDriverDetails({
         </section>
 
         <section className="border-b border-border/60 px-2 py-2">
-          <h4 className="mb-1.5 flex items-center gap-1 text-[11px] font-semibold">
+          <h4 className="mb-1.5 flex items-center gap-1 text-xs font-semibold">
             <MapPin className="size-3" aria-hidden />
             {t("details.assignedRestaurants")}
           </h4>
           {restaurantNames.length === 0 ? (
-            <p className="text-[10px] text-muted-foreground">{t("details.noRestaurants")}</p>
+            <p className="text-xs text-muted-foreground">{t("details.noRestaurants")}</p>
           ) : (
             <ul className="space-y-1">
               {restaurantNames.map((pin) => (
                 <li key={pin.id}>
                   {pin.id === "meta" ? (
-                    <span className="text-[11px]">{pin.name}</span>
+                    <span className="text-xs">{pin.name}</span>
                   ) : (
                     <Link
                       href={`/restaurants/${pin.id}`}
-                      className="block truncate text-[11px] text-primary hover:bg-primary/10"
+                      className="block truncate text-xs text-primary hover:bg-primary/10"
                     >
                       {pin.name}
                     </Link>
@@ -318,9 +318,9 @@ export function FleetDriverDetails({
         </section>
 
         <section className="border-b border-border/60 px-2 py-2">
-          <h4 className="mb-1.5 text-[11px] font-semibold">{t("details.recentOrders")}</h4>
+          <h4 className="mb-1.5 text-xs font-semibold">{t("details.recentOrders")}</h4>
           {recentOrders.length === 0 ? (
-            <p className="text-[10px] text-muted-foreground">{t("details.noRecentOrders")}</p>
+            <p className="text-xs text-muted-foreground">{t("details.noRecentOrders")}</p>
           ) : (
             <ul className="space-y-1.5">
               {recentOrders.map((order) => {
@@ -331,13 +331,13 @@ export function FleetDriverDetails({
                 return (
                   <li key={order.id} className="rounded-md border border-border/60 bg-muted/30 px-2 py-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-[11px] font-semibold">#{order.shortId}</p>
-                      <span className="text-[10px] font-semibold text-muted-foreground">
+                      <p className="text-xs font-semibold">#{order.shortId}</p>
+                      <span className="text-xs font-semibold text-muted-foreground">
                         {t(`details.orderStatus.${display}`)}
                       </span>
                     </div>
-                    <p className="truncate text-[10px] text-muted-foreground">{order.partnerName ?? "—"}</p>
-                    <p className="text-[10px] text-muted-foreground">{formatDurationSince(order.deliveredAt)}</p>
+                    <p className="truncate text-xs text-muted-foreground">{order.partnerName ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">{formatDurationSince(order.deliveredAt)}</p>
                   </li>
                 );
               })}
@@ -374,11 +374,11 @@ function Stat({
 }) {
   return (
     <div className="min-w-0 rounded-md border border-border/60 bg-muted/30 px-1.5 py-1">
-      <p className="flex items-center gap-0.5 text-[9px] text-muted-foreground">
+      <p className="flex items-center gap-0.5 text-xs text-muted-foreground">
         {icon}
         <span className="truncate">{label}</span>
       </p>
-      <p className="truncate text-[11px] font-semibold tabular-nums">{value}</p>
+      <p className="truncate text-xs font-semibold tabular-nums">{value}</p>
     </div>
   );
 }

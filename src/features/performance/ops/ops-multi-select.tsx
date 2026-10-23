@@ -68,7 +68,7 @@ export function OpsMultiSelect({
 
   return (
     <div className="min-w-0">
-      <p className="mb-1 flex items-center gap-1 truncate text-[10px] font-medium text-muted-foreground">
+      <p className="mb-1 flex items-center gap-1 truncate text-xs font-medium text-muted-foreground">
         {Icon ? <Icon className="size-3 shrink-0 opacity-70" /> : null}
         {label}
       </p>

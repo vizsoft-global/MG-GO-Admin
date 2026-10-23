@@ -130,7 +130,7 @@ export function EsignSignersEditor({
         </span>
         <div>
           <p className="text-sm font-semibold">{t("title")}</p>
-          <p className="text-[10px] text-muted-foreground">{t("subtitle")}</p>
+          <p className="text-xs text-muted-foreground">{t("subtitle")}</p>
         </div>
       </div>
       {readOnly ? null : (
@@ -187,14 +187,14 @@ export function EsignSignersEditor({
       {readOnly ? null : pickedCannotSign ? (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5">
           <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-amber-700" />
-          <p className="min-w-0 flex-1 text-[11px] text-amber-900">
+          <p className="min-w-0 flex-1 text-xs text-amber-900">
             {t("missingGrant", { name: picked?.full_name || picked?.email || "" })}
           </p>
           {optionsData?.can_grant ? (
             <Button
               type="button"
               variant="outline"
-              className="h-8 px-2 text-[11px]"
+              className="h-8 px-2 text-xs"
               disabled={grant.isPending}
               onClick={() => staffId && grant.mutate(staffId)}
             >
@@ -204,7 +204,7 @@ export function EsignSignersEditor({
         </div>
       ) : null}
       {persistedRows.length === 0 && draftRows.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">{t("empty")}</p>
+        <p className="text-xs text-muted-foreground">{t("empty")}</p>
       ) : (
         <ul className="space-y-1.5">
           {persistedRows.map((row) => (
@@ -216,7 +216,7 @@ export function EsignSignersEditor({
                 <p className="truncate text-xs font-medium">
                   {row.display_name || row.staff_contact || "—"}
                 </p>
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {roleLabel(row.role)} · {row.status}
                 </p>
               </div>
@@ -242,7 +242,7 @@ export function EsignSignersEditor({
             >
               <div className="min-w-0">
                 <p className="truncate text-xs font-medium">{row.display_name || "—"}</p>
-                <p className="text-[10px] text-muted-foreground">{roleLabel(row.role)}</p>
+                <p className="text-xs text-muted-foreground">{roleLabel(row.role)}</p>
               </div>
               <Button
                 type="button"

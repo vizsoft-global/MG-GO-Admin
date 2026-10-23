@@ -158,7 +158,7 @@ export function EsignScreenshotSettingsShell({
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
           <div>
             <p className="text-sm font-semibold text-amber-900">{t("defaultLabel")}</p>
-            <p className="text-[11px] text-amber-800">{t("overrideNote")}</p>
+            <p className="text-xs text-amber-800">{t("overrideNote")}</p>
           </div>
         </div>
         {defaultLoading ? (
@@ -182,7 +182,7 @@ export function EsignScreenshotSettingsShell({
           side instead — same columns, same grouping, no row hidden. */}
       <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
         <AppListCard className="h-full min-w-0 p-0">
-          <p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("sectionRequestTypes")}
           </p>
           <Table style={{ tableLayout: "fixed" }}>
@@ -231,7 +231,7 @@ export function EsignScreenshotSettingsShell({
         </AppListCard>
 
         <AppListCard className="h-full min-w-0 p-0">
-          <p className="border-b border-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("sectionCategories")}
           </p>
           <Table style={{ tableLayout: "fixed" }}>

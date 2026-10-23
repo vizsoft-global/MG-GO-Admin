@@ -173,7 +173,7 @@ export function AttendanceFiltersButton({
     >
       <SlidersHorizontal className="h-4 w-4" />
       {activeCount > 0 ? (
-        <span className="absolute -end-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-[9px] font-semibold leading-4 text-primary-foreground">
+        <span className="absolute -end-1 -top-1 min-w-4 rounded-full bg-primary px-1 text-xs font-semibold leading-4 text-primary-foreground">
           {activeCount}
         </span>
       ) : null}

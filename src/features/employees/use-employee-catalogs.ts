@@ -28,3 +28,8 @@ export function useNationalityCategories() {
 export function useBankCodes() {
   return useEmployeeCatalog("bank_codes");
 }
+
+/** The sponsorship catalog the Profile's Sponsorship picker reads. */
+export function useSponsorships() {
+  return useEmployeeCatalog("sponsorships");
+}

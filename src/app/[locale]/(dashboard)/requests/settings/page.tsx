@@ -100,9 +100,9 @@ export default async function RequestsSettingsPage({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{t(`links.${key}`)}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">{t(`linksDesc.${key}`)}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{t(`linksDesc.${key}`)}</p>
                 {metaLabel ? (
-                  <p className="mt-1 text-[10px] text-muted-foreground/80">{metaLabel}</p>
+                  <p className="mt-1 text-xs text-muted-foreground/80">{metaLabel}</p>
                 ) : null}
               </div>
               <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />

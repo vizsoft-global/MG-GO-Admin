@@ -228,7 +228,7 @@ export function WorkflowsSettingsPanel() {
         actions={
           <div className="flex items-center gap-2">
             {dirty ? (
-              <span className="rounded-full border border-warning-bg bg-warning-bg px-2 py-0.5 text-[11px] font-medium text-warning">
+              <span className="rounded-full border border-warning-bg bg-warning-bg px-2 py-0.5 text-xs font-medium text-warning">
                 {t("unsavedChanges")}
               </span>
             ) : null}
@@ -369,7 +369,7 @@ export function WorkflowsSettingsPanel() {
                           {t(`actions.${action}` as "actions.approve")}
                         </ToggleChip>
                       ))}
-                      <span className="ms-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <span className="ms-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
                         <Clock className="h-3 w-3" />
                         {step.is_system_auto || !step.sla_minutes
                           ? t("slaChipNone")
@@ -406,13 +406,13 @@ export function WorkflowsSettingsPanel() {
 
         <AppListCard className="space-y-2 p-4">
           <h3 className="text-sm font-semibold">{t("slaPanelTitle")}</h3>
-          <p className="text-[11px] text-muted-foreground">{t("slaPanelSubtitle")}</p>
+          <p className="text-xs text-muted-foreground">{t("slaPanelSubtitle")}</p>
           {selectedStep?.is_system_auto ? (
-            <p className="text-[11px] text-muted-foreground">{t("slaAutoNote")}</p>
+            <p className="text-xs text-muted-foreground">{t("slaAutoNote")}</p>
           ) : selectedStep ? (
             <div className="space-y-2">
               <div className="space-y-1">
-                <Label className="text-[11px]">{t("slaPerStep")}</Label>
+                <Label className="text-xs">{t("slaPerStep")}</Label>
                 <Select
                   value={slaHoursValue(selectedStep.sla_minutes)}
                   onValueChange={(v) => {
@@ -438,7 +438,7 @@ export function WorkflowsSettingsPanel() {
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-[11px]">{t("onBreach")}</Label>
+                <Label className="text-xs">{t("onBreach")}</Label>
                 <Select
                   value={selectedStep.breach_action ?? "notify"}
                   onValueChange={(v) => {
@@ -459,14 +459,14 @@ export function WorkflowsSettingsPanel() {
                   </SelectContent>
                 </Select>
               </div>
-              <p className="text-[10px] leading-relaxed text-muted-foreground">{t("slaHelp")}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{t("slaHelp")}</p>
             </div>
           ) : null}
           <h3 className="border-t border-border pt-2 text-sm font-semibold">{t("howRoutingWorks")}</h3>
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             {t("howRoutingWorksBody")}
           </p>
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t("hint")}{" "}
             <Link href="/requests/settings/roles" className="text-primary hover:underline">
               {t("rolesLink")}

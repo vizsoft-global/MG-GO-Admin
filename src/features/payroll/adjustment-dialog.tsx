@@ -197,28 +197,28 @@ export function AdjustmentDialog({
       className="fixed z-50 origin-(--transform-origin) rounded-lg border border-border bg-popover p-3 text-sm shadow-md ring-1 ring-foreground/10 duration-200 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95"
       style={{ top: pos.top, left: pos.left, width: pos.width }}
     >
-      <p className="text-[13px] font-semibold">{title}</p>
+      <p className="text-sm font-semibold">{title}</p>
       {state.context ? (
-        <p className="mt-1 text-[11px] text-muted-foreground">
+        <p className="mt-1 text-xs text-muted-foreground">
           {state.context.riderName} · {state.context.amId} · {state.context.date}
         </p>
       ) : (
-        <p className="mt-1 text-[11px] text-muted-foreground">
+        <p className="mt-1 text-xs text-muted-foreground">
           {t("riders", { count: state.riderCount })} · {t("days", { count: state.dayCount })} ·{" "}
           {t("cells", { count: state.cells.length })}
         </p>
       )}
       {state.context ? (
-        <p className="mt-1 text-[11px] text-muted-foreground">
+        <p className="mt-1 text-xs text-muted-foreground">
           {state.context.zone} ({state.context.zoneCategory}) · {t("ordersN", { n: state.context.orders })} ·{" "}
           {t("hoursN", { n: state.context.hours })}
         </p>
       ) : null}
-      <p className="mt-1 text-[11px]">
+      <p className="mt-1 text-xs">
         <span className="text-muted-foreground">{t("automatic")}: </span>
         <span className="font-semibold">{autoLabel}</span>
       </p>
-      {state.note ? <p className="mt-1 text-[10px] text-muted-foreground">{state.note}</p> : null}
+      {state.note ? <p className="mt-1 text-xs text-muted-foreground">{state.note}</p> : null}
       {state.cells.length === 1 ? (
         <AdjustmentHistory driverId={state.cells[0]!.driverId} date={state.cells[0]!.date} />
       ) : null}
@@ -231,7 +231,7 @@ export function AdjustmentDialog({
             aria-pressed={choice === status}
             onClick={() => setChoice(status)}
             className={cn(
-              "flex h-8 w-full items-center gap-2 rounded-md border px-2 text-start text-[11px] font-semibold transition-colors",
+              "flex h-8 w-full items-center gap-2 rounded-md border px-2 text-start text-xs font-semibold transition-colors",
               choice === status
                 ? "border-emerald-500 bg-emerald-100 text-emerald-900 shadow-sm ring-1 ring-emerald-400/50"
                 : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -249,7 +249,7 @@ export function AdjustmentDialog({
 
       {choice === "custom" ? (
         <div className="mt-2 flex items-center gap-2">
-          <Label htmlFor="payroll-adjust-hours" className="text-[11px]">
+          <Label htmlFor="payroll-adjust-hours" className="text-xs">
             {t("customHours")}
           </Label>
           <Input
@@ -263,13 +263,13 @@ export function AdjustmentDialog({
       ) : null}
 
       {state.cells.length > 1 ? (
-        <p className="mt-2 text-[10px] text-muted-foreground">
+        <p className="mt-2 text-xs text-muted-foreground">
           {t("willChange", { change: willChange.change, same: willChange.same })}
         </p>
       ) : null}
 
       <div className="mt-2 space-y-1">
-        <Label htmlFor="payroll-adjust-reason" className="text-[11px]">
+        <Label htmlFor="payroll-adjust-reason" className="text-xs">
           {t("reason")} <span className="text-destructive">*</span>
         </Label>
         <Input
@@ -281,10 +281,10 @@ export function AdjustmentDialog({
           onBlur={() => setTouched(true)}
           onChange={(e) => setReason(e.target.value)}
         />
-        {reasonMissing ? <p className="text-[10px] text-destructive">{t("reasonRequired")}</p> : null}
+        {reasonMissing ? <p className="text-xs text-destructive">{t("reasonRequired")}</p> : null}
       </div>
 
-      <p className="mt-2 flex items-start gap-1.5 text-[10px] leading-4 text-muted-foreground">
+      <p className="mt-2 flex items-start gap-1.5 text-xs leading-4 text-muted-foreground">
         <Info className="mt-0.5 size-3.5 shrink-0" />
         {t("auditHint")}
       </p>
@@ -320,19 +320,19 @@ function AdjustmentHistory({ driverId, date }: { driverId: string; date: string 
   return (
     <div className="mt-2 space-y-1">
       {latest ? (
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {t("lastEdited", { who: latest.actorName, when: latest.adjustedAt })}
         </p>
       ) : null}
-      <p className="text-[11px] font-semibold">{t("history")}</p>
+      <p className="text-xs font-semibold">{t("history")}</p>
       <div className="max-h-24 space-y-1 overflow-y-auto">
         {audit.isLoading ? (
-          <p className="text-[10px] text-muted-foreground">{t("historyLoading")}</p>
+          <p className="text-xs text-muted-foreground">{t("historyLoading")}</p>
         ) : rows.length === 0 ? (
-          <p className="text-[10px] text-muted-foreground">{t("historyEmpty")}</p>
+          <p className="text-xs text-muted-foreground">{t("historyEmpty")}</p>
         ) : (
           rows.map((row) => (
-            <p key={row.id} className="text-[10px] leading-4 text-muted-foreground">
+            <p key={row.id} className="text-xs leading-4 text-muted-foreground">
               <span className="font-semibold text-foreground">{row.adjustedAt}</span>
               {" · "}
               {row.actorName}

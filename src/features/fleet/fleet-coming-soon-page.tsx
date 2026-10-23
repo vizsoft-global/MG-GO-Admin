@@ -26,7 +26,7 @@ export function FleetComingSoonPage({
           description="Coming soon — this Fleet page is stubbed until its data UI ships."
         />
         <p className="px-4 pb-4 text-center">
-          <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+          <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
             Coming soon
           </span>
         </p>

@@ -132,6 +132,15 @@ export async function enrichSessionPermissions(
   }
 
   const accessKind = parseStaffAccessKind(accessKindRaw);
+  if (accessKind === "partner") {
+    return resolveSessionPermissionSlugs({
+      isSuperAdmin: false,
+      accessKind,
+      userTicks: [],
+      roleSlugs: [],
+      catalogSlugs: [],
+    });
+  }
   const epochCache = options?.fresh ? undefined : options?.cache;
   const seenEpoch = options?.seenEpoch ?? 0;
 

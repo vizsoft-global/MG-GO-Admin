@@ -132,12 +132,12 @@ export function RestaurantCoordinateInputs({
           className="rounded-lg bg-background font-mono text-sm tabular-nums"
         />
       </div>
-      <p className="text-[11px] text-muted-foreground">{labels.hint}</p>
+      <p className="text-xs text-muted-foreground">{labels.hint}</p>
       {latError ? (
-        <p className="text-[11px] text-destructive">{labels.invalidLatitude}</p>
+        <p className="text-xs text-destructive">{labels.invalidLatitude}</p>
       ) : null}
       {lngError ? (
-        <p className="text-[11px] text-destructive">{labels.invalidLongitude}</p>
+        <p className="text-xs text-destructive">{labels.invalidLongitude}</p>
       ) : null}
     </div>
   );

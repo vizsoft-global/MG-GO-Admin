@@ -129,7 +129,7 @@ function HubTile({
       </span>
       <span
         className={cn(
-          "text-center text-[14px] font-medium leading-normal text-[#18181b]",
+          "text-center text-sm font-medium leading-normal text-[#18181b]",
           wrapLabel ? "max-w-[100px]" : "whitespace-nowrap",
         )}
       >
@@ -137,7 +137,7 @@ function HubTile({
         {trailing}
       </span>
       {count != null && count > 0 ? (
-        <span className="absolute -end-2 -top-[5px] inline-flex items-center justify-center rounded-full border border-[#f6e5c3] bg-[#fffaeb] px-[7px] py-[2px] text-[12px] font-semibold tabular-nums text-[#b54708]">
+        <span className="absolute -end-2 -top-[5px] inline-flex items-center justify-center rounded-full border border-[#f6e5c3] bg-[#fffaeb] px-[7px] py-[2px] text-xs font-semibold tabular-nums text-[#b54708]">
           {count > 999 ? "999+" : count}
         </span>
       ) : null}
@@ -176,7 +176,7 @@ function FilterChip({
       aria-pressed={selected}
       onClick={onClick}
       className={cn(
-        "inline-flex items-center rounded-md px-2 py-1 text-[11.5px] transition-colors duration-150",
+        "inline-flex items-center rounded-md px-2 py-1 text-xs transition-colors duration-150",
         selected
           ? "bg-[#18181b] font-semibold text-white"
           : "border border-[#e4e4e7] bg-[#f4f4f5] font-medium text-[#71717a] hover:bg-[#ececee]",
@@ -189,7 +189,7 @@ function FilterChip({
 
 function YouBadge({ children }: { children: ReactNode }) {
   return (
-    <span className="rounded bg-[#fffaeb] px-2 py-[3px] text-[10px] font-bold text-[#b54708]">
+    <span className="rounded bg-[#fffaeb] px-2 py-[3px] text-xs font-bold text-[#b54708]">
       {children}
     </span>
   );
@@ -395,7 +395,7 @@ export function RcmV2HubShell() {
       className="-m-3 flex min-h-svh flex-col [color-scheme:light] bg-[#f9f1eb] text-[#18181b] dark:bg-[#f9f1eb] dark:text-[#18181b]"
       style={{ backgroundColor: LAUNCHER_BRAND.canvas, colorScheme: "light" }}
     >
-      <p className="px-6 pt-4 text-[13px] font-normal text-[#71717a]">{t("hubTitle")}</p>
+      <p className="px-6 pt-4 text-sm font-normal text-[#71717a]">{t("hubTitle")}</p>
       <div className="flex items-center justify-between gap-3 border-b border-[#ececee] px-6 py-2.5">
         <div className="inline-flex items-start rounded-lg border-[0.5px] border-black/15 bg-[#f4f4f5] p-[3px]">
           <button
@@ -409,13 +409,13 @@ export function RcmV2HubShell() {
           >
             <span
               className={cn(
-                "w-[180px] text-[13px]",
+                "w-[180px] text-sm",
                 tab === "outgoing" ? "font-semibold text-[#18181b]" : "font-normal text-[#71717a]",
               )}
             >
               {t("outgoingShort")}
             </span>
-            <span className="text-[10px] font-normal text-[#787887]">{t("outgoingHint")}</span>
+            <span className="text-xs font-normal text-[#787887]">{t("outgoingHint")}</span>
           </button>
           <button
             type="button"
@@ -429,7 +429,7 @@ export function RcmV2HubShell() {
             <span className="flex w-[180px] items-center justify-between gap-2">
               <span
                 className={cn(
-                  "text-[13px]",
+                  "text-sm",
                   tab === "incoming" ? "font-semibold text-[#18181b]" : "font-normal text-[#71717a]",
                 )}
               >
@@ -437,23 +437,23 @@ export function RcmV2HubShell() {
               </span>
               <span
                 className={cn(
-                  "rounded-[10px] bg-[#e4e4e7] px-1.5 py-px text-[10px] font-semibold tabular-nums",
+                  "rounded-[10px] bg-[#e4e4e7] px-1.5 py-px text-xs font-semibold tabular-nums",
                   tab === "incoming" ? "text-[#18181b]" : "text-[#71717a]",
                 )}
               >
                 {incomingCount}
               </span>
             </span>
-            <span className="text-[10px] font-normal text-[#787887]">{t("incomingHint")}</span>
+            <span className="text-xs font-normal text-[#787887]">{t("incomingHint")}</span>
           </button>
         </div>
         {senderBadge || receiverBadge ? (
           <div className="flex items-center gap-2">
-            <span className="text-[12px] font-normal text-[#71717a]">{t("yourAccess")}</span>
+            <span className="text-xs font-normal text-[#71717a]">{t("yourAccess")}</span>
             {senderBadge ? (
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-[#18181b]",
+                  "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-[#18181b]",
                   tab === "incoming"
                     ? "border border-[#e4e4e7] bg-[#f4f4f5]"
                     : "bg-[#efeff0]",
@@ -468,7 +468,7 @@ export function RcmV2HubShell() {
             {receiverBadge ? (
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-[#18181b]",
+                  "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-[#18181b]",
                   tab === "incoming"
                     ? "border border-[#e4e4e7] bg-[#f4f4f5]"
                     : "bg-[#efeff0]",
@@ -489,10 +489,10 @@ export function RcmV2HubShell() {
           <section className="relative z-10 flex w-full shrink-0 flex-col gap-[25px] rounded-xl border border-[#e4e4e7] bg-white p-5 lg:w-[513px] lg:max-w-[710px]">
             <div className="flex flex-col gap-2.5">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-[16px] font-semibold text-[#18181b]">{t("createFromTemplate")}</h2>
+                <h2 className="text-base font-semibold text-[#18181b]">{t("createFromTemplate")}</h2>
                 <YouBadge>{t("youSend")}</YouBadge>
               </div>
-              <p className="flex flex-wrap items-center gap-1 text-[13px] leading-normal">
+              <p className="flex flex-wrap items-center gap-1 text-sm leading-normal">
                 <span className="font-normal text-[#71717a]">{t("templateHint")}</span>
                 <Link
                   href="/employeedesk/esign/templates"
@@ -529,7 +529,7 @@ export function RcmV2HubShell() {
                         />
                         {penaltyOpen ? (
                           <div className="absolute start-0 top-full z-20 mt-2 flex w-[224px] flex-col gap-2.5 rounded-lg border border-[#e4e4e7] bg-white p-2.5 shadow-[0_4px_6px_rgba(0,0,0,0.08)]">
-                            <p className="text-[10px] font-normal tracking-[0.5px] text-[#a1a1aa] uppercase">
+                            <p className="text-xs font-normal tracking-[0.5px] text-[#a1a1aa] uppercase">
                               {t("penaltyCategory")}
                             </p>
                             <div className="flex flex-col gap-1">
@@ -537,7 +537,7 @@ export function RcmV2HubShell() {
                                 <Link
                                   key={child.key}
                                   href={`/employeedesk/esign/send?category=${alignPenaltyCategoryKey(child.key)}`}
-                                  className="flex h-[31px] w-[204px] items-center rounded p-2 text-[12.5px] font-normal text-[#18181b] hover:bg-[#f4f4f5]"
+                                  className="flex h-[31px] w-[204px] items-center rounded p-2 text-xs font-normal text-[#18181b] hover:bg-[#f4f4f5]"
                                   onClick={() => setPenaltyOpen(false)}
                                 >
                                   {child.label}
@@ -565,19 +565,19 @@ export function RcmV2HubShell() {
 
           <div className="flex min-w-0 w-full flex-1 flex-col gap-4">
             <section className="flex flex-col gap-4 rounded-xl border border-[#e4e4e7] bg-white p-5">
-              <h2 className="text-[16px] font-semibold text-[#18181b]">{t("sendToMany")}</h2>
-              <p className="text-[13px] font-normal leading-[18px] text-[#71717a]">{t("sendToManyHint")}</p>
+              <h2 className="text-base font-semibold text-[#18181b]">{t("sendToMany")}</h2>
+              <p className="text-sm font-normal leading-[18px] text-[#71717a]">{t("sendToManyHint")}</p>
               <div className="flex flex-col gap-2">
                 <Link
                   href="/employeedesk/esign/bulk"
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#18181b] px-4 py-2.5 text-[13px] font-semibold text-white transition-colors duration-150 hover:bg-[#27272a] active:scale-[0.97] motion-reduce:active:scale-100"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#18181b] px-4 py-2.5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#27272a] active:scale-[0.97] motion-reduce:active:scale-100"
                 >
                   <Glyph src="/hub/plus.svg" size={14} />
                   {t("importExcel")}
                 </Link>
                 <button
                   type="button"
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#e4e4e7] bg-white px-4 py-2.5 text-[13px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#e4e4e7] bg-white px-4 py-2.5 text-sm font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
                   onClick={() => downloadGenericExampleSheet()}
                 >
                   <Glyph src="/hub/download.svg" size={14} />
@@ -588,16 +588,16 @@ export function RcmV2HubShell() {
 
             <section className="flex flex-col gap-2 rounded-xl border border-[#e4e4e7] bg-white p-4">
               <div className="flex items-center justify-between gap-2">
-                <h2 className="text-[15px] font-semibold text-[#18181b]">{t("sentForSignature")}</h2>
+                <h2 className="text-sm font-semibold text-[#18181b]">{t("sentForSignature")}</h2>
                 <Link
                   href="/employeedesk/esign/batches"
-                  className="text-[12px] font-medium text-[#b54708] underline decoration-solid underline-offset-2"
+                  className="text-xs font-medium text-[#b54708] underline decoration-solid underline-offset-2"
                 >
                   {t("viewAll")}
                 </Link>
               </div>
               {recentSends.length === 0 ? (
-                <p className="py-6 text-center text-[12px] text-[#71717a]">{t("emptySends")}</p>
+                <p className="py-6 text-center text-xs text-[#71717a]">{t("emptySends")}</p>
               ) : (
                 <div className="flex flex-col">
                   {recentSends.map((row) => {
@@ -614,21 +614,21 @@ export function RcmV2HubShell() {
                       >
                         <div className="flex items-center gap-2">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-[13px] font-semibold leading-4 text-[#18181b]">
+                            <p className="truncate text-sm font-semibold leading-4 text-[#18181b]">
                               {row.title}
                             </p>
-                            <p className="mt-0.5 truncate text-[11px] leading-4 text-[#71717a]">
+                            <p className="mt-0.5 truncate text-xs leading-4 text-[#71717a]">
                               {bulk
                                 ? t("batchEmployeesBulk", { count: total, date: sent })
                                 : t("batchEmployees", { count: total, date: sent })}
                             </p>
                           </div>
-                          <span className="shrink-0 text-[11px] font-medium tabular-nums text-[#3f3f46]">
+                          <span className="shrink-0 text-xs font-medium tabular-nums text-[#3f3f46]">
                             {t("signedOf", { signed, total, percent })}
                           </span>
                           <span
                             className={cn(
-                              "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold",
+                              "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs font-semibold",
                               done
                                 ? "border-[#d3f3df] bg-[#ecfdf3] text-[#067647]"
                                 : "border-[#f6e5c3] bg-[#fffaeb] text-[#b54708]",
@@ -639,7 +639,7 @@ export function RcmV2HubShell() {
                           </span>
                           <Link
                             href={row.href}
-                            className="inline-flex h-7 shrink-0 items-center rounded-md border border-[#e4e4e7] bg-white px-2 text-[11px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
+                            className="inline-flex h-7 shrink-0 items-center rounded-md border border-[#e4e4e7] bg-white px-2 text-xs font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
                           >
                             {t("track")}
                           </Link>
@@ -672,7 +672,7 @@ export function RcmV2HubShell() {
         <div className="flex flex-1 flex-col items-start gap-4 px-6 pb-6 pt-2 lg:flex-row">
           <section className="flex w-full shrink-0 flex-col gap-[25px] rounded-xl border border-[#e4e4e7] bg-white p-5 lg:w-[431px] lg:max-w-[510px]">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-[16px] font-semibold text-[#18181b]">{t("queuesWaiting")}</h2>
+              <h2 className="text-base font-semibold text-[#18181b]">{t("queuesWaiting")}</h2>
               <YouBadge>{t("youReceive")}</YouBadge>
             </div>
             <div className="flex flex-col gap-[25px]">
@@ -697,17 +697,17 @@ export function RcmV2HubShell() {
 
           <section className="flex min-w-0 w-full flex-1 flex-col gap-2 rounded-xl border border-[#e4e4e7] bg-white p-4">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-[15px] font-semibold text-[#18181b]">{t("needsAction")}</h2>
+              <h2 className="text-sm font-semibold text-[#18181b]">{t("needsAction")}</h2>
               <div className="flex items-center gap-1.5">
                 <Link
                   href="/employeedesk/all?scope=all"
-                  className="text-[12px] font-medium text-[#b54708] underline decoration-solid underline-offset-2"
+                  className="text-xs font-medium text-[#b54708] underline decoration-solid underline-offset-2"
                 >
                   {t("viewAll")}
                 </Link>
                 <button
                   type="button"
-                  className="inline-flex h-7 items-center rounded-md border border-[#e4e4e7] bg-white px-2 text-[12px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
+                  className="inline-flex h-7 items-center rounded-md border border-[#e4e4e7] bg-white px-2 text-xs font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
                   onClick={() => setUploadOpen(true)}
                 >
                   {t("uploadDocument")}
@@ -732,7 +732,7 @@ export function RcmV2HubShell() {
               <div ref={sortRef} className="relative">
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 text-[11.5px] font-normal text-[#71717a]"
+                  className="inline-flex items-center gap-1 text-xs font-normal text-[#71717a]"
                   aria-expanded={sortOpen}
                   onClick={() => setSortOpen((open) => !open)}
                 >
@@ -746,7 +746,7 @@ export function RcmV2HubShell() {
                         key={value}
                         type="button"
                         className={cn(
-                          "flex h-[31px] w-full items-center rounded px-2 text-start text-[12.5px] text-[#18181b] hover:bg-[#f4f4f5]",
+                          "flex h-[31px] w-full items-center rounded px-2 text-start text-xs text-[#18181b] hover:bg-[#f4f4f5]",
                           sort === value && "bg-[#f4f4f5]",
                         )}
                         onClick={() => {
@@ -764,7 +764,7 @@ export function RcmV2HubShell() {
             {actionQuery.isPending && actionRows.length === 0 ? (
               <div className="py-6" aria-busy="true" />
             ) : actionRows.length === 0 ? (
-              <p className="py-6 text-center text-[12px] text-[#71717a]">{t("emptyAction")}</p>
+              <p className="py-6 text-center text-xs text-[#71717a]">{t("emptyAction")}</p>
             ) : (
               <div className="max-h-[min(22rem,40vh)] min-h-0 overflow-y-auto">
                 {actionRows.map((row) => (
@@ -772,13 +772,13 @@ export function RcmV2HubShell() {
                 ))}
               </div>
             )}
-            <p className="text-[11px] font-normal leading-[15px] text-[#a1a1aa]">{t("incomingFootnote")}</p>
+            <p className="text-xs font-normal leading-[15px] text-[#a1a1aa]">{t("incomingFootnote")}</p>
           </section>
         </div>
       )}
 
       <footer className="mt-auto flex flex-col gap-3 border-t border-[#e4e4e7] bg-white px-6 pt-4 pb-6">
-        <p className="text-[10px] font-semibold tracking-[0.5px] text-[#a1a1aa]">{t("adminOnly")}</p>
+        <p className="text-xs font-semibold tracking-[0.5px] text-[#a1a1aa]">{t("adminOnly")}</p>
         <div className="flex flex-wrap items-start gap-2.5">
           {adminChips.map((chip) => (
             <Link
@@ -786,7 +786,7 @@ export function RcmV2HubShell() {
               href={chip.href}
               className={cn(
                 "inline-flex items-center rounded-md border border-[#e4e4e7] bg-white px-3 py-1.5 font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa]",
-                tab === "incoming" ? "text-[13px]" : "text-[12px]",
+                tab === "incoming" ? "text-sm" : "text-xs",
               )}
             >
               {t(`admin.${chip.id}` as "admin.templates")}
@@ -812,11 +812,11 @@ function ActionRow({ row, locale }: { row: RequestListRow; locale: string }) {
     <div className="flex flex-col gap-1 border-b border-[#f4f4f5] py-2 last:border-b-0 last:pb-0">
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold leading-4 text-[#18181b]">
+          <p className="truncate text-sm font-semibold leading-4 text-[#18181b]">
             {t(`types.${row.request_type}` as "types.leave")}
           </p>
           {row.is_confidential ? (
-            <p className="mt-0.5 inline-flex min-w-0 items-center gap-1 text-[11px] leading-4 text-[#71717a]">
+            <p className="mt-0.5 inline-flex min-w-0 items-center gap-1 text-xs leading-4 text-[#71717a]">
               <Glyph src="/hub/lock.svg" size={11} />
               <span className="truncate">
                 {t("confidentialLine")}
@@ -824,7 +824,7 @@ function ActionRow({ row, locale }: { row: RequestListRow; locale: string }) {
               </span>
             </p>
           ) : (
-            <p className="mt-0.5 truncate text-[11px] leading-4 text-[#71717a]">
+            <p className="mt-0.5 truncate text-xs leading-4 text-[#71717a]">
               {t("fromPrefix")}
               {who}
               {sent ? ` · ${sent}` : ""}
@@ -834,7 +834,7 @@ function ActionRow({ row, locale }: { row: RequestListRow; locale: string }) {
         </div>
         <span
           className={cn(
-            "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold",
+            "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs font-semibold",
             track.done
               ? "border-[#d3f3df] bg-[#ecfdf3] text-[#067647]"
               : "border-[#f6e5c3] bg-[#fffaeb] text-[#b54708]",
@@ -845,7 +845,7 @@ function ActionRow({ row, locale }: { row: RequestListRow; locale: string }) {
         </span>
         <Link
           href={`/employeedesk/${row.id}`}
-          className="inline-flex h-7 shrink-0 items-center rounded-md border border-[#e4e4e7] bg-white px-2 text-[11px] font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
+          className="inline-flex h-7 shrink-0 items-center rounded-md border border-[#e4e4e7] bg-white px-2 text-xs font-medium text-[#18181b] transition-colors duration-150 hover:bg-[#fafafa] active:scale-[0.97] motion-reduce:active:scale-100"
         >
           {t("review")}
         </Link>

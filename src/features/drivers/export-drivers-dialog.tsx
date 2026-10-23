@@ -146,7 +146,7 @@ export function DriversExportDialog({
             </p>
           ) : null}
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("columnsTitle")}
             </p>
             <div className="flex gap-1">
@@ -204,7 +204,7 @@ export function DriversExportDialog({
                 <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
                 {t("includeAppCode")}
               </Label>
-              <p className="text-[10px] text-muted-foreground">{t("includeAppCodeHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("includeAppCodeHint")}</p>
             </div>
             <Switch
               id="include-app-code"

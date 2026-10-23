@@ -41,7 +41,7 @@ export function AttendanceDriverDetailPageShell({ driverId }: { driverId: string
 
       {dayRow ? (
         <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("colCheckInPhoto")}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -51,7 +51,7 @@ export function AttendanceDriverDetailPageShell({ driverId }: { driverId: string
               distanceM={dayRow.check_in_distance_m}
             />
             {dayRow.check_in_photo_at ? (
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {new Date(dayRow.check_in_photo_at).toLocaleString()}
               </span>
             ) : null}

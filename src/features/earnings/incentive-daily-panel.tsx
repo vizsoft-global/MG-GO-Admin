@@ -80,10 +80,10 @@ export function IncentiveDailyPanel() {
   return (
     <div className="space-y-3">
       <p className="text-sm font-medium">{t("incentiveDailyTitle")}</p>
-      <p className="text-[10px] text-muted-foreground">{t("incentiveDailyHint")}</p>
+      <p className="text-xs text-muted-foreground">{t("incentiveDailyHint")}</p>
       <div className="flex flex-wrap items-end gap-2">
         <div className="space-y-1">
-          <label htmlFor="incentive-daily-from" className="text-[10px] text-muted-foreground">
+          <label htmlFor="incentive-daily-from" className="text-xs text-muted-foreground">
             {t("startDate")}
           </label>
           <Input
@@ -95,7 +95,7 @@ export function IncentiveDailyPanel() {
           />
         </div>
         <div className="space-y-1">
-          <label htmlFor="incentive-daily-to" className="text-[10px] text-muted-foreground">
+          <label htmlFor="incentive-daily-to" className="text-xs text-muted-foreground">
             {t("endDate")}
           </label>
           <Input
@@ -172,7 +172,7 @@ export function IncentiveDailyPanel() {
                   <TableRow key={row.id || `${row.driver_id}-${row.earn_date}`}>
                     <TableCell>
                       <p className="truncate text-sm font-medium">{row.driver_name}</p>
-                      <p className="font-mono text-[10px] text-muted-foreground">{row.driver_code}</p>
+                      <p className="font-mono text-xs text-muted-foreground">{row.driver_code}</p>
                     </TableCell>
                     <TableCell className="font-mono text-sm">{row.employee_id || "—"}</TableCell>
                     <TableCell className="tabular-nums text-sm">{row.earn_date}</TableCell>

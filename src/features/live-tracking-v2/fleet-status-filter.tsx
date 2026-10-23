@@ -83,20 +83,20 @@ export function FleetStatusFilter({
 
       <PopoverContent className="w-[230px] p-1.5" align="start">
         <div className="flex items-center justify-between px-1.5 pb-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("filters.statuses")}
           </span>
           <div className="flex items-center gap-1">
             <button
               type="button"
-              className="cursor-pointer rounded px-1 text-[11px] text-primary transition-colors duration-150 hover:bg-primary/10"
+              className="cursor-pointer rounded px-1 text-xs text-primary transition-colors duration-150 hover:bg-primary/10"
               onClick={() => onSetStatuses(null)}
             >
               {t("filters.selectAll")}
             </button>
             <button
               type="button"
-              className="cursor-pointer rounded px-1 text-[11px] text-muted-foreground transition-colors duration-150 hover:bg-muted"
+              className="cursor-pointer rounded px-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-muted"
               onClick={() => onSetStatuses([])}
             >
               {t("filters.selectNone")}

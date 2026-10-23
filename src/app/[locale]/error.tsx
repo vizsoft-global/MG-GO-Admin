@@ -39,7 +39,7 @@ export default function LocaleError({
           {t("retry")}
         </Button>
         {error.digest ? (
-          <p className="mt-3 text-center text-[10px] text-muted-foreground">
+          <p className="mt-3 text-center text-xs text-muted-foreground">
             {t("reference", { digest: error.digest })}
           </p>
         ) : null}

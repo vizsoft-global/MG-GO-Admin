@@ -28,7 +28,7 @@ export function DpdDistributionCard({
           <Icon className="size-4 text-primary" />
           <h3 className="text-sm font-semibold">{title}</h3>
         </div>
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">
           {t("barLegend")}
         </span>
       </div>

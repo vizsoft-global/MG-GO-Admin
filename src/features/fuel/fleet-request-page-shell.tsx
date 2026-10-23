@@ -267,7 +267,7 @@ export function FleetRequestPageShell({
                         className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
                       >
                         {group.label}
-                        <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                        <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
                           {group.rows.length}
                         </span>
                       </TableCell>
@@ -333,10 +333,10 @@ function FleetRequestRow({
       <TableCell className="whitespace-nowrap font-medium">{row.request_code}</TableCell>
       <TableCell className="whitespace-nowrap">
         <p className="font-medium">{row.driver_name}</p>
-        {row.employee_id ? <p className="text-[11px] text-muted-foreground">{row.employee_id}</p> : null}
+        {row.employee_id ? <p className="text-xs text-muted-foreground">{row.employee_id}</p> : null}
         <Link
           href={`/requests/${row.id}`}
-          className="inline-flex items-center gap-1 text-[11px] text-primary hover:bg-primary/10"
+          className="inline-flex items-center gap-1 text-xs text-primary hover:bg-primary/10"
           onClick={(event) => event.stopPropagation()}
         >
           <ExternalLink className="h-3 w-3" />

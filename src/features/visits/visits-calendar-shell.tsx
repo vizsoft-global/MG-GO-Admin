@@ -346,7 +346,7 @@ export function VisitsCalendarShell({
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="min-w-[92px] text-center text-[13px] font-semibold tabular-nums text-foreground">
+            <span className="min-w-[92px] text-center text-sm font-semibold tabular-nums text-foreground">
               {mode === "day" ? dayLabel : weekLabel}
             </span>
             <Button
@@ -387,7 +387,7 @@ export function VisitsCalendarShell({
                 aria-pressed={mode === value}
                 onClick={() => setMode(value)}
                 className={cn(
-                  "inline-flex h-7 items-center rounded-md px-3.5 text-[13px] transition-colors",
+                  "inline-flex h-7 items-center rounded-md px-3.5 text-sm transition-colors",
                   mode === value
                     ? "border border-border bg-card font-semibold text-foreground shadow-sm"
                     : "font-medium text-muted-foreground hover:text-foreground",
@@ -415,7 +415,7 @@ export function VisitsCalendarShell({
             <table className="w-full border-collapse">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-muted/40 [&>th]:bg-muted/40 [&>th]:backdrop-blur-sm">
-                  <th className="h-[38px] w-[80px] text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <th className="h-[38px] w-[80px] text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {t("colTime")}
                   </th>
                   {columns.map((column) => (
@@ -423,10 +423,10 @@ export function VisitsCalendarShell({
                       key={column.id}
                       className="h-[38px] min-w-[150px] border-s border-border ps-3 text-start"
                     >
-                      <span className="block truncate text-[12.5px] font-semibold text-foreground">
+                      <span className="block truncate text-xs font-semibold text-foreground">
                         {column.title}
                       </span>
-                      <span className="block truncate text-[10.5px] font-normal text-muted-foreground">
+                      <span className="block truncate text-xs font-normal text-muted-foreground">
                         {column.subtitle}
                       </span>
                     </th>
@@ -440,7 +440,7 @@ export function VisitsCalendarShell({
                       <tr className="border-y border-border bg-muted/30">
                         <td
                           colSpan={columns.length + 1}
-                          className="py-1.5 text-center text-[11.5px] font-medium text-muted-foreground"
+                          className="py-1.5 text-center text-xs font-medium text-muted-foreground"
                         >
                           {t("calendar.lunchBreak", {
                             from: config.lunch_start.slice(0, 5),
@@ -459,7 +459,7 @@ export function VisitsCalendarShell({
                           return (
                             <td
                               key={column.id}
-                              className="h-[38px] border-s border-border bg-muted/60 text-center text-[11px] font-medium text-muted-foreground"
+                              className="h-[38px] border-s border-border bg-muted/60 text-center text-xs font-medium text-muted-foreground"
                             >
                               {t("calendar.blocked")}
                             </td>
@@ -484,7 +484,7 @@ export function VisitsCalendarShell({
                             {cell.first ? (
                               <Link
                                 href={`/visit-bookings/${cell.first.id}`}
-                                className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card py-px pe-1.5 ps-1.5 text-[10.5px] font-medium leading-4 text-foreground hover:bg-muted/60"
+                                className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card py-px pe-1.5 ps-1.5 text-xs font-medium leading-4 text-foreground hover:bg-muted/60"
                               >
                                 <span
                                   className={cn(
@@ -501,7 +501,7 @@ export function VisitsCalendarShell({
                             ) : null}
                             <span
                               className={cn(
-                                "block text-[10px] leading-4 tabular-nums",
+                                "block text-xs leading-4 tabular-nums",
                                 cell.booked === 0
                                   ? "font-medium text-muted-foreground/60"
                                   : isFull

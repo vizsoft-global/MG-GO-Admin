@@ -21,7 +21,7 @@ export function ApprovalWorkflowPanel({
   return (
     <div className="flex h-full flex-col rounded-xl border border-border bg-card p-4 shadow-sm">
       <h3 className="text-sm font-semibold">{t("title")}</h3>
-      <p className="mb-3 text-[11px] text-muted-foreground">{t("subtitle")}</p>
+      <p className="mb-3 text-xs text-muted-foreground">{t("subtitle")}</p>
       <div className="space-y-0">
         {steps.map((step, i) => (
           <div key={step.title} className="relative flex gap-2.5 pb-4 last:pb-0">
@@ -30,7 +30,7 @@ export function ApprovalWorkflowPanel({
             ) : null}
             <span
               className={cn(
-                "relative z-10 flex size-7 shrink-0 items-center justify-center rounded-full border-2 text-[11px] font-extrabold",
+                "relative z-10 flex size-7 shrink-0 items-center justify-center rounded-full border-2 text-xs font-extrabold",
                 i < 3
                   ? "border-emerald-500 bg-emerald-100 text-emerald-800"
                   : "border-border bg-muted/40 text-muted-foreground",
@@ -39,23 +39,23 @@ export function ApprovalWorkflowPanel({
               {i + 1}
             </span>
             <div>
-              <p className="text-[12.5px] font-semibold">{step.title}</p>
-              <p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{step.body}</p>
+              <p className="text-xs font-semibold">{step.title}</p>
+              <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{step.body}</p>
             </div>
           </div>
         ))}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2">
         <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-          <p className="text-[10.5px] font-bold text-muted-foreground">{t("awaiting")}</p>
+          <p className="text-xs font-bold text-muted-foreground">{t("awaiting")}</p>
           <p className="text-base font-bold">{awaitingAction}</p>
         </div>
         <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-          <p className="text-[10.5px] font-bold text-muted-foreground">{t("perRider")}</p>
+          <p className="text-xs font-bold text-muted-foreground">{t("perRider")}</p>
           <p className="text-base font-bold">{requestsPerRider.toFixed(1)}</p>
         </div>
       </div>
-      <p className="mt-3 text-[11px] leading-5 text-muted-foreground">{t("footnote")}</p>
+      <p className="mt-3 text-xs leading-5 text-muted-foreground">{t("footnote")}</p>
     </div>
   );
 }

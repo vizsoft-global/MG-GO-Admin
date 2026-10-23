@@ -27,9 +27,9 @@ export function FleetAttachmentRow({
       )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium text-foreground">{title}</p>
-        {fileName ? <p className="truncate text-[10px] text-muted-foreground">{fileName}</p> : null}
+        {fileName ? <p className="truncate text-xs text-muted-foreground">{fileName}</p> : null}
         {captured ? (
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Captured {captured}
             {fromCamera ? " · From mobile camera" : source === "admin_upload" ? " · Admin upload" : ""}
           </p>

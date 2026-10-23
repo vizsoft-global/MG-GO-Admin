@@ -104,7 +104,7 @@ export function TrackingInsightsPanel({
               </span>
               <span className={cnCount(item.count)}>{item.count}</span>
             </div>
-            <span className="text-[10px] leading-tight text-slate-700 dark:text-slate-200">
+            <span className="text-xs leading-tight text-slate-700 dark:text-slate-200">
               {item.label}
             </span>
           </li>
@@ -119,7 +119,7 @@ function cnIcon(tone: string) {
 }
 
 function cnCount(count: number) {
-  return `shrink-0 rounded-full bg-background px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+  return `shrink-0 rounded-full bg-background px-1.5 py-0.5 text-xs font-semibold tabular-nums ${
     count > 0 ? "text-foreground" : "text-muted-foreground"
   }`;
 }

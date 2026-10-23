@@ -116,7 +116,7 @@ export function VehicleCompaniesPanel({ companies }: { companies: VehicleCompany
           { label: t("kpiVehicles"), value: assignedVehicles },
         ].map((item) => (
           <div key={item.label} className="rounded-lg border border-border bg-muted/20 px-3 py-2">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{item.label}</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{item.label}</p>
             <p className="text-lg font-semibold tabular-nums">{item.value}</p>
           </div>
         ))}
@@ -166,7 +166,7 @@ export function VehicleCompaniesPanel({ companies }: { companies: VehicleCompany
                       {item.vehicle_count > 0 ? (
                         <Link
                           href={`/vehicles?company=${encodeURIComponent(item.key)}`}
-                          className="inline-flex items-center gap-0.5 text-[10px] text-primary hover:bg-primary/10"
+                          className="inline-flex items-center gap-0.5 text-xs text-primary hover:bg-primary/10"
                         >
                           {t("viewVehicles")}
                           <ExternalLink className="size-3" aria-hidden />
@@ -221,7 +221,7 @@ export function VehicleCompaniesPanel({ companies }: { companies: VehicleCompany
                     onChange={(event) => setDraft({ ...draft, labelEn: event.target.value })}
                   />
                   {draft.isNew && draftKey ? (
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {t("keyHint", { key: draftKey })}
                     </p>
                   ) : null}
@@ -254,7 +254,7 @@ export function VehicleCompaniesPanel({ companies }: { companies: VehicleCompany
                     </SegmentOption>
                   </div>
                   {!draft.isNew && !draft.isActive && draft.vehicleCount > 0 ? (
-                    <p className="text-[10px] text-amber-700">
+                    <p className="text-xs text-amber-700">
                       {t("deactivateHint", { count: draft.vehicleCount })}
                     </p>
                   ) : null}

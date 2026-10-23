@@ -121,7 +121,7 @@ function PartnerFormBody({
             placeholder={t("fieldTitlePlaceholder")}
             className="rounded-lg bg-background"
           />
-          <p className="text-[11px] text-muted-foreground">{t("titleHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("titleHint")}</p>
         </div>
 
         <div className="space-y-1.5">
@@ -134,7 +134,7 @@ function PartnerFormBody({
             rows={3}
             className="resize-none"
           />
-          <p className="text-[11px] text-muted-foreground">{t("descriptionHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("descriptionHint")}</p>
         </div>
 
         <div className="space-y-2">
@@ -149,7 +149,7 @@ function PartnerFormBody({
                   className="h-full w-full object-contain p-1"
                 />
               ) : (
-                <span className="text-[10px] text-muted-foreground">{t("noLogo")}</span>
+                <span className="text-xs text-muted-foreground">{t("noLogo")}</span>
               )}
             </div>
             <div className="flex flex-col gap-2">
@@ -187,7 +187,7 @@ function PartnerFormBody({
               )}
             </div>
           </div>
-          <p className="text-[11px] text-muted-foreground">{t("logoHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("logoHint")}</p>
         </div>
       </div>
 

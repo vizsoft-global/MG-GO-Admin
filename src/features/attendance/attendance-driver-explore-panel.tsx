@@ -123,7 +123,7 @@ function AttendanceComplianceBreakdown({
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-[10px] text-muted-foreground">
+      <p className="mt-2 text-xs text-muted-foreground">
         {t("complianceBreakdownHint")}
       </p>
     </div>
@@ -224,21 +224,21 @@ export function AttendanceDriverExplorePanel({
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-[10px] text-muted-foreground">{t("weekPresent")}</p>
+          <p className="text-xs text-muted-foreground">{t("weekPresent")}</p>
           <p className="text-lg font-semibold tabular-nums">{weekStats.present}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-[10px] text-muted-foreground">{t("kpiLate")}</p>
+          <p className="text-xs text-muted-foreground">{t("kpiLate")}</p>
           <p className="text-lg font-semibold tabular-nums">{weekStats.late}</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-[10px] text-muted-foreground">{t("kpiCompliance")}</p>
+          <p className="text-xs text-muted-foreground">{t("kpiCompliance")}</p>
           <p className="text-lg font-semibold tabular-nums">
             {weekStats.avgCompliance}%
           </p>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-[10px] text-muted-foreground">{t("colDuty")}</p>
+          <p className="text-xs text-muted-foreground">{t("colDuty")}</p>
           <p className="text-lg font-semibold tabular-nums">
             {formatDurationSeconds(dayRow.duty_seconds)}
           </p>

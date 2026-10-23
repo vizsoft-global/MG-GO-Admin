@@ -79,7 +79,7 @@ export function AssistantPageShell({ gatewayReady }: { gatewayReady: boolean }) 
               const rtl = looksArabic(text);
               return (
                 <div key={message.id} className="space-y-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {message.role === "user" ? t("you") : t("assistant")}
                   </p>
                   <div

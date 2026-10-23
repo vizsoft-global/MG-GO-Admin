@@ -39,7 +39,7 @@ export function RequesterHeader({
       return (
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{name}</p>
-          <Link href={profileHref} className="text-[12px] font-medium text-orange-700 hover:underline">
+          <Link href={profileHref} className="text-xs font-medium text-orange-700 hover:underline">
             {t("detail.viewProfile")}
           </Link>
         </div>
@@ -65,7 +65,7 @@ export function RequesterHeader({
         </span>
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{name}</p>
-          <p className="truncate text-[11px] text-muted-foreground">
+          <p className="truncate text-xs text-muted-foreground">
             {[
               requester?.zone ? t("zoneLabel", { zone: requester.zone }) : null,
               requester?.phone || null,

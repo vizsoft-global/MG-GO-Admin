@@ -54,7 +54,7 @@ export function GoogleMapsStatusBanner({ className }: { className?: string }) {
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{t("hints.googleMapsAuthFailed")}</span>
         </p>
-        <p className="mt-1.5 ps-5 text-[11px] leading-relaxed text-destructive/90">
+        <p className="mt-1.5 ps-5 text-xs leading-relaxed text-destructive/90">
           {t("hints.googleMapsReferrerFix")}
         </p>
       </div>

@@ -192,6 +192,7 @@ export const APP_ACCESS_CATALOG: readonly AppAccessEntry[] = [
       },
       { id: "payrollRequests", labelKey: "subViews.payrollRequests", slugs: ["payroll.requests"] },
       { id: "payrollSettings", labelKey: "subViews.payrollSettings", slugs: ["payroll.settings"] },
+      { id: "payrollHrPayroll", labelKey: "subViews.payrollHrPayroll", slugs: ["payroll.hr_payroll"] },
     ],
   },
   {

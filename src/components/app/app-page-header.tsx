@@ -57,11 +57,11 @@ export function AppPageHeader({
       ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">
             {title}
           </h1>
           {description ? (
-            <div className="mt-0.5 text-sm text-muted-foreground">{description}</div>
+            <div className="mt-0.5 text-sm font-normal text-muted-foreground">{description}</div>
           ) : null}
         </div>
         {actions ? (

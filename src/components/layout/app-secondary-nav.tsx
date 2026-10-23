@@ -67,7 +67,7 @@ export function AppSecondaryNav({
       className="hidden h-full w-56 shrink-0 border-e border-sidebar-border bg-sidebar md:flex"
     >
       <SidebarHeader className="h-11 justify-center border-b border-sidebar-border px-3">
-        <SidebarGroupLabel className="px-0 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+        <SidebarGroupLabel className="px-0 text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
           {groupLabel}
         </SidebarGroupLabel>
       </SidebarHeader>
@@ -83,7 +83,7 @@ export function AppSecondaryNav({
                   <SidebarMenuItem key={child.id}>
                     <SidebarMenuButton
                       isActive={isActive}
-                      className="h-8 cursor-pointer rounded-md text-[13px] font-normal"
+                      className="h-8 cursor-pointer rounded-md text-sm font-normal"
                       render={
                         <Link href={child.href} prefetch>
                           <MenuIcon

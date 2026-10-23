@@ -2,7 +2,6 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { getFirebaseFirestore } from "@/lib/firebase/admin";
 import {
-  MIDDLEWARE_SESSION_BUDGET_MS,
   STAFF_SESSION_COOKIE,
   verifyStaffSessionCookie,
 } from "@/lib/firebase/session";
@@ -22,6 +21,7 @@ export type SessionUser = {
   isSuperAdmin: boolean;
   isManager: boolean;
   accessKind: StaffAccessKind | null;
+  partnerProjectKey: string | null;
   adminRoleSlug: string;
   epochs: EpochCounters;
 };
@@ -36,6 +36,13 @@ export type SessionOutcome = {
 
 const SESSION_BUDGET_MS = 8_000;
 
+/**
+ * Page and layout cookie verify. The proxy stays on the 3s middleware budget.
+ * A cold Admin init plus `verifySessionCookie` routinely exceeds 3s, and that
+ * path throws `auth_backend_unavailable` into the locale error boundary.
+ */
+const PAGE_SESSION_VERIFY_MS = 15_000;
+
 async function loadSessionOutcome(): Promise<SessionOutcome> {
   try {
     return await loadSessionOutcomeUnsafe();
@@ -49,7 +56,7 @@ async function loadSessionOutcomeUnsafe(): Promise<SessionOutcome> {
   const cookie = cookieStore.get(STAFF_SESSION_COOKIE)?.value;
 
   const probe = await verifyStaffSessionCookie(cookie, {
-    timeoutMs: MIDDLEWARE_SESSION_BUDGET_MS,
+    timeoutMs: PAGE_SESSION_VERIFY_MS,
     checkRevoked: false,
   });
 

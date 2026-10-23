@@ -31,6 +31,7 @@ import {
   parseMonthKey,
 } from "../core/kuwait";
 import { requireStaff, requireStaffFresh, type StaffContext } from "../core/staff";
+import { loadNationalityLabels, nationalityLabel } from "../core/nationality-label";
 import {
   BATCH_LIMIT,
   chunk,
@@ -581,6 +582,7 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
     restaurantClientId: string | null;
   };
 
+  const nationalityLabels = await loadNationalityLabels("en");
   const rosterAll: RosterRow[] = driverSnap.docs.map((doc) => {
     const raw = (doc.data() ?? {}) as Dict;
     const zoneId = asString(raw["zone_id"]);
@@ -609,7 +611,11 @@ export const adminPayrollMonthSnapshot = onCall(async (request) => {
       zoneId,
       zoneName: zoneId ? (zoneNames.get(zoneId) ?? asString(raw["zone_name"])) : null,
       projectKey,
-      nationality: asString(raw["nationality"]),
+      nationality: nationalityLabel(
+        raw["nationality_category_keys"],
+        nationalityLabels,
+        asString(raw["nationality"]),
+      ),
       riderCategory: asString(raw["rider_category"]),
       sourceCompany: asString(raw["source_company"]),
       status: asString(raw["status"]),

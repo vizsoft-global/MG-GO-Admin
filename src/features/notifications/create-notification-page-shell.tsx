@@ -505,7 +505,7 @@ export function CreateNotificationPageShell() {
                       {t("screenshotForceOff")}
                     </SegmentOption>
                   </div>
-                  <p className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                     <ShieldOff className="size-3 shrink-0" aria-hidden />
                     {resolvedScreenshotRestricted
                       ? t("screenshotWillRestrict")
@@ -622,7 +622,7 @@ export function CreateNotificationPageShell() {
                 actionFields={actionFields}
               />
               <div className="rounded-lg border border-border bg-muted/20 p-3">
-                <p className="text-xs font-semibold text-accent">{t("previewPayload")}</p>
+                <p className="text-xs font-semibold text-[#A73C24]">{t("previewPayload")}</p>
                 <pre className="mt-2 overflow-x-auto text-xs">{payloadPreview}</pre>
               </div>
             </div>

@@ -327,7 +327,7 @@ export function EsignSentShell() {
               >
                 {t(`filters.${tab}`)}
                 {count != null ? (
-                  <span className="rounded-full bg-muted px-1.5 text-[10px] tabular-nums">
+                  <span className="rounded-full bg-muted px-1.5 text-xs tabular-nums">
                     {count}
                   </span>
                 ) : null}
@@ -367,7 +367,7 @@ export function EsignSentShell() {
                       so the list keeps Figma's column set instead of an actions column. */}
                   <Link
                     href={`/requests/esign/${row.id}`}
-                    className="mt-0.5 flex items-center gap-1 font-sans text-[10px] text-primary hover:underline"
+                    className="mt-0.5 flex items-center gap-1 font-sans text-xs text-primary hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <ExternalLink className="h-3 w-3" />
@@ -376,7 +376,7 @@ export function EsignSentShell() {
                 </TableCell>
                 <TableCell className="text-sm">
                   <div>{row.driver_name}</div>
-                  <div className="text-[11px] text-muted-foreground">{row.driver_code}</div>
+                  <div className="text-xs text-muted-foreground">{row.driver_code}</div>
                 </TableCell>
                 <TableCell
                   className="max-w-[320px] truncate text-sm font-medium"
@@ -473,7 +473,7 @@ export function EsignSentShell() {
                 className="h-9 py-1.5"
                 onChange={(e) => setDocumentFile(e.target.files?.[0] ?? null)}
               />
-              <p className="text-[10px] text-muted-foreground">{t("fieldDocumentHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("fieldDocumentHint")}</p>
             </div>
           </div>
           <AppModalFooter title={t("createTitle")} subtitle={t("createSubtitle")}>

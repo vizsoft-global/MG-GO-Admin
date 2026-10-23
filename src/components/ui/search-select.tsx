@@ -128,7 +128,7 @@ export function SearchSelect({
           />
         </div>
         {showRecentsLabel ? (
-          <p className="mb-1 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="mb-1 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Recent
           </p>
         ) : null}
@@ -152,7 +152,7 @@ export function SearchSelect({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{item.label}</span>
                   {item.hint ? (
-                    <span className="block truncate text-[11px] text-muted-foreground">
+                    <span className="block truncate text-xs text-muted-foreground">
                       {item.hint}
                     </span>
                   ) : null}
@@ -166,7 +166,7 @@ export function SearchSelect({
           ) : null}
         </div>
         {hasMore ? (
-          <p className="mt-2 px-1 text-[11px] text-muted-foreground">
+          <p className="mt-2 px-1 text-xs text-muted-foreground">
             {items.length - visibleItems.length} more items. Type to search all.
           </p>
         ) : null}
@@ -174,4 +174,6 @@ export function SearchSelect({
     </Popover>
   );
 }
+
+
 

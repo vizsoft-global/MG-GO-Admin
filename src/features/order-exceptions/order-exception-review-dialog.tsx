@@ -56,7 +56,7 @@ function Field({
 }) {
   return (
     <div className={cn("min-w-0", className)}>
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
       <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground">
@@ -140,7 +140,7 @@ function OrderExceptionReviewForm({
             <div className="space-y-3 px-5 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {t("reviewTitle")}
                   </p>
                   <p className="mt-0.5 truncate text-base font-semibold text-foreground">
@@ -155,7 +155,7 @@ function OrderExceptionReviewForm({
                 </div>
                 <span
                   className={cn(
-                    "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+                    "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold",
                     STATUS_TONE[row.status],
                   )}
                 >
@@ -173,7 +173,7 @@ function OrderExceptionReviewForm({
               <div className="grid grid-cols-2 gap-3 rounded-xl border border-border bg-muted/20 p-3 sm:grid-cols-4">
                 <Field label={t("colOrder")}>
                   <Receipt className="h-3 w-3 shrink-0 text-muted-foreground" />
-                  <span className="truncate font-mono text-[11px]">{row.order_id || "—"}</span>
+                  <span className="truncate font-mono text-xs">{row.order_id || "—"}</span>
                 </Field>
                 <Field label={t("colKind")}>
                   <AlertTriangle className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -194,7 +194,7 @@ function OrderExceptionReviewForm({
               </div>
 
               <div className="rounded-xl border border-border p-3">
-                <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <MessageSquare className="h-3 w-3" />
                   {t("colReason")}
                 </p>
@@ -204,9 +204,9 @@ function OrderExceptionReviewForm({
               </div>
 
               <div>
-                <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("colProof")}
-                  <span className="rounded-full bg-muted px-1.5 py-px text-[10px] font-medium normal-case text-muted-foreground">
+                  <span className="rounded-full bg-muted px-1.5 py-px text-xs font-medium normal-case text-muted-foreground">
                     {t("proofCount", { count: proofs.length })}
                   </span>
                 </p>
@@ -260,7 +260,7 @@ function OrderExceptionReviewForm({
                       : "border-rose-200 bg-rose-50/60",
                   )}
                 >
-                  <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {row.status === "approved" ? (
                       <BadgeCheck className="h-3 w-3" />
                     ) : (
@@ -291,12 +291,12 @@ function OrderExceptionReviewForm({
                   <div className="flex items-center justify-between gap-2">
                     <label
                       htmlFor="order-exception-review-note"
-                      className="text-[11px] font-semibold text-foreground"
+                      className="text-xs font-semibold text-foreground"
                     >
                       {t("reviewNote")}
                     </label>
                     {noteMissing ? (
-                      <span className="text-[10px] font-medium text-destructive">
+                      <span className="text-xs font-medium text-destructive">
                         {t("reviewNoteRequired")}
                       </span>
                     ) : null}
@@ -317,7 +317,7 @@ function OrderExceptionReviewForm({
                       noteMissing && "border-destructive focus-visible:ring-destructive",
                     )}
                   />
-                  <div className="flex flex-col gap-1 text-[10px] leading-snug text-muted-foreground sm:flex-row sm:gap-4">
+                  <div className="flex flex-col gap-1 text-xs leading-snug text-muted-foreground sm:flex-row sm:gap-4">
                     <span className="inline-flex items-center gap-1">
                       <Check className="h-3 w-3 text-emerald-600" />
                       {t("approveHint")}
@@ -328,7 +328,7 @@ function OrderExceptionReviewForm({
                     </span>
                   </div>
                   {actionError ? (
-                    <p role="alert" className="text-[11px] font-medium text-destructive">
+                    <p role="alert" className="text-xs font-medium text-destructive">
                       {actionError}
                     </p>
                   ) : null}

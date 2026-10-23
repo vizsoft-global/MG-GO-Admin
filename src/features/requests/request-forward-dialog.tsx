@@ -148,7 +148,7 @@ export function RequestForwardDialog({
         </DialogHeader>
         <div className="space-y-3 px-5 py-4">
           <div className="space-y-1.5">
-            <Label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("staff")}
             </Label>
             <div
@@ -160,7 +160,7 @@ export function RequestForwardDialog({
               {selected ? (
                 <span
                   className={cn(
-                    "flex size-8 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+                    "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                     avatarTintFromName(selected.full_name),
                   )}
                 >
@@ -180,7 +180,7 @@ export function RequestForwardDialog({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="forward-note" className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <Label htmlFor="forward-note" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("note")}
               <span className="ms-0.5 text-destructive">*</span>
             </Label>
@@ -191,7 +191,7 @@ export function RequestForwardDialog({
               onChange={(event) => setNote(event.target.value)}
             />
           </div>
-          <p className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+          <p className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0" />
             <span>
               {selected

@@ -237,7 +237,7 @@ export function FuelPageShell({
               </div>
             )}
             {rangeError ? (
-              <p className="text-[10px] text-destructive">
+              <p className="text-xs text-destructive">
                 {rangeError === "span" ? t("rangeTooLong") : t("rangeOrder")}
               </p>
             ) : null}
@@ -376,10 +376,10 @@ function FuelRow({
     >
       <TableCell className="whitespace-nowrap">
         <p className="font-medium">{row.driverName ?? "—"}</p>
-        {row.employeeId ? <p className="text-[11px] text-muted-foreground">{row.employeeId}</p> : null}
+        {row.employeeId ? <p className="text-xs text-muted-foreground">{row.employeeId}</p> : null}
         <Link
           href={`/fuel/drivers/${row.driverId}`}
-          className="inline-flex items-center gap-1 text-[11px] text-primary hover:bg-primary/10"
+          className="inline-flex items-center gap-1 text-xs text-primary hover:bg-primary/10"
           onClick={(event) => event.stopPropagation()}
         >
           <ExternalLink className="h-3 w-3" />
@@ -387,7 +387,7 @@ function FuelRow({
         </Link>
       </TableCell>
       <TableCell className="whitespace-nowrap font-medium">{row.plate ?? "—"}</TableCell>
-      <TableCell className="font-mono text-[11px]">{row.chip ?? "—"}</TableCell>
+      <TableCell className="font-mono text-xs">{row.chip ?? "—"}</TableCell>
       <TableCell>
         <FuelTypeBadge value={row.fuelType} />
       </TableCell>
@@ -434,7 +434,7 @@ function FuelRow({
               {cell ? (
                 <button
                   type="button"
-                  className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100"
+                  className="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
                   onClick={(event) => {
                     event.stopPropagation();
                     onOpenFill();
@@ -449,7 +449,7 @@ function FuelRow({
                   type="button"
                   title={mark.code}
                   aria-label={mark.code}
-                  className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-semibold leading-tight ${FLEET_REQUEST_CHIP_CLASS[mark.type]}`}
+                  className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-semibold leading-tight ${FLEET_REQUEST_CHIP_CLASS[mark.type]}`}
                   onClick={(event) => {
                     event.stopPropagation();
                     onOpenRequest(mark.id);

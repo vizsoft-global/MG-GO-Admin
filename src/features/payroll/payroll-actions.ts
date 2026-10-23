@@ -32,6 +32,7 @@ import {
 } from "./payroll-snapshot";
 import { parseRules } from "./payroll-rules-engine";
 import type { PayrollColumnConfigRow, PayrollHeadingView } from "./payroll-column-config";
+import type { HrBundle, HrCellPatch } from "./hr-payroll-types";
 import type {
   OffStructureBulkResult,
   PayrollAdjustmentAuditRow,
@@ -47,7 +48,7 @@ function requirePayrollView() {
 }
 
 async function requirePayrollPermission(
-  slug: "payroll.view" | "payroll.export" | "payroll.manage",
+  slug: "payroll.view" | "payroll.export" | "payroll.manage" | "payroll.hr_payroll",
 ) {
   const session = await getSessionUser();
   if (
@@ -1090,6 +1091,47 @@ export async function savePayrollColumnConfig(input: {
     after: { label: input.label, hiddenViews: input.hiddenViews },
   });
   return { ok: true };
+}
+
+async function requireHrPayrollRead() {
+  const session = await getSessionUser();
+  if (!session) throw new Error("not_authorized");
+  const allowed =
+    session.isSuperAdmin ||
+    hasPermissionInSet(session.permissions, "payroll.hr_payroll", false) ||
+    hasPermissionInSet(session.permissions, "payroll.manage", false);
+  if (!allowed) throw new Error("not_authorized");
+  return session;
+}
+
+export async function fetchHrPayrollBundle(monthKey: string, locale: string): Promise<HrBundle> {
+  await requireHrPayrollRead();
+  const { data, error } = await callRpc<HrBundle>("admin_hr_payroll_snapshot", {
+    p_month: monthKey,
+    p_locale: locale,
+  });
+  if (error || !data) throw new Error(error?.message || "load_failed");
+  return data;
+}
+
+export async function saveHrPayrollCells(
+  monthKey: string,
+  cells: readonly { driverId: string; patch: HrCellPatch }[],
+): Promise<{ saved: number; skipped: number }> {
+  await requirePayrollPermission("payroll.manage");
+  let saved = 0;
+  let skipped = 0;
+  for (let i = 0; i < cells.length; i += 400) {
+    const chunk = cells.slice(i, i + 400);
+    const { data, error } = await callRpc<{ saved?: number; skipped?: number }>("admin_save_hr_payroll_cells", {
+      p_month: monthKey,
+      p_cells: chunk,
+    });
+    if (error || !data) throw new Error(error?.message || "save_failed");
+    saved += Number(data.saved ?? 0);
+    skipped += Number(data.skipped ?? 0);
+  }
+  return { saved, skipped };
 }
 
 export type PayrollIdentityField = "employeeId" | "fullName" | "clientId" | "restaurantName";

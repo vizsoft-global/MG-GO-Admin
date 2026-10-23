@@ -184,7 +184,7 @@ export function VisitsReceptionShell() {
                     </span>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{selected.driver_name}</p>
-                      <p className="truncate text-[11px] text-muted-foreground">
+                      <p className="truncate text-xs text-muted-foreground">
                         {selected.booking_code} · {selected.driver_phone ?? "—"}
                       </p>
                     </div>
@@ -196,25 +196,25 @@ export function VisitsReceptionShell() {
 
                 <dl className="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-3 text-sm">
                   <div>
-                    <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <dt className="text-xs uppercase tracking-wide text-muted-foreground">
                       {t("colDepartment")}
                     </dt>
                     <dd className="font-medium">{selected.department_label}</dd>
                   </div>
                   <div>
-                    <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <dt className="text-xs uppercase tracking-wide text-muted-foreground">
                       {t("detail.branch")}
                     </dt>
                     <dd className="font-medium">{selected.branch_name ?? "—"}</dd>
                   </div>
                   <div>
-                    <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <dt className="text-xs uppercase tracking-wide text-muted-foreground">
                       {t("colDate")}
                     </dt>
                     <dd className="tabular-nums">{selected.scheduled_date}</dd>
                   </div>
                   <div>
-                    <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <dt className="text-xs uppercase tracking-wide text-muted-foreground">
                       {t("detail.slot")}
                     </dt>
                     <dd className="tabular-nums">
@@ -259,7 +259,7 @@ export function VisitsReceptionShell() {
                       </Button>
                     </div>
                     {selected.status !== "confirmed" && selected.status !== "checked_in" ? (
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {t("reception.alreadyClosed")}
                       </p>
                     ) : null}
@@ -271,7 +271,7 @@ export function VisitsReceptionShell() {
             <div className="rounded-xl border border-border bg-card shadow-sm">
               <div className="flex items-center justify-between border-b border-border p-3">
                 <h2 className="text-sm font-semibold">{t("reception.todaysArrivals")}</h2>
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {t("reception.bookedDoneCount", {
                     booked: sorted.length,
                     done: groups.done.length,
@@ -288,7 +288,7 @@ export function VisitsReceptionShell() {
                 ).map((section) =>
                   section.items.length === 0 ? null : (
                     <div key={section.key}>
-                      <p className="bg-muted/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <p className="bg-muted/40 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {section.label} · {section.items.length}
                       </p>
                       {section.items.map((row) => (
@@ -306,7 +306,7 @@ export function VisitsReceptionShell() {
                           </span>
                           <span
                             className={cn(
-                              "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+                              "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                               avatarTintClass(row.driver_name),
                             )}
                           >
@@ -316,7 +316,7 @@ export function VisitsReceptionShell() {
                             <span className="block truncate text-sm font-medium">
                               {row.driver_name}
                             </span>
-                            <span className="block truncate text-[11px] text-muted-foreground">
+                            <span className="block truncate text-xs text-muted-foreground">
                               {row.department_label}
                             </span>
                           </span>
@@ -358,7 +358,7 @@ export function VisitsReceptionShell() {
                     resolveScan(e.currentTarget.value);
                   }}
                 />
-                <p className="text-center text-[11px] text-muted-foreground">
+                <p className="text-center text-xs text-muted-foreground">
                   {t("reception.scanHint")}
                 </p>
               </form>
@@ -388,21 +388,21 @@ export function VisitsReceptionShell() {
                         className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-start text-sm hover:bg-muted/40"
                       >
                         <span className="truncate">{row.driver_name}</span>
-                        <span className="font-mono text-[11px] text-muted-foreground">
+                        <span className="font-mono text-xs text-muted-foreground">
                           {row.booking_code}
                         </span>
                       </button>
                     </li>
                   ))}
                   {filteredRows.length === 0 ? (
-                    <li className="px-2 py-1.5 text-[11px] text-muted-foreground">
+                    <li className="px-2 py-1.5 text-xs text-muted-foreground">
                       {t("reception.noMatches")}
                     </li>
                   ) : null}
                 </ul>
               ) : recents.length > 0 ? (
                 <div className="mt-2">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
                     {t("reception.recent")}
                   </p>
                   <div className="mt-1 flex flex-wrap gap-1.5">
@@ -415,7 +415,7 @@ export function VisitsReceptionShell() {
                           const row = sorted.find((r) => r.booking_code === code);
                           if (row) setSelectedId(row.id);
                         }}
-                        className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[11px] font-mono text-muted-foreground hover:bg-muted/60"
+                        className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-xs font-mono text-muted-foreground hover:bg-muted/60"
                       >
                         {code}
                       </Link>

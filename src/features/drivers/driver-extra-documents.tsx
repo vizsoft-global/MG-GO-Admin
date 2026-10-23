@@ -3,12 +3,11 @@
 import { useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, FileText, Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { ExternalLink, FileText, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { SimpleConfirmDialog } from "@/components/simple-confirm-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -166,13 +165,13 @@ export function DriverExtraDocuments({
   }
 
   return (
-    <Card className="rounded-xl border-border shadow-sm">
-      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 border-b border-border py-4">
-        <div>
-          <CardTitle className="text-base font-semibold">
+    <section className="overflow-hidden rounded-[14px] border border-border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-[18px]">
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-foreground">
             {t("extraDocumentsTitle")}
-          </CardTitle>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          </h3>
+          <p className="mt-0.5 text-sm text-muted-foreground">
             {t("extraDocumentsDescription")}
           </p>
         </div>
@@ -180,41 +179,39 @@ export function DriverExtraDocuments({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="h-9 cursor-pointer rounded-lg"
+            className="h-10 min-h-10 cursor-pointer rounded-lg px-3.5"
             onClick={() => {
               resetDialog();
               setAddOpen(true);
             }}
           >
-            <Plus className="me-1.5 h-4 w-4" />
-            {t("extraDocumentAdd")}
+            + {t("extraDocumentAdd")}
           </Button>
         ) : null}
-      </CardHeader>
-      <CardContent className="py-4">
+      </div>
+      <div>
         {isLoading ? (
           <div className="flex min-h-[96px] items-center justify-center">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : documents.length === 0 ? (
-          <p className="py-6 text-center text-xs text-muted-foreground">
+          <p className="px-4 py-9 text-center text-sm text-muted-foreground">
             {t("extraDocumentsEmpty")}
           </p>
         ) : (
-          <ul className="divide-y divide-border">
+          <ul>
             {documents.map((doc) => {
               const uploadedOn = formatUploadedOn(locale, doc.uploadedAt);
               return (
-                <li key={doc.id} className="flex items-center gap-3 py-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40 text-muted-foreground">
-                    <FileText className="h-4 w-4" />
+                <li key={doc.id} className="flex items-center gap-3 border-b border-border px-5 py-3 last:border-b-0">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#F7E9E4] text-sidebar-primary">
+                    <FileText className="h-[18px] w-[18px]" aria-hidden />
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-foreground">
                       {doc.title}
                     </p>
-                    <p className="truncate text-[11px] text-muted-foreground">
+                    <p className="truncate text-xs text-muted-foreground">
                       {formatFileSize(doc.sizeBytes)}
                       {uploadedOn
                         ? ` · ${t("extraDocumentUploadedOn", { date: uploadedOn })}`
@@ -251,7 +248,7 @@ export function DriverExtraDocuments({
             })}
           </ul>
         )}
-      </CardContent>
+      </div>
 
       <Dialog
         open={addOpen}
@@ -280,7 +277,7 @@ export function DriverExtraDocuments({
                   if (showErrors) setErrorKey(null);
                 }}
                 placeholder={t("extraDocumentNamePlaceholder")}
-                className="h-9 rounded-lg"
+                className="h-[42px] min-h-[42px] rounded-lg px-3"
                 maxLength={120}
                 disabled={pending}
                 autoFocus
@@ -308,21 +305,21 @@ export function DriverExtraDocuments({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={pending}
-                className="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border bg-muted/20 px-3 py-2.5 text-start hover:border-primary/40 hover:bg-primary/5"
+                className="flex min-h-[42px] w-full cursor-pointer items-center gap-2 rounded-lg border-[1.5px] border-dashed border-[#D7D7DF] bg-[#F7F6F4] px-3 py-2.5 text-start hover:border-[#292A3F] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Upload className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-medium text-foreground">
                     {file ? file.name : t("extraDocumentChooseFile")}
                   </span>
-                  <span className="block text-[10px] text-muted-foreground">
+                  <span className="block text-xs text-muted-foreground">
                     {file ? formatFileSize(file.size) : t("extraDocumentFileHint")}
                   </span>
                 </span>
               </button>
             </div>
             {showErrors && errorKey ? (
-              <p className="text-[10px] text-destructive">{errorMessage(errorKey)}</p>
+              <p className="text-xs text-destructive">{errorMessage(errorKey)}</p>
             ) : null}
           </div>
           <AppModalFooter
@@ -332,8 +329,7 @@ export function DriverExtraDocuments({
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="h-9 cursor-pointer rounded-md"
+              className="h-10 min-h-10 cursor-pointer rounded-lg"
               onClick={() => {
                 resetDialog();
                 setAddOpen(false);
@@ -344,8 +340,7 @@ export function DriverExtraDocuments({
             </Button>
             <Button
               type="button"
-              size="sm"
-              className="h-9 cursor-pointer rounded-md px-4"
+              className="h-10 min-h-10 cursor-pointer rounded-lg bg-[#292A3F] px-4 text-white hover:bg-[#292A3F]/90"
               onClick={() => void handleUpload()}
               disabled={pending}
             >
@@ -370,6 +365,6 @@ export function DriverExtraDocuments({
         onConfirm={handleDelete}
         isPending={pending}
       />
-    </Card>
+    </section>
   );
 }

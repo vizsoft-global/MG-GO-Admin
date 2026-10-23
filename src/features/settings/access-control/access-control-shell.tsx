@@ -10,7 +10,11 @@ import { Button } from "@/components/ui/button";
 import { RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CATALOG_SLUGS } from "@/lib/auth/permission-catalog";
-import { managerDowngradeSeedTicks, type StaffAccessKind } from "@/lib/auth/staff-access";
+import {
+  managerDowngradeSeedTicks,
+  type PartnerProjectKey,
+  type StaffAccessKind,
+} from "@/lib/auth/staff-access";
 import {
   APP_ACCESS_CATALOG,
   appAccessToTicks,
@@ -220,7 +224,9 @@ function StaffAccessWorkspace({
 
   const initialKind = rowKind(row);
   const initialAccess = ticksToAppAccess(row.slugs);
+  const initialProject: PartnerProjectKey = row.partnerProjectKey ?? "keeta";
   const [kind, setKind] = useState<StaffAccessKind>(initialKind);
+  const [partnerProject, setPartnerProject] = useState<PartnerProjectKey>(initialProject);
   const [access, setAccess] = useState<AppAccessMap>(initialAccess);
   const [unknown, setUnknown] = useState<string[]>(() => preservedUnknownSlugs(row.slugs));
   const [department, setDepartment] = useState<StaffDepartment | null>(row.staffDepartment);
@@ -229,6 +235,7 @@ function StaffAccessWorkspace({
   const [lastChanged, setLastChanged] = useState<StaffLastChanged>(row.lastChanged);
   const [baseline, setBaseline] = useState({
     kind: initialKind,
+    partnerProject: initialProject,
     access: initialAccess,
     department: row.staffDepartment,
     grants: [] as RequestTypeGrant[],
@@ -237,6 +244,7 @@ function StaffAccessWorkspace({
 
   const [copyOpen, setCopyOpen] = useState(false);
   const [downgradeOpen, setDowngradeOpen] = useState(false);
+  const [pendingKind, setPendingKind] = useState<StaffAccessKind>("user");
 
   const isSuperAdmin = row.isSuperAdmin;
   const fullAccess = isSuperAdmin || kind === "manager";
@@ -275,12 +283,13 @@ function StaffAccessWorkspace({
   const unsaved = useMemo(() => {
     let count = 0;
     if (kind !== baseline.kind) count += 1;
+    if (partnerProject !== baseline.partnerProject) count += 1;
     if (department !== baseline.department) count += 1;
     if (grantsKey(grants) !== grantsKey(baseline.grants)) count += 1;
     if (grantsKeyForEsign(esignGrants) !== grantsKeyForEsign(baseline.esignGrants)) count += 1;
     if (!fullAccess) count += diffAccess(baseline.access, access).changeCount;
     return count;
-  }, [access, baseline, department, esignGrants, fullAccess, grants, kind]);
+  }, [access, baseline, department, esignGrants, fullAccess, grants, kind, partnerProject]);
 
   useEffect(() => {
     unsavedRef.current = unsaved;
@@ -288,7 +297,8 @@ function StaffAccessWorkspace({
 
   const applyKind = (next: StaffAccessKind) => {
     if (isSuperAdmin) return;
-    if (kind === "manager" && next === "user") {
+    if (kind === "manager" && next !== "manager") {
+      setPendingKind(next);
       setDowngradeOpen(true);
       return;
     }
@@ -296,10 +306,24 @@ function StaffAccessWorkspace({
   };
 
   const confirmDowngrade = () => {
-    const seeded = managerDowngradeSeedTicks(CATALOG_SLUGS);
-    setKind("user");
-    setAccess(ticksToAppAccess(seeded));
-    setUnknown(preservedUnknownSlugs(seeded));
+    switch (pendingKind) {
+      case "partner":
+        setKind("partner");
+        break;
+      case "user": {
+        const seeded = managerDowngradeSeedTicks(CATALOG_SLUGS);
+        setKind("user");
+        setAccess(ticksToAppAccess(seeded));
+        setUnknown(preservedUnknownSlugs(seeded));
+        break;
+      }
+      case "manager":
+        break;
+      default: {
+        const unreachable: never = pendingKind;
+        return unreachable;
+      }
+    }
   };
 
   const draftTicks = useMemo(
@@ -333,6 +357,7 @@ function StaffAccessWorkspace({
         userId: row.id,
         accessKind: kind,
         slugs: draftTicks,
+        partnerProjectKey: kind === "partner" ? partnerProject : null,
         department,
         requestTypes: grants,
         esignCategories: esignGrants,
@@ -344,13 +369,14 @@ function StaffAccessWorkspace({
       toast.success(t("saved"));
       applyEpochs(result.epochs);
       void queryClient.invalidateQueries({ queryKey: queryKeys.menu.all() });
-      setBaseline({ kind, access, department, grants, esignGrants });
+      setBaseline({ kind, partnerProject, access, department, grants, esignGrants });
       router.refresh();
     });
   };
 
   const discard = () => {
     setKind(baseline.kind);
+    setPartnerProject(baseline.partnerProject);
     setAccess(baseline.access);
     setDepartment(baseline.department);
     setGrants(baseline.grants);
@@ -425,6 +451,8 @@ function StaffAccessWorkspace({
           onDepartment={setDepartment}
           accessKind={kind}
           onAccessKind={applyKind}
+          partnerProjectKey={partnerProject}
+          onPartnerProject={setPartnerProject}
           disabled={isPending || isSuperAdmin}
         />
         <div className="flex flex-wrap items-center gap-2 px-4 py-3">
@@ -438,7 +466,7 @@ function StaffAccessWorkspace({
                   aria-pressed={active}
                   onClick={() => setAppFilter(filter.id)}
                   className={cn(
-                    "inline-flex h-[30px] cursor-pointer items-center gap-1.5 rounded-md px-3 text-[12.5px] transition-colors duration-150",
+                    "inline-flex h-[30px] cursor-pointer items-center gap-1.5 rounded-md px-3 text-xs transition-colors duration-150",
                     active
                       ? "bg-white font-medium text-[#18181B] shadow-sm"
                       : "text-[#52525B] hover:text-[#18181B]",
@@ -455,7 +483,7 @@ function StaffAccessWorkspace({
           <Button
             type="button"
             variant="outline"
-            className="h-9 cursor-pointer rounded-lg border-[#E4E4E7] bg-white px-2.5 text-[12.5px] font-medium text-[#18181B]"
+            className="h-9 cursor-pointer rounded-lg border-[#E4E4E7] bg-white px-2.5 text-xs font-medium text-[#18181B]"
             onClick={resetRole}
             disabled={isPending || isSuperAdmin}
           >
@@ -468,7 +496,7 @@ function StaffAccessWorkspace({
             placeholder={t("searchApps")}
             clearLabel={t("clearSearch")}
             className="min-w-[180px]"
-            inputClassName="h-9 rounded-lg border-[#E4E4E7] bg-white text-[12.5px]"
+            inputClassName="h-9 rounded-lg border-[#E4E4E7] bg-white text-xs"
           />
         </div>
         <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">

@@ -85,7 +85,7 @@ export function RequestAttachDialog({
             {t("chooseFile")}
           </button>
           {files.length === 0 ? (
-            <p className="text-[10px] text-muted-foreground">{t("hint")}</p>
+            <p className="text-xs text-muted-foreground">{t("hint")}</p>
           ) : (
             <ul className="space-y-1.5">
               {files.map((file, index) => (
@@ -95,7 +95,7 @@ export function RequestAttachDialog({
                 >
                   <span className="min-w-0 truncate">
                     {file.name}
-                    <span className="ms-1.5 text-[10px] text-emerald-700/80">
+                    <span className="ms-1.5 text-xs text-emerald-700/80">
                       {formatSize(file.size)}
                     </span>
                   </span>

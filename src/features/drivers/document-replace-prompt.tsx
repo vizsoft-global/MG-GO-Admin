@@ -30,13 +30,13 @@ export function ReplaceExpiryPrompt({
 
   return (
     <div className="mt-1.5 space-y-2 rounded-md border border-amber-200 bg-amber-50/80 p-2">
-      <p className="text-[11px] font-medium text-amber-900">{labels.title}</p>
+      <p className="text-xs font-medium text-amber-900">{labels.title}</p>
       <div className="flex flex-wrap gap-1">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="h-7 cursor-pointer rounded-md px-2 text-[11px]"
+          className="h-7 cursor-pointer rounded-md px-2 text-xs"
           onClick={onKeepDate}
         >
           {labels.keepDate}
@@ -50,7 +50,7 @@ export function ReplaceExpiryPrompt({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 cursor-pointer rounded-md px-2 text-[11px]"
+          className="h-7 cursor-pointer rounded-md px-2 text-xs"
           onClick={onCancel}
         >
           {labels.cancel}
@@ -82,7 +82,7 @@ function ReplaceDateForm({
       <Input
         name="expiresAt"
         type="date"
-        className="h-7 w-[9.5rem] text-[11px]"
+        className="h-7 w-[9.5rem] text-xs"
         defaultValue={defaultDate}
         required
         aria-label={labels.expiresOn}
@@ -90,7 +90,7 @@ function ReplaceDateForm({
       <Button
         type="submit"
         size="sm"
-        className="h-7 cursor-pointer rounded-md px-2 text-[11px]"
+        className="h-7 cursor-pointer rounded-md px-2 text-xs"
       >
         {labels.confirm}
       </Button>

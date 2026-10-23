@@ -253,7 +253,7 @@ export function VisitsBranchesShell() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold">{row.name}</span>
                     {row.is_default ? (
-                      <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                      <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                         {t("branches.default")}
                       </span>
                     ) : null}
@@ -302,7 +302,7 @@ export function VisitsBranchesShell() {
                       </Button>
                     </div>
                   ) : (
-                    <span className="text-[11px] text-muted-foreground">—</span>
+                    <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </TableCell>
               </AppDataTableRow>

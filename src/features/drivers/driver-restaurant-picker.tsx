@@ -17,12 +17,16 @@ export function DriverRestaurantPicker({
   onChange,
   disabled,
   variant = "inline",
+  triggerClassName,
+  emptyLabel,
 }: {
   restaurants: RestaurantOption[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
   disabled?: boolean;
   variant?: "inline" | "compact";
+  triggerClassName?: string;
+  emptyLabel?: string;
 }) {
   const t = useTranslations("pages.driverNew");
   const [query, setQuery] = useState("");
@@ -80,12 +84,13 @@ export function DriverRestaurantPicker({
             className={cn(
               "flex h-9 w-full cursor-pointer items-center justify-between rounded-md border border-input bg-background px-3 text-sm shadow-xs",
               "disabled:cursor-not-allowed disabled:opacity-50",
+              triggerClassName,
             )}
           >
-            <span className={cn("truncate text-left", selectedIds.length === 0 && "text-muted-foreground")}>
-              {selectedIds.length === 0
-                ? t("sections.restaurants")
-                : `${t("sections.restaurants")} · ${selectedIds.length}`}
+            <span className={cn("truncate text-left", selectedPreview.length === 0 && "text-muted-foreground")}>
+              {selectedPreview.length === 0
+                ? (emptyLabel ?? t("sections.restaurants"))
+                : selectedPreview.map((item) => item.label).join(", ")}
             </span>
             <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
           </PopoverTrigger>
@@ -139,7 +144,7 @@ export function DriverRestaurantPicker({
         ) : null}
 
         {selectedIds.length === 0 ? (
-          <p className="text-[10px] leading-snug text-muted-foreground">{t("restaurantsActivationHint")}</p>
+          <p className="text-xs leading-snug text-muted-foreground">{t("restaurantsActivationHint")}</p>
         ) : null}
       </div>
     );

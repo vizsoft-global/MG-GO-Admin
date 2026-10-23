@@ -130,7 +130,7 @@ export function DriverOperationTimeline({
           <button
             type="button"
             onClick={onViewAll}
-            className="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/10"
+            className="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
           >
             <ExternalLink className="h-3 w-3" />
             {t("viewAll")}
@@ -164,10 +164,10 @@ export function DriverOperationTimeline({
                       : "bg-rose-500",
                   )}
                 />
-                <span className="w-10 shrink-0 text-[10px] tabular-nums text-slate-500 dark:text-slate-400">
+                <span className="w-10 shrink-0 text-xs tabular-nums text-slate-500 dark:text-slate-400">
                   {formatClock(event.occurredAt, locale)}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-[11px] text-slate-700 dark:text-slate-200">
+                <span className="min-w-0 flex-1 truncate text-xs text-slate-700 dark:text-slate-200">
                   {label}
                   {event.success ? null : (
                     <span className="ms-1 font-semibold text-rose-600 dark:text-rose-400">

@@ -116,19 +116,19 @@ export function LanguagesPanel() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="text-[10px] uppercase">
+                    <Badge variant="outline" className="text-xs uppercase">
                       {l.dir}
                     </Badge>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant="secondary" className="text-xs">
                         {l.translation_count ?? 0} {t("keys")}
                       </Badge>
                       {(l.needs_review_count ?? 0) > 0 && (
                         <Badge
                           variant="outline"
-                          className="border-accent text-[10px] text-accent"
+                          className="border-border text-xs text-foreground"
                         >
                           {l.needs_review_count} {t("needReview")}
                         </Badge>

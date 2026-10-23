@@ -623,7 +623,7 @@ export function DriverDevicesPageShell() {
                           className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
                         >
                           {group.label}
-                          <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                          <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
                             {group.rows.length}
                           </span>
                         </TableCell>
@@ -692,7 +692,7 @@ export function DriverDevicesPageShell() {
                   disabled={pending}
                   className="min-h-[72px] resize-none"
                 />
-                <p className="text-[10px] text-muted-foreground">{t("notifyBodyHint")}</p>
+                <p className="text-xs text-muted-foreground">{t("notifyBodyHint")}</p>
               </div>
             </div>
             <AppModalFooter
@@ -753,7 +753,7 @@ export function DriverDevicesPageShell() {
                     required
                     disabled={pending}
                   />
-                  <p className="text-[10px] text-muted-foreground">{t("forceMinCodeHint")}</p>
+                  <p className="text-xs text-muted-foreground">{t("forceMinCodeHint")}</p>
                 </div>
               ) : null}
             </div>
@@ -824,7 +824,7 @@ function DeviceRow({
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              "grid size-8 shrink-0 place-items-center rounded-full text-[11px] font-semibold",
+              "grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold",
               avatarTintFromName(row.full_name),
             )}
             aria-hidden
@@ -838,7 +838,7 @@ function DeviceRow({
             >
               {row.full_name}
             </Link>
-            <span className="text-[11px] text-muted-foreground">#{row.driver_code}</span>
+            <span className="text-xs text-muted-foreground">#{row.driver_code}</span>
           </div>
         </div>
       </TableCell>
@@ -848,7 +848,7 @@ function DeviceRow({
       <TableCell>
         <span
           className={cn(
-            "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold",
+            "inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-semibold",
             SEVERITY_BADGE[row.severity],
           )}
         >
@@ -858,7 +858,7 @@ function DeviceRow({
       <TableCell className="whitespace-nowrap">
         <span
           className={cn(
-            "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-medium tabular-nums",
+            "inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-medium tabular-nums",
             buildBelowMin
               ? "border-destructive/30 bg-destructive/10 text-destructive"
               : "border-emerald-200 bg-emerald-50 text-emerald-800",
@@ -867,7 +867,7 @@ function DeviceRow({
           {formatBuild(row)}
         </span>
         {row.buildGap != null && row.buildGap > 0 ? (
-          <span className="ms-1.5 text-[10px] text-muted-foreground">
+          <span className="ms-1.5 text-xs text-muted-foreground">
             {t("buildsBehind", { count: row.buildGap })}
           </span>
         ) : null}

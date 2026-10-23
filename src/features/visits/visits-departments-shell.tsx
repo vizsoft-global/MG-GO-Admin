@@ -188,7 +188,7 @@ export function VisitsDepartmentsShell() {
         description={t("departments.pageSubtitle")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {t("departments.countLabel", { count: rows.length })}
             </span>
             {canManage ? (
@@ -241,7 +241,7 @@ export function VisitsDepartmentsShell() {
                 <TableCell>
                   <span
                     className={cn(
-                      "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                      "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
                       departmentBadgeClass(row.key),
                     )}
                   >
@@ -263,7 +263,7 @@ export function VisitsDepartmentsShell() {
                     {t("departments.desksValue", { count: row.desks_count })}
                   </span>
                   {row.desk_location ? (
-                    <p className="text-[10px] text-muted-foreground">{row.desk_location}</p>
+                    <p className="text-xs text-muted-foreground">{row.desk_location}</p>
                   ) : null}
                 </TableCell>
                 <TableCell>
@@ -271,7 +271,7 @@ export function VisitsDepartmentsShell() {
                     <div className="flex items-center gap-2">
                       <span
                         className={cn(
-                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
                           avatarTintClass(row.assigned_staff_name),
                         )}
                       >
@@ -323,7 +323,7 @@ export function VisitsDepartmentsShell() {
                       {t("catalog.edit")}
                     </Button>
                   ) : (
-                    <span className="text-[11px] text-muted-foreground">—</span>
+                    <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </TableCell>
               </AppDataTableRow>
@@ -415,7 +415,7 @@ export function VisitsDepartmentsShell() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("departments.branchHint")}
               </p>
             </div>

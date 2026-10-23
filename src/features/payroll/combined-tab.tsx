@@ -68,7 +68,7 @@ export function CombinedPayrollTab({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="rounded-xl border border-border bg-card px-4 py-3 text-[12px] leading-5 shadow-sm">
+        <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-5 shadow-sm">
           <b>{t("combinedBannerTitle")}</b> {t("combinedBannerBody")}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -102,7 +102,7 @@ export function CombinedPayrollTab({
             fallbackLabel={fallbackLabel}
             canManage={canManage}
           />
-          <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-orange-300 bg-orange-50 px-3 text-[11px] font-semibold text-orange-800">
+          <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-orange-800">
             <Hand className="size-3.5" />
             {t("adjust.adjustedCells", { count: adjustedCells })}
           </span>
@@ -145,11 +145,11 @@ export function CombinedPayrollTab({
       <PayrollLegend riders={searched} />
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="border-b border-border px-4 py-2">
-          <h3 className="text-[13px] font-semibold">{t("manualChanges.title")}</h3>
-          <p className="text-[10px] text-muted-foreground">{t("manualChanges.hint")}</p>
+          <h3 className="text-sm font-semibold">{t("manualChanges.title")}</h3>
+          <p className="text-xs text-muted-foreground">{t("manualChanges.hint")}</p>
         </div>
         <div className="max-h-[min(240px,28dvh)] overflow-auto">
-          <table className="w-max min-w-full border-collapse text-[12px]">
+          <table className="w-max min-w-full border-collapse text-xs">
             <thead className="sticky top-0 bg-card">
               <tr>
                 <th className={TABLE_HEAD_CLASS}>{t("manualChanges.when")}</th>

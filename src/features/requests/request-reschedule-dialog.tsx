@@ -94,8 +94,8 @@ export function RequestRescheduleDialog({
           <p
             className={
               invalidRange
-                ? "text-[10px] text-destructive sm:col-span-2"
-                : "text-[10px] text-muted-foreground sm:col-span-2"
+                ? "text-xs text-destructive sm:col-span-2"
+                : "text-xs text-muted-foreground sm:col-span-2"
             }
           >
             {invalidRange ? t("invalidRange") : t("hint")}

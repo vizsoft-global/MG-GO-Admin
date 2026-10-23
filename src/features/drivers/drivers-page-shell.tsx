@@ -254,9 +254,15 @@ function DriversPageContent() {
   // The dashboard tile links straight to `?tab=pending`, and the detail page returns to the same
   // address — so the queue survives whatever the router does with the mounted shell.
   const tabParam = searchParams.get("tab");
+  const projectParam = searchParams.get("project");
   useEffect(() => {
     setTabFilter(parseDriversTab(tabParam));
   }, [tabParam]);
+  useEffect(() => {
+    const project = projectParam?.trim().toLowerCase();
+    if (!project) return;
+    setColumnFilters((current) => ({ ...current, project: { in: [project] } }));
+  }, [projectParam]);
 
   const query = useMemo(
     () => ({
@@ -724,7 +730,7 @@ function DriversPageContent() {
                   >
                     <FilterX className="h-3.5 w-3.5" aria-hidden />
                     <span className="hidden 2xl:inline">{t("clearAllFilters")}</span>
-                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white tabular-nums">
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-white tabular-nums">
                       {activeFilterCount}
                     </span>
                   </Button>
@@ -932,7 +938,7 @@ function DriversPageContent() {
                           className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
                         >
                           {group.label}
-                          <span className="ms-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                          <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
                             {group.rows.length}
                           </span>
                         </TableCell>

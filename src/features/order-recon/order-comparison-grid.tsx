@@ -104,7 +104,7 @@ export function ComparisonDayGrid({
             {days.map((ymd) => (
               <th key={ymd} className={cn(TABLE_HEAD_CLASS, "min-w-8 px-0.5 py-1 text-center")}>
                 <div>{ymd.slice(8)}</div>
-                <div className="text-[9px] font-normal text-muted-foreground">{weekdayShort(ymd)}</div>
+                <div className="text-xs font-normal text-muted-foreground">{weekdayShort(ymd)}</div>
               </th>
             ))}
           </tr>
@@ -148,7 +148,7 @@ function RiderBlock({
         <td className={cn(STICKY[1], "border-b border-border px-1.5 py-1 font-medium")}>{row.mgId}</td>
         <td className={cn(STICKY[2], "border-b border-border px-1.5 py-1")}>{row.name || "—"}</td>
         <td className={cn(STICKY[3], "border-b border-border px-1.5 py-1")}>{row.restaurant}</td>
-        <td className={cn(STICKY[4], "border-b border-border px-1.5 py-1 text-center text-[10px]")}>{monthLabel}</td>
+        <td className={cn(STICKY[4], "border-b border-border px-1.5 py-1 text-center text-xs")}>{monthLabel}</td>
         <td className="border-b border-border px-1.5 py-1 text-center">{row.offDays}</td>
         {row.diffDays.map((d, i) => {
           const tint = diffTint(d);
@@ -175,7 +175,7 @@ function RiderBlock({
 
 function SubRow({ label, values }: { label: string; values: number[] }) {
   return (
-    <tr className="bg-muted/20 text-[11px]">
+    <tr className="bg-muted/20 text-xs">
       <td className={cn(STICKY[0], "px-1 py-0.5")} />
       <td className={cn(STICKY[1], "px-1.5 py-0.5 text-muted-foreground")} colSpan={1}>
         {label}

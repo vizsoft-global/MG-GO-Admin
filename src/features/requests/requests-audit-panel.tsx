@@ -209,7 +209,7 @@ export function RequestsAuditPanel() {
           { label: t("title") },
         ]}
         actions={
-          <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 text-[11px] font-medium text-muted-foreground">
+          <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 text-xs font-medium text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" />
             {t("readOnly")}
           </span>
@@ -305,7 +305,7 @@ export function RequestsAuditPanel() {
               <SelectItem value="asc">{t("sortOldest")}</SelectItem>
             </SelectContent>
           </Select>
-          <span className="ms-auto text-[11px] text-muted-foreground">
+          <span className="ms-auto text-xs text-muted-foreground">
             {loading
               ? ""
               : t("eventCountInRange", {
@@ -341,14 +341,14 @@ export function RequestsAuditPanel() {
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <Avatar className="h-6 w-6">
-                      <AvatarFallback className="text-[9px]">
+                      <AvatarFallback className="text-xs">
                         {initialsOf(row.actor_name)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
                       <p className="truncate text-xs font-medium">{row.actor_name}</p>
                       {row.actor_role ? (
-                        <p className="truncate text-[10px] text-muted-foreground">
+                        <p className="truncate text-xs text-muted-foreground">
                           {row.actor_role}
                         </p>
                       ) : null}
@@ -357,7 +357,7 @@ export function RequestsAuditPanel() {
                 </TableCell>
                 <TableCell>
                   <span
-                    className={`inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-semibold capitalize ${actionTone(row.action)}`}
+                    className={`inline-flex rounded-md border px-1.5 py-0.5 text-xs font-semibold capitalize ${actionTone(row.action)}`}
                   >
                     {row.action}
                   </span>
@@ -369,7 +369,7 @@ export function RequestsAuditPanel() {
                       : (row.route_name ?? "—")}
                   </p>
                   {row.target_code && row.route_name ? (
-                    <p className="truncate text-[10px] text-muted-foreground">{row.route_name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{row.route_name}</p>
                   ) : null}
                 </TableCell>
                 <TableCell className="max-w-[280px] whitespace-normal text-xs text-muted-foreground">
@@ -386,7 +386,7 @@ export function RequestsAuditPanel() {
         </AppDataTable>
         {!loading && filteredRows.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-1">
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {t("range", {
                 from: (currentPage - 1) * PAGE_SIZE + 1,
                 to: (currentPage - 1) * PAGE_SIZE + pagedRows.length,
@@ -405,7 +405,7 @@ export function RequestsAuditPanel() {
                 <ChevronLeft className="h-3.5 w-3.5" />
                 {t("prev")}
               </Button>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {t("pageOf", { page: currentPage, pages: pageCount })}
               </span>
               <Button

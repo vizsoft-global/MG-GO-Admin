@@ -56,7 +56,7 @@ function RiderTable({
               <TableRow key={row.driver_id}>
                 <TableCell>
                   <p className="truncate text-sm font-medium">{row.driver_name}</p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {row.employee_id || row.driver_code}
                   </p>
                 </TableCell>
@@ -252,7 +252,7 @@ export function PerformanceDpdPanel() {
             </div>
             {openZone && zoneChildren.length > 0 ? (
               <div className="border-t border-border px-4 py-3">
-                <p className="mb-2 text-[10px] text-muted-foreground">
+                <p className="mb-2 text-xs text-muted-foreground">
                   {t("zoneRestaurants", {
                     zone:
                       data?.zones.find((z) => (z.id ?? "") === openZone)?.name ?? t("unassigned"),

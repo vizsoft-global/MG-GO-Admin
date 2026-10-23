@@ -140,7 +140,7 @@ export function VehiclesColumnHeader({
               />
             ) : kind === "range" ? (
               <div className="grid grid-cols-2 gap-1.5">
-                <label className="text-[10px] text-muted-foreground">
+                <label className="text-xs text-muted-foreground">
                   {labels.min}
                   <Input
                     type="number"
@@ -150,7 +150,7 @@ export function VehiclesColumnHeader({
                     className="mt-0.5 h-9"
                   />
                 </label>
-                <label className="text-[10px] text-muted-foreground">
+                <label className="text-xs text-muted-foreground">
                   {labels.max}
                   <Input
                     type="number"

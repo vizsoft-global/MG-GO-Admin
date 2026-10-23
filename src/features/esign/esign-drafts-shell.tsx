@@ -173,7 +173,7 @@ export function EsignDraftsShell() {
                 <TableCell className="max-w-[160px] truncate text-xs">
                   {row.created_by_name ?? "—"}
                 </TableCell>
-                <TableCell className="text-[11px] tabular-nums text-muted-foreground">
+                <TableCell className="text-xs tabular-nums text-muted-foreground">
                   {formatEsignTrackerDate(row.updated_at)}
                 </TableCell>
                 <TableCell className="text-end">

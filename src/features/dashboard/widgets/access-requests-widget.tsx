@@ -45,7 +45,7 @@ export function AccessRequestsWidget({
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-foreground">{row.fullName ?? "—"}</p>
         <p className="truncate text-xs text-muted-foreground">{row.email}</p>
-        <p className="mt-1 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+        <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
           <Clock className="size-3" />
           {new Date(row.createdAt).toLocaleString()}
         </p>

@@ -11,6 +11,7 @@ import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { PAYROLL_ATTENDANCE_FIELDS, PAYROLL_RECON_FIELDS, payrollHoursFromFields } from "./payroll-read-plan";
 import { isKeetaProjectKey } from "./_shared";
 import { applyPayrollManualOrders } from "./payroll-edits";
+import { loadNationalityLabels, nationalityLabel } from "../core/nationality-label";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GET_ALL_CHUNK = 300;
@@ -216,7 +217,7 @@ export const adminPayrollRuleSnapshot = measureOnCall("adminPayrollRuleSnapshot"
   const settings = await loadAppSettings();
 
   const ctx = await loadPayrollContext({ month, zoneMonth, start, end, lastDay, days, settings, phases });
-  return buildSnapshot(ctx, slicers, staff);
+  return await buildSnapshot(ctx, slicers, staff);
   } finally {
     logPhases("adminPayrollRuleSnapshot", phases);
   }
@@ -618,7 +619,7 @@ function inList(list: string[] | null, value: string | null): boolean {
   return value !== null && list.includes(value);
 }
 
-function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContext) {
+async function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContext) {
   const { month, days, settings } = ctx;
 
   const zoneNames = new Map<string, string>();
@@ -796,6 +797,7 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
   }
 
   const dayGrid = dayStringsBetween(ctx.firstDay, ctx.lastDay).slice(0, days);
+  const nationalityLabels = await loadNationalityLabels("en");
 
   const riders = ctx.driverSnap.docs
     .map((doc) => {
@@ -873,9 +875,17 @@ function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: StaffContex
               : trimmedOrNull(raw["partner_name"]) ?? "—",
         projectKey,
         nationality:
-          asString(raw["nationality"]) ?? asString(raw["nationality_code"]) ?? "—",
+          nationalityLabel(
+            raw["nationality_category_keys"],
+            nationalityLabels,
+            asString(raw["nationality"]) ?? asString(raw["nationality_code"]),
+          ) ?? "—",
         nationalityCode:
-          asString(raw["nationality_code"]) ?? asString(raw["nationality"]),
+          nationalityLabel(
+            raw["nationality_category_keys"],
+            nationalityLabels,
+            asString(raw["nationality"]) ?? asString(raw["nationality_code"]),
+          ),
         status: asString(raw["status"]) === "active" ? "Active" : "Inactive",
         vehicleKey:
           asString(raw["vehicle_key"]) ??

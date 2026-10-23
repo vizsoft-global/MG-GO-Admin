@@ -96,7 +96,7 @@ export function RequestsTab({
 
   return (
     <div className="space-y-2">
-      <div className="rounded-xl border border-border bg-card px-4 py-3 text-[12px] leading-5 shadow-sm">
+      <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-5 shadow-sm">
         <b>{t("requestsBannerTitle")}</b> {t("requestsBannerBody")}
       </div>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
@@ -132,7 +132,7 @@ export function RequestsTab({
               )}
             >
               {open > 0 ? (
-                <span className="absolute end-2 top-2 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-extrabold text-white">
+                <span className="absolute end-2 top-2 rounded-full bg-red-500 px-1.5 py-0.5 text-xs font-extrabold text-white">
                   {open}
                 </span>
               ) : null}
@@ -144,8 +144,8 @@ export function RequestsTab({
               >
                 <Icon className="size-4" />
               </span>
-              <p className="text-[12.5px] font-bold">{t(`tiles.${item.key}`)}</p>
-              <p className="mt-0.5 text-[10.5px] text-muted-foreground">
+              <p className="text-xs font-bold">{t(`tiles.${item.key}`)}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 {t(`tileDept.${item.deptKey}`)} · {total}
               </p>
             </button>
@@ -160,7 +160,7 @@ export function RequestsTab({
                 {t("queueTitle")}
                 {tile !== "all" ? ` · ${t(`tiles.${tile}`)}` : ""}
               </h3>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("queueSub", { count: list.length, month: month.label })}
               </p>
             </div>
@@ -189,7 +189,7 @@ export function RequestsTab({
             ))}
           </div>
           <div className="max-h-[min(480px,46dvh)] overflow-auto">
-            <table className="w-full min-w-[1100px] border-collapse text-[12px]">
+            <table className="w-full min-w-[1100px] border-collapse text-xs">
               <thead className="sticky top-0 bg-card">
                 <tr>
                   {[
@@ -237,7 +237,7 @@ export function RequestsTab({
                       <td className="px-2 py-1.5">
                         <span
                           className={cn(
-                            "inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold",
+                            "inline-flex rounded-full px-2 py-0.5 text-xs font-bold",
                             statusPill(row.uiStatus),
                           )}
                         >

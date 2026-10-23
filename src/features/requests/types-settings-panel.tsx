@@ -131,7 +131,7 @@ export function TypesSettingsPanel() {
                           {row.is_system ? (
                             <span
                               title={t("systemLockHint")}
-                              className="inline-flex items-center gap-0.5 rounded-full border border-primary/20 bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary"
+                              className="inline-flex items-center gap-0.5 rounded-full border border-primary/20 bg-primary/10 px-1.5 py-px text-xs font-medium text-primary"
                             >
                               <Lock className="h-2.5 w-2.5" />
                               {t("systemBadge")}
@@ -140,7 +140,7 @@ export function TypesSettingsPanel() {
                         </div>
                         <Link
                           href={`/requests/settings/types/${row.key}`}
-                          className="text-[11px] text-primary hover:underline"
+                          className="text-xs text-primary hover:underline"
                         >
                           {t("viewDetails")}
                         </Link>
@@ -186,7 +186,7 @@ export function TypesSettingsPanel() {
         </Table>
       </AppListCard>
 
-      <p className="text-[10px] text-muted-foreground">{t("systemLockNote")}</p>
+      <p className="text-xs text-muted-foreground">{t("systemLockNote")}</p>
 
       <RequestTypeFormDialog
         open={addOpen}

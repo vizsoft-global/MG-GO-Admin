@@ -199,7 +199,7 @@ export function TrackingMapLegend({
                   disabled={!isInteractive}
                   onClick={() => (isInteractive ? onToggleStatus(status) : undefined)}
                   className={cn(
-                    "h-6 rounded-full px-2 text-[11px] font-medium shadow-none transition-opacity",
+                    "h-6 rounded-full px-2 text-xs font-medium shadow-none transition-opacity",
                     isInteractive && !active && "opacity-45",
                   )}
                 >
@@ -210,12 +210,12 @@ export function TrackingMapLegend({
             );
           })}
           <li
-            className="ms-1 inline-flex cursor-default select-none items-center gap-1.5 border-s border-border ps-3 text-[11px] text-muted-foreground"
+            className="ms-1 inline-flex cursor-default select-none items-center gap-1.5 border-s border-border ps-3 text-xs text-muted-foreground"
             role="status"
             title={t("legendClusterHint")}
             aria-label={`${t("fleetStatus.cluster")} ${clusterCount}`}
           >
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-semibold tabular-nums text-foreground">
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-xs font-semibold tabular-nums text-foreground">
               {clusterCount}
             </span>
             <span>{t("fleetStatus.cluster")}</span>
@@ -321,7 +321,7 @@ export function TrackingSelectedDriverPopup({
             {driver.driverCode} <span className="mx-1">·</span> {speed}
           </p>
           {onDelivery ? (
-            <p className="mt-0.5 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+            <p className="mt-0.5 text-xs font-medium text-slate-600 dark:text-slate-300">
               {t("statusDeliverySubmit")} ·{" "}
               {liveMotion(driver) === "moving"
                 ? `${t("statusMoving")} • ${speed}`
@@ -352,12 +352,12 @@ export function TrackingSelectedDriverPopup({
         </div>
       </dl>
 
-      <p className="mt-2 truncate text-[11px] text-slate-500 dark:text-slate-300">
+      <p className="mt-2 truncate text-xs text-slate-500 dark:text-slate-300">
         {meta?.zoneName ?? "—"}
       </p>
       {locationLine ? (
         <p
-          className="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-300"
+          className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-300"
           title={address ? `${t("streetAddress")}: ${address}` : undefined}
         >
           {locationLine}
@@ -380,7 +380,7 @@ export function TrackingSelectedDriverPopup({
         <OverlayAction label={t("assignOrder")} icon={MapPin} />
       </div>
 
-      <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-300">
+      <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-300">
         <Pill tone={toneByStatus[fleetStatus]}>{t(`fleetStatus.${fleetStatus}`)}</Pill>
         <StatusDot tone={toneByStatus[fleetStatus]} />
         <span className="mx-1">•</span>
@@ -413,7 +413,7 @@ function OverlayAction({
   onClick?: () => void;
 }) {
   const content = (
-    <span className="inline-flex w-full flex-col items-center gap-1 px-1 py-2 text-[10px] text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100">
+    <span className="inline-flex w-full flex-col items-center gap-1 px-1 py-2 text-xs text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100">
       <Icon className="h-3.5 w-3.5" />
       <span className="text-center leading-tight">{label}</span>
     </span>

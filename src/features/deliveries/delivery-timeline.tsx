@@ -205,15 +205,15 @@ export function DeliveryTimeline({ delivery }: { delivery: DeliveryListRow }) {
                   )}
                   aria-hidden
                 />
-                <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {step.label}
                 </p>
               </div>
-              <p className="mt-1 truncate text-[11px] font-medium text-foreground">
+              <p className="mt-1 truncate text-xs font-medium text-foreground">
                 {step.at ?? step.detail ?? "—"}
               </p>
               {step.at && step.detail ? (
-                <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{step.detail}</p>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">{step.detail}</p>
               ) : null}
             </div>
           );
@@ -223,7 +223,7 @@ export function DeliveryTimeline({ delivery }: { delivery: DeliveryListRow }) {
         <div className="mt-2 flex flex-wrap items-center gap-1">
           {earlyDrop ? (
             <span
-              className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+              className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-800"
               title={
                 delivery.pickup_delivery_distance_m !== null
                   ? t("distanceMeters", {
@@ -237,7 +237,7 @@ export function DeliveryTimeline({ delivery }: { delivery: DeliveryListRow }) {
           ) : null}
           {outsideZone ? (
             <span
-              className="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700"
+              className="rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-xs font-medium text-rose-700"
               title={
                 delivery.zone_distance_m !== null
                   ? t("distanceMeters", { meters: Math.round(delivery.zone_distance_m) })
@@ -249,7 +249,7 @@ export function DeliveryTimeline({ delivery }: { delivery: DeliveryListRow }) {
           ) : null}
           {mismatch ? (
             <span
-              className="rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-700"
+              className="rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 text-xs font-medium text-purple-700"
               title={delivery.order_proof_ocr_order_id ?? undefined}
             >
               {t("photoMismatch")}

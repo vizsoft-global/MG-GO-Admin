@@ -366,7 +366,7 @@ export function EsignWaitingShell({
                         extra one for a navigation the whole row already performs. */}
                     <Link
                       href={`/requests/esign/${row.id}`}
-                      className="mt-0.5 flex items-center gap-1 font-sans text-[10px] text-primary hover:underline"
+                      className="mt-0.5 flex items-center gap-1 font-sans text-xs text-primary hover:underline"
                       onClick={(event) => event.stopPropagation()}
                     >
                       <ExternalLink className="h-3 w-3" />
@@ -375,13 +375,13 @@ export function EsignWaitingShell({
                   </TableCell>
                   <TableCell className="text-sm">
                     <div className="max-w-[160px] truncate">{row.driver_name}</div>
-                    <div className="text-[11px] text-muted-foreground">{row.driver_code}</div>
+                    <div className="text-xs text-muted-foreground">{row.driver_code}</div>
                   </TableCell>
                   <TableCell>
                     <div className="max-w-[300px] truncate text-sm font-medium" title={row.title ?? undefined}>
                       {row.title}
                     </div>
-                    <div className="max-w-[300px] truncate text-[11px] text-muted-foreground">
+                    <div className="max-w-[300px] truncate text-xs text-muted-foreground">
                       {[row.template_name, row.batch_code].filter(Boolean).join(" · ") || "—"}
                     </div>
                   </TableCell>
@@ -392,7 +392,7 @@ export function EsignWaitingShell({
                   </TableCell>
                   <TableCell className="text-sm tabular-nums">
                     <div>{row.due_at ? row.due_at.slice(0, 10) : "—"}</div>
-                    <div className="text-[11px] text-muted-foreground">
+                    <div className="text-xs text-muted-foreground">
                       {ageDays <= 0 ? t("sentToday") : t("sentDaysAgo", { count: ageDays })}
                     </div>
                   </TableCell>
@@ -400,7 +400,7 @@ export function EsignWaitingShell({
                     {reminderCount > 0 ? (
                       <span className="inline-flex items-center gap-1.5">
                         <span>{row.last_reminded_at ? row.last_reminded_at.slice(5, 10) : "—"}</span>
-                        <span className="rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                        <span className="rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-xs font-semibold text-muted-foreground">
                           {reminderCount}×
                         </span>
                       </span>

@@ -6,7 +6,6 @@ import { SegmentOption } from "@/components/app/toggle-chip";
 import { Input } from "@/components/ui/input";
 import type { DriverProjectKey } from "@/features/fleet/fleet-labels";
 import { ProjectKeyField } from "@/features/fleet/project-key-field";
-import { countrySearchSelectItems } from "@/lib/geo/countries";
 import type { DriverRiderCategory } from "../types";
 import { companyMatchesCategory, selectableCompanies } from "../source-companies";
 import { useSourceCompanies } from "../use-source-companies";
@@ -34,8 +33,6 @@ export function DriverFormIdentitySection({
   passportNumber,
   onPassportNumberChange,
   employeeIdRequired = true,
-  nationality,
-  onNationalityChange,
   riderCategory,
   onRiderCategoryChange,
   sourceCompany,
@@ -67,8 +64,6 @@ export function DriverFormIdentitySection({
   passportNumber: string;
   onPassportNumberChange: (next: string) => void;
   employeeIdRequired?: boolean;
-  nationality: string;
-  onNationalityChange: (next: string) => void;
   riderCategory: DriverRiderCategory;
   onRiderCategoryChange: (next: DriverRiderCategory) => void;
   sourceCompany: string;
@@ -84,7 +79,6 @@ export function DriverFormIdentitySection({
     civilId: string;
     employeeId: string;
     passportNumber: string;
-    nationality: string;
     riderCategory: string;
     sourceCompany: string;
     project: string;
@@ -105,8 +99,6 @@ export function DriverFormIdentitySection({
     employeeId?: string;
     employeeIdHelp?: string;
     passportNumber?: string;
-    nationality: string;
-    searchNationality: string;
     sourceCompany?: string;
     searchSourceCompany?: string;
   };
@@ -124,7 +116,6 @@ export function DriverFormIdentitySection({
     passportNumber?: string;
   };
 }) {
-  const countryItems = useMemo(() => countrySearchSelectItems(), []);
   const companies = useSourceCompanies();
   const systemCompany = companies.find((c) => c.is_system) ?? null;
   const companyItems = useMemo(
@@ -239,7 +230,7 @@ export function DriverFormIdentitySection({
             aria-invalid={Boolean(errors.employeeId)}
           />
           {placeholders.employeeIdHelp ? (
-            <p className="text-[10px] leading-tight text-muted-foreground">
+            <p className="text-xs leading-tight text-muted-foreground">
               {placeholders.employeeIdHelp}
             </p>
           ) : null}
@@ -261,19 +252,6 @@ export function DriverFormIdentitySection({
             aria-invalid={Boolean(errors.passportNumber)}
           />
           <FieldError message={errors.passportNumber} />
-        </FieldBlock>
-
-        <FieldBlock>
-          <FieldLabel htmlFor="driver-nationality">{labels.nationality}</FieldLabel>
-          <SearchableSelect
-            value={nationality}
-            onValueChange={onNationalityChange}
-            items={countryItems}
-            placeholder={placeholders.nationality}
-            searchPlaceholder={placeholders.searchNationality}
-            recentsKey="driver-nationality"
-            disabled={disabled}
-          />
         </FieldBlock>
 
         <FieldBlock>

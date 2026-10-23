@@ -100,7 +100,7 @@ export function OpsTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-md border border-border bg-card px-2.5 py-2 text-[11px] shadow-sm">
+    <div className="rounded-md border border-border bg-card px-2.5 py-2 text-xs shadow-sm">
       <p className="mb-1 font-semibold">{label}</p>
       {payload.map((p) => (
         <p key={String(p.name)} style={{ color: p.color }}>
@@ -144,7 +144,7 @@ export function OpsLineChart({
             <LabelList
               dataKey={s.key}
               position="top"
-              className="fill-foreground text-[10px]"
+              className="fill-foreground text-xs"
               formatter={(value) =>
                 formatOpsTooltipNumber(value as number | string | null, metric)
               }
@@ -256,7 +256,7 @@ export function OpsBarChart({
             <LabelList
               dataKey={s.key}
               position={layout === "horizontal" ? "right" : "top"}
-              className="fill-foreground text-[10px]"
+              className="fill-foreground text-xs"
               formatter={(value) =>
                 formatOpsTooltipNumber(value as number | string | null, metric)
               }

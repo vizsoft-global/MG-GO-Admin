@@ -174,7 +174,7 @@ export function DriverFormCustomFieldsSection({
                   <span className="text-muted-foreground">{def.label}</span>
                 </label>
               ) : null}
-              {err ? <p className="text-[10px] text-destructive">{err}</p> : null}
+              {err ? <p className="text-xs text-destructive">{err}</p> : null}
             </div>
           );
         })}

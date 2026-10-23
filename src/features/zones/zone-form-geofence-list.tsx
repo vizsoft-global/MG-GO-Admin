@@ -86,7 +86,7 @@ export function ZoneFormGeofenceList({
                       <span className="block truncate text-xs font-medium text-foreground">
                         {zone.name}
                       </span>
-                      <span className="block truncate text-[10px] text-muted-foreground">
+                      <span className="block truncate text-xs text-muted-foreground">
                         #{zone.code}
                       </span>
                     </span>

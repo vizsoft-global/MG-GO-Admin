@@ -72,7 +72,7 @@ export function DriverLevelBadge({ level }: { level: "D" | "standard" | null | u
   const t = useTranslations("pages.drivers");
   if (level !== "D") return null;
   return (
-    <span className="inline-flex h-5 items-center rounded-md border border-rose-300 bg-rose-50 px-1.5 text-[10px] font-bold text-rose-800">
+    <span className="inline-flex h-5 items-center rounded-md border border-rose-300 bg-rose-50 px-1.5 text-xs font-bold text-rose-800">
       {t("levelBadgeD")}
     </span>
   );

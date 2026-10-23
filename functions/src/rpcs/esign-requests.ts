@@ -26,6 +26,7 @@ import {
 } from "../core/fs";
 
 import { COLLECTIONS, FIELDS } from "../core/collections";
+import { loadNationalityLabels, nationalityLabel } from "../core/nationality-label";
 import { readEsignSnapshotExtra } from "./esign-snapshot-extra";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireStaff } from "../core/staff";
@@ -226,11 +227,12 @@ export async function esignEmployeeSnapshotFor(driverId: string): Promise<Dict |
   const driver = dataOf(driverSnap);
 
   const zoneId = textOrNull(driver[FIELDS.drivers.zoneId]);
-  const [profileSnap, zoneSnap, settings, intakeSnap] = await Promise.all([
+  const [profileSnap, zoneSnap, settings, intakeSnap, nationalityLabels] = await Promise.all([
     db.collection(COLLECTIONS.profiles).doc(driverId).get(),
     zoneId ? db.collection(COLLECTIONS.zones).doc(zoneId).get() : Promise.resolve(null),
     loadAppSettings(),
     db.collection(COLLECTIONS.driverIntakes).doc(driverId).get(),
+    loadNationalityLabels("en"),
   ]);
   const profile = profileSnap.exists ? dataOf(profileSnap) : {};
   const zone = zoneSnap && zoneSnap.exists ? dataOf(zoneSnap) : null;
@@ -265,7 +267,11 @@ export async function esignEmployeeSnapshotFor(driverId: string): Promise<Dict |
     accommodation: trimmedOrNull(driver.accommodation),
     zone: zone ? textOrNull(zone.name) : null,
     project: textOrNull(driver[FIELDS.drivers.projectKey]),
-    nationality: textOrNull(driver.nationality),
+    nationality: nationalityLabel(
+      driver.nationality_category_keys,
+      nationalityLabels,
+      textOrNull(driver.nationality),
+    ),
     ...extra,
     department: extra.department ?? textOrNull(driver[FIELDS.drivers.projectKey]),
     years_of_service: yearsOfService,

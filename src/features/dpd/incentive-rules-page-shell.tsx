@@ -341,7 +341,7 @@ export function IncentiveRulesPageShell() {
                 >
                   <TableCell className="font-medium">
                     {displayIncentiveRuleName(row.name)}
-                    <p className="text-[11px] font-normal text-primary">
+                    <p className="text-xs font-normal text-primary">
                       {tPage("viewDetails")}
                     </p>
                   </TableCell>

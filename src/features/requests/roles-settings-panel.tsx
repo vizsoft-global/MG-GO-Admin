@@ -277,9 +277,9 @@ export function RolesSettingsPanel() {
   function chipClass(tone: ChipTone): string {
     switch (tone) {
       case "muted":
-        return "rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-foreground";
+        return "rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium text-foreground";
       case "decide":
-        return "rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800";
+        return "rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800";
       default: {
         const _exhaustive: never = tone;
         return _exhaustive;
@@ -310,7 +310,7 @@ export function RolesSettingsPanel() {
         ))}
         {overflow > 0 ? (
           <span
-            className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+            className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground"
             title={types.slice(MAX_VISIBLE_CHIPS).map((type) => chipLabel(type)).join(", ")}
           >
             +{overflow}
@@ -348,10 +348,10 @@ export function RolesSettingsPanel() {
               <span className={cn("size-2 shrink-0 rounded-full", card.dotClass)} aria-hidden />
               <h3 className="text-sm font-semibold">{t(card.titleKey)}</h3>
             </div>
-            <p className="text-[11px] leading-relaxed text-muted-foreground">{t(card.bodyKey)}</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">{t(card.bodyKey)}</p>
             <button
               type="button"
-              className="text-[12px] font-medium text-primary hover:underline"
+              className="text-xs font-medium text-primary hover:underline"
               onClick={() =>
                 setRoleFilter((current) => (current === card.id ? "all" : card.id))
               }
@@ -365,7 +365,7 @@ export function RolesSettingsPanel() {
       <div className="space-y-2">
         <div>
           <h3 className="text-sm font-semibold">{t("staffAccessTitle")}</h3>
-          <p className="text-[11px] text-muted-foreground">{t("staffAccessSubtitle")}</p>
+          <p className="text-xs text-muted-foreground">{t("staffAccessSubtitle")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <SearchField
@@ -452,7 +452,7 @@ export function RolesSettingsPanel() {
                       <Avatar className="h-8 w-8">
                         <AvatarFallback
                           className={cn(
-                            "text-[10px] font-semibold",
+                            "text-xs font-semibold",
                             avatarTintFromName(row.profile_name),
                           )}
                         >
@@ -461,7 +461,7 @@ export function RolesSettingsPanel() {
                       </Avatar>
                       <div className="min-w-0">
                         <p className="text-sm font-medium">{row.profile_name}</p>
-                        <p className="text-[10px] text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           {row.profile_email ?? "—"}
                         </p>
                       </div>

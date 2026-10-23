@@ -97,7 +97,7 @@ function ReportKpi({
         >
           {icon}
         </span>
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {label}
         </p>
       </div>
@@ -112,7 +112,7 @@ function ReportKpi({
         </p>
         {delta}
       </div>
-      {hint ? <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -137,14 +137,14 @@ function Delta({
   if (current == null || previous == null) return null;
   const diff = current - previous;
   if (diff === 0) {
-    return <span className="text-[11px] text-muted-foreground">{flatLabel}</span>;
+    return <span className="text-xs text-muted-foreground">{flatLabel}</span>;
   }
   const good = lowerIsBetter ? diff < 0 : diff > 0;
   const Icon = diff > 0 ? TrendingUp : TrendingDown;
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-0.5 text-[11px] font-medium tabular-nums",
+        "inline-flex items-center gap-0.5 text-xs font-medium tabular-nums",
         good ? "text-success" : "text-danger",
       )}
     >
@@ -494,7 +494,7 @@ export function VisitsReportsShell() {
           <div className="grid gap-2 lg:grid-cols-[1.6fr_1fr] lg:items-stretch">
             <AppListCard className="h-full p-4">
               <h3 className="text-sm font-semibold">{t("reports.visitsOverTime")}</h3>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("reports.visitsOverTimeSub")}
               </p>
               {/* Bar heights are percentages, so the track needs a definite height. */}
@@ -516,7 +516,7 @@ export function VisitsReportsShell() {
                         }}
                       />
                     </div>
-                    <span className="text-[9px] text-muted-foreground">{bucket.label}</span>
+                    <span className="text-xs text-muted-foreground">{bucket.label}</span>
                   </div>
                 ))}
               </div>
@@ -524,11 +524,11 @@ export function VisitsReportsShell() {
 
             <AppListCard className="h-full p-4">
               <h3 className="text-sm font-semibold">{t("reports.busiestSlots")}</h3>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("reports.busiestSlotsSub")}
               </p>
               {busiestSlots.length === 0 ? (
-                <p className="mt-3 text-[11px] text-muted-foreground">
+                <p className="mt-3 text-xs text-muted-foreground">
                   {t("reports.busiestSlotsEmpty")}
                 </p>
               ) : (
@@ -549,7 +549,7 @@ export function VisitsReportsShell() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[11px] text-muted-foreground">
+                  <p className="mt-3 text-xs text-muted-foreground">
                     {t("reports.busiestSlotsCaption")}
                   </p>
                 </>
@@ -576,7 +576,7 @@ export function VisitsReportsShell() {
                   <TableCell>
                     <span
                       className={cn(
-                        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
                         departmentBadgeClass(dept.key),
                       )}
                     >

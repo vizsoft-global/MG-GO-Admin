@@ -97,14 +97,14 @@ export function FleetInsightsPanel({
           <ChevronLeft className="size-4 rtl:rotate-180" aria-hidden />
         </Button>
         <span
-          className="flex flex-col items-center gap-0.5 text-[10px] font-semibold tabular-nums"
+          className="flex flex-col items-center gap-0.5 text-xs font-semibold tabular-nums"
           title={t("kpis.online")}
         >
           <Signal className="size-3.5 text-muted-foreground" aria-hidden />
           {snapshot.kpis.online}
         </span>
         <span
-          className="flex flex-col items-center gap-0.5 text-[10px] font-semibold tabular-nums text-rose-700"
+          className="flex flex-col items-center gap-0.5 text-xs font-semibold tabular-nums text-rose-700"
           title={t("kpis.alerts")}
         >
           <AlertTriangle className="size-3.5" aria-hidden />
@@ -136,7 +136,7 @@ export function FleetInsightsPanel({
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <section className="shrink-0 border-b border-border/60 px-2 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("insights.statusDistribution")}
           </p>
           <div className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -162,7 +162,7 @@ export function FleetInsightsPanel({
               return (
                 <li
                   key={segment.bucket}
-                  className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
                 >
                   <span
                     className={cn(
@@ -191,7 +191,7 @@ export function FleetInsightsPanel({
         </section>
 
         <section className="shrink-0 border-b border-border/60 px-2 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("insights.kpis")}
           </p>
           <div className="mt-1.5 grid grid-cols-3 gap-1">
@@ -224,11 +224,11 @@ export function FleetInsightsPanel({
         </section>
 
         <section className="max-h-[28%] shrink-0 overflow-y-auto overscroll-contain border-b border-border/60 px-2 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("insights.zoneDistribution")}
           </p>
           {snapshot.zoneCounts.length === 0 ? (
-            <p className="mt-1.5 text-[10px] text-muted-foreground">
+            <p className="mt-1.5 text-xs text-muted-foreground">
               {t("insights.noZoneDrivers")}
             </p>
           ) : (
@@ -237,14 +237,14 @@ export function FleetInsightsPanel({
                 const max = snapshot.zoneCounts[0]?.count || 1;
                 return (
                   <li key={entry.zoneId ?? "none"} className="flex items-center gap-1.5">
-                    <span className="w-24 truncate text-[10px]">{entry.zoneName}</span>
+                    <span className="w-24 truncate text-xs">{entry.zoneName}</span>
                     <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                       <span
                         className="fleet-progress-fill block h-full rounded-full"
                         style={{ width: `${(entry.count / max) * 100}%` }}
                       />
                     </span>
-                    <span className="w-6 text-end text-[10px] font-semibold tabular-nums">
+                    <span className="w-6 text-end text-xs font-semibold tabular-nums">
                       {entry.count}
                     </span>
                   </li>
@@ -277,7 +277,7 @@ function Kpi({
 }) {
   return (
     <div className="rounded-md border border-border/60 bg-muted/30 px-1.5 py-1">
-      <p className="flex items-center gap-1 text-[9px] leading-tight text-muted-foreground">
+      <p className="flex items-center gap-1 text-xs leading-tight text-muted-foreground">
         <span className="shrink-0" aria-hidden>
           {icon}
         </span>
@@ -291,7 +291,7 @@ function Kpi({
       >
         {value}
         {suffix ? (
-          <span className="ms-0.5 text-[9px] font-medium text-muted-foreground">{suffix}</span>
+          <span className="ms-0.5 text-xs font-medium text-muted-foreground">{suffix}</span>
         ) : null}
       </p>
     </div>

@@ -267,7 +267,7 @@ export function StorageSettingsPanel() {
               ? formatNumber(analytics.classARequests)
               : "—"}
           </p>
-          <p className="text-[11px] text-muted-foreground">{t("stats.last30Days")}</p>
+          <p className="text-xs text-muted-foreground">{t("stats.last30Days")}</p>
         </div>
         <div className="rounded-xl border border-border/60 bg-card p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
@@ -282,11 +282,11 @@ export function StorageSettingsPanel() {
               : "—"}
           </p>
           {analytics?.available ? (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t("stats.egress", { size: formatBytes(analytics.egressBytes) })}
             </p>
           ) : (
-            <p className="text-[11px] text-muted-foreground">{t("stats.last30Days")}</p>
+            <p className="text-xs text-muted-foreground">{t("stats.last30Days")}</p>
           )}
         </div>
       </div>

@@ -79,7 +79,7 @@ export function PayrollTab({
 
   return (
     <div className="space-y-2">
-      <div className="rounded-xl border border-border bg-card px-4 py-3 text-[12px] leading-5 shadow-sm">
+      <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-5 shadow-sm">
         <b>{t("payrollBannerTitle")}</b>{" "}
         {t("payrollBannerBody", { days: month.days, fixed: month.fixedDays })}
       </div>

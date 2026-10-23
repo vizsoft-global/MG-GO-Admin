@@ -43,7 +43,7 @@ export function PayrollDistributionChart({
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">{title}</h3>
-          <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
         </div>
         <button
           type="button"
@@ -75,7 +75,7 @@ export function PayrollDistributionChart({
                 if (!active || !payload?.[0]) return null;
                 const row = payload[0].payload as (typeof data)[number];
                 return (
-                  <div className="rounded-md border border-border bg-card px-2.5 py-2 text-[11px] shadow-sm">
+                  <div className="rounded-md border border-border bg-card px-2.5 py-2 text-xs shadow-sm">
                     {row.label}: {row.riders}
                   </div>
                 );

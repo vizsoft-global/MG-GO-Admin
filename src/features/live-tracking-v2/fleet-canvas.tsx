@@ -325,7 +325,7 @@ export function FleetCanvas() {
               {/* Decoration, and it competes with the filters for the row now: at 1280 it
                   is the 120px that pushes the partner select past the bar's edge. It
                   appears only where there is width to spare for it. */}
-              <span className="hidden whitespace-nowrap text-[11px] text-muted-foreground 2xl:inline">
+              <span className="hidden whitespace-nowrap text-xs text-muted-foreground 2xl:inline">
                 {t("subtitle")}
               </span>
               {/* Which rail the map is actually on is never the thing that gives way to a

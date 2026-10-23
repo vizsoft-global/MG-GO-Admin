@@ -66,6 +66,26 @@ html[data-theme="shopify"] {
   --fleet-kind-car-fg: #3730a3;
   --fleet-kind-bike: #fce7f3;
   --fleet-kind-bike-fg: #9f1239;
+
+  --btn-primary: #A73C24;
+  --btn-primary-fg: #ffffff;
+  --btn-primary-hover: #8F331F;
+  --btn-primary-active: #7A2B1A;
+  --btn-secondary-border: #A73C24;
+  --btn-secondary-fg: #A73C24;
+  --btn-secondary-hover: rgb(167 60 36 / 0.12);
+  --btn-secondary-active: rgb(167 60 36 / 0.2);
+  --btn-focus: rgb(167 60 36 / 0.4);
+  --btn-disabled-opacity: 0.4;
+  --type-h1: 24px;
+  --type-h2: 20px;
+  --type-h3: 16px;
+  --type-body: 14px;
+  --type-caption: 12px;
+  --icon-launcher: 24px;
+  --icon-inline: 20px;
+  --icon-indicator: 16px;
+  --launcher-tile: 56px;
 }
 
 html.dark,
@@ -112,4 +132,24 @@ html[data-theme="shopify"].dark {
   --info-bg: oklch(0.22 0.04 250);
   --pending: oklch(0.72 0.14 38);
   --pending-bg: oklch(0.22 0.04 38);
+
+  --btn-primary: #A73C24;
+  --btn-primary-fg: #ffffff;
+  --btn-primary-hover: #8F331F;
+  --btn-primary-active: #7A2B1A;
+  --btn-secondary-border: #A73C24;
+  --btn-secondary-fg: #A73C24;
+  --btn-secondary-hover: rgb(167 60 36 / 0.12);
+  --btn-secondary-active: rgb(167 60 36 / 0.2);
+  --btn-focus: rgb(167 60 36 / 0.4);
+  --btn-disabled-opacity: 0.4;
+  --type-h1: 24px;
+  --type-h2: 20px;
+  --type-h3: 16px;
+  --type-body: 14px;
+  --type-caption: 12px;
+  --icon-launcher: 24px;
+  --icon-inline: 20px;
+  --icon-indicator: 16px;
+  --launcher-tile: 56px;
 }

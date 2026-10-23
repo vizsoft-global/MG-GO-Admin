@@ -1,5 +1,5 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { BarChart3, Scale, Wallet } from "lucide-react";
+import { BarChart3, FileSpreadsheet, Scale, Wallet } from "lucide-react";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,7 +15,13 @@ import { requireAnyPermission } from "@/lib/auth/require-permission";
  * away from Payroll itself. They live here now, gated exactly as before, so a
  * card is still never an advertisement for a page that answers /unauthorized.
  */
-const HUB_PERMISSIONS = ["payroll.view", "performance.view", "order_recon.view"] as const;
+const HUB_PERMISSIONS = [
+  "payroll.view",
+  "performance.view",
+  "order_recon.view",
+  "payroll.hr_payroll",
+  "payroll.manage",
+] as const;
 
 const CARDS: ReadonlyArray<{
   key: string;
@@ -33,6 +39,20 @@ const CARDS: ReadonlyArray<{
   { key: "payroll", href: "/payroll", icon: Wallet, permission: "payroll.view" },
 ];
 
+const HR_CARDS: ReadonlyArray<{
+  key: string;
+  href: string;
+  icon: typeof Wallet;
+  permission: Permission;
+}> = [
+  {
+    key: "hrPayroll",
+    href: "/payroll/hr",
+    icon: FileSpreadsheet,
+    permission: "payroll.hr_payroll",
+  },
+];
+
 export default async function PayrollHubPage({
   params,
 }: {
@@ -45,6 +65,11 @@ export default async function PayrollHubPage({
 
   const cards = CARDS.filter((card) =>
     hasPermissionInSet(session.permissions, card.permission, session.isSuperAdmin),
+  );
+  const hrCards = HR_CARDS.filter(
+    (card) =>
+      hasPermissionInSet(session.permissions, card.permission, session.isSuperAdmin) ||
+      hasPermissionInSet(session.permissions, "payroll.manage", session.isSuperAdmin),
   );
 
   return (
@@ -79,6 +104,36 @@ export default async function PayrollHubPage({
           );
         })}
       </div>
+
+      {hrCards.length > 0 ? (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-foreground">{t("hrSection")}</h2>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {hrCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <Link key={card.key} href={card.href} className="group">
+                  <Card className="h-full rounded-xl border-border bg-card shadow-sm transition-colors group-hover:border-primary/40">
+                    <CardContent className="flex items-start gap-3 p-4">
+                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                        <Icon className="size-4" aria-hidden />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground">
+                          {t(`cards.${card.key}.title`)}
+                        </p>
+                        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                          {t(`cards.${card.key}.body`)}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </AppPage>
   );
 }

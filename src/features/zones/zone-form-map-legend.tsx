@@ -33,7 +33,7 @@ export function ZoneFormMapLegend({
         {t("geofenceLegend")}
       </p>
       {visible.length === 0 ? (
-        <p className="py-1 text-[11px] text-slate-500 dark:text-slate-400">
+        <p className="py-1 text-xs text-slate-500 dark:text-slate-400">
           {t("geofenceListEmpty")}
         </p>
       ) : (
@@ -61,7 +61,7 @@ export function ZoneFormMapLegend({
         <button
           type="button"
           onClick={onViewAll}
-          className="mt-1 cursor-pointer text-start text-[11px] font-medium text-primary hover:underline"
+          className="mt-1 cursor-pointer text-start text-xs font-medium text-primary hover:underline"
         >
           {t("viewAllZones", { count: total })}
         </button>

@@ -399,7 +399,7 @@ function AssetsPageContent() {
                   {hasActiveFilters ? (
                     <Badge
                       variant="secondary"
-                      className="ms-2 h-5 min-w-5 rounded-full px-1.5 text-[10px]"
+                      className="ms-2 h-5 min-w-5 rounded-full px-1.5 text-xs"
                     >
                       {(statusFilter !== "all" ? 1 : 0) + (categoryFilter !== "all" ? 1 : 0)}
                     </Badge>
@@ -569,7 +569,7 @@ function AssetsPageContent() {
                               </span>
                               <div>
                                 <p className="font-medium">{row.name}</p>
-                                <p className="text-[11px] text-muted-foreground">{row.code}</p>
+                                <p className="text-xs text-muted-foreground">{row.code}</p>
                               </div>
                             </div>
                           </TableCell>

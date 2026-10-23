@@ -90,7 +90,7 @@ export function FuelWithdrawnDialog({
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
-        <p className="text-[10px] text-muted-foreground">{t("editWithdrawnHint", { limit: formatKwd(row.monthlyLimit) })}</p>
+        <p className="text-xs text-muted-foreground">{t("editWithdrawnHint", { limit: formatKwd(row.monthlyLimit) })}</p>
       </FieldBlock>
     </FleetRecordDialog>
   );

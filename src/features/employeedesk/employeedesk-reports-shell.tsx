@@ -257,17 +257,17 @@ export function EmployeeDeskReportsShell({
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <p className="text-sm font-semibold">{t(`links.${key}`)}</p>
                     {adminOnly ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                         <ShieldCheck className="h-3 w-3" />
                         {t("adminOnly")}
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     {t(`linksDesc.${key}`)}
                   </p>
                   {metaLabel ? (
-                    <p className="mt-1 text-[10px] text-muted-foreground/80">{metaLabel}</p>
+                    <p className="mt-1 text-xs text-muted-foreground/80">{metaLabel}</p>
                   ) : null}
                 </div>
                 <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -283,7 +283,7 @@ export function EmployeeDeskReportsShell({
         description={t("workload.subtitle")}
         headerActions={
           canManageRequests ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground">
               <ShieldCheck className="h-3 w-3" />
               {t("workload.window")}
             </span>
@@ -291,7 +291,7 @@ export function EmployeeDeskReportsShell({
         }
       >
         {!canManageRequests ? (
-          <p className="border-t border-border px-4 py-8 text-center text-[11px] text-muted-foreground">
+          <p className="border-t border-border px-4 py-8 text-center text-xs text-muted-foreground">
             {t("workload.managersOnly")}
           </p>
         ) : departments.isLoading ? (
@@ -313,7 +313,7 @@ export function EmployeeDeskReportsShell({
                   <p className="text-sm font-medium">
                     {departments.data?.error ? t("workload.failed") : t("workload.empty")}
                   </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {departments.data?.error ? t("workload.failedBody") : t("workload.emptyBody")}
                   </p>
                 </AppDataTableEmpty>

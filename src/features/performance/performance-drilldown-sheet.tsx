@@ -29,10 +29,10 @@ function MetricBlock({
 }) {
   return (
     <div className="rounded-lg border border-border bg-muted/20 p-3">
-      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-xl font-semibold tabular-nums text-foreground">{value}</p>
       {hint ? (
-        <p className="mt-0.5 text-[10px] text-muted-foreground">{hint}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
       ) : null}
     </div>
   );
@@ -161,12 +161,12 @@ function DrilldownBody({
                 </ul>
               </div>
             ) : (
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("noExceptions")}
               </p>
             )}
 
-            <p className="text-[10px] text-muted-foreground">{t("weightsNote")}</p>
+            <p className="text-xs text-muted-foreground">{t("weightsNote")}</p>
           </>
         )}
       </div>

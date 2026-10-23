@@ -7,6 +7,7 @@ import { parseId, parseIdList } from "../core/query";
 import { requireStaff, requireStaffFresh } from "../core/staff";
 import { overlayZoneMonthDocs } from "../core/rollups";
 import { EMPTY_ROW, asDate, loadAllDocs, loadDocMap, num, toRow, type Row } from "./fleet";
+import { loadNationalityLabels, nationalityLabel } from "../core/nationality-label";
 
 const PERFORMANCE_TARGET_DPD = "performance_target_dpd";
 const DRIVER_DPD_SHIFT_NOTICES = "driver_dpd_shift_notices";
@@ -814,6 +815,7 @@ async function buildRoll(args: OpsArgs): Promise<{
           "employee_id",
           "restaurant_id",
           "nationality",
+          "nationality_category_keys",
           "status",
           "source_type",
           "source_company",
@@ -899,6 +901,12 @@ async function buildRoll(args: OpsArgs): Promise<{
 
   const driverById = new Map<string, Dict>();
   for (const doc of driverSnaps.docs) driverById.set(doc.id, toRow(doc.id, doc.data() as Dict));
+  const nationalityLabels = await loadNationalityLabels("en");
+  for (const driver of driverById.values()) {
+    const stored = typeof driver.nationality === "string" ? driver.nationality : null;
+    const label = nationalityLabel(driver.nationality_category_keys, nationalityLabels, stored);
+    if (label) driver.nationality = label;
+  }
 
   const expected = new Set<string>();
   for (const row of deliveryRows) {

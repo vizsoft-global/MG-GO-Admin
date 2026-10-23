@@ -172,7 +172,7 @@ export function RestaurantFormFields({
           }
           className="rounded-lg bg-background font-mono text-sm"
         />
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {labels.externalMerchantIdHint}
         </p>
       </div>
@@ -186,9 +186,9 @@ export function RestaurantFormFields({
           placeholder={labels.mapLinkPlaceholder}
           className="rounded-lg bg-background text-sm"
         />
-        <p className="text-[11px] text-muted-foreground">{labels.mapLinkHint}</p>
+        <p className="text-xs text-muted-foreground">{labels.mapLinkHint}</p>
         {labels.mapAutoFilledHint ? (
-          <p className="text-[11px] text-muted-foreground/80">
+          <p className="text-xs text-muted-foreground/80">
             {labels.mapAutoFilledHint}
           </p>
         ) : null}
@@ -231,7 +231,7 @@ export function RestaurantFormFields({
             ))}
           </SelectContent>
         </Select>
-        <p className="text-[11px] text-muted-foreground">{labels.statusHint}</p>
+        <p className="text-xs text-muted-foreground">{labels.statusHint}</p>
       </div>
     </div>
   );

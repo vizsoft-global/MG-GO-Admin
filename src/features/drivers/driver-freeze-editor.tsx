@@ -151,15 +151,15 @@ export function DriverFreezeEditor({
 
         {ui === "active" && freezeReason ? (
           <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-destructive">
+            <p className="text-xs font-medium uppercase tracking-wide text-destructive">
               {t("reasonLabel")}
             </p>
             <p className="mt-1 text-sm text-foreground">{freezeReason}</p>
-            <p className="mt-2 text-[10px] text-muted-foreground">
+            <p className="mt-2 text-xs text-muted-foreground">
               {t("untilDate", { date: formatKuwaitDateLabel(frozenUntil ?? today) })}
             </p>
             {frozenAt ? (
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t("frozenAt", { date: new Date(frozenAt).toLocaleString() })}
               </p>
             ) : null}
@@ -168,9 +168,9 @@ export function DriverFreezeEditor({
 
         {ui === "scheduled" && freezeReason ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-900">
-            <p className="text-[10px] font-medium uppercase tracking-wide">{t("scheduledLabel")}</p>
+            <p className="text-xs font-medium uppercase tracking-wide">{t("scheduledLabel")}</p>
             <p className="mt-1 text-sm">{freezeReason}</p>
-            <p className="mt-2 text-[10px]">
+            <p className="mt-2 text-xs">
               {t("windowRange", {
                 from: formatKuwaitDateLabel(frozenFrom ?? today),
                 until: formatKuwaitDateLabel(frozenUntil ?? today),
