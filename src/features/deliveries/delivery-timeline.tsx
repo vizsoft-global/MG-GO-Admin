@@ -3,6 +3,7 @@
 import { useLocale, useTranslations } from "next-intl";
 import { MapPin, Package, ShieldCheck, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { type CancelReasonCode, parseCancelReason } from "./parse-cancel-reason";
 import type { DeliveryListRow } from "./types";
 
 type Step = {
@@ -13,6 +14,16 @@ type Step = {
   state: "done" | "pending" | "muted";
   icon: typeof Package;
 };
+
+function cancelTimelineDetail(
+  raw: string | null,
+  labelFor: (code: CancelReasonCode) => string,
+): string | null {
+  const parsed = parseCancelReason(raw);
+  if (!parsed) return null;
+  const label = labelFor(parsed.code);
+  return parsed.note ? `${label} — ${parsed.note}` : label;
+}
 
 function formatAt(value: string | null, locale: string): string | null {
   if (!value) return null;
@@ -30,6 +41,7 @@ function formatAt(value: string | null, locale: string): string | null {
  */
 export function DeliveryTimeline({ delivery }: { delivery: DeliveryListRow }) {
   const t = useTranslations("pages.deliveries.timeline");
+  const tDelivery = useTranslations("pages.deliveries");
   const locale = useLocale();
 
   const earlyDrop = delivery.is_early_drop === true;
@@ -85,7 +97,55 @@ export function DeliveryTimeline({ delivery }: { delivery: DeliveryListRow }) {
         delivery.status === "cancelled" ? delivery.cancelled_at : delivery.delivered_at,
         locale,
       ),
-      detail: delivery.status === "cancelled" ? delivery.cancel_reason : null,
+      detail:
+        delivery.status === "cancelled"
+          ? cancelTimelineDetail(delivery.cancel_reason, (code) => {
+              switch (code) {
+                case "item_unavailable":
+                  return tDelivery("cancelReason.item_unavailable");
+                case "restaurant_canceled":
+                  return tDelivery("cancelReason.restaurant_canceled");
+                case "long_preparation":
+                  return tDelivery("cancelReason.long_preparation");
+                case "highway_order":
+                  return tDelivery("cancelReason.highway_order");
+                case "auto_accept_unconfirmed":
+                  return tDelivery("cancelReason.auto_accept_unconfirmed");
+                case "customer_canceled":
+                  return tDelivery("cancelReason.customer_canceled");
+                case "food_theft":
+                  return tDelivery("cancelReason.food_theft");
+                case "navigation_issue":
+                  return tDelivery("cancelReason.navigation_issue");
+                case "delivery_delayed":
+                  return tDelivery("cancelReason.delivery_delayed");
+                case "food_too_large":
+                  return tDelivery("cancelReason.food_too_large");
+                case "merchant_closed":
+                  return tDelivery("cancelReason.merchant_closed");
+                case "order_reassigned":
+                  return tDelivery("cancelReason.order_reassigned");
+                case "accident":
+                  return tDelivery("cancelReason.accident");
+                case "wrong_address":
+                  return tDelivery("cancelReason.wrong_address");
+                case "vehicle_breakdown":
+                  return tDelivery("cancelReason.vehicle_breakdown");
+                case "customer_no_show":
+                  return tDelivery("cancelReason.customer_no_show");
+                case "customer_refused":
+                  return tDelivery("cancelReason.customer_refused");
+                case "restaurant_issue":
+                  return tDelivery("cancelReason.restaurant_issue");
+                case "other":
+                  return tDelivery("cancelReason.other");
+                default: {
+                  const exhaustive: never = code;
+                  return exhaustive;
+                }
+              }
+            })
+          : null,
       state:
         delivery.status === "cancelled"
           ? delivery.cancelled_at
