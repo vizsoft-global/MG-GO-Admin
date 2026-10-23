@@ -3202,6 +3202,30 @@
         { "fieldPath": "source", "order": "ASCENDING" },
         { "fieldPath": "created_at", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "driver_leave_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "project_key", "order": "ASCENDING" },
+        { "fieldPath": "year_month", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "driver_leave_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "year_month", "order": "ASCENDING" },
+        { "fieldPath": "start_date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "driver_leave_plans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "driver_id", "order": "ASCENDING" },
+        { "fieldPath": "start_date", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

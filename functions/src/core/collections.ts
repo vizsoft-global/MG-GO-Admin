@@ -68,6 +68,7 @@ export const COLLECTIONS = {
   /** Per rider-day GPS totals written by the Worker flush (`{driverId}_{day}`). */
   riderDayStats: "rider_day_stats",
   driverOffStructure: "driver_off_structure",
+  driverLeavePlans: "driver_leave_plans",
   /** Operations-uploaded Invalid / Rejected / Cancelled rows, keyed `{driverId}_{day}`. */
   riderComplianceDaily: "rider_compliance_daily",
   orderReconRows: "order_recon_rows",

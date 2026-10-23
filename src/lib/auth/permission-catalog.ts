@@ -318,6 +318,8 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
     label: "View AI staff assistant",
     category: "assistant",
   },
+  { slug: "client_portal.view", label: "View client portal", category: "drivers" },
+  { slug: "operations_dashboard.view", label: "View rider operations dashboard", category: "drivers" },
   // releases.manage removed — App Releases / sideload OTA decommissioned (Play Store only).
   ...PERMISSION_CRUD_CATALOG,
 ];

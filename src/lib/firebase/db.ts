@@ -137,6 +137,7 @@ export const COLLECTIONS = {
   adminRoles: "admin_roles",
   adminRolePermissions: "admin_role_permissions",
   adminUserPermissions: "admin_user_permissions",
+  driverLeavePlans: "driver_leave_plans",
   adminAllowlist: "admin_allowlist",
   adminActivityLogs: "admin_activity_logs",
   adminCostSamples: "admin_cost_samples",

@@ -170,6 +170,19 @@ The PDFs *New Musallam DPD Home Launcher* and *New Musallam RCM* (plus the 21 sc
 
 Do not port these three exceptions to other modules.
 
+### Sanctioned exception — Rider Operations and Client Portal
+
+`/operations-dashboard` and `/client-portal` only. Other pages stay on the rulebook.
+
+- Project pills and header actions use the shared button tokens (`--btn-primary` `#A73C24`, hover `#8F331F`, pressed `#7A2B1A`, secondary transparent with a 1px `#A73C24` border). This is not the emerald `ToggleChip`.
+- Header buttons, project pills, and filters are `h-9`, the same height as the rest of the panel. KPI tiles use compact padding and a `text-xl` number. Section bands and tables use `text-sm` / `text-xs` so they match other list pages. The page title stays `type-h1`.
+- Status and chart colours stay as listed below.
+- Status colors: Running `#1e7e34`, Extension `#0d7a5f`, Leave `#1565c0`, New `#00838f`, Absent From MOSAL `#c2185b`, Cancelled `#5c6370`.
+- Leave bars: past `#1565c0`, current `#0f6e78`, future dashed `#dbe7f7` with stroke `#1565c0`.
+- Add leave and Bulk import stay footer-first via `AppModalFooter`. Controls inside those modals stay `h-9`. No `transition-all`.
+
+Do not port this palette to other modules.
+
 ---
 
 ## 11. Pre-ship checklist

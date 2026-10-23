@@ -13,7 +13,10 @@ import { CATALOG_SLUG_SET } from "@/lib/auth/permission-catalog";
 import {
   expandRoleSlugsToUserTicks,
   isStaffMatrixSlug,
+  parsePartnerProjectKey,
   parseStaffAccessKind,
+  PARTNER_PERMISSION_SLUGS,
+  type PartnerProjectKey,
   type StaffAccessKind,
 } from "@/lib/auth/staff-access";
 import {
@@ -54,6 +57,7 @@ export type StaffAccessListRow = {
   fullName: string | null;
   email: string | null;
   accessKind: StaffAccessKind | null;
+  partnerProjectKey: PartnerProjectKey | null;
   roleId: string | null;
   roleName: string | null;
   roleSlug: string | null;
@@ -280,6 +284,7 @@ export async function listStaffAccess(): Promise<{
         fullName: typeof row.full_name === "string" ? row.full_name : null,
         email: typeof row.email === "string" ? row.email : null,
         accessKind: parseStaffAccessKind(row.access_kind),
+        partnerProjectKey: parsePartnerProjectKey(row.partner_project_key),
         roleId,
         roleName: role?.name ?? null,
         roleSlug: role?.slug ?? null,
@@ -385,6 +390,7 @@ export async function saveStaffAccess(input: {
   userId: string;
   accessKind: StaffAccessKind;
   slugs: string[];
+  partnerProjectKey?: string | null;
   department?: StaffDepartment | null;
   requestTypes?: RequestTypeGrant[];
   esignCategories?: EsignCategoryGrant[];
@@ -408,17 +414,39 @@ export async function saveStaffAccess(input: {
   const previousTicks = slugsOf(
     (await db.collection(COLLECTIONS.adminUserPermissions).doc(input.userId).get()).data(),
   );
-  const slugs = kind === "user" ? matrixSlugs(input.slugs) : [];
+  let slugs: string[];
+  let partnerProjectKey: string | null = null;
+  switch (kind) {
+    case "partner": {
+      const project = parsePartnerProjectKey(input.partnerProjectKey);
+      if (!project) return { error: "invalid_project" };
+      partnerProjectKey = project;
+      slugs = [...PARTNER_PERMISSION_SLUGS];
+      break;
+    }
+    case "user":
+      slugs = matrixSlugs(input.slugs);
+      break;
+    case "manager":
+      slugs = [];
+      break;
+    default: {
+      const unreachable: never = kind;
+      return unreachable;
+    }
+  }
   const beforeAccess = ticksToAppAccess(previousTicks.filter(isStaffMatrixSlug));
   const afterAccess = ticksToAppAccess(slugs);
   const accessDiff = diffAccess(beforeAccess, afterAccess);
 
   const profilePatch: {
     access_kind: StaffAccessKind;
+    partner_project_key: string | null;
     updated_at: Date;
     staff_department?: string | null;
   } = {
     access_kind: kind,
+    partner_project_key: partnerProjectKey,
     updated_at: new Date(),
   };
   if (input.department !== undefined) {
@@ -427,7 +455,7 @@ export async function saveStaffAccess(input: {
 
   const previousKind = parseStaffAccessKind(profile.access_kind);
   const demoted =
-    (previousKind === "manager" && kind === "user") ||
+    (previousKind === "manager" && (kind === "user" || kind === "partner")) ||
     (kind === "user" && previousTicks.some((tick) => !slugs.includes(tick)));
 
   let requestDocs: QueryDocumentSnapshot[] = [];

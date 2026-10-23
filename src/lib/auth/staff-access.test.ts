@@ -7,6 +7,8 @@ import {
   isStaffMatrixSlug,
   managerDowngradeSeedTicks,
   migratedSessionIsSupersetOfRole,
+  parsePartnerProjectKey,
+  parseStaffAccessKind,
   permissionGrantedByTicks,
   resolveSessionPermissionSlugs,
   roleSlugsForSave,
@@ -200,6 +202,27 @@ describe("resolveSessionPermissionSlugs", () => {
     });
     assert.ok(slugs.has("drivers.bulk_delete"));
     assert.ok(slugs.has("data.cleanup"));
+  });
+
+  it("gives a partner only client_portal.view and drivers.view", () => {
+    const slugs = resolveSessionPermissionSlugs({
+      isSuperAdmin: false,
+      accessKind: "partner",
+      userTicks: ["payroll.view"],
+      roleSlugs: ["payroll.view", "settings.view"],
+      catalogSlugs: ["payroll.view", "settings.view", "drivers.view", "client_portal.view"],
+    });
+    assert.deepEqual([...slugs].sort(), ["client_portal.view", "drivers.view"].sort());
+    assert.equal(slugs.has("payroll.view"), false);
+    assert.equal(slugs.has("settings.view"), false);
+  });
+
+  it("parses partner kind and project keys", () => {
+    assert.equal(parseStaffAccessKind("partner"), "partner");
+    assert.equal(parsePartnerProjectKey("unset"), null);
+    assert.equal(parsePartnerProjectKey(""), null);
+    assert.equal(parsePartnerProjectKey("keeta"), "keeta");
+    assert.equal(parsePartnerProjectKey("americana"), "americana");
   });
 });
 

@@ -22,6 +22,7 @@ import {
   type Query,
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
+import { bumpOperationsDashboards } from "../router/read-snapshot";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireStaff } from "../core/staff";
 import { fullScanFallback, lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
@@ -1243,6 +1244,7 @@ export const adminCreateRequest = onCall(async (request) => {
     await batch.commit();
   }
 
+  if (type === "leave" || type === "sick_leave") await bumpOperationsDashboards();
   return { ok: true, id: reqRef.id, request_code: code };
 });
 

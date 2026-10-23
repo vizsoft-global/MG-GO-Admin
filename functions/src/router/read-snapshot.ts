@@ -214,6 +214,11 @@ export async function readThroughScanSnapshot(
   return { value, snapshot: "miss" };
 }
 
+/** Leave and sick requests change the same numbers as a leave-plan write. */
+export function bumpOperationsDashboards(): Promise<void> {
+  return bumpScanSnapshots(OPERATIONS_SNAPSHOTS);
+}
+
 /** One write moves every cached copy of these handlers. The next read recomputes. */
 export async function bumpScanSnapshots(names: readonly string[]): Promise<void> {
   if (names.length === 0) return;

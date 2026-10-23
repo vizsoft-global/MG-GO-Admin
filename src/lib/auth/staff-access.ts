@@ -1,4 +1,16 @@
-export const STAFF_ACCESS_KINDS = ["manager", "user"] as const;
+export const STAFF_ACCESS_KINDS = ["manager", "user", "partner"] as const;
+
+/** Projects a partner account may be locked to. */
+export const PARTNER_PROJECT_KEYS = ["keeta", "americana"] as const;
+export type PartnerProjectKey = (typeof PARTNER_PROJECT_KEYS)[number];
+
+/** The only ticks a partner session may hold. */
+export const PARTNER_PERMISSION_SLUGS = ["client_portal.view", "drivers.view"] as const;
+
+export function parsePartnerProjectKey(value: unknown): PartnerProjectKey | null {
+  if (value === "keeta" || value === "americana") return value;
+  return null;
+}
 export type StaffAccessKind = (typeof STAFF_ACCESS_KINDS)[number];
 
 export const RESOURCE_CRUD_MODULES = [
@@ -60,7 +72,7 @@ const MATRIX_CRUD_VERBS = ["create", "edit", "delete", "bulk_delete"] as const;
 export const RESOURCE_MATRIX_VERBS = MATRIX_CRUD_VERBS;
 
 export function parseStaffAccessKind(value: unknown): StaffAccessKind | null {
-  if (value === "manager" || value === "user") return value;
+  if (value === "manager" || value === "user" || value === "partner") return value;
   return null;
 }
 
@@ -165,6 +177,7 @@ export function resolveSessionPermissionSlugs(input: {
   roleSlugs: readonly string[];
   catalogSlugs: readonly string[];
 }): Set<string> {
+  if (input.accessKind === "partner") return new Set(PARTNER_PERMISSION_SLUGS);
   if (input.isSuperAdmin || input.accessKind === "manager") {
     return new Set(input.catalogSlugs);
   }

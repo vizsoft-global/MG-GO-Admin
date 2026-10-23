@@ -84,6 +84,8 @@ export const APP_ACCESS_CATALOG: readonly AppAccessEntry[] = [
       { id: "devices", labelKey: "subViews.devices", slugs: ["driver_devices.view"] },
     ],
   },
+  { appId: "operations-dashboard", extraViewer: ["operations_dashboard.view"], subViews: [] },
+  { appId: "client-portal", extraViewer: ["client_portal.view"], subViews: [] },
   {
     appId: "deliveries",
     crudModule: "deliveries",

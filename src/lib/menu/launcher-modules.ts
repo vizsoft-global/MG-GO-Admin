@@ -11,6 +11,8 @@ export const LAUNCHER_TILE_IDS = [
   "dashboard-ops",
   "live-tracking-v2",
   "drivers",
+  "operations-dashboard",
+  "client-portal",
   "driver-groups",
   "deliveries",
   "attendance",
