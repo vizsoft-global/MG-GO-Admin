@@ -97,6 +97,8 @@ export type PayrollRiderRow = {
   nationality: string;
   nationalityCode: string | null;
   status: "Active" | "Inactive";
+  /** A hand-set Status column value. Absent means today's cell (or the account) decides. */
+  statusOverride?: { key: string; label: string } | null;
   vehicleKey: string | null;
   sourceType: string | null;
   sourceCompany: string | null;

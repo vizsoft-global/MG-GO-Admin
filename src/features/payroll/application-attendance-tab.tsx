@@ -38,7 +38,8 @@ import {
   stickyIdentityStyle,
 } from "./payroll-heading";
 import { PayrollListToolbar } from "./payroll-list-toolbar";
-import { RiderStatusPill } from "./rider-status-pill";
+import { PayrollStatusCell } from "./payroll-status-cell";
+import { usePayrollStatusFilterList } from "./payroll-status-context";
 import {
   PayrollIdentityCell,
   payrollIdentityField,
@@ -66,6 +67,7 @@ export function ApplicationAttendanceTab({
   today: string;
 }) {
   const t = useTranslations("pages.payroll");
+  const statusList = usePayrollStatusFilterList();
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<ColumnFilters>({});
   const [sort, setSort] = useState<ColumnSort>(null);
@@ -273,6 +275,7 @@ export function ApplicationAttendanceTab({
                         values={searched.map((row) =>
                           String(riderColumnValue(row, column.id, today) ?? ""),
                         )}
+                        fixedList={column.id === "status" ? statusList : undefined}
                         filter={filters[column.id]}
                         onChange={(next) => setFilter(column.id, next)}
                         sort={sort}
@@ -330,7 +333,7 @@ export function ApplicationAttendanceTab({
                       const identityField = payrollIdentityField(column.id);
                       const display =
                         column.id === "status" ? (
-                          <RiderStatusPill row={row} today={today} />
+                          <PayrollStatusCell row={row} today={today} canEdit={canManage} />
                         ) : identityField ? (
                           <PayrollIdentityCell
                             driverId={row.driverId}

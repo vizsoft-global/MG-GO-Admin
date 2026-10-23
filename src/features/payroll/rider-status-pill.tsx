@@ -10,9 +10,10 @@ const FALLBACK_HEX = "#94a3b8";
 /**
  * One rider's current status as a colour-coded pill.
  *
- * Today's cell wins; a past month (or a rider whose today cell is still blank)
- * shows the account status instead. The label is `resolveRiderStatus().label`,
- * the same string the column filter, the sort and the CSV read.
+ * A hand-set status wins. Otherwise today's cell is folded into the seven
+ * Status choices, and a blank cell shows the account status. The label is
+ * `resolveRiderStatus().label`, the same string the column filter, the sort
+ * and the CSV read.
  */
 export function RiderStatusPill({
   row,
@@ -25,16 +26,17 @@ export function RiderStatusPill({
   className?: string;
 }) {
   const status = resolveRiderStatus(row, today);
-  if (status.kind === "account") {
+  if (status.status === "active" || status.status === "inactive") {
     return (
       <span
         className={cn(
-          "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap",
+          "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap",
           status.status === "active"
             ? "bg-emerald-100 text-emerald-800"
             : "bg-muted text-muted-foreground",
           className,
         )}
+        title={status.label}
       >
         {status.label}
       </span>
@@ -44,7 +46,7 @@ export function RiderStatusPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap",
+        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold whitespace-nowrap",
         className,
       )}
       style={{ borderColor: `${hex}66`, backgroundColor: `${hex}1f` }}

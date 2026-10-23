@@ -344,3 +344,183 @@ function parseOrders(value: unknown): number | null {
   }
   return parsed;
 }
+
+/** Status-column choices. Worked days stay Active; Active Payroll is set by hand. */
+export const CORE_STATUS_KEYS = [
+  "active",
+  "absent",
+  "leave",
+  "active_payroll",
+  "accident",
+  "terminated",
+  "cancelled",
+] as const;
+
+export type CoreStatusKey = (typeof CORE_STATUS_KEYS)[number];
+
+export const CORE_STATUS_LABEL: Record<CoreStatusKey, string> = {
+  active: "Active",
+  absent: "Absent",
+  leave: "Leave",
+  active_payroll: "Active Payroll",
+  accident: "Accident",
+  terminated: "Terminated",
+  cancelled: "Cancelled",
+};
+
+export type PayrollStatusEntry = { key: CoreStatusKey | "custom"; label: string };
+
+export type PayrollStatusRoster = {
+  byDriver: Record<string, PayrollStatusEntry>;
+  customs: string[];
+};
+
+const MAX_STATUS_LABEL = 40;
+const MAX_STATUS_CUSTOMS = 40;
+const STATUS_ROSTER_DOC = "roster";
+
+function isCoreStatusKey(value: string): value is CoreStatusKey {
+  return (CORE_STATUS_KEYS as readonly string[]).includes(value);
+}
+
+function cleanStatusLabel(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim();
+}
+
+function statusLabelRejected(value: string): boolean {
+  if (!value || value.length > MAX_STATUS_LABEL) return true;
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code < 32 || code === 127) return true;
+  }
+  return false;
+}
+
+export function normalizePayrollStatusChoice(input: {
+  key?: string;
+  label?: string;
+}): PayrollStatusEntry {
+  const key = (input.key ?? "").trim();
+  if (isCoreStatusKey(key)) return { key, label: CORE_STATUS_LABEL[key] };
+  const label = cleanStatusLabel(input.label ?? "");
+  if (statusLabelRejected(label)) throw new Error("invalid_status");
+  const core = CORE_STATUS_KEYS.find(
+    (item) => CORE_STATUS_LABEL[item].toLowerCase() === label.toLowerCase(),
+  );
+  if (core) return { key: core, label: CORE_STATUS_LABEL[core] };
+  return { key: "custom", label };
+}
+
+export function applyPayrollStatusRoster(
+  roster: PayrollStatusRoster,
+  driverId: string,
+  choice: PayrollStatusEntry | null,
+): PayrollStatusRoster {
+  const byDriver = { ...roster.byDriver };
+  const customs = [...roster.customs];
+  if (!choice) {
+    delete byDriver[driverId];
+    return { byDriver, customs };
+  }
+  byDriver[driverId] = choice;
+  if (choice.key === "custom") {
+    const exists = customs.some((item) => item.toLowerCase() === choice.label.toLowerCase());
+    if (!exists && customs.length < MAX_STATUS_CUSTOMS) customs.push(choice.label);
+  }
+  return { byDriver, customs };
+}
+
+function readStatusRoster(data: Dict | undefined): PayrollStatusRoster {
+  const byDriver: Record<string, PayrollStatusEntry> = {};
+  const rawMap = data?.by_driver;
+  if (rawMap && typeof rawMap === "object") {
+    for (const [id, value] of Object.entries(rawMap as Record<string, unknown>)) {
+      if (!value || typeof value !== "object") continue;
+      const row = value as Dict;
+      try {
+        byDriver[id] = normalizePayrollStatusChoice({
+          key: typeof row.key === "string" ? row.key : "",
+          label: typeof row.label === "string" ? row.label : "",
+        });
+      } catch {
+        // A stored row that no longer parses is dropped on the next write.
+      }
+    }
+  }
+  const customs: string[] = [];
+  const rawCustoms = data?.customs;
+  if (Array.isArray(rawCustoms)) {
+    for (const item of rawCustoms) {
+      if (typeof item !== "string") continue;
+      try {
+        const choice = normalizePayrollStatusChoice({ label: item });
+        if (choice.key !== "custom") continue;
+        if (customs.some((existing) => existing.toLowerCase() === choice.label.toLowerCase())) continue;
+        if (customs.length >= MAX_STATUS_CUSTOMS) break;
+        customs.push(choice.label);
+      } catch {
+        // Skip a custom that is blank or too long.
+      }
+    }
+  }
+  return { byDriver, customs };
+}
+
+export const adminListPayrollRiderStatuses = onCall(async (request) => {
+  await requireStaffFresh(request, "payroll.view");
+  const snap = await getFirestore().collection(COLLECTIONS.payrollRiderStatuses).doc(STATUS_ROSTER_DOC).get();
+  return readStatusRoster(snap.exists ? (snap.data() as Dict) : undefined);
+});
+
+export const adminSavePayrollRiderStatus = onCall(async (request) => {
+  const staff = await requireStaffFresh(request, "payroll.manage");
+  const data = argsOf(request.data);
+  const driverId = pickText(data, "p_driver_id", "driver_id", "driverId");
+  if (!driverId || driverId.length > 128) throw new HttpsError("invalid-argument", "invalid_driver");
+  const clear = pick(data, "p_clear", "clear") === true;
+  let choice: PayrollStatusEntry | null = null;
+  if (!clear) {
+    try {
+      choice = normalizePayrollStatusChoice({
+        key: pickText(data, "p_key", "key") ?? "",
+        label: pickText(data, "p_label", "label") ?? "",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "invalid_status";
+      throw new HttpsError("invalid-argument", message);
+    }
+  }
+  const db = getFirestore();
+  if (choice) {
+    const driver = await db.collection(COLLECTIONS.drivers).doc(driverId).get();
+    if (!driver.exists) throw new HttpsError("not-found", "driver_not_found");
+  }
+  const ref = db.collection(COLLECTIONS.payrollRiderStatuses).doc(STATUS_ROSTER_DOC);
+  const next = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const applied = applyPayrollStatusRoster(
+      readStatusRoster(snap.exists ? (snap.data() as Dict) : undefined),
+      driverId,
+      choice,
+    );
+    tx.set(
+      ref,
+      {
+        by_driver: applied.byDriver,
+        customs: applied.customs,
+        updated_at: FieldValue.serverTimestamp(),
+        updated_by: staff.uid,
+      },
+      { merge: true },
+    );
+    return applied;
+  });
+  await logAdminActivity({
+    actorId: staff.uid,
+    action: clear ? "delete" : "update",
+    entity: "payroll_rider_statuses",
+    entityId: driverId,
+    detail: choice ? { key: choice.key, label: choice.label } : { clear: true },
+  });
+  return next;
+});

@@ -1121,3 +1121,37 @@ export async function savePayrollOrders(
   });
   if (error) throw new Error(error.message || "save_failed");
 }
+
+export type PayrollStatusRoster = {
+  byDriver: Record<string, { key: string; label: string }>;
+  customs: string[];
+};
+
+function statusRosterOf(data: PayrollStatusRoster | null | undefined): PayrollStatusRoster {
+  return {
+    byDriver: data?.byDriver && typeof data.byDriver === "object" ? data.byDriver : {},
+    customs: Array.isArray(data?.customs) ? data.customs : [],
+  };
+}
+
+export async function listPayrollRiderStatuses(): Promise<PayrollStatusRoster> {
+  await requirePayrollView();
+  const { data, error } = await callRpc<PayrollStatusRoster>("admin_list_payroll_rider_statuses");
+  if (error || !data) throw new Error(error?.message || "load_failed");
+  return statusRosterOf(data);
+}
+
+export async function savePayrollRiderStatus(
+  driverId: string,
+  choice: { key: string; label: string } | null,
+): Promise<PayrollStatusRoster> {
+  await requirePayrollPermission("payroll.manage");
+  const { data, error } = await callRpc<PayrollStatusRoster>(
+    "admin_save_payroll_rider_status",
+    choice
+      ? { p_driver_id: driverId, p_key: choice.key, p_label: choice.label }
+      : { p_driver_id: driverId, p_clear: true },
+  );
+  if (error || !data) throw new Error(error?.message || "save_failed");
+  return statusRosterOf(data);
+}

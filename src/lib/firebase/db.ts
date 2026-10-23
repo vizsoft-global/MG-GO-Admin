@@ -71,6 +71,7 @@ export const COLLECTIONS = {
   payrollZoneSettings: "payroll_zone_settings",
   payrollManualAdjustments: "payroll_manual_adjustments",
   payrollOrderOverrides: "payroll_order_overrides",
+  payrollRiderStatuses: "payroll_rider_statuses",
   payrollColumnConfig: "payroll_column_config",
   payrollRuleAuditLogs: "payroll_rule_audit_logs",
   requestTypeDefinitions: "request_type_definitions",

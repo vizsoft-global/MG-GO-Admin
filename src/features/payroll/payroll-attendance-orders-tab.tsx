@@ -38,7 +38,8 @@ import {
   payrollIdentityField,
   payrollIdentityValue,
 } from "./payroll-identity-cell";
-import { RiderStatusPill } from "./rider-status-pill";
+import { PayrollStatusCell } from "./payroll-status-cell";
+import { usePayrollStatusFilterList } from "./payroll-status-context";
 import { usePayrollAdjust } from "./payroll-adjust-context";
 import { aoShownOrders } from "./payroll-orders-display";
 import { PayrollCellMenu, type PayrollCellMenuState } from "./payroll-cell-menu";
@@ -86,6 +87,7 @@ export function PayrollAttendanceOrdersTab({
   today: string;
 }) {
   const t = useTranslations("pages.payroll");
+  const statusList = usePayrollStatusFilterList();
   const [search, setSearch] = useState("");
   const { prefs } = usePayrollListPrefs("payroll-ao");
   const [filters, setFilters] = useState<ColumnFilters>({});
@@ -543,6 +545,7 @@ export function PayrollAttendanceOrdersTab({
                       }
                       columnId={column.id}
                       values={searched.map((row) => String(riderColumnValue(row, column.id, today) ?? ""))}
+                      fixedList={column.id === "status" ? statusList : undefined}
                       filter={filters[column.id]}
                       onChange={(next) => setFilter(column.id, next)}
                       sort={sort}
@@ -620,7 +623,7 @@ export function PayrollAttendanceOrdersTab({
                         {column.id === "zoneCategory" ? (
                           <ZoneCategoryPill category={row.zoneCategory} />
                         ) : column.id === "status" ? (
-                          <RiderStatusPill row={row} today={today} />
+                          <PayrollStatusCell row={row} today={today} canEdit={editable} />
                         ) : column.id === "actualHours" ? (
                           row.actualHours.toFixed(2)
                         ) : payrollIdentityField(column.id) ? (

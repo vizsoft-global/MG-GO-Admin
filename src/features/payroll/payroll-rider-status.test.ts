@@ -12,6 +12,7 @@ import {
   riderStatusLabel,
 } from "./payroll-rider-columns";
 import { PAYROLL_STATUS_CHIP, type DayStatus } from "./payroll-formulas";
+import { statusFilterLabels } from "./payroll-status-options";
 import type { PayrollRiderRow } from "./payroll-types";
 
 /** Only the fields the status resolver reads; the rest of the row is unrelated. */
@@ -37,10 +38,51 @@ describe("rider status", () => {
     });
     const status = resolveRiderStatus(row, "2026-10-22");
     assert.equal(status.kind, "day");
-    assert.equal(status.status, "sick");
-    assert.equal(status.label, "Sick");
-    assert.equal(status.hex, PAYROLL_STATUS_CHIP.sick.hex);
+    assert.equal(status.status, "leave");
+    assert.equal(status.label, "Leave");
+    assert.equal(status.hex, PAYROLL_STATUS_CHIP.leave.hex);
     assert.equal(status.date, "2026-10-22");
+  });
+
+  it("folds a worked day into Active and an absence into Absent", () => {
+    const work = riderRow({ dates: ["2026-10-22"], days: ["work"] });
+    const worked = resolveRiderStatus(work, "2026-10-22");
+    assert.equal(worked.status, "active");
+    assert.equal(worked.label, "Active");
+    assert.equal(worked.hex, null);
+    const off = riderRow({ dates: ["2026-10-22"], days: ["off"] });
+    assert.equal(resolveRiderStatus(off, "2026-10-22").label, "Active");
+    const absent = riderRow({ dates: ["2026-10-22"], days: ["abs_lo"] });
+    const folded = resolveRiderStatus(absent, "2026-10-22");
+    assert.equal(folded.status, "absent");
+    assert.equal(folded.label, "Absent");
+  });
+
+  it("lets a hand-set status replace today's cell", () => {
+    const row = riderRow({ dates: ["2026-10-22"], days: ["work"] });
+    row.statusOverride = { key: "active_payroll", label: "Active Payroll" };
+    const status = resolveRiderStatus(row, "2026-10-22");
+    assert.equal(status.kind, "manual");
+    assert.equal(status.label, "Active Payroll");
+    assert.equal(riderColumnValue(row, "status", "2026-10-22"), "Active Payroll");
+  });
+
+  it("lists the seven cores and a custom, and hides the retired day words", () => {
+    const labels = statusFilterLabels(["Night desk"], ["Night desk"]);
+    assert.deepEqual(labels.slice(0, 7), [
+      "Active",
+      "Absent",
+      "Leave",
+      "Active Payroll",
+      "Accident",
+      "Terminated",
+      "Cancelled",
+    ]);
+    assert.equal(labels.includes("Night desk"), true);
+    assert.equal(labels.includes("Work"), false);
+    assert.equal(labels.includes("Sick"), false);
+    assert.equal(labels.includes("Inactive"), false);
+    assert.equal(statusFilterLabels([], ["Desk"]).at(-1), "Desk");
   });
 
   it("falls back to the account status when today's cell is blank", () => {

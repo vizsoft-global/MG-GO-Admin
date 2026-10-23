@@ -6,6 +6,15 @@ import { PAYROLL_DAY_HOURS, PAYROLL_STATUS_CHIP, type DayStatus } from "./payrol
 import { aoShownOrders } from "./payroll-orders-display";
 import { cellParticular } from "./payroll-particulars";
 import { ADJUSTMENT_STATUS_TO_DAY, type AdjustmentStatus } from "./payroll-rules-engine";
+import {
+  CORE_PAYROLL_STATUS_HEX,
+  CORE_PAYROLL_STATUS_LABEL,
+  CUSTOM_STATUS_HEX,
+  isCorePayrollStatus,
+  payrollGridStatusFromDay,
+  payrollStatusChoiceFromLabel,
+  type CorePayrollStatusKey,
+} from "./payroll-status-options";
 import type { PayrollRiderRow } from "./payroll-types";
 
 export type PayrollRiderColumn = {
@@ -180,14 +189,14 @@ export function restaurantDisplayId(row: PayrollRiderRow): string {
  * all read, so an export can never disagree with the grid.
  */
 export type RiderStatusValue = {
-  /** Day status, or the riders-list account status when no day status applies. */
-  status: DayStatus | "active" | "inactive";
+  /** A core Status choice, a custom label, or the riders-list Inactive account. */
+  status: CorePayrollStatusKey | "inactive" | "custom";
   label: string;
-  /** Legend swatch for a day status; null for the account status. */
+  /** Null for Active and Inactive, which use the account pill. */
   hex: string | null;
   /** Kuwait date the day status came from, when one did. */
   date: string | null;
-  kind: "day" | "account";
+  kind: "day" | "account" | "manual";
 };
 
 /** Pill vocabulary: the legend's words, shortened to fit one cell. */
@@ -250,21 +259,59 @@ export function riderStatusHex(status: DayStatus): string | null {
   return RIDER_STATUS_HEX[status];
 }
 
+function manualStatus(row: PayrollRiderRow): RiderStatusValue | null {
+  const override = row.statusOverride;
+  const raw = override?.label?.trim();
+  if (!override || !raw) return null;
+  if (isCorePayrollStatus(override.key)) {
+    return {
+      status: override.key,
+      label: CORE_PAYROLL_STATUS_LABEL[override.key],
+      hex: CORE_PAYROLL_STATUS_HEX[override.key],
+      date: null,
+      kind: "manual",
+    };
+  }
+  const choice = payrollStatusChoiceFromLabel(raw);
+  if (!choice) return null;
+  if (isCorePayrollStatus(choice.key)) {
+    return {
+      status: choice.key,
+      label: choice.label,
+      hex: CORE_PAYROLL_STATUS_HEX[choice.key],
+      date: null,
+      kind: "manual",
+    };
+  }
+  return {
+    status: "custom",
+    label: choice.label,
+    hex: CUSTOM_STATUS_HEX,
+    date: null,
+    kind: "manual",
+  };
+}
+
 export function resolveRiderStatus(
   row: PayrollRiderRow,
   todayDate?: string | null,
 ): RiderStatusValue {
+  const manual = manualStatus(row);
+  if (manual) return manual;
   const today = todayDate ?? kuwaitToday();
   const index = row.dayInfo.findIndex((info) => info.date === today);
   const dayStatus = index >= 0 ? row.days[index] : undefined;
   if (dayStatus && dayStatus !== "blank") {
-    return {
-      status: dayStatus,
-      label: riderStatusLabel(dayStatus),
-      hex: riderStatusHex(dayStatus),
-      date: today,
-      kind: "day",
-    };
+    const key = payrollGridStatusFromDay(dayStatus);
+    if (key) {
+      return {
+        status: key,
+        label: CORE_PAYROLL_STATUS_LABEL[key],
+        hex: CORE_PAYROLL_STATUS_HEX[key],
+        date: today,
+        kind: "day",
+      };
+    }
   }
   const active = row.status === "Active";
   return {

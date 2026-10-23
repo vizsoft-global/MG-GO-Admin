@@ -298,7 +298,9 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   ],
   "./rpcs/payroll-edits": [
     "adminSavePayrollIdentity",
-    "adminSavePayrollOrders"
+    "adminSavePayrollOrders",
+    "adminListPayrollRiderStatuses",
+    "adminSavePayrollRiderStatus"
   ],
   "./rpcs/payouts": [
     "getEarningsOverview",

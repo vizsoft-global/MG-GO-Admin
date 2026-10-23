@@ -145,12 +145,12 @@ export function PayrollFilterChips({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {prefix ? (
-        <span className="text-[11px] font-semibold text-muted-foreground">{prefix}</span>
+        <span className="text-xs font-semibold text-muted-foreground">{prefix}</span>
       ) : null}
       {chips.map((chip) => (
         <span
           key={chip.columnId}
-          className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-muted/40 px-2 text-[11px] font-medium text-foreground"
+          className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-muted/40 px-2 text-xs font-medium text-foreground"
         >
           <ListFilter className="size-3 text-muted-foreground" />
           {chip.text}
@@ -165,14 +165,14 @@ export function PayrollFilterChips({
         </span>
       ))}
       {sortLabel ? (
-        <span className="inline-flex h-7 items-center rounded-md border border-primary/30 bg-primary/10 px-2 text-[11px] font-semibold text-primary">
+        <span className="inline-flex h-7 items-center rounded-md border border-primary/30 bg-primary/10 px-2 text-xs font-semibold text-primary">
           {sortLabel}
         </span>
       ) : null}
       <button
         type="button"
         onClick={onClear}
-        className="inline-flex h-7 items-center rounded-md px-2 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/10"
+        className="inline-flex h-7 items-center rounded-md px-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
       >
         {clearLabel}
       </button>
@@ -189,7 +189,9 @@ function defaultFilterMode(
   filter: ColumnFilterValue | undefined,
   values: readonly string[] | undefined,
   numeric: boolean,
+  fixedList?: readonly string[],
 ): ColumnFilterValue["kind"] {
+  if (fixedList && fixedList.length > 0) return "list";
   if (filter?.kind) return filter.kind;
   if (values && values.length > 0) return "list";
   if (numeric) return "range";
@@ -205,6 +207,7 @@ export function PayrollColumnHeader({
   sort,
   onSort,
   numeric = false,
+  fixedList,
   className,
   style,
   heading,
@@ -217,13 +220,17 @@ export function PayrollColumnHeader({
   sort: ColumnSort;
   onSort: (next: ColumnSort) => void;
   numeric?: boolean;
+  /** When set, List mode shows these labels in this order instead of the column's own words. */
+  fixedList?: readonly string[];
   className?: string;
   style?: CSSProperties;
   heading?: ReactNode;
 }) {
   const t = useTranslations("pages.payroll.columnFilter");
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<ColumnFilterValue["kind"]>(defaultFilterMode(filter, values, numeric));
+  const [mode, setMode] = useState<ColumnFilterValue["kind"]>(
+    defaultFilterMode(filter, values, numeric, fixedList),
+  );
   const [text, setText] = useState(filter?.kind === "text" ? filter.text : "");
   const [picked, setPicked] = useState<string[]>(
     filter?.kind === "list" ? [...filter.values] : [],
@@ -233,7 +240,13 @@ export function PayrollColumnHeader({
   const [search, setSearch] = useState("");
 
   const counts = useMemo(() => countValueOccurrences(values ?? []), [values]);
-  const uniqueValues = useMemo(() => sortParticularValues([...new Set(values ?? [])]), [values]);
+  const uniqueValues = useMemo(
+    () => (fixedList ? [...fixedList] : sortParticularValues([...new Set(values ?? [])])),
+    [fixedList, values],
+  );
+  const modeIds = fixedList
+    ? (["list"] as const)
+    : (["text", "list", ...(numeric ? (["range"] as const) : [])] as const);
   const visibleValues = useMemo(() => {
     const needle = search.trim().toLowerCase();
     if (!needle) return uniqueValues;
@@ -246,7 +259,7 @@ export function PayrollColumnHeader({
   function openChanged(next: boolean) {
     setOpen(next);
     if (next) {
-      setMode(defaultFilterMode(filter, values, numeric));
+      setMode(defaultFilterMode(filter, values, numeric, fixedList));
       setText(filter?.kind === "text" ? filter.text : "");
       setPicked(filter?.kind === "list" ? [...filter.values] : []);
       setMin(filter?.kind === "range" && filter.min !== null ? String(filter.min) : "");
@@ -312,14 +325,15 @@ export function PayrollColumnHeader({
             className="w-[min(260px,92vw)] origin-(--transform-origin) p-3"
           >
             <p className="mb-2 text-xs font-semibold">{t("title", { column: label })}</p>
+            {modeIds.length > 1 ? (
             <div className="mb-2 flex flex-wrap gap-1">
-              {(["text", "list", ...(numeric ? (["range"] as const) : [])] as const).map((id) => (
+              {modeIds.map((id) => (
                 <button
                   key={id}
                   type="button"
                   onClick={() => setMode(id)}
                   className={cn(
-                    "inline-flex h-7 items-center rounded-md border px-2 text-[11px] font-semibold transition-colors",
+                    "inline-flex h-7 items-center rounded-md border px-2 text-xs font-semibold transition-colors",
                     mode === id
                       ? "border-primary bg-primary text-primary-foreground ring-1 ring-primary/40"
                       : "border-border bg-muted/30 text-muted-foreground hover:text-foreground",
@@ -329,6 +343,7 @@ export function PayrollColumnHeader({
                 </button>
               ))}
             </div>
+            ) : null}
 
             {mode === "text" ? (
               <Input
@@ -349,7 +364,7 @@ export function PayrollColumnHeader({
                   <button
                     type="button"
                     onClick={toggleAll}
-                    className="flex w-full items-center gap-2 border-b border-border px-2 py-1.5 text-[11px] font-semibold hover:bg-muted/50"
+                    className="flex w-full items-center gap-2 border-b border-border px-2 py-1.5 text-xs font-semibold hover:bg-muted/50"
                   >
                     <span
                       className={cn(
@@ -369,7 +384,7 @@ export function PayrollColumnHeader({
                         key={value}
                         type="button"
                         onClick={() => toggleValue(value)}
-                        className="flex w-full items-center gap-2 px-2 py-1.5 text-start text-[11px] hover:bg-muted/50"
+                        className="flex w-full items-center gap-2 px-2 py-1.5 text-start text-xs hover:bg-muted/50"
                       >
                         <span
                           className={cn(
@@ -401,7 +416,7 @@ export function PayrollColumnHeader({
                       });
                       onSort({ columnId, dir: "asc" });
                     }}
-                    className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border text-[11px] font-semibold hover:bg-muted/50"
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border text-xs font-semibold hover:bg-muted/50"
                   >
                     <ArrowUpAZ className="size-3" />
                     {t("sortSmallest")}
@@ -411,7 +426,7 @@ export function PayrollColumnHeader({
                     onClick={() => {
                       onSort({ columnId, dir: "desc" });
                     }}
-                    className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border text-[11px] font-semibold hover:bg-muted/50"
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border text-xs font-semibold hover:bg-muted/50"
                   >
                     <ArrowDownAZ className="size-3" />
                     {t("sortLargest")}
@@ -441,7 +456,7 @@ export function PayrollColumnHeader({
               <button
                 type="button"
                 onClick={clear}
-                className="inline-flex h-8 items-center rounded-md px-2 text-[11px] font-semibold text-destructive transition-colors hover:bg-destructive/10"
+                className="inline-flex h-8 items-center rounded-md px-2 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/10"
               >
                 {t("clear")}
               </button>
@@ -449,14 +464,14 @@ export function PayrollColumnHeader({
                 <button
                   type="button"
                   onClick={() => onSort({ columnId, dir: sorted === "asc" ? "desc" : "asc" })}
-                  className="inline-flex h-8 items-center rounded-md border border-border px-2 text-[11px] font-semibold hover:bg-muted/50"
+                  className="inline-flex h-8 items-center rounded-md border border-border px-2 text-xs font-semibold hover:bg-muted/50"
                 >
                   {sorted === "desc" ? <ArrowDownAZ className="size-3" /> : <ArrowUpAZ className="size-3" />}
                 </button>
                 <button
                   type="button"
                   onClick={apply}
-                  className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-[11px] font-semibold text-primary-foreground"
+                  className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground"
                 >
                   {t("apply")}
                 </button>

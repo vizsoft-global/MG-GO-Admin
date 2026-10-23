@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Calculator, CalendarOff, Download, FilterX, Loader2 } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
@@ -34,6 +34,9 @@ import {
   PayrollZoneCategoryChips,
 } from "./payroll-chrome";
 import { PayrollAdjustProvider } from "./payroll-adjust-context";
+import { PayrollStatusContextProvider } from "./payroll-status-context";
+import { statusFilterLabels } from "./payroll-status-options";
+import { listPayrollRiderStatuses, savePayrollRiderStatus } from "./payroll-actions";
 import { PayrollLegend } from "./payroll-grid";
 import { PayrollTab } from "./payroll-tab";
 import { CombinedPayrollTab } from "./combined-tab";
@@ -106,8 +109,44 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
   const fallbackLabel = useCallback((key: string) => t(`riderCols.${key}`), [t]);
 
-  const slicedRiders = useMemo(() => {
+  const statusQuery = useQuery({
+    queryKey: queryKeys.payroll.riderStatuses(),
+    queryFn: listPayrollRiderStatuses,
+    staleTime: 60_000,
+  });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const rosterRiders = useMemo(() => {
     const all = data?.riders ?? [];
+    const byDriver = statusQuery.data?.byDriver;
+    if (!byDriver) return all;
+    return all.map((row) => {
+      const override = byDriver[row.driverId];
+      return override ? { ...row, statusOverride: override } : row;
+    });
+  }, [data?.riders, statusQuery.data]);
+  const statusLabels = useMemo(
+    () =>
+      statusFilterLabels(
+        statusQuery.data?.customs ?? [],
+        Object.values(statusQuery.data?.byDriver ?? {}).map((entry) => entry.label),
+      ),
+    [statusQuery.data],
+  );
+  const saveStatus = useCallback(
+    async (driverId: string, choice: { key: string; label: string } | null) => {
+      setSavingId(driverId);
+      try {
+        const next = await savePayrollRiderStatus(driverId, choice);
+        queryClient.setQueryData(queryKeys.payroll.riderStatuses(), next);
+      } finally {
+        setSavingId(null);
+      }
+    },
+    [queryClient],
+  );
+
+  const slicedRiders = useMemo(() => {
+    const all = rosterRiders;
     if (!hasSlicers(slicers)) return all;
     return all.filter((rider) =>
       riderMatchesSlicers(
@@ -124,7 +163,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
         slicers,
       ),
     );
-  }, [data?.riders, slicers]);
+  }, [rosterRiders, slicers]);
 
   const filteredRiders = useMemo(() => {
     const byStatus = filterRidersByStatus(slicedRiders, statusFilter);
@@ -246,6 +285,9 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
   }
 
   return (
+    <PayrollStatusContextProvider
+      value={{ canEdit: canManage, labels: statusLabels, savingId, save: saveStatus }}
+    >
     <AppPage className="space-y-2">
       <PayrollAdjustProvider>
       <AppPageHeader
@@ -404,6 +446,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
       ) : null}
       </PayrollAdjustProvider>
     </AppPage>
+    </PayrollStatusContextProvider>
   );
 }
 

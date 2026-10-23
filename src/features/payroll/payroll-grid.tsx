@@ -66,7 +66,8 @@ import {
   type PayrollRiderColumn,
 } from "./payroll-rider-columns";
 import { cellsFromSelection, fillTargetCells, tilePasteOntoSelection, visibleFillTargets } from "./payroll-snapshot";
-import { RiderStatusPill } from "./rider-status-pill";
+import { PayrollStatusCell } from "./payroll-status-cell";
+import { usePayrollStatusFilterList } from "./payroll-status-context";
 import type { PayrollAdjustmentCell, PayrollRiderRow } from "./payroll-types";
 import { PayrollCellMenu, type PayrollCellMenuState } from "./payroll-cell-menu";
 import {
@@ -257,6 +258,7 @@ export function PayrollDayGrid({
   const [menu, setMenu] = useState<PayrollCellMenuState | null>(null);
 
   const editable = Boolean(editor?.canManage);
+  const statusList = usePayrollStatusFilterList();
   const identity = useMemo(() => {
     if (!headingConfig) return COMBINED_IDENTITY_COLUMNS;
     return COMBINED_IDENTITY_COLUMNS.filter((column) => !columnHiddenIn(column.id, "combined", headingConfig));
@@ -785,6 +787,7 @@ export function PayrollDayGrid({
                   }
                   columnId={column.id}
                   values={rows.map((row) => String(riderColumnValue(row, column.id, today) ?? ""))}
+                  fixedList={column.id === "status" ? statusList : undefined}
                   filter={filters[column.id]}
                   onChange={(next) => setFiltersFor(setFilters, column.id, next)}
                   sort={sort}
@@ -1064,7 +1067,7 @@ function renderIdentityCell(
   canEdit = false,
 ) {
   if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
-  if (column.id === "status") return <RiderStatusPill row={row} today={today} />;
+  if (column.id === "status") return <PayrollStatusCell row={row} today={today} canEdit={canEdit} />;
   const field = payrollIdentityField(column.id);
   if (field) {
     return (
@@ -1087,7 +1090,7 @@ function renderSummaryCell(
   canEdit = false,
 ) {
   if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
-  if (column.id === "status") return <RiderStatusPill row={row} today={today} />;
+  if (column.id === "status") return <PayrollStatusCell row={row} today={today} canEdit={canEdit} />;
   const field = payrollIdentityField(column.id);
   if (field) {
     return (
@@ -1173,6 +1176,7 @@ export function PayrollSummaryTable({
   canManage?: boolean;
 }) {
   const t = useTranslations("pages.payroll");
+  const statusList = usePayrollStatusFilterList();
   const [filters, setFilters] = useState<ColumnFilters>({});
   const [sort, setSort] = useState<ColumnSort>(null);
   const columns = useMemo(() => {
@@ -1243,6 +1247,7 @@ export function PayrollSummaryTable({
                   label={t(`riderCols.${column.labelKey}`)}
                   columnId={column.id}
                   values={rows.map((row) => String(riderColumnValue(row, column.id, today) ?? ""))}
+                  fixedList={column.id === "status" ? statusList : undefined}
                   filter={filters[column.id]}
                   onChange={(next) => setFiltersFor(setFilters, column.id, next)}
                   sort={sort}
