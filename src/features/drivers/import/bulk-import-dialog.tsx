@@ -27,8 +27,11 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import { SegmentOption } from "@/components/app/toggle-chip";
 import { queryKeys } from "@/lib/query/query-keys";
 import { isImportRowReady } from "./import-identity";
+import { duplicateHeaderFields } from "./driver-import-patch";
+import { redoDriverImport, undoDriverImport } from "./driver-import-replay-actions";
 import { parseSpreadsheetFile } from "@/lib/import/spreadsheet";
 import { fetchDriverImportLookups } from "../drivers-import-actions";
+import { listSourceCompanies } from "../source-companies-actions";
 import { getDriverImportJob } from "../drivers-import-job-actions";
 import { useDriverImportJob } from "./driver-import-job-provider";
 import { ImportJobHistory } from "./import-job-history";
@@ -55,9 +58,10 @@ import {
   saveStoredMapping,
 } from "./parse";
 import {
-  DRIVER_IMPORT_TEMPLATE_PATH,
-  TEMPLATE_COLUMNS_PARAM,
+  applyTemplateExamples,
   resolveTemplateColumns,
+  templateDriversAoa,
+  templateGuideAoa,
 } from "./template";
 import { TemplateColumnPicker } from "./template-column-picker";
 import {
@@ -67,6 +71,7 @@ import {
   downloadWorkbookXlsx,
 } from "./export-xlsx";
 import {
+  companiesLookupAoa,
   partnersLookupAoa,
   restaurantsLookupAoa,
   zonesLookupAoa,
@@ -172,14 +177,6 @@ export function DriverBulkImportDialog({
       new Set(templateColumns.map((column) => column.field)),
     [templateSelection, templateColumns],
   );
-  const templateHref = useMemo(() => {
-    if (!templateSelection) return DRIVER_IMPORT_TEMPLATE_PATH;
-    const cols = templateColumns
-      .filter((column) => column.pinned || templateSelected.has(column.field))
-      .map((column) => column.field);
-    return `${DRIVER_IMPORT_TEMPLATE_PATH}?${TEMPLATE_COLUMNS_PARAM}=${encodeURIComponent(cols.join(","))}`;
-  }, [templateSelection, templateSelected, templateColumns]);
-
   const summary = useMemo(() => {
     const ready = preview.filter((r) => isImportRowReady(r, duplicateStrategy)).length;
     const duplicate = preview.filter(
@@ -260,7 +257,10 @@ export function DriverBulkImportDialog({
     }
   };
 
+  const duplicateHeaders = useMemo(() => duplicateHeaderFields(mapping), [mapping]);
+
   const handleImport = () => {
+    if (duplicateHeaders.length > 0) return;
     const ready = preview.filter((row) => isImportRowReady(row, duplicateStrategy));
     if (ready.length === 0) return;
     void (async () => {
@@ -330,6 +330,41 @@ export function DriverBulkImportDialog({
     });
   };
 
+  const downloadSample = () => {
+    startTransition(async () => {
+      try {
+        const lookups = await fetchDriverImportLookups();
+        if ("error" in lookups) {
+          toast.error(t("lookupFailed"));
+          return;
+        }
+        const companies = await listSourceCompanies().catch(() => []);
+        const fields = templateColumns
+          .filter((column) => column.pinned || templateSelected.has(column.field))
+          .map((column) => column.field);
+        const restaurantExample =
+          lookups.restaurants.find((row) => row.importable && row.restaurant_code)
+            ?.restaurant_code ||
+          lookups.restaurants.find((row) => row.importable)?.name ||
+          "";
+        const documented = applyTemplateExamples(
+          resolveTemplateColumns(fields, templateCustomColumns),
+          { restaurant: restaurantExample, zone: lookups.zones[0]?.id || "" },
+        );
+        downloadWorkbookXlsx("dpd-driver-import-template.xlsx", [
+          { name: "Drivers", aoa: templateDriversAoa(documented) },
+          { name: "Guide", aoa: templateGuideAoa(documented) },
+          { name: "Restaurants", aoa: restaurantsLookupAoa(lookups.restaurants) },
+          { name: "Zones", aoa: zonesLookupAoa(lookups.zones) },
+          { name: "Partners", aoa: partnersLookupAoa(lookups.partners) },
+          { name: "Companies", aoa: companiesLookupAoa(companies) },
+        ]);
+      } catch {
+        toast.error(t("lookupFailed"));
+      }
+    });
+  };
+
   const requiredMapped =
     DRIVER_IMPORT_REQUIRED_FIELDS.every((field) => mapping[field]) &&
     Boolean(mapping.zone_id || mapping.restaurant_ids);
@@ -381,26 +416,25 @@ export function DriverBulkImportDialog({
               {panel === "new" ? (
             <>
               <div className="space-y-1.5 rounded-lg border border-border px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("requiredTitle")} <span className="text-destructive">*</span>
                 </p>
                 <p className="text-xs text-foreground">{t("requiredList")}</p>
-                <p className="text-[10px] text-muted-foreground">{t("optionalList")}</p>
+                <p className="text-xs text-muted-foreground">{t("optionalList")}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
                   size="sm"
                   className="h-9 cursor-pointer rounded-lg"
-                  nativeButton={false}
-                  render={
-                    <a
-                      href={templateHref}
-                      download="dpd-driver-import-template.xlsx"
-                    />
-                  }
+                  disabled={isPending}
+                  onClick={downloadSample}
                 >
-                  <Download className="me-2 h-4 w-4" />
+                  {isPending ? (
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="me-2 h-4 w-4" />
+                  )}
                   {t("downloadSample")}
                 </Button>
                 <TemplateColumnPicker
@@ -439,11 +473,11 @@ export function DriverBulkImportDialog({
                   {t("downloadLookups")}
                 </Button>
               </div>
-              <p className="text-[10px] text-muted-foreground">{t("templateHint")}</p>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="text-xs text-muted-foreground">{t("templateHint")}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("lookupLists")}
               </p>
-              <p className="text-[10px] text-muted-foreground">{t("lookupHint")}</p>
+              <p className="text-xs text-muted-foreground">{t("lookupHint")}</p>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
@@ -609,12 +643,43 @@ export function DriverBulkImportDialog({
                   invalid: summary.invalid,
                 })}
               </p>
+              {duplicateHeaders.length > 0 ? (
+                <p className="text-xs text-destructive">{t("duplicateHeader")}</p>
+              ) : null}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => {
+                    void undoDriverImport().then((result) => {
+                      if ("error" in result) toast.error(result.error);
+                      else toast.success(t("undoDone"));
+                    });
+                  }}
+                >
+                  {t("undo")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => {
+                    void redoDriverImport().then((result) => {
+                      if ("error" in result) toast.error(result.error);
+                      else toast.success(t("redoDone"));
+                    });
+                  }}
+                >
+                  {t("redo")}
+                </Button>
+              </div>
               <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
                 <div>
                   <Label htmlFor="update-by-employee-id" className="text-sm">
                     {t("duplicateStrategy")}
                   </Label>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {t("duplicateUpdateHint")}
                   </p>
                 </div>
@@ -630,7 +695,7 @@ export function DriverBulkImportDialog({
                   <Label htmlFor="approve-immediately" className="text-sm">
                     {t("approveImmediately")}
                   </Label>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {t("approveImmediatelyHint")}
                   </p>
                 </div>

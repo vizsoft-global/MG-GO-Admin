@@ -69,6 +69,7 @@ export function DriverMappingBoard({
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {t("targetFields")}
         </p>
+        <div className="max-h-64 space-y-3 overflow-y-auto">
         {[
           ...DRIVER_IMPORT_FIELDS.map((field) => ({
             field: field as DriverImportTargetField,
@@ -109,6 +110,7 @@ export function DriverMappingBoard({
             </Select>
           </div>
         ))}
+        </div>
       </div>
     </div>
   );

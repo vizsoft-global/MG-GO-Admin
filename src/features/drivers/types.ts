@@ -306,7 +306,7 @@ export const DRIVER_IMPORT_FIELDS = [
   "nationality_category_keys",
   "project_key",
   "accommodation",
-  "joined_at",
+  "work_start_date",
   "screenshots_allowed",
   "login_verification_exempt",
   "bank_code",
@@ -319,6 +319,17 @@ export const DRIVER_IMPORT_FIELDS = [
   "passport_expiry",
   "health_card_expiry",
   "operations_card_expiry",
+  "sponsorship_key",
+  "job_position",
+  "hiring_type",
+  "job_end_date",
+  "job_end_description",
+  "residency_expiry_date",
+  "fixed_salary",
+  "work_permit_salary",
+  "last_increment_date",
+  "currency",
+  "asset_ids",
 ] as const;
 
 /**
@@ -376,7 +387,17 @@ export type DriverImportPreviewStatus =
   | "unmatched_restaurant"
   | "ambiguous_partner"
   | "ambiguous_zone"
-  | "ambiguous_restaurant";
+  | "ambiguous_restaurant"
+  | "ambiguous_employee_id"
+  | "duplicate_header"
+  | "invalid_sponsorship"
+  | "invalid_job_position"
+  | "invalid_hiring_type"
+  | "invalid_job_end_description"
+  | "invalid_money"
+  | "invalid_currency"
+  | "invalid_asset"
+  | "invalid_vehicle_type";
 
 export type DriverImportMappedRow = {
   rowIndex: number;
@@ -411,7 +432,8 @@ export type DriverImportMappedRow = {
   nationality_category_keys: string | null;
   project_key: string | null;
   accommodation: string | null;
-  joined_at: string | null;
+  /** Raw Work Start cell. Stored as `work_start_date`. */
+  work_start_date: string | null;
   screenshots_allowed: string | null;
   login_verification_exempt: string | null;
   bank_code: string | null;
@@ -424,12 +446,26 @@ export type DriverImportMappedRow = {
   passport_expiry: string | null;
   health_card_expiry: string | null;
   operations_card_expiry: string | null;
+  sponsorship_key: string | null;
+  job_position: string | null;
+  hiring_type: string | null;
+  job_end_date: string | null;
+  job_end_description: string | null;
+  residency_expiry_date: string | null;
+  fixed_salary: string | null;
+  work_permit_salary: string | null;
+  last_increment_date: string | null;
+  currency: string | null;
+  /** Comma list of asset catalog names or codes. */
+  asset_ids: string | null;
   /**
    * Which target fields the sheet actually carries a column for. A field that is
    * absent is never written — that is what stops a partial sheet from nulling
    * the columns it does not mention.
    */
   present: Partial<Record<DriverImportTargetField, boolean>>;
+  /** Per-row `-` cells. A present blank cell is not cleared. */
+  cleared: Partial<Record<DriverImportTargetField, boolean>>;
 };
 
 export const DRIVER_IMPORT_EXPIRY_FIELDS = [
@@ -473,6 +509,9 @@ export type DriverImportPreviewRow = Omit<
   | "passport_expiry"
   | "health_card_expiry"
   | "operations_card_expiry"
+  | "asset_ids"
+  | "fixed_salary"
+  | "work_permit_salary"
 > & {
   status: DriverImportPreviewStatus;
   partner_id: string | null;
@@ -504,8 +543,8 @@ export type DriverImportPreviewRow = Omit<
   nationality_category_names: string[];
   project_key: DriverProjectKey | null;
   accommodation: string | null;
-  /** `YYYY-MM-DD` (Kuwait) for the join date. */
-  joined_at: string | null;
+  /** `YYYY-MM-DD` written to `work_start_date`. */
+  work_start_date: string | null;
   screenshots_allowed: boolean | null;
   login_verification_exempt: boolean | null;
   bank_code: string | null;
@@ -515,6 +554,18 @@ export type DriverImportPreviewRow = Omit<
   beneficiary_civil_id: string | null;
   /** ISO expiry per slot; `null` = clear with `-`, absent key = untouched. */
   expiries: Partial<Record<DriverImportExpiryField, string | null>>;
+  sponsorship_key: string | null;
+  job_position: string | null;
+  hiring_type: string | null;
+  job_end_date: string | null;
+  job_end_description: string | null;
+  residency_expiry_date: string | null;
+  fixed_salary: number | null;
+  work_permit_salary: number | null;
+  last_increment_date: string | null;
+  currency: string | null;
+  asset_ids: string[];
+  asset_names: string[];
   skip?: boolean;
   /** True when this employee ID already exists in the fleet (not a second sheet row). */
   existingByEmployeeId?: boolean;

@@ -34,7 +34,7 @@ export function ImportJobBanner() {
             {activeJob.fileName}
           </p>
         </div>
-        <p className="mt-0.5 font-mono text-[11px] tabular-nums text-muted-foreground">
+        <p className="mt-0.5 font-mono text-xs tabular-nums text-muted-foreground">
           {t("importProgress", { done, total })}
         </p>
       </div>
