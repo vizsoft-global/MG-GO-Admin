@@ -14,6 +14,16 @@ export const ORDER_EXCEPTION_PAGE_SIZE = 50;
 /** One export may carry this many rows; the sheet reports anything it could not. */
 export const ORDER_EXCEPTION_EXPORT_MAX_ROWS = 1000;
 
+/** The queue's first page. Sidebar prefetch and the list query share this object. */
+export const ORDER_EXCEPTION_FIRST_PAGE: OrderExceptionListFilters = {
+  status: "pending",
+  kind: "all",
+  source: "all",
+  limit: ORDER_EXCEPTION_PAGE_SIZE,
+  offset: 0,
+  cursor: null,
+};
+
 export const ORDER_EXCEPTION_KINDS: readonly OrderExceptionKind[] = ["rejected", "cancelled"];
 export const ORDER_EXCEPTION_SOURCES: readonly OrderExceptionSource[] = [
   "driver_declined",
@@ -94,6 +104,8 @@ export type OrderExceptionListFilters = {
   search?: string;
   limit?: number;
   offset?: number;
+  /** Last row id of the previous page. Absent on the first page. */
+  cursor?: string | null;
 };
 
 export type OrderExceptionCounts = {
@@ -109,6 +121,7 @@ export type OrderExceptionListResult = {
   counts: OrderExceptionCounts;
   offset: number;
   limit: number;
+  nextCursor?: string | null;
 };
 
 /**

@@ -3208,6 +3208,7 @@
     { "collectionGroup": "driver_location_events", "fieldPath": "expire_at", "ttl": true, "indexes": [] },
     { "collectionGroup": "driver_operation_events", "fieldPath": "expire_at", "ttl": true, "indexes": [] },
     { "collectionGroup": "driver_telemetry_events", "fieldPath": "expire_at", "ttl": true, "indexes": [] },
-    { "collectionGroup": "admin_cost_samples", "fieldPath": "expire_at", "ttl": true, "indexes": [] }
+    { "collectionGroup": "admin_cost_samples", "fieldPath": "expire_at", "ttl": true, "indexes": [] },
+    { "collectionGroup": "page_read_snapshots", "fieldPath": "expire_at", "ttl": true, "indexes": [] }
   ]
 }

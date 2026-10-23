@@ -200,6 +200,8 @@ function buildListPayload(
 
   const search = textOrNull(filters?.search);
   if (search) payload.search = search.slice(0, 120);
+  const cursor = textOrNull(filters?.cursor);
+  if (cursor) payload.cursor = cursor;
 
   return { payload, from, to, search };
 }
@@ -245,6 +247,7 @@ export async function listOrderExceptions(
       counts,
       offset: Number.isFinite(Number(body.offset)) ? Math.max(Number(body.offset), 0) : offset,
       limit: Number.isFinite(Number(body.limit)) ? Math.max(Number(body.limit), 1) : limit,
+      nextCursor: typeof body.nextCursor === "string" && body.nextCursor ? body.nextCursor : null,
     },
     error: null,
   };

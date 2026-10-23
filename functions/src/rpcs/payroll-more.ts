@@ -44,6 +44,7 @@ import {
   pickText,
   type Dict,
 } from "./_shared";
+import { bumpScanSnapshots, PAYROLL_SNAPSHOTS } from "../router/read-snapshot";
 
 const DEFAULT_OFF_DAYS = 2;
 const DAY_HOURS = 12;
@@ -397,6 +398,7 @@ export const adminApplyPayrollAdjustments = onCall(async (request) => {
     after: { cells: cells.length, reason, actor },
   });
 
+  await bumpScanSnapshots(PAYROLL_SNAPSHOTS);
   return { applied: cells.length, reason, by: actor };
 });
 

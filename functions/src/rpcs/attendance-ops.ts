@@ -16,6 +16,7 @@ import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
 import { loadAppSettings } from "../core/settings";
 import { requireStaff, requireStaffFresh } from "../core/staff";
+import { bumpScanSnapshots, ATTENDANCE_SNAPSHOTS } from "../router/read-snapshot";
 import { identityMatchesSearch, identitySearchValues } from "../core/search-text";
 import {
   SCAN_CAP,
@@ -290,6 +291,7 @@ export const adminCorrectAttendance = onCall(async (request) => {
       zoneId: old[ATT.zoneId],
       status: patch[ATT.status],
     });
+    await bumpScanSnapshots(ATTENDANCE_SNAPSHOTS);
     return serializeLog(ref.id, { ...old, ...patch });
   }
 
@@ -339,6 +341,7 @@ export const adminCorrectAttendance = onCall(async (request) => {
     // action, so the phone is told and the snapshot is invalidated.
     await sendDriverHomeRefresh(driverId, "attendance_corrected");
     await invalidateDriverHomeDailySafe(driverId, "attendance_corrected");
+    await bumpScanSnapshots(ATTENDANCE_SNAPSHOTS);
     return serializeLog(doc.id, { ...old, ...patch });
   }
 
@@ -372,6 +375,7 @@ export const adminCorrectAttendance = onCall(async (request) => {
   });
   await sendDriverHomeRefresh(driverId, "attendance_corrected");
   await invalidateDriverHomeDailySafe(driverId, "attendance_corrected");
+  await bumpScanSnapshots(ATTENDANCE_SNAPSHOTS);
   return serializeLog(ref.id, row);
 });
 

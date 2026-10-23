@@ -32,6 +32,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { signOut } from "@/features/auth/actions";
 import { useHasMounted } from "@/hooks/use-has-mounted";
 import { useNavBadges } from "@/hooks/use-nav-badges";
+import { useQueryClient } from "@tanstack/react-query";
+import { prefetchAdminRoute } from "@/lib/query/route-prefetch";
 import { useSidebarMenu } from "@/hooks/use-sidebar-menu";
 import type { SidebarMenuEpochs } from "@/lib/menu/sidebar-menu-query";
 import { moduleChipStyle } from "@/lib/menu/module-colors";
@@ -188,7 +190,9 @@ function NavItemLink({
 }) {
   const activeLeafId = useContext(ActiveNavContext);
   const badges = useContext(NavBadgeContext);
+  const queryClient = useQueryClient();
   if (!node.href) return null;
+  const href = node.href;
   const isActive = node.id === activeLeafId;
   const badge = badges[node.id];
 
@@ -199,7 +203,7 @@ function NavItemLink({
         tooltip={label}
         className="h-8 cursor-pointer rounded-md px-2.5 text-[13px] font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-semibold data-active:text-slate-900 data-active:shadow-sm"
         render={
-          <Link href={node.href} prefetch>
+          <Link href={href} prefetch onMouseEnter={() => prefetchAdminRoute(queryClient, href)}>
             <span
               className="grid size-5 shrink-0 place-items-center rounded-md"
               style={moduleChipStyle(node.id)}
@@ -246,6 +250,7 @@ function NavGroup({
 }) {
   const activeLeafId = useContext(ActiveNavContext);
   const { state } = useSidebar();
+  const queryClient = useQueryClient();
   const children = node.children ?? [];
   const groupLabel = tGroupLabel(node.label);
   const collapsed = state === "collapsed";
@@ -266,7 +271,7 @@ function NavGroup({
           tooltip={groupLabel}
           className="h-8 cursor-pointer rounded-md px-2.5 text-[13px] font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-semibold data-active:text-slate-900 data-active:shadow-sm"
           render={
-            <Link href={href} prefetch>
+            <Link href={href} prefetch onMouseEnter={() => prefetchAdminRoute(queryClient, href)}>
               <MenuIcon name={node.icon} className="h-3.5 w-3.5 shrink-0" />
               <span>{groupLabel}</span>
             </Link>

@@ -359,6 +359,7 @@ export const adminListOrderExceptions = onCall(async (request) => {
   const maxLimit = exportMode ? EXPORT_MAX : LIST_MAX;
   const limit = Math.min(Math.max(pickCount(data, LIST_DEFAULT, "limit", "p_limit"), 1), maxLimit);
   const offset = Math.max(pickCount(data, 0, "offset", "p_offset"), 0);
+  const cursor = pickId(data, "cursor", "p_cursor");
 
   const db = getFirestore();
   let query: Query = db.collection(COLLECTIONS.orderExceptions);
@@ -369,7 +370,30 @@ export const adminListOrderExceptions = onCall(async (request) => {
     query = query.where("source", "==", source);
   }
 
-  const snap = await query.orderBy("created_at", "desc").limit(maxLimit * 2).get();
+  const hasWindow = Boolean(fromDay || toDay || search !== "");
+  const fastPage = !exportMode && !hasWindow && !(offset > 0 && !cursor);
+  if (fastPage) {
+    let pageQuery = query.orderBy("created_at", "desc");
+    if (cursor) {
+      const cursorSnap = await db.collection(COLLECTIONS.orderExceptions).doc(cursor).get();
+      if (cursorSnap.exists) pageQuery = pageQuery.startAfter(cursorSnap);
+    }
+    const [snap, counted] = await Promise.all([pageQuery.limit(limit).get(), query.count().get()]);
+    const rows = snap.docs.map((doc) => serialiseException(doc.id, doc.data() as Dict));
+    const total = counted.data().count;
+    const nextCursor = rows.length === limit ? (snap.docs[snap.docs.length - 1]?.id ?? null) : null;
+    return {
+      rows,
+      total,
+      counts: { pending: 0, approved: 0, rejected: 0, total },
+      offset: 0,
+      limit,
+      nextCursor,
+    };
+  }
+
+  const readCap = exportMode ? EXPORT_MAX : 200;
+  const snap = await query.orderBy("created_at", "desc").limit(readCap).get();
   const all = snap.docs.map((doc) => serialiseException(doc.id, doc.data() as Dict));
 
   const windowed = all.filter((row) => {
@@ -384,13 +408,15 @@ export const adminListOrderExceptions = onCall(async (request) => {
 
   const counts = { pending: 0, approved: 0, rejected: 0, total: windowed.length };
   for (const row of windowed) counts[row.status] += 1;
+  const rows = sortByCreatedDesc(windowed).slice(offset, offset + limit);
 
   return {
-    rows: sortByCreatedDesc(windowed).slice(offset, offset + limit),
+    rows,
     total: windowed.length,
     counts,
     offset,
     limit,
+    nextCursor: null,
   };
 });
 
@@ -482,14 +508,12 @@ export const adminReviewOrderException = onCall(async (request) => {
  * `admin_order_exception_summary` — the counts the list header shows without
  * reading every row. One scan over a small collection.
  */
-export const adminOrderExceptionSummary = onCall(async (request) => {
-  await requireStaff(request, "deliveries.view");
-
-  const data = (request.data ?? {}) as Dict;
-  const fromDay = pickText(data, "from", "p_from");
-  const toDay = pickText(data, "to", "p_to");
-
-  const snap = await getFirestore().collection(COLLECTIONS.orderExceptions).orderBy("created_at", "desc").limit(2000).get();
+async function summaryFromScan(fromDay: string | null, toDay: string | null) {
+  const snap = await getFirestore()
+    .collection(COLLECTIONS.orderExceptions)
+    .orderBy("created_at", "desc")
+    .limit(2000)
+    .get();
   const counts = {
     pending: 0,
     approved: 0,
@@ -516,4 +540,48 @@ export const adminOrderExceptionSummary = onCall(async (request) => {
     else counts.store_or_customer += 1;
   }
   return counts;
+}
+
+async function summaryFromCount(fromDay: string | null, toDay: string | null) {
+  const base = getFirestore().collection(COLLECTIONS.orderExceptions);
+  const bounded = (query: Query): Query => {
+    let next = query;
+    if (fromDay) next = next.where("day", ">=", fromDay);
+    if (toDay) next = next.where("day", "<=", toDay);
+    return next;
+  };
+  const n = async (query: Query) => (await bounded(query).count().get()).data().count;
+  const [pending, approved, rejected, cancelledOrders, driverDeclined, total] = await Promise.all([
+    n(base.where("status", "==", "pending")),
+    n(base.where("status", "==", "approved")),
+    n(base.where("status", "==", "rejected")),
+    n(base.where("status", "in", ["pending", "approved"]).where("kind", "==", "cancelled")),
+    n(base.where("source", "==", "driver_declined")),
+    n(base),
+  ]);
+  const open = pending + approved;
+  return {
+    pending,
+    approved,
+    rejected,
+    cancelled_orders: cancelledOrders,
+    rejected_orders: Math.max(0, open - cancelledOrders),
+    driver_declined: driverDeclined,
+    store_or_customer: Math.max(0, total - driverDeclined),
+    total,
+  };
+}
+
+export const adminOrderExceptionSummary = onCall(async (request) => {
+  await requireStaff(request, "deliveries.view");
+
+  const data = (request.data ?? {}) as Dict;
+  const fromDay = pickText(data, "from", "p_from");
+  const toDay = pickText(data, "to", "p_to");
+  try {
+    return await summaryFromCount(fromDay, toDay);
+  } catch (error) {
+    console.info(JSON.stringify({ perf: "order-exception-summary-scan", message: String(error) }));
+    return summaryFromScan(fromDay, toDay);
+  }
 });

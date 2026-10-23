@@ -12,6 +12,7 @@ import { COLLECTIONS } from "../core/collections";
 import { requireStaffFresh } from "../core/staff";
 import { driverSearchStamp } from "../core/search-text";
 import { logAdminActivity, pick, pickText, type Dict } from "./_shared";
+import { bumpScanSnapshots, PAYROLL_SNAPSHOTS } from "../router/read-snapshot";
 
 const EMPLOYEE_ID_RE = /^[A-Za-z0-9]{1,100}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -291,6 +292,7 @@ export const adminSavePayrollIdentity = onCall(async (request) => {
     entityId: driverId,
     detail: { field, value: value.trim() },
   });
+  await bumpScanSnapshots(PAYROLL_SNAPSHOTS);
   return { ok: true };
 });
 
@@ -330,6 +332,7 @@ export const adminSavePayrollOrders = onCall(async (request) => {
     entityId: `${driverId}_${date}`,
     detail: { orders },
   });
+  await bumpScanSnapshots(PAYROLL_SNAPSHOTS);
   return { ok: true };
 });
 

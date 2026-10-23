@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Ban, CheckCircle2, ClipboardList, Clock, Download, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -67,25 +67,28 @@ export function OrderExceptionsPageShell() {
   const [to, setTo] = useState("");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState(0);
+  const [cursors, setCursors] = useState<Array<string | null>>([null]);
   const [selected, setSelected] = useState<OrderExceptionRow | null>(null);
 
   const range = useMemo(
     () => ({ from: from || undefined, to: to || undefined }),
     [from, to],
   );
+  const slow = Boolean(debouncedSearch || range.from || range.to);
   const filters = useMemo(
     () => ({
       status: tab,
       kind,
       source,
-      from: range.from,
-      to: range.to,
-      search: debouncedSearch || undefined,
+      ...(range.from ? { from: range.from } : {}),
+      ...(range.to ? { to: range.to } : {}),
+      ...(debouncedSearch ? { search: debouncedSearch } : {}),
       limit: ORDER_EXCEPTION_PAGE_SIZE,
-      offset,
+      offset: slow ? page * ORDER_EXCEPTION_PAGE_SIZE : 0,
+      cursor: slow ? null : (cursors[page] ?? null),
     }),
-    [tab, kind, source, range.from, range.to, debouncedSearch, offset],
+    [tab, kind, source, range.from, range.to, debouncedSearch, page, cursors, slow],
   );
 
   const list = useOrderExceptionsList(filters);
@@ -110,9 +113,26 @@ export function OrderExceptionsPageShell() {
 
   const rows = list.data?.rows ?? [];
   const total = list.data?.total ?? 0;
+  const nextCursor = list.data?.nextCursor ?? null;
   const counts = summary.data;
+  const pageStart = page * ORDER_EXCEPTION_PAGE_SIZE;
   const hasFilters =
     kind !== "all" || source !== "all" || Boolean(from) || Boolean(to) || Boolean(debouncedSearch);
+
+  function resetPage() {
+    setPage(0);
+    setCursors([null]);
+  }
+
+  useEffect(() => {
+    if (slow) return;
+    setCursors((prev) => {
+      if (prev[page + 1] === nextCursor) return prev;
+      const copy = prev.slice(0, page + 1);
+      copy[page + 1] = nextCursor;
+      return copy;
+    });
+  }, [nextCursor, page, slow]);
 
   const kindItems = [
     { value: "all", label: t("kindAll") },
@@ -222,7 +242,7 @@ export function OrderExceptionsPageShell() {
         activeId={tab}
         onSelect={(id) => {
           setTab(id as OrderExceptionStatusFilter);
-          setOffset(0);
+          resetPage();
         }}
         items={[
           { id: "all", label: t("tabAll") },
@@ -241,12 +261,12 @@ export function OrderExceptionsPageShell() {
                 onChange={(event) => setSearch(event.target.value)}
                 onBlur={() => {
                   setDebouncedSearch(search.trim());
-                  setOffset(0);
+                  resetPage();
                 }}
                 onKeyDown={(event) => {
                   if (event.key !== "Enter") return;
                   setDebouncedSearch(search.trim());
-                  setOffset(0);
+                  resetPage();
                 }}
                 placeholder={t("searchPlaceholder")}
                 className="h-9 ps-8"
@@ -258,7 +278,7 @@ export function OrderExceptionsPageShell() {
               onValueChange={(value) => {
                 if (!value) return;
                 setKind(value as OrderExceptionKindFilter);
-                setOffset(0);
+                resetPage();
               }}
             >
               <SelectTrigger className="h-9 w-[140px] cursor-pointer text-xs" aria-label={t("filterKind")}>
@@ -278,7 +298,7 @@ export function OrderExceptionsPageShell() {
               onValueChange={(value) => {
                 if (!value) return;
                 setSource(value as OrderExceptionSourceFilter);
-                setOffset(0);
+                resetPage();
               }}
             >
               <SelectTrigger className="h-9 w-[160px] cursor-pointer text-xs" aria-label={t("filterSource")}>
@@ -298,7 +318,7 @@ export function OrderExceptionsPageShell() {
               aria-label={t("filterFrom")}
               onChange={(event) => {
                 setFrom(event.target.value);
-                setOffset(0);
+                resetPage();
               }}
               className="h-9 w-[140px]"
             />
@@ -308,7 +328,7 @@ export function OrderExceptionsPageShell() {
               aria-label={t("filterTo")}
               onChange={(event) => {
                 setTo(event.target.value);
-                setOffset(0);
+                resetPage();
               }}
               className="h-9 w-[140px]"
             />
@@ -366,7 +386,7 @@ export function OrderExceptionsPageShell() {
               <AppDataTableRow key={row.id} onClick={() => setSelected(row)}>
                 <TableCell className="max-w-[180px]">
                   <p className="truncate text-sm font-medium">{row.driver_name ?? "—"}</p>
-                  <p className="truncate font-mono text-[10px] text-muted-foreground">
+                  <p className="truncate font-mono text-xs text-muted-foreground">
                     {row.driver_code ?? ""}
                   </p>
                 </TableCell>
@@ -387,7 +407,7 @@ export function OrderExceptionsPageShell() {
                 <TableCell>
                   <span
                     className={cn(
-                      "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                      "inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold",
                       STATUS_TONE[row.status],
                     )}
                   >
@@ -401,26 +421,30 @@ export function OrderExceptionsPageShell() {
             ))}
           </AppDataTable>
         )}
-        {total > ORDER_EXCEPTION_PAGE_SIZE ? (
+        {total > ORDER_EXCEPTION_PAGE_SIZE || page > 0 ? (
           <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-2">
             <Button
               type="button"
               variant="outline"
               className="h-9"
-              disabled={offset === 0}
-              onClick={() => setOffset((value) => Math.max(0, value - ORDER_EXCEPTION_PAGE_SIZE))}
+              disabled={page === 0}
+              onClick={() => setPage((value) => Math.max(0, value - 1))}
             >
               {t("pagePrev")}
             </Button>
             <span className="text-xs tabular-nums text-muted-foreground">
-              {offset + 1}–{Math.min(offset + ORDER_EXCEPTION_PAGE_SIZE, total)} / {total}
+              {pageStart + 1}–{Math.min(pageStart + ORDER_EXCEPTION_PAGE_SIZE, total)} / {total}
             </span>
             <Button
               type="button"
               variant="outline"
               className="h-9"
-              disabled={offset + ORDER_EXCEPTION_PAGE_SIZE >= total}
-              onClick={() => setOffset((value) => value + ORDER_EXCEPTION_PAGE_SIZE)}
+              disabled={
+                slow
+                  ? pageStart + ORDER_EXCEPTION_PAGE_SIZE >= total
+                  : nextCursor == null
+              }
+              onClick={() => setPage((value) => value + 1)}
             >
               {t("pageNext")}
             </Button>

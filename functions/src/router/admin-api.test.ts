@@ -150,6 +150,8 @@ describe("admin api dispatcher", () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+    const previous = process.env.PAGE_READ_SNAPSHOT;
+    process.env.PAGE_READ_SNAPSHOT = "0";
     try {
       const first = dispatchAdminLane("light", { data: { fn: "adminPerfPing", data: {} } }, () => async () => {
         await gate;
@@ -163,6 +165,8 @@ describe("admin api dispatcher", () => {
       assert.equal(await first, "first");
     } finally {
       console.info = info;
+      if (previous === undefined) delete process.env.PAGE_READ_SNAPSHOT;
+      else process.env.PAGE_READ_SNAPSHOT = previous;
     }
     const parsed = lines.map((line) => JSON.parse(line) as { inflight: number; fn: string });
     assert.equal(parsed.some((line) => line.fn === "adminLiveFleetSnapshot" && line.inflight === 2), true);

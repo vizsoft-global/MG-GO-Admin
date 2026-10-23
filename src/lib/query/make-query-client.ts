@@ -1,4 +1,4 @@
-import { QueryClient } from "@tanstack/react-query";
+import { keepPreviousData, QueryClient } from "@tanstack/react-query";
 
 /**
  * Panel query defaults.
@@ -20,6 +20,7 @@ export function makeQueryClient(): QueryClient {
         staleTime,
         gcTime,
         refetchOnWindowFocus: false,
+        placeholderData: keepPreviousData,
         retry: (failureCount, error) => {
           const status =
             typeof error === "object" && error && "status" in error

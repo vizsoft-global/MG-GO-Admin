@@ -19,17 +19,14 @@ import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { buildLiveFleetSnapshot, num, type Dict } from "./fleet";
 import { runIngestDriverPositions, runRecordFleetEvents, runRecordRiderDayStats } from "./fleet-ingest";
+import { WORKER_HTTP_CAPACITY } from "./worker-http-capacity";
 
 export const workerSharedSecret = defineSecret("WORKER_SHARED_SECRET");
 
 const workerHttp = {
   secrets: [workerSharedSecret],
   invoker: "public" as const,
-  timeoutSeconds: 120,
-  cpu: 1,
-  concurrency: 40,
-  maxInstances: 20,
-  minInstances: 1,
+  ...WORKER_HTTP_CAPACITY,
 };
 
 type OpsEvent = {
