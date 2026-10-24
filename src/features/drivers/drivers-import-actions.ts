@@ -7,6 +7,8 @@ import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
 import { employeeIdKey, normalizeEmployeeId } from "./driver-errors";
 import {
+  canContinueImportLookups,
+  clientIdKey,
   evaluateImportIdentity,
   isImportRowReady,
   shouldApproveImportRow,
@@ -386,9 +388,9 @@ export async function resolveDriverImportPreview(
       .eq("is_active", true),
     db
       .from("driver_intakes")
-      .select("id, phone, civil_id, employee_id, linked_profile_id")
+      .select("id, phone, civil_id, employee_id, client_id, linked_profile_id")
       .is("archived_at", null),
-    db.from("drivers").select("id, employee_id, civil_id").is("archived_at", null),
+    db.from("drivers").select("id, employee_id, civil_id, client_id").is("archived_at", null),
     db.from("profiles").select("id, phone").eq("role", "rider"),
     db
       .from("source_companies")
@@ -455,6 +457,16 @@ export async function resolveDriverImportPreview(
     employeeIds: new Set(),
     phoneToEmployee: new Map(),
     civilToEmployee: new Map(),
+    clientIdToEmployees: new Map(),
+    employeeIdByKey: new Map(),
+  };
+  const rememberClient = (raw: string | null | undefined, empKey: string, rawEmp: string) => {
+    const key = clientIdKey(raw);
+    if (!key) return;
+    const set = roster.clientIdToEmployees.get(key) ?? new Set<string>();
+    set.add(empKey);
+    roster.clientIdToEmployees.set(key, set);
+    if (!roster.employeeIdByKey.has(empKey)) roster.employeeIdByKey.set(empKey, rawEmp);
   };
   const peopleByEmployee = new Map<string, Set<string>>();
   const rememberPerson = (raw: string | null | undefined, person: string) => {
@@ -470,6 +482,7 @@ export async function resolveDriverImportPreview(
     const key = employeeIdKey(driver.employee_id);
     roster.employeeIds.add(key);
     rememberPerson(driver.employee_id, driver.id);
+    rememberClient(driver.client_id, key, driver.employee_id);
     driverEmpById.set(driver.id, key);
     if (driver.civil_id) {
       roster.civilToEmployee.set(normalizeCivilId(driver.civil_id) ?? driver.civil_id, key);
@@ -480,6 +493,7 @@ export async function resolveDriverImportPreview(
     const key = employeeIdKey(intake.employee_id);
     roster.employeeIds.add(key);
     rememberPerson(intake.employee_id, intake.linked_profile_id ?? `intake:${intake.id}`);
+    rememberClient(intake.client_id, key, intake.employee_id);
     if (intake.phone) {
       roster.phoneToEmployee.set(normalizeKuwaitPhone(intake.phone) ?? intake.phone, key);
     }
@@ -498,6 +512,7 @@ export async function resolveDriverImportPreview(
     employeeIds: new Set(),
     phones: new Map(),
     civils: new Map(),
+    clientIds: new Map(),
   };
   const monthDays = kuwaitCalendarMonthDays(kuwaitToday());
   const passportSeen = new Map<string, number>();
@@ -552,8 +567,14 @@ export async function resolveDriverImportPreview(
     const identity = evaluateImportIdentity(row, roster, seen);
     let status: DriverImportPreviewStatus = identity.status;
     const existingByEmployeeId = identity.existingByEmployeeId;
+    const existingByClientId = identity.existingByClientId;
     const lookupStillOpen = () =>
-      status === "ok" || (status === "duplicate_employee_id" && existingByEmployeeId);
+      canContinueImportLookups({
+        ...identity,
+        status,
+        existingByEmployeeId,
+        existingByClientId,
+      });
 
     if (lookupStillOpen() && row.partner_id?.trim()) {
       const hit = resolvePartnerToken(row.partner_id, partnerIndex);
@@ -679,7 +700,7 @@ export async function resolveDriverImportPreview(
         if (hit.status === "ok") {
           employee_status_key = hit.key;
           employee_status_name = hit.name;
-        } else {
+        } else if (hit.status !== "empty") {
           status = "invalid_employee_status";
         }
       }
@@ -693,7 +714,7 @@ export async function resolveDriverImportPreview(
         if (hit.status === "ok") {
           section_keys = hit.keys;
           section_names = hit.names;
-        } else {
+        } else if (hit.status !== "empty") {
           status = "invalid_section";
         }
       }
@@ -710,7 +731,7 @@ export async function resolveDriverImportPreview(
         if (hit.status === "ok") {
           nationality_category_keys = hit.keys;
           nationality_category_names = hit.names;
-        } else {
+        } else if (hit.status !== "empty") {
           status = "invalid_nationality_category";
         }
       }
@@ -827,6 +848,7 @@ export async function resolveDriverImportPreview(
     if (
       lookupStillOpen() &&
       !existingByEmployeeId &&
+      !existingByClientId &&
       opsRequired &&
       !hasOpsAssignment(zone_id, restaurant_ids)
     ) {
@@ -914,15 +936,25 @@ export async function resolveDriverImportPreview(
 
     const people = row.employee_id
       ? peopleByEmployee.get(employeeIdKey(row.employee_id))
-      : undefined;
+      : identity.resolvedEmployeeId
+        ? peopleByEmployee.get(employeeIdKey(identity.resolvedEmployeeId))
+        : undefined;
     const ambiguousEmployee = (people?.size ?? 0) > 1;
     if (ambiguousEmployee) status = "ambiguous_employee_id";
-    else if (lookupStillOpen() && existingByEmployeeId) status = "duplicate_employee_id";
+    else if (
+      lookupStillOpen() &&
+      existingByEmployeeId &&
+      status !== "duplicate_client_id"
+    ) {
+      status = "duplicate_employee_id";
+    }
 
     return {
       ...row,
       status,
       existingByEmployeeId: ambiguousEmployee ? false : existingByEmployeeId,
+      existingByClientId: ambiguousEmployee ? false : existingByClientId,
+      resolved_employee_id: identity.resolvedEmployeeId,
       ops_required: opsRequired,
       partner_id,
       partner_name,
@@ -1019,8 +1051,9 @@ export async function applyOneImportRow(
 
   const phone = row.phone?.trim() ? normalizeKuwaitPhone(row.phone) : null;
   const civilId = row.civil_id?.trim() ? normalizeCivilId(row.civil_id) : null;
-  const employeeId = normalizeEmployeeId(row.employee_id!);
-  if (!employeeId) return fail("missing_fields");
+  const requestedEmployeeId = normalizeEmployeeId(
+    row.employee_id ?? row.resolved_employee_id ?? "",
+  );
   // A partial sheet that updates an existing rider does not have to repeat the
   // zone / restaurant columns; a brand-new rider still needs an assignment.
   const carriesAssignment = Boolean(row.present.zone_id || row.present.restaurant_ids);
@@ -1040,13 +1073,31 @@ export async function applyOneImportRow(
   let beforeSnap = {};
   let journalBefore: Awaited<ReturnType<typeof readImportSnapshot>> | null = null;
 
-  const matchExisting = () =>
-    ctx.db
+  const matchExisting = async () => {
+    if (requestedEmployeeId) {
+      const byEmp = await ctx.db
+        .from("driver_intakes")
+        .select("id, linked, driver_code, linked_profile_id, employee_id")
+        .is("archived_at", null)
+        .ilike("employee_id", requestedEmployeeId)
+        .maybeSingle();
+      if (byEmp.data) return byEmp;
+    }
+    const clientId = normalizeClientValue(row.client_id);
+    if (!clientId || ctx.duplicateStrategy !== "update") {
+      return { data: null, error: null };
+    }
+    const { data: rows, error } = await ctx.db
       .from("driver_intakes")
-      .select("id, linked, driver_code, linked_profile_id")
+      .select("id, linked, driver_code, linked_profile_id, employee_id")
       .is("archived_at", null)
-      .ilike("employee_id", employeeId)
-      .maybeSingle();
+      .ilike("client_id", clientId);
+    if (error) return { data: null, error };
+    if (!rows || rows.length !== 1) return { data: null, error: null };
+    return { data: rows[0], error: null };
+  };
+
+  let employeeId = requestedEmployeeId;
 
   if (row.off_days != null) {
     const { data: existingForOff } = await matchExisting();
@@ -1069,6 +1120,10 @@ export async function applyOneImportRow(
     const { data: existing } = await matchExisting();
 
     if (existing) {
+      employeeId =
+        requestedEmployeeId ||
+        normalizeEmployeeId(existing.employee_id ?? "") ||
+        employeeId;
       alreadyLinked = Boolean(existing.linked || existing.linked_profile_id);
       const prior = await loadIntakeProfileSnapshot(ctx.db, existing.id);
       beforeSnap = prior?.snapshot ?? {};
@@ -1141,6 +1196,7 @@ export async function applyOneImportRow(
   }
 
   if (!intakeId) {
+    if (!employeeId) return fail("missing_fields");
     const { data: code, error: codeErr } = await ctx.db.rpc("allocate_driver_code");
     if (codeErr || !code) return fail("Could not allocate driver code");
 

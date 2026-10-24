@@ -1,19 +1,24 @@
+import { employeeSheetHeader } from "./employee-sheet-columns";
 import type { DriverListPageRow, DriverListRow } from "./types";
 
 type ExportRow = DriverListRow & Partial<DriverListPageRow>;
 
 export const DRIVER_EXPORT_COLUMNS = [
-  { id: "driver_code", pinned: true },
+  { id: "client_id", pinned: true },
   { id: "employee_id", pinned: true },
+  { id: "rider_category", pinned: true },
+  { id: "company_client_id", pinned: true },
+  { id: "company_name", pinned: true },
   { id: "full_name", pinned: true },
-  { id: "phone", pinned: false },
-  { id: "partner", pinned: false },
-  { id: "zone", pinned: false },
-  { id: "restaurants", pinned: false },
-  { id: "rider_category", pinned: false },
-  { id: "company_client_id", pinned: false },
-  { id: "company_name", pinned: false },
-  { id: "client_id", pinned: false },
+  { id: "phone", pinned: true },
+  { id: "restaurants", pinned: true },
+  { id: "zone", pinned: true },
+  { id: "vehicle", pinned: true },
+  { id: "section", pinned: true },
+  { id: "partner", pinned: true },
+  { id: "employee_status", pinned: true },
+  { id: "driver_code", pinned: false },
+  { id: "project_key", pinned: false },
   { id: "client_name", pinned: false },
   { id: "account_status", pinned: false },
   { id: "on_duty", pinned: false },
@@ -58,9 +63,14 @@ export function resolveExportColumnIds(
     ...DRIVER_EXPORT_COLUMNS.map((column) => column.id),
     ...customFields.map((field) => customExportColumnId(field.key)),
   ]);
-  const picked = selected.filter((id) => allowed.has(id));
-  const missingPinned = DRIVER_EXPORT_PINNED_IDS.filter((id) => !picked.includes(id));
-  return [...missingPinned, ...picked];
+  const picked = new Set(selected.filter((id) => allowed.has(id)));
+  const catalogIds = DRIVER_EXPORT_COLUMNS.map((column) => column.id).filter(
+    (id) => PINNED_EXPORT_IDS.has(id) || picked.has(id),
+  );
+  const extra = selected.filter(
+    (id) => allowed.has(id) && !catalogIds.includes(id),
+  );
+  return [...catalogIds, ...extra];
 }
 
 function cellValue(
@@ -93,6 +103,14 @@ function cellValue(
       return row.client_id ?? "";
     case "client_name":
       return row.client_name ?? "";
+    case "vehicle":
+      return row.vehicle_label ?? "";
+    case "section":
+      return (row.section_keys ?? []).join(", ");
+    case "employee_status":
+      return row.employee_status_key ?? "";
+    case "project_key":
+      return row.project_key ?? "";
     case "account_status":
       return row.is_blocked ? "blocked" : row.account_status;
     case "on_duty":
@@ -122,7 +140,7 @@ function headerFor(
     const key = columnId.slice("custom:".length);
     return customFields.find((field) => field.key === key)?.label ?? key;
   }
-  return columnId;
+  return employeeSheetHeader(columnId);
 }
 
 export function buildDriversExportAoa(
@@ -159,7 +177,7 @@ export function driversExportCsv(aoa: Array<Array<string | number>>): string {
   return aoa.map((row) => row.map(escapeCsvCell).join(",")).join("\n");
 }
 
-export function downloadDriversCsv(aoa: Array<Array<string | number>>): void {
+export function   downloadDriversCsv(aoa: Array<Array<string | number>>): void {
   const blob = new Blob(["\uFEFF" + driversExportCsv(aoa)], {
     type: "text/csv;charset=utf-8",
   });

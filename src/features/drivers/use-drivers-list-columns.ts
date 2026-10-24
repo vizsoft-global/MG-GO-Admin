@@ -15,8 +15,8 @@ import {
   type ListColumnPreference,
 } from "@/lib/ui-preferences/types";
 
-const LOCAL_KEY = "dpd:drivers:list-columns";
-const MIGRATED_FLAG = "dpd:drivers:list-columns:migrated";
+const LOCAL_KEY = "dpd:drivers:list-columns.v2";
+const MIGRATED_FLAG = "dpd:drivers:list-columns.v2:migrated";
 
 function systemDefault(
   options: TableColumnVisibilityOption[],

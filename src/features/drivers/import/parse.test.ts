@@ -75,6 +75,36 @@ describe("guessColumnMapping", () => {
     assert.equal(mapping.off_days, "Number of OFFs");
     assert.equal(mapping.full_name, "Full Name");
   });
+
+  it("maps Project, Restaurant, Employee Category, and Project key", () => {
+    const mapping = guessColumnMapping([
+      "Full Name",
+      "MG ID",
+      "Client ID",
+      "Project",
+      "Project key",
+      "Zone",
+      "Restaurant",
+      "Employee Category",
+      "Employee Status",
+    ]);
+    assert.equal(mapping.full_name, "Full Name");
+    assert.equal(mapping.employee_id, "MG ID");
+    assert.equal(mapping.client_id, "Client ID");
+    assert.equal(mapping.partner_id, "Project");
+    assert.equal(mapping.project_key, "Project key");
+    assert.equal(mapping.zone_id, "Zone");
+    assert.equal(mapping.restaurant_ids, "Restaurant");
+    assert.equal(mapping.section_keys, "Employee Category");
+    assert.equal(mapping.employee_status_key, "Employee Status");
+    assert.equal(mapping.rider_category, undefined);
+  });
+
+  it("keeps a legacy Partner header on partner_id", () => {
+    const mapping = guessColumnMapping(["Full Name", "Partner", "Project key"]);
+    assert.equal(mapping.partner_id, "Partner");
+    assert.equal(mapping.project_key, "Project key");
+  });
 });
 
 describe("mapRowsFromSheet", () => {

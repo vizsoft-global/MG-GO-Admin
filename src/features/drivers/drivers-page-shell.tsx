@@ -25,6 +25,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Trash2,
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -43,7 +44,10 @@ import {
   useDriverLevelIndex,
   type DriverLevelFilter,
 } from "@/features/drivers/use-driver-levels";
-import { useEmployeeStatuses } from "@/features/employees/use-employee-catalogs";
+import {
+  useEmployeeSections,
+  useEmployeeStatuses,
+} from "@/features/employees/use-employee-catalogs";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -79,7 +83,13 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import { fetchDriversForExport } from "./drivers-list-actions";
 import { useAuth } from "@/contexts/auth-context";
-import { useApproveDriverIntake, useDriverDetail, useRestoreDriverIntake } from "./use-drivers";
+import {
+  useApproveDriverIntake,
+  useArchiveDriverIntakes,
+  useDriverDetail,
+  useRestoreDriverIntake,
+} from "./use-drivers";
+import { DriverArchiveDialog } from "./driver-archive-dialog";
 import { useDriversPage } from "./use-drivers-page";
 import { DriverBulkImportDialog } from "./import/bulk-import-dialog";
 import { DriversExportDialog } from "./export-drivers-dialog";
@@ -158,6 +168,8 @@ const COLUMN_FILTER_KEY: Record<string, DriversFixedColumn> = {
   phone: "phone",
   restaurants: "restaurants",
   zone: "zone",
+  section: "section",
+  employeeStatus: "employeeStatus",
   clientId: "platformId",
   clientName: "platformName",
   todayDeliveries: "todayDeliveries",
@@ -223,6 +235,7 @@ function DriversPageContent() {
   const { can } = useAuth();
   const canCreate = can("drivers.create");
   const canEdit = can("drivers.edit");
+  const canArchive = can("drivers.delete") || can("drivers.bulk_delete");
   const { data: customFieldDefs } = useCustomFieldDefinitions();
   const activeCustomDefs = useMemo(
     () => (customFieldDefs ?? []).filter((d) => d.is_active && !d.archived_at),
@@ -230,8 +243,10 @@ function DriversPageContent() {
   );
   const approveDriver = useApproveDriverIntake();
   const restoreDriver = useRestoreDriverIntake();
+  const archiveMany = useArchiveDriverIntakes();
   const [bulkOpen, setBulkOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tabFilter, setTabFilter] = useState<DriversTab>(() =>
@@ -241,6 +256,7 @@ function DriversPageContent() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const { prefs, update: updateListPrefs } = useListViewPrefs("drivers");
   const statusesQuery = useEmployeeStatuses();
+  const sectionsQuery = useEmployeeSections();
   const [columnFilters, setColumnFilters] = useState<DriversColumnFilters>({});
   const [sort, setSort] = useState<DriversSort>(DEFAULT_DRIVERS_SORT);
   const [levelFilter, setLevelFilter] = useState<DriverLevelFilter>("all");
@@ -430,7 +446,7 @@ function DriversPageContent() {
   const columnVisibilityOptions = useMemo(
     () => [
       { id: "select", label: t("selectAll"), locked: true as const },
-      { id: "driverId", label: t("colDriverId") },
+      { id: "clientId", label: t("colClientId") },
       { id: "employeeId", label: t("colEmployeeId") },
       { id: "riderCategory", label: t("colRiderCategory") },
       { id: "companyClientId", label: t("colCompanyClientId") },
@@ -440,9 +456,10 @@ function DriversPageContent() {
       { id: "restaurants", label: t("colRestaurants") },
       { id: "zone", label: t("colZone") },
       { id: "vehicle", label: t("colVehicle") },
-      // Off by default: most operations never reference a platform, and the
-      // list already runs to the edge of a 14" viewport.
-      { id: "clientId", label: t("colClientId"), defaultVisible: false as const },
+      { id: "section", label: t("colSection") },
+      { id: "partner", label: t("colProject") },
+      { id: "employeeStatus", label: t("colEmployeeStatus") },
+      { id: "driverId", label: t("colDriverId"), defaultVisible: false as const },
       { id: "clientName", label: t("colClientName"), defaultVisible: false as const },
       { id: "todayDeliveries", label: t("colTodayDeliveries") },
       { id: "status", label: t("colStatus") },
@@ -507,6 +524,10 @@ function DriversPageContent() {
             : accountStatusLabelFor(value as DriverAccountStatus);
         case "attendance":
           return value === "on_duty" ? t("attendanceOnDuty") : t("attendanceOffDuty");
+        case "section":
+          return catalogLabel(value, sectionsQuery.data ?? [], locale);
+        case "employeeStatus":
+          return catalogLabel(value, statusesQuery.data ?? [], locale);
         default: {
           if (column.startsWith("cf:")) {
             const def = activeCustomDefs.find((d) => customFilterColumn(d.key) === column);
@@ -521,7 +542,7 @@ function DriversPageContent() {
     },
     // accountStatusLabelFor only reads `t`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t, tCommon, activeCustomDefs],
+    [t, tCommon, activeCustomDefs, locale, sectionsQuery.data, statusesQuery.data],
   );
 
   const filterContext = useMemo(
@@ -565,7 +586,7 @@ function DriversPageContent() {
         ),
         className: "w-10",
       },
-      fixed("driverId", t("colDriverId")),
+      fixed("clientId", t("colClientId")),
       fixed("employeeId", t("colEmployeeId")),
       fixed("riderCategory", t("colRiderCategory")),
       fixed("companyClientId", t("colCompanyClientId")),
@@ -575,7 +596,10 @@ function DriversPageContent() {
       fixed("restaurants", t("colRestaurants")),
       fixed("zone", t("colZone")),
       { id: "vehicle", label: t("colVehicle") },
-      fixed("clientId", t("colClientId")),
+      fixed("section", t("colSection")),
+      { id: "partner", label: t("colProject") },
+      fixed("employeeStatus", t("colEmployeeStatus")),
+      fixed("driverId", t("colDriverId")),
       fixed("clientName", t("colClientName")),
       fixed("todayDeliveries", t("colTodayDeliveries")),
       fixed("status", t("colStatus")),
@@ -794,6 +818,27 @@ function DriversPageContent() {
                 />
                 <TooltipContent>{t("export")}</TooltipContent>
               </Tooltip>
+              {canArchive && tabFilter !== "archived" ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg text-destructive hover:bg-destructive/10 sm:w-auto sm:px-2.5"
+                        onClick={() => setArchiveOpen(true)}
+                        disabled={filteredTotal === 0 && selectedIds.size === 0}
+                        aria-label={t("bulkArchive")}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="ms-1.5 hidden 2xl:inline">{t("bulkArchive")}</span>
+                      </Button>
+                    }
+                  />
+                  <TooltipContent>{t("bulkArchive")}</TooltipContent>
+                </Tooltip>
+              ) : null}
               {canCreate ? (
                 <Tooltip>
                   <TooltipTrigger
@@ -871,7 +916,7 @@ function DriversPageContent() {
                         <DriverLevelBadge level={levelIndex.data?.get(driver.id)?.level} />
                       </p>
                       <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                        {driver.employee_id ?? formatDriverCodeDisplay(driver.driver_code)}
+                        {[driver.client_id, driver.employee_id].filter(Boolean).join(" · ") || "—"}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">{driver.zone_name || "—"}</p>
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -977,11 +1022,11 @@ function DriversPageContent() {
                           />
                         </VisibleTableCell>
                         <VisibleTableCell
-                          columnId="driverId"
+                          columnId="clientId"
                           isVisible={isColumnVisible}
                           className="font-mono text-sm text-muted-foreground"
                         >
-                          {formatDriverCodeDisplay(driver.driver_code)}
+                          {driver.client_id ?? "—"}
                         </VisibleTableCell>
                         <VisibleTableCell
                           columnId="employeeId"
@@ -1047,11 +1092,40 @@ function DriversPageContent() {
                           />
                         </VisibleTableCell>
                         <VisibleTableCell
-                          columnId="clientId"
+                          columnId="section"
+                          isVisible={isColumnVisible}
+                          className="text-sm text-muted-foreground"
+                        >
+                          {driver.section_keys.length
+                            ? driver.section_keys
+                                .map((key) => catalogLabel(key, sectionsQuery.data ?? [], locale))
+                                .join(", ")
+                            : "—"}
+                        </VisibleTableCell>
+                        <VisibleTableCell
+                          columnId="partner"
+                          isVisible={isColumnVisible}
+                          className="text-sm text-muted-foreground"
+                        >
+                          {driver.partner_name || "—"}
+                        </VisibleTableCell>
+                        <VisibleTableCell columnId="employeeStatus" isVisible={isColumnVisible}>
+                          {driver.employee_status_key ? (
+                            <EmployeeStatusBadge
+                              statusKey={driver.employee_status_key}
+                              rows={statusesQuery.data ?? []}
+                              locale={locale}
+                            />
+                          ) : (
+                            "—"
+                          )}
+                        </VisibleTableCell>
+                        <VisibleTableCell
+                          columnId="driverId"
                           isVisible={isColumnVisible}
                           className="font-mono text-sm text-muted-foreground"
                         >
-                          {driver.client_id ?? "—"}
+                          {formatDriverCodeDisplay(driver.driver_code)}
                         </VisibleTableCell>
                         <VisibleTableCell
                           columnId="clientName"
@@ -1313,6 +1387,50 @@ function DriversPageContent() {
       />
       {canCreate ? (
         <DriverBulkImportDialog open={bulkOpen} onOpenChange={setBulkOpen} />
+      ) : null}
+      {canArchive && tabFilter !== "archived" ? (
+        <DriverArchiveDialog
+          open={archiveOpen}
+          onOpenChange={setArchiveOpen}
+          pending={archiveMany.isPending}
+          title={t("bulkArchive")}
+          subtitle={t("bulkArchiveSubtitle", {
+            count: selectedIds.size > 0 ? selectedIds.size : Math.min(filteredTotal, 500),
+          })}
+          confirmLabel={t("bulkArchive")}
+          onConfirm={async (reason) => {
+            try {
+              let intakeIds = [...selectedIds];
+              if (intakeIds.length === 0) {
+                const loaded = await fetchDriversForExport(query);
+                intakeIds = loaded.rows.map((row) => row.id);
+              }
+              const result = await archiveMany.mutateAsync({ intakeIds, reason });
+              setArchiveOpen(false);
+              setSelectedIds(new Set());
+              if (result.failed > 0 || result.truncated) {
+                toast.warning(
+                  t("bulkArchivePartial", {
+                    archived: result.archived,
+                    failed: result.failed,
+                  }),
+                );
+                return;
+              }
+              toast.success(t("bulkArchiveDone", { count: result.archived }));
+            } catch (err) {
+              const key =
+                err instanceof Error && isDriverErrorKey(err.message)
+                  ? err.message
+                  : "save_failed";
+              toast.error(
+                isDriverErrorKey(key)
+                  ? t(`restoreErrors.${key}` as "restoreErrors.save_failed")
+                  : t("bulkArchiveFailed"),
+              );
+            }
+          }}
+        />
       ) : null}
     </AppPage>
   );

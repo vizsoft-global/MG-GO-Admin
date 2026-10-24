@@ -363,6 +363,7 @@ export type DriverImportPreviewStatus =
   | "duplicate_phone"
   | "duplicate_civil_id"
   | "duplicate_employee_id"
+  | "duplicate_client_id"
   | "duplicate_passport"
   | "invalid_phone"
   | "invalid_civil_id"
@@ -397,6 +398,8 @@ export type DriverImportPreviewStatus =
   | "ambiguous_zone"
   | "ambiguous_restaurant"
   | "ambiguous_employee_id"
+  | "ambiguous_client_id"
+  | "client_id_mismatch"
   | "duplicate_header"
   | "invalid_sponsorship"
   | "invalid_job_position"
@@ -577,6 +580,10 @@ export type DriverImportPreviewRow = Omit<
   skip?: boolean;
   /** True when this employee ID already exists in the fleet (not a second sheet row). */
   existingByEmployeeId?: boolean;
+  /** True when a unique Client ID resolved an existing rider. */
+  existingByClientId?: boolean;
+  /** MG ID filled from a unique Client ID match when the sheet left it blank. */
+  resolved_employee_id?: string | null;
   /**
    * False when every HR section on the row is non-operational, so the sheet may
    * leave zone/restaurants blank. Computed once in the preview so the apply

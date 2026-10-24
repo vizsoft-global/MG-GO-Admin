@@ -58,7 +58,7 @@ describe("buildCredentialsAoa", () => {
       "Passcode",
       "Phone",
       "Civil ID",
-      "Partner",
+      "Project",
       "Zone",
       "Vehicle",
       "Restaurants",

@@ -8,7 +8,7 @@ const CREDENTIAL_HEADERS = [
   "Passcode",
   "Phone",
   "Civil ID",
-  "Partner",
+  "Project",
   "Zone",
   "Vehicle",
   "Restaurants",

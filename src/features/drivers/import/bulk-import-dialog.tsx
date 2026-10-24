@@ -89,6 +89,7 @@ function previewVariant(
     case "duplicate_phone":
     case "duplicate_civil_id":
     case "duplicate_employee_id":
+    case "duplicate_client_id":
       return "warning";
     default:
       return "danger";
@@ -180,12 +181,17 @@ export function DriverBulkImportDialog({
   const summary = useMemo(() => {
     const ready = preview.filter((r) => isImportRowReady(r, duplicateStrategy)).length;
     const duplicate = preview.filter(
-      (r) => r.existingByEmployeeId && r.status === "duplicate_employee_id",
+      (r) =>
+        (r.existingByEmployeeId && r.status === "duplicate_employee_id") ||
+        (r.existingByClientId && r.status === "duplicate_client_id"),
     ).length;
     const invalid = preview.filter(
       (r) =>
         !isImportRowReady(r, duplicateStrategy) &&
-        !(r.existingByEmployeeId && r.status === "duplicate_employee_id"),
+        !(
+          (r.existingByEmployeeId && r.status === "duplicate_employee_id") ||
+          (r.existingByClientId && r.status === "duplicate_client_id")
+        ),
     ).length;
     return { ready, duplicate, invalid, total: preview.length };
   }, [preview, duplicateStrategy]);
@@ -478,6 +484,26 @@ export function DriverBulkImportDialog({
                 {t("lookupLists")}
               </p>
               <p className="text-xs text-muted-foreground">{t("lookupHint")}</p>
+              <details className="rounded-lg border border-border px-3 py-2">
+                <summary className="cursor-pointer text-xs font-semibold text-foreground">
+                  {t("columnGuideTitle")}
+                </summary>
+                <p className="mt-1.5 text-[10px] text-muted-foreground">
+                  {t("columnGuideHint")}
+                </p>
+                <ul className="mt-2 space-y-1 text-[10px] leading-4 text-muted-foreground">
+                  {templateColumns.map((column) => (
+                    <li key={column.field}>
+                      <span className="font-medium text-foreground">{column.header}</span>
+                      {column.required ? (
+                        <span className="text-destructive"> *</span>
+                      ) : null}
+                      {column.example ? ` · ${column.example}` : ""}
+                      {` — ${column.allowed}`}
+                    </li>
+                  ))}
+                </ul>
+              </details>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
@@ -729,14 +755,16 @@ export function DriverBulkImportDialog({
                           <td className="px-2 py-1">
                             <StatusPill variant={previewVariant(row, duplicateStrategy)} dot={false}>
                               {isImportRowReady(row, duplicateStrategy) &&
-                              row.existingByEmployeeId
+                              (row.existingByEmployeeId || row.existingByClientId)
                                 ? t("status.will_update")
                                 : t(`status.${row.status}`)}
                             </StatusPill>
                           </td>
                           <td className="px-2 py-1">{row.full_name ?? "—"}</td>
                           <td className="px-2 py-1">{row.phone ?? "—"}</td>
-                          <td className="px-2 py-1 tabular-nums">{row.employee_id ?? "—"}</td>
+                          <td className="px-2 py-1 tabular-nums">
+                            {row.employee_id ?? row.resolved_employee_id ?? "—"}
+                          </td>
                           <td className="px-2 py-1">{row.client_id ?? "—"}</td>
                           <td className="px-2 py-1">{row.client_name ?? "—"}</td>
                           <td className="px-2 py-1">{row.zone_name ?? "—"}</td>
