@@ -16,6 +16,7 @@ export const COMPARISON_ERROR_KEYS = [
   "service_stale",
   "service_unavailable",
   "compare_failed",
+  "request_failed",
 ] as const;
 
 export type ComparisonErrorKey = (typeof COMPARISON_ERROR_KEYS)[number];

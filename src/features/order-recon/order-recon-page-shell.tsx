@@ -33,7 +33,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { useAuth } from "@/contexts/auth-context";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { cn } from "@/lib/utils";
-import { getOrderComparison } from "./order-comparison-actions";
+import { fetchOrderComparison } from "./order-recon-client";
 import { comparisonErrorKeyFromMessage } from "./order-comparison-errors";
 import { applyPageFilters, activeFilterEntries, filterChipLabel } from "./order-comparison-filters";
 import {
@@ -88,7 +88,7 @@ export function OrderReconPageShell() {
   const query = useQuery({
     queryKey: queryKeys.orderRecon.comparison(range.from, range.to),
     queryFn: async () => {
-      const res = await getOrderComparison({ from: range.from, to: range.to });
+      const res = await fetchOrderComparison({ from: range.from, to: range.to });
       if ("error" in res) throw new Error(res.error);
       return res.snapshot;
     },
@@ -149,7 +149,7 @@ export function OrderReconPageShell() {
       const sameMonth = range.from === monthMeta.from && range.to === monthMeta.to;
       let monthRiders = riders;
       if (!sameMonth) {
-        const res = await getOrderComparison({ from: monthMeta.from, to: monthMeta.to });
+        const res = await fetchOrderComparison({ from: monthMeta.from, to: monthMeta.to });
         if ("error" in res) return;
         monthRiders = buildComparisonRiders(res.snapshot, monthDays);
       }

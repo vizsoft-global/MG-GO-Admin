@@ -29,14 +29,16 @@ import {
 } from "@/components/ui/table";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
-  commitOrderRecon,
   getOrderRecon,
   listOrderReconRuns,
-  previewOrderRecon,
-  redoOrderReconImport,
-  undoOrderReconImport,
   type ReconPreview,
 } from "./order-recon-actions";
+import {
+  fetchOrderReconCommit,
+  fetchOrderReconPreview,
+  fetchOrderReconRedo,
+  fetchOrderReconUndo,
+} from "./order-recon-client";
 import { downloadOrderReconTemplate, reconTemplateColumns } from "./order-recon-template";
 import { redoTargetId, undoTargetId } from "./recon-import-stack";
 
@@ -50,6 +52,9 @@ const KNOWN_ERRORS = new Set([
   "not_authorized",
   "nothing_to_undo",
   "nothing_to_redo",
+  "preview_failed",
+  "request_failed",
+  "not_configured",
 ]);
 
 export function OrderReconImportDialog({
@@ -112,10 +117,8 @@ export function OrderReconImportDialog({
       toast.error(t("errors.missing_file"));
       return;
     }
-    const fd = new FormData();
-    fd.set("file", file);
     startTransition(async () => {
-      const result = await previewOrderRecon(fd);
+      const result = await fetchOrderReconPreview(file);
       if ("error" in result) {
         toast.error(message(result.error));
         return;
@@ -127,7 +130,7 @@ export function OrderReconImportDialog({
   const onCommit = () => {
     if (!preview) return;
     startTransition(async () => {
-      const result = await commitOrderRecon(preview);
+      const result = await fetchOrderReconCommit(preview);
       if ("error" in result) {
         toast.error(message(result.error));
         return;
@@ -141,7 +144,7 @@ export function OrderReconImportDialog({
 
   const undo = () => {
     startTransition(async () => {
-      const result = await undoOrderReconImport();
+      const result = await fetchOrderReconUndo();
       if (result.error) {
         toast.error(message(result.error));
         return;
@@ -153,7 +156,7 @@ export function OrderReconImportDialog({
 
   const redo = () => {
     startTransition(async () => {
-      const result = await redoOrderReconImport();
+      const result = await fetchOrderReconRedo();
       if (result.error) {
         toast.error(message(result.error));
         return;

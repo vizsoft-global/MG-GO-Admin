@@ -284,6 +284,7 @@ export async function getOrderComparison(input: {
   from: string;
   to: string;
 }): Promise<{ snapshot: ComparisonSnapshot } | { error: string }> {
+  try {
   const auth = await requireView();
   if ("error" in auth) return auth;
   const from = input.from;
@@ -326,6 +327,11 @@ export async function getOrderComparison(input: {
       to,
       message: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
     });
+    return { error: "compare_failed" };
+  }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (message === "not_configured") return { error: "not_configured" };
     return { error: "compare_failed" };
   }
 }

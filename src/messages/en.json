@@ -250,6 +250,11 @@
       "sessionSafe": "You are still signed in.",
       "retry": "Try again",
       "reference": "Reference {digest}"
+    },
+    "sessionRecover": {
+      "title": "Reconnecting your session",
+      "body": "You are still signed in. The panel is retrying the page automatically.",
+      "retry": "Try again"
     }
   },
   "pages": {
@@ -3479,7 +3484,11 @@
         "save_failed": "Could not save this run.",
         "not_authorized": "You do not have permission for this action.",
         "nothing_to_undo": "Nothing to undo.",
-        "nothing_to_redo": "Nothing to redo."
+        "nothing_to_redo": "Nothing to redo.",
+        "invalid_range": "Pick a valid date range.",
+        "not_configured": "Comparison is not configured in this environment.",
+        "preview_failed": "The file could not be previewed. Try again.",
+        "request_failed": "The server did not finish this request. Try again."
       }
     },
     "verifications": {

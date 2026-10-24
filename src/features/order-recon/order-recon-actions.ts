@@ -113,9 +113,16 @@ export type ReconPreview = {
   unresolvedCount: number;
 };
 
+function asReconError(err: unknown, fallback: string): { error: string } {
+  const message = err instanceof Error ? err.message : "";
+  if (message === "not_configured") return { error: "not_configured" };
+  return { error: fallback };
+}
+
 export async function previewOrderRecon(
   formData: FormData,
 ): Promise<{ preview: ReconPreview } | { error: string }> {
+  try {
   const auth = await requireOrderRecon("manage");
   if ("error" in auth) return auth;
 
@@ -185,6 +192,9 @@ export async function previewOrderRecon(
       unresolvedCount: issues.length,
     },
   };
+  } catch (err) {
+    return asReconError(err, "preview_failed");
+  }
 }
 
 type CompareRow = {
@@ -199,6 +209,7 @@ type CompareRow = {
 export async function commitOrderRecon(
   preview: ReconPreview,
 ): Promise<{ run: OrderReconRun } | { error: string }> {
+  try {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireOrderRecon("manage");
@@ -390,6 +401,9 @@ export async function commitOrderRecon(
       rows: rows.map((row, i) => ({ ...row, id: `${run.id}-${i}` })),
     },
   };
+  } catch (err) {
+    return asReconError(err, "save_failed");
+  }
 }
 
 function mapStoredRun(doc: DocumentSnapshot): OrderReconRunSummary | null {
@@ -521,6 +535,7 @@ export async function redoOrderReconImport(): Promise<{ error?: string }> {
 }
 
 async function replayReconImport(direction: "undo" | "redo"): Promise<{ error?: string }> {
+  try {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireOrderRecon("manage");
@@ -559,4 +574,7 @@ async function replayReconImport(direction: "undo" | "redo"): Promise<{ error?: 
     after: { direction },
   });
   return {};
+  } catch (err) {
+    return asReconError(err, "save_failed");
+  }
 }
