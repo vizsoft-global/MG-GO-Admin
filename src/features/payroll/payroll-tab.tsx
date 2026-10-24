@@ -10,6 +10,7 @@ import {
   useTableColumnVisibility,
   type TableColumnVisibilityOption,
 } from "@/hooks/use-table-column-visibility";
+import { formatPct } from "@/lib/format/percent";
 import {
   payrollRiderMatchesSearch,
   type PayrollKpis,
@@ -157,6 +158,3 @@ export function PayrollTab({
   );
 }
 
-function formatPct(value: number): string {
-  return `${value.toFixed(1)}%`;
-}

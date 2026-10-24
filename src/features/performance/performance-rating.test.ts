@@ -179,14 +179,14 @@ describe("component blend", () => {
 
   it("deliveryPct is a dash when the target is missing", () => {
     assert.equal(deliveryPct(0, 0), "—");
-    assert.equal(deliveryPct(1.2, 50), "120%");
+    assert.equal(deliveryPct(1.2, 50), "120.0%");
   });
 
   it("scorePct and rawPct keep a percent sign, and dash when unknown", () => {
     assert.equal(scorePct(57.1), "57.1%");
     assert.equal(scorePct(null), "—");
     assert.equal(rawPct(Number.NaN), "—");
-    assert.equal(rawPct(0.8), "80%");
+    assert.equal(rawPct(0.8), "80.0%");
   });
 });
 

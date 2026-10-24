@@ -10,6 +10,7 @@ import {
   Timer,
   Timer as TimerIcon,
 } from "lucide-react";
+import { formatPct } from "@/lib/format/percent";
 import { componentPct } from "./performance-formulas";
 import type {
   PerformanceComponent,
@@ -73,7 +74,7 @@ export function PerformanceComponentBreakdown({
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
         <p className="text-xs font-medium">{t("title")}</p>
         <span className="text-xs font-semibold tabular-nums text-muted-foreground">
-          {compliance == null ? t("unmeasured") : `${Math.round(compliance)}%`}
+          {compliance == null ? t("unmeasured") : formatPct(compliance)}
         </span>
       </div>
       <ul className="divide-y divide-border">
@@ -115,7 +116,7 @@ export function PerformanceComponentBreakdown({
                     {t("unmeasured")}
                   </span>
                 ) : (
-                  `${Math.round(value)}%`
+                  formatPct(value)
                 )}
               </span>
             </li>

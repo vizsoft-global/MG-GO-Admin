@@ -1,3 +1,5 @@
+import { formatPct } from "@/lib/format/percent";
+
 const KUWAIT_TZ = "Asia/Kuwait";
 
 export function formatKuwaitTime(iso: string | null | undefined): string {
@@ -31,8 +33,7 @@ export function formatVsScheduled(
   scheduledSeconds: number,
 ): string {
   if (scheduledSeconds <= 0) return "—";
-  const pct = Math.round((onlineSeconds / scheduledSeconds) * 100);
-  return `${pct}%`;
+  return formatPct((onlineSeconds / scheduledSeconds) * 100);
 }
 
 export function adherenceTooltip(adherence: {

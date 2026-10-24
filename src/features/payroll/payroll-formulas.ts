@@ -1,5 +1,6 @@
 import { fieldSearchMatch } from "@/components/app/app-list-controls/search-match";
 import { storesVisibleForPartners } from "@/features/performance/performance-ops-formulas";
+import { formatPct } from "@/lib/format/percent";
 
 export const MONTH_ABBR = [
   "Jan",
@@ -1174,7 +1175,8 @@ export function dayDisplayHours(
 }
 
 export function formatPayrollPct(value: number, digits = 1): string {
-  if (!Number.isFinite(value)) return "0.0%";
+  if (!Number.isFinite(value)) return `${(0).toFixed(digits)}%`;
+  if (digits === 1) return formatPct(value);
   return `${value.toFixed(digits)}%`;
 }
 

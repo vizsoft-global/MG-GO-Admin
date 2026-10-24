@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { buildCsv, downloadCsv } from "@/features/driver-tracking/csv-export";
 import { useEsignStatusCounts } from "@/features/esign/use-esign";
+import { formatPct } from "@/lib/format/percent";
 import { queryKeys } from "@/lib/query/query-keys";
 import { selectOptions, selectOptionsFrom } from "@/lib/select-items";
 import { fetchAdminRequestsList, fetchAdminRequestsTrend } from "./requests-actions";
@@ -314,7 +315,7 @@ export function RequestsReportsPanel() {
               },
               {
                 label: t("kpiApprovalRate"),
-                value: approvalRate == null ? "—" : `${approvalRate}%`,
+                value: formatPct(approvalRate),
                 icon: CheckCircle2,
                 accent: "success",
               },
@@ -443,7 +444,7 @@ export function RequestsReportsPanel() {
                         <TableCell className="tabular-nums text-muted-foreground">
                           {decided === 0
                             ? "—"
-                            : `${Math.round((row.approved / decided) * 100)}%`}
+                            : formatPct((row.approved / decided) * 100)}
                         </TableCell>
                         <TableCell className="tabular-nums text-muted-foreground">
                           {row.avg_step_seconds == null

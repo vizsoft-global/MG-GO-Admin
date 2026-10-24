@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatPct, roundPercent } from "@/lib/format/percent";
 import { NotificationsTabBar } from "./notifications-tab-bar";
 import { useNotificationAnalyticsDaily, useNotificationDashboard } from "./use-notifications";
 
@@ -43,10 +44,10 @@ export function AnalyticsPageShell() {
     { sent: 0, delivered: 0, opened: 0, clicked: 0, failed: 0 },
   );
 
-  const seenRate = totals.sent > 0 ? Math.round((totals.opened / totals.sent) * 100) : 0;
-  const tappedRate = totals.sent > 0 ? Math.round((totals.clicked / totals.sent) * 100) : 0;
+  const seenRate = totals.sent > 0 ? roundPercent((totals.opened / totals.sent) * 100) : 0;
+  const tappedRate = totals.sent > 0 ? roundPercent((totals.clicked / totals.sent) * 100) : 0;
   const tappedOfSeenRate =
-    totals.opened > 0 ? Math.round((totals.clicked / totals.opened) * 100) : 0;
+    totals.opened > 0 ? roundPercent((totals.clicked / totals.opened) * 100) : 0;
 
   return (
     <AppPage>
@@ -64,8 +65,8 @@ export function AnalyticsPageShell() {
       <KpiGrid
         items={[
           { label: t("kpiSent"), value: kpisLoading ? "…" : String(kpis?.sentToday ?? 0) },
-          { label: t("kpiDeliveryRate"), value: kpisLoading ? "…" : `${kpis?.deliveryRate ?? 0}%` },
-          { label: t("kpiOpenRate"), value: kpisLoading ? "…" : `${kpis?.openRate ?? 0}%` },
+          { label: t("kpiDeliveryRate"), value: kpisLoading ? "…" : formatPct(kpis?.deliveryRate ?? 0) },
+          { label: t("kpiOpenRate"), value: kpisLoading ? "…" : formatPct(kpis?.openRate ?? 0) },
           { label: t("kpiFailed"), value: kpisLoading ? "…" : String(kpis?.failedDeliveries ?? 0) },
         ]}
       />
@@ -98,14 +99,14 @@ export function AnalyticsPageShell() {
               <div className="rounded-md border border-border bg-background px-3 py-2">
                 <p className="text-xs text-muted-foreground">{t("analyticsFunnelSeen")}</p>
                 <p className="font-semibold">
-                  {isLoading ? "…" : `${totals.opened} (${seenRate}%)`}
+                  {isLoading ? "…" : `${totals.opened} (${formatPct(seenRate)})`}
                 </p>
               </div>
               <span className="text-muted-foreground">→</span>
               <div className="rounded-md border border-border bg-background px-3 py-2">
                 <p className="text-xs text-muted-foreground">{t("analyticsFunnelTapped")}</p>
                 <p className="font-semibold">
-                  {isLoading ? "…" : `${totals.clicked} (${tappedRate}% ${t("analyticsFunnelOfSent")}, ${tappedOfSeenRate}% ${t("analyticsFunnelOfSeen")})`}
+                  {isLoading ? "…" : `${totals.clicked} (${formatPct(tappedRate)} ${t("analyticsFunnelOfSent")}, ${formatPct(tappedOfSeenRate)} ${t("analyticsFunnelOfSeen")})`}
                 </p>
               </div>
             </div>

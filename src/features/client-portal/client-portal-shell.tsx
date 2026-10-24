@@ -17,6 +17,7 @@ import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { signOut } from "@/features/auth/actions";
 import { downloadCsv } from "@/lib/csv/client-download";
 import { defaultStartDate, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
+import { formatPct } from "@/lib/format/percent";
 import { selectOptions } from "@/lib/select-items";
 import { leaveExportRows, type LeaveMonthBar } from "@/features/operations-dashboard/shape";
 import { fetchClientPortalDashboard } from "./client-portal-actions";
@@ -199,7 +200,7 @@ export function ClientPortalShell() {
     shownMonths.length > 0
       ? shownMonths.reduce((best, row) => (row.rate > best.rate ? row : best))
       : undefined;
-  const peakLabel = peakRow && peakRow.rate > 0 ? `${monthTick(peakRow.yearMonth, locale)} · ${Math.round(peakRow.rate)}%` : "—";
+  const peakLabel = peakRow && peakRow.rate > 0 ? `${monthTick(peakRow.yearMonth, locale)} · ${formatPct(peakRow.rate)}` : "—";
   const dateMode = day === today ? "today" : day === yesterday ? "yesterday" : "custom";
   const dateLabel = new Date(`${day}T12:00:00`).toLocaleDateString(locale, {
     weekday: "long",
@@ -323,7 +324,7 @@ export function ClientPortalShell() {
         <Tile label={t("kpiWorking")} value={data?.kpis.working ?? 0} color="#22863a" valueColor="#1e7e34" />
         <Tile label={t("kpiOnLeave")} value={data?.kpis.onLeave ?? 0} color="#1565c0" />
         <Tile label={t("kpiAbsentSick")} value={data?.kpis.absentSick ?? 0} color="#c62828" valueColor="#b71c1c" />
-        <Tile label={t("kpiWorkingRate")} value={`${data?.kpis.workingRate ?? 0}%`} color="#0f6e78" />
+        <Tile label={t("kpiWorkingRate")} value={formatPct(data?.kpis.workingRate ?? 0)} color="#0f6e78" />
       </div>
 
       <section className={card} style={{ borderColor: "#e3e5e8" }}>
@@ -461,8 +462,8 @@ export function ClientPortalShell() {
           <p className="text-sm text-muted-foreground">{t("turnoverEmpty")}</p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <Tile label={t("turnoverThisYear")} value={comparison ? `${Math.round(comparison.annualPct)}%` : data?.turnover.yearly || "—"} color="#b45309" />
-            <Tile label={t("turnoverMonthlyAvg")} value={comparison ? `${Math.round(comparison.monthlyAvgPct)}%` : "—"} color="#714b67" />
+            <Tile label={t("turnoverThisYear")} value={comparison ? formatPct(comparison.annualPct) : data?.turnover.yearly || "—"} color="#b45309" />
+            <Tile label={t("turnoverMonthlyAvg")} value={comparison ? formatPct(comparison.monthlyAvgPct) : "—"} color="#714b67" />
             <Tile label={t("turnoverDepartures")} value={comparison?.departuresCount ?? "—"} color="#c62828" />
             <Tile label={t("turnoverHighest")} value={peakLabel} color="#b45309" />
           </div>
@@ -475,7 +476,7 @@ export function ClientPortalShell() {
                 const current = row.yearMonth === today.slice(0, 7);
                 return (
                   <div key={row.yearMonth} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
-                    <span className="text-[10px] text-[#5c6370]">{Math.round(row.rate)}%</span>
+                    <span className="text-[10px] text-[#5c6370]">{formatPct(row.rate)}</span>
                     <span
                       className="w-full rounded-sm"
                       style={{
@@ -510,7 +511,7 @@ export function ClientPortalShell() {
                   </TableRow>
                   <TableRow>
                     <TableCell>{t("colRate")}</TableCell>
-                    {shownMonths.map((row) => <TableCell key={row.yearMonth}>{`${Math.round(row.rate)}%`}</TableCell>)}
+                    {shownMonths.map((row) => <TableCell key={row.yearMonth}>{formatPct(row.rate)}</TableCell>)}
                   </TableRow>
                 </TableBody>
               </Table>

@@ -1,3 +1,4 @@
+import { formatPct } from "@/lib/format/percent";
 import { getCountryLabel, normalizeCountryCode } from "@/lib/geo/countries";
 import {
   displayRiderId,
@@ -39,10 +40,7 @@ export function formatDpd(value: number | null | undefined): string {
   return value.toFixed(1);
 }
 
-export function formatPct(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return `${value.toFixed(1)}%`;
-}
+export { formatPct };
 
 export type OpsTooltipMetric = OpsChartMetric | "riders";
 
