@@ -87,6 +87,19 @@ export function conditionsToColumns(
   return row;
 }
 
+const CRITERIA_FIELDS = new Set(["orders", "hours", "dpd", "riders"]);
+
+/** Zone-column edits must not drop criteria the columns no longer render. */
+export function zoneEditConditions(
+  existing: readonly PayrollRuleCondition[],
+  nextRow: RuleTableRow,
+  usesZone: boolean,
+): PayrollRuleCondition[] {
+  const zone = columnsToConditions(nextRow, { usesZone, usesOrders: false, usesHours: false });
+  const criteria = existing.filter((condition) => CRITERIA_FIELDS.has(condition.field));
+  return [...zone, ...criteria];
+}
+
 export function columnsToConditions(
   row: RuleTableRow,
   uses: { usesZone: boolean; usesOrders: boolean; usesHours: boolean },

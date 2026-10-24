@@ -328,6 +328,14 @@ describe("condition matching", () => {
       null,
     );
   });
+
+  it("matches DPD and rider count only when the metric is present", () => {
+    const withMetrics = { ...base, dpd: 5, riders: 10 };
+    assert.equal(matchesCondition({ field: "dpd", op: "lt", value: 6 }, withMetrics), true);
+    assert.equal(matchesCondition({ field: "riders", op: "gte", value: 10 }, withMetrics), true);
+    assert.equal(matchesCondition({ field: "dpd", op: "gte", value: 0 }, { ...base, dpd: null }), false);
+    assert.equal(matchesCondition({ field: "riders", op: "gte", value: 0 }, base), false);
+  });
 });
 
 describe("SOP 5.2 — Americana rules decide the documented day", () => {

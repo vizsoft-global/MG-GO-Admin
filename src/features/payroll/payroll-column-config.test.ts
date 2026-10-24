@@ -22,6 +22,17 @@ describe("payroll column config", () => {
     assert.equal(resolveColumnLabel("zone", "Zone", config), "Zone");
   });
 
+  it("ignores the old restaurant and partner defaults", () => {
+    const stored = configByKey([
+      { columnKey: "restaurant", label: "Client Name", hiddenViews: [] },
+      { columnKey: "partner", label: "Partner", hiddenViews: [] },
+      { columnKey: "name", label: "Rider name", hiddenViews: [] },
+    ]);
+    assert.equal(resolveColumnLabel("restaurant", "Restaurant", stored), "Restaurant");
+    assert.equal(resolveColumnLabel("partner", "Client Name", stored), "Client Name");
+    assert.equal(resolveColumnLabel("name", "Name", stored), "Rider name");
+  });
+
   it("hides a heading only in the views that were saved", () => {
     assert.equal(columnHiddenIn("amId", "combined", config), true);
     assert.equal(columnHiddenIn("amId", "ao", config), false);

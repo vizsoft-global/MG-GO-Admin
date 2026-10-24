@@ -2,13 +2,10 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Hand, Redo2, Undo2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { GroupedSections, groupRows } from "@/components/app/app-list-controls";
 import { payrollRiderMatchesSearch, type PayrollPeriod } from "./payroll-formulas";
 import { PayrollListToolbar, usePayrollListPrefs } from "./payroll-list-toolbar";
-import { usePayrollAdjust } from "./payroll-adjust-context";
 import { PayrollDayGrid, PayrollLegend } from "./payroll-grid";
 import { exportCombinedPayrollCsv } from "./payroll-csv";
 import { configByKey, exportLabelsFromConfig, hiddenSetFor } from "./payroll-column-config";
@@ -33,7 +30,6 @@ export function CombinedPayrollTab({
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
   const { prefs } = usePayrollListPrefs("payroll-combined");
-  const session = usePayrollAdjust();
   const audit = usePayrollAdjustmentAudit({ from: month.from, to: month.to });
   const headings = usePayrollColumnConfig();
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
@@ -58,11 +54,6 @@ export function CombinedPayrollTab({
     [prefs.groupBy, searched],
   );
 
-  const adjustedCells = useMemo(
-    () => searched.reduce((sum, row) => sum + row.adjustedCells, 0),
-    [searched],
-  );
-
   const fallbackLabel = useCallback((key: string) => t(`riderCols.${key}`), [t]);
 
   return (
@@ -71,42 +62,12 @@ export function CombinedPayrollTab({
         <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-5 shadow-sm">
           <b>{t("combinedBannerTitle")}</b> {t("combinedBannerBody")}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {canManage ? (
-            <>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9"
-              disabled={session.undoCount === 0 || session.pending}
-              onClick={() => session.undo()}
-            >
-              <Undo2 className="size-3.5" />
-              {t("adjust.undo")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9"
-              disabled={session.redoCount === 0 || session.pending}
-              onClick={() => session.redo()}
-            >
-              <Redo2 className="size-3.5" />
-              {t("adjust.redo")}
-            </Button>
-            </>
-          ) : null}
-          <PayrollColumnsMenu
-            view="combined"
-            config={headingConfig}
-            fallbackLabel={fallbackLabel}
-            canManage={canManage}
-          />
-          <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-orange-300 bg-orange-50 px-3 text-xs font-semibold text-orange-800">
-            <Hand className="size-3.5" />
-            {t("adjust.adjustedCells", { count: adjustedCells })}
-          </span>
-        </div>
+        <PayrollColumnsMenu
+          view="combined"
+          config={headingConfig}
+          fallbackLabel={fallbackLabel}
+          canManage={canManage}
+        />
       </div>
       <PayrollListToolbar prefKey="payroll-combined" search={search} onSearchChange={setSearch} />
       <GroupedSections groups={grouped}>
@@ -129,11 +90,6 @@ export function CombinedPayrollTab({
                 });
               }
             }}
-            editor={
-              canManage
-                ? { canManage, onRequestAdjust: session.openRequest, onNotice: session.onNotice }
-                : undefined
-            }
             footer={t("tableFootRange", {
               shown: rows.length,
               total: riders.length,

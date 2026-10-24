@@ -23,7 +23,7 @@ import {
 /* Rule shape                                                          */
 /* ------------------------------------------------------------------ */
 
-export const RULE_FIELDS = ["zone_category", "zone", "orders", "hours"] as const;
+export const RULE_FIELDS = ["zone_category", "zone", "orders", "hours", "dpd", "riders"] as const;
 export type RuleField = (typeof RULE_FIELDS)[number];
 
 export const RULE_NUMERIC_OPS = ["lt", "lte", "gt", "gte", "eq", "neq"] as const;
@@ -318,21 +318,24 @@ function compareSet(
   return op === "not_in" ? !hit : hit;
 }
 
-export function matchesCondition(
-  condition: PayrollRuleCondition,
-  facts: { zoneName: string | null; zoneCategory: ZoneCategory; orders: number; hours: number },
-): boolean {
+export function matchesCondition(condition: PayrollRuleCondition, facts: RuleFacts): boolean {
   switch (condition.field) {
     case "orders":
       return compareNumeric(facts.orders, condition.op, condition.value);
     case "hours":
       return compareNumeric(facts.hours, condition.op, condition.value);
+    case "dpd":
+      return facts.dpd != null && compareNumeric(facts.dpd, condition.op, condition.value);
+    case "riders":
+      return facts.riders != null && compareNumeric(facts.riders, condition.op, condition.value);
     case "zone_category":
       return compareSet(facts.zoneCategory, condition.op, condition.value);
     case "zone":
       return compareSet(facts.zoneName ?? "", condition.op, condition.value);
-    default:
-      return false;
+    default: {
+      const exhaustive: never = condition.field;
+      return exhaustive;
+    }
   }
 }
 
@@ -341,6 +344,10 @@ export type RuleFacts = {
   zoneCategory: ZoneCategory;
   orders: number;
   hours: number;
+  /** Previous-month zone DPD. Null when the zone was not measured. */
+  dpd?: number | null;
+  /** Previous-month zone rider-days. Null when the zone was not measured. */
+  riders?: number | null;
 };
 
 /** The first rule whose every condition holds. Null when none does. */
@@ -379,6 +386,8 @@ const FIELD_WORD: Record<RuleField, string> = {
   zone: "Zone",
   orders: "Orders",
   hours: "Hours",
+  dpd: "DPD",
+  riders: "Number of riders",
 };
 
 const CATEGORY_WORD: Record<string, string> = {
@@ -548,6 +557,10 @@ export type DayFacts = {
   loggedHours: number;
   /** Daily final adjusted orders for this date. */
   orders: number;
+  /** Previous-month zone DPD used by a DPD criterion. */
+  zoneDpd?: number | null;
+  /** Previous-month zone rider-days used by a rider-count criterion. */
+  zoneRiders?: number | null;
   /** The Operations cover on this date, from an approved or pending request. */
   cover: "off" | "sick" | "accident" | null;
   coverApproved: boolean;
@@ -635,6 +648,8 @@ export function evalDay(facts: DayFacts): DayOutcome {
       zoneCategory: facts.zoneCategory,
       orders: facts.orders,
       hours: facts.loggedHours,
+      dpd: facts.zoneDpd ?? null,
+      riders: facts.zoneRiders ?? null,
     });
     if (rule) {
       const status = RULE_KIND_TO_STATUS[rule.result.kind];
