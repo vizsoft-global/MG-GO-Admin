@@ -173,6 +173,9 @@ export const COLLECTIONS = {
   employeeSections: "employee_sections",
   nationalityCategories: "nationality_categories",
   bankCodes: "bank_codes",
+  sponsorships: "sponsorships",
+  payrollHrPeriods: "payroll_hr_periods",
+  driverHrPayroll: "driver_hr_payroll",
   adminActivityLogs: "admin_activity_logs",
   counters: "counters",
 } as const;
