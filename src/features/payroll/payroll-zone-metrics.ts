@@ -1,3 +1,4 @@
+import { formatPct } from "@/lib/format/percent";
 import { zoneCategoryFor, type ZoneCategory } from "./payroll-rules-engine";
 
 /**
@@ -187,6 +188,7 @@ export function formatDpd(value: number | null, digits = 2): string {
 }
 
 export function formatZonePct(value: number | null, digits = 1): string {
+  if (digits === 1) return formatPct(value);
   if (value === null || !Number.isFinite(value)) return "—";
   return `${value.toFixed(digits)}%`;
 }

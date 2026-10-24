@@ -1,3 +1,4 @@
+import { formatUnitPct } from "@/lib/format/percent";
 import { countryLabel } from "@/lib/geo/countries";
 import type { PayrollRiderRow } from "./payroll-types";
 import { HR_COLUMNS, HR_FOOTER_KEYS, HR_OPS_KEYS } from "./hr-payroll-columns";
@@ -95,7 +96,8 @@ export function computeHrPayroll(input: HrComputeInput): HrComputeResult {
 }
 
 export function formatHrEfficiency(ratio: number): string {
-  return `${(ratio * 100).toFixed(1)}%`;
+  if (!Number.isFinite(ratio)) return "0.0%";
+  return formatUnitPct(ratio);
 }
 
 function money(n: number): string {

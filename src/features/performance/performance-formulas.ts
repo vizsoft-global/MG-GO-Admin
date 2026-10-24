@@ -1,3 +1,4 @@
+import { formatPct, formatUnitPct } from "@/lib/format/percent";
 import {
   DEFAULT_PERFORMANCE_WEIGHTS,
   type PerformanceComponent,
@@ -11,12 +12,14 @@ export function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-export function pct(ratio: number, digits = 0): string {
+export function pct(ratio: number, digits = 1): string {
+  if (digits === 1) return formatUnitPct(clamp01(ratio));
   return `${(clamp01(ratio) * 100).toFixed(digits)}%`;
 }
 
-export function rawPct(ratio: number, digits = 0): string {
+export function rawPct(ratio: number, digits = 1): string {
   if (!Number.isFinite(ratio)) return "—";
+  if (digits === 1) return formatUnitPct(ratio);
   return `${(ratio * 100).toFixed(digits)}%`;
 }
 
@@ -24,15 +27,17 @@ export function rawPct(ratio: number, digits = 0): string {
 export function deliveryPct(
   ratio: number,
   target: number,
-  digits = 0,
+  digits = 1,
 ): string {
   if (!(target > 0) || !Number.isFinite(ratio)) return "—";
+  if (digits === 1) return formatUnitPct(ratio);
   return `${(ratio * 100).toFixed(digits)}%`;
 }
 
 /** Composite / pillar scores are already 0–100. */
 export function scorePct(score: number | null | undefined, digits = 1): string {
   if (score == null || !Number.isFinite(score)) return "—";
+  if (digits === 1) return formatPct(score);
   return `${score.toFixed(digits)}%`;
 }
 

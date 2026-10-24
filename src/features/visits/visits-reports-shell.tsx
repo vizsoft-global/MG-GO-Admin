@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatPct } from "@/lib/format/percent";
 import { queryKeys } from "@/lib/query/query-keys";
 import { selectOptionsFrom } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
@@ -179,7 +180,7 @@ function toCsv(
       r.visits,
       r.completed,
       r.noShows,
-      r.visits > 0 ? `${Math.round((r.completed / r.visits) * 100)}%` : "0%",
+      r.visits > 0 ? formatPct((r.completed / r.visits) * 100) : formatPct(0),
       r.avgWait ?? "",
     ]
       .map((v) => `"${String(v).replace(/"/g, '""')}"`)
@@ -446,7 +447,7 @@ export function VisitsReportsShell() {
           icon={<Activity className="h-3.5 w-3.5" />}
           iconClass="bg-danger/10 text-danger"
           label={t("reports.noShowRate")}
-          value={`${summary.noShowRate}%`}
+          value={formatPct(summary.noShowRate)}
           valueClass="text-danger"
           hint={priorHint}
           delta={
@@ -587,7 +588,7 @@ export function VisitsReportsShell() {
                   <TableCell className="tabular-nums">{dept.completed}</TableCell>
                   <TableCell className="tabular-nums">{dept.noShows}</TableCell>
                   <TableCell className="tabular-nums text-muted-foreground">
-                    {dept.visits > 0 ? `${Math.round((dept.completed / dept.visits) * 100)}%` : "0%"}
+                    {dept.visits > 0 ? formatPct((dept.completed / dept.visits) * 100) : formatPct(0)}
                   </TableCell>
                   <TableCell className="tabular-nums text-muted-foreground">
                     {dept.avgWait != null

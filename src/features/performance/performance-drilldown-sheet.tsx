@@ -94,7 +94,7 @@ function DrilldownBody({
               />
               <MetricBlock
                 label={t("colUtilization")}
-                value={pct(detail.utilization, 0)}
+                value={pct(detail.utilization)}
                 hint={t("daysHint", {
                   worked: detail.worked_days,
                   eligible: detail.eligible_days,
@@ -105,7 +105,7 @@ function DrilldownBody({
                 value={
                   detail.compliance_score == null
                     ? "—"
-                    : `${Math.round(detail.compliance_score)}%`
+                    : scorePct(detail.compliance_score)
                 }
                 hint={t("exceptionsCount", {
                   count: detail.penalised_exception_count,

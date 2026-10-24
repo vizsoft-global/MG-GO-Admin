@@ -193,7 +193,7 @@ export function DriverPerformanceTab({
               value={
                 row.compliance_score == null
                   ? "—"
-                  : `${Math.round(row.compliance_score)}%`
+                  : scorePct(row.compliance_score)
               }
               hint={tDriver("performanceExceptionsHint", {
                 count: row.penalised_exception_count,
@@ -262,7 +262,7 @@ export function DriverPerformanceTab({
                     <td className="px-2 py-1.5 text-end font-semibold tabular-nums">
                       {day.compliance_score == null
                         ? "—"
-                        : `${Math.round(day.compliance_score)}%`}
+                        : scorePct(day.compliance_score)}
                     </td>
                     {components.map((component) => {
                       const value = componentPct(
@@ -279,7 +279,7 @@ export function DriverPerformanceTab({
                               : undefined,
                           )}
                         >
-                          {value == null ? "—" : `${Math.round(value)}%`}
+                          {value == null ? "—" : scorePct(value)}
                         </td>
                       );
                     })}

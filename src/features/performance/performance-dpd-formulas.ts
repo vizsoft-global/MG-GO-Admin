@@ -1,3 +1,4 @@
+import { formatUnitPct } from "@/lib/format/percent";
 import type { DpdEfficiencyRider } from "./performance-types";
 
 /** Raw actual / target. Null when target is missing or zero — never divide by zero. */
@@ -23,8 +24,7 @@ export function dpdRiderRate(
 }
 
 export function formatUncappedPct(ratio: number | null): string {
-  if (ratio == null || !Number.isFinite(ratio)) return "—";
-  return `${(Math.round(ratio * 1000) / 10).toFixed(1)}%`;
+  return formatUnitPct(ratio);
 }
 
 /**

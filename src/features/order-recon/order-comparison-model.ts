@@ -1,3 +1,5 @@
+import { formatUnitPct } from "@/lib/format/percent";
+
 export const COMPARISON_RESULTS = [
   "match",
   "am_higher",
@@ -388,8 +390,7 @@ export function ridersWithDayDiff(riders: ComparisonRider[], dayIndex: number): 
 }
 
 export function formatPct(value: number | null): string {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return `${(value * 100).toFixed(1)}%`;
+  return formatUnitPct(value);
 }
 
 export function avgPerDay(am: number, workedDays: number): number {

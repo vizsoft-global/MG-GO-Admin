@@ -5,6 +5,7 @@ import {
   type LeavePlanRow,
   type PlainRow,
 } from "@/features/operations-dashboard/shape";
+import { formatPct } from "@/lib/format/percent";
 
 export type PortalKpis = {
   assigned: number;
@@ -231,11 +232,16 @@ function rateLabel(value: unknown): string {
   if (row) {
     const rate = pick(row, ["rate"]);
     if (rate == null || rate === "") return "";
-    return `${num(rate)}%`;
+    return formatPct(num(rate));
   }
   const plain = text(value);
   if (!plain) return "";
-  return plain.endsWith("%") ? plain : `${plain}%`;
+  if (plain.endsWith("%")) {
+    const parsed = Number(plain.slice(0, -1).trim());
+    return Number.isFinite(parsed) ? formatPct(parsed) : plain;
+  }
+  const parsed = Number(plain);
+  return Number.isFinite(parsed) ? formatPct(parsed) : `${plain}%`;
 }
 
 function readTurnover(raw: unknown): Turnover {

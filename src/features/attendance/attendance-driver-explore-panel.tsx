@@ -8,6 +8,7 @@ import { AppEmptyState } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { Input } from "@/components/ui/input";
 import { StatusPill } from "@/components/dashboard/status-pill";
+import { formatPct } from "@/lib/format/percent";
 import { componentPct } from "@/features/performance/performance-formulas";
 import { componentLabel } from "@/features/performance/performance-component-breakdown";
 import {
@@ -102,7 +103,7 @@ function AttendanceComplianceBreakdown({
                 <td className="px-2 py-1.5 text-end font-semibold tabular-nums">
                   {row.compliance_score == null
                     ? "—"
-                    : `${Math.round(row.compliance_score)}%`}
+                    : formatPct(row.compliance_score)}
                 </td>
                 {components.map((c) => {
                   const value = componentPct(row.component_scores, c.key);
@@ -114,7 +115,7 @@ function AttendanceComplianceBreakdown({
                         value == null ? "text-muted-foreground" : undefined,
                       )}
                     >
-                      {value == null ? "—" : `${Math.round(value)}%`}
+                      {value == null ? "—" : formatPct(value)}
                     </td>
                   );
                 })}

@@ -29,6 +29,7 @@ import { cloneNotificationCampaign } from "./notifications-actions";
 import { NotificationsTabBar } from "./notifications-tab-bar";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { useInfiniteNotificationCampaigns, useNotificationDashboard } from "./use-notifications";
+import { formatPct } from "@/lib/format/percent";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
 
 function formatDateTime(iso: string | null): string {
@@ -132,11 +133,11 @@ export function NotificationsPageShell() {
           { label: t("kpiDrafts"), value: kpisLoading ? "…" : String(kpis?.drafts ?? 0) },
           {
             label: t("kpiDeliveryRate"),
-            value: kpisLoading ? "…" : `${kpis?.deliveryRate ?? 0}%`,
+            value: kpisLoading ? "…" : formatPct(kpis?.deliveryRate ?? 0),
           },
           {
             label: t("kpiOpenRate"),
-            value: kpisLoading ? "…" : `${kpis?.openRate ?? 0}%`,
+            value: kpisLoading ? "…" : formatPct(kpis?.openRate ?? 0),
           },
           { label: t("kpiFailed"), value: kpisLoading ? "…" : String(kpis?.failedDeliveries ?? 0) },
           {

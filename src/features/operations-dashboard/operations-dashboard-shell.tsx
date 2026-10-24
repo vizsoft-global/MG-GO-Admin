@@ -21,6 +21,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { downloadCsv } from "@/lib/csv/client-download";
+import { formatPct, roundPercent } from "@/lib/format/percent";
 import { selectOptions } from "@/lib/select-items";
 import { useRouter } from "@/i18n/navigation";
 import {
@@ -685,7 +686,7 @@ export function OperationsDashboardShell() {
         <Tile label={t("kpiOnLeave")} value={data?.kpis.onLeave ?? 0} color="#1565c0" />
         <Tile label={t("kpiAbsent")} value={data?.kpis.absent ?? 0} color="#c62828" valueColor="#b71c1c" />
         <Tile label={t("kpiSick")} value={data?.kpis.sick ?? 0} color="#e8710a" valueColor="#b45309" />
-        <Tile label={t("kpiWorkingRate")} value={`${data?.kpis.workingRate ?? 0}%`} color="#0f6e78" />
+        <Tile label={t("kpiWorkingRate")} value={formatPct(data?.kpis.workingRate ?? 0)} color="#0f6e78" />
         <Tile label={t("kpiAccident")} value={data?.kpis.accident ?? 0} color="#5c6370" />
       </div>
 
@@ -737,7 +738,7 @@ export function OperationsDashboardShell() {
                     <div className="flex items-center gap-2">
                       <StackBar row={project} />
                       <span className="text-xs text-[#5c6370]">
-                        {t("workingShare", { pct: project.assigned ? Math.round((project.working / project.assigned) * 100) : 0 })}
+                        {t("workingShare", { pct: project.assigned ? roundPercent((project.working / project.assigned) * 100) : 0 })}
                       </span>
                     </div>
                   </TableCell>
@@ -752,7 +753,7 @@ export function OperationsDashboardShell() {
                 <TableCell>{projectTotals.sick}</TableCell>
                 <TableCell>{projectTotals.other}</TableCell>
                 <TableCell className="text-xs text-[#5c6370]">
-                  {t("workingShare", { pct: projectTotals.assigned ? Math.round((projectTotals.working / projectTotals.assigned) * 100) : 0 })}
+                  {t("workingShare", { pct: projectTotals.assigned ? roundPercent((projectTotals.working / projectTotals.assigned) * 100) : 0 })}
                 </TableCell>
               </TableRow>
             </TableBody>
@@ -770,7 +771,7 @@ export function OperationsDashboardShell() {
         </div>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {(data?.employeeStatus ?? []).map((tile) => {
-            const share = statusTotal === 0 ? 0 : Math.round((tile.count / statusTotal) * 100);
+            const share = statusTotal === 0 ? 0 : roundPercent((tile.count / statusTotal) * 100);
             return (
               <div key={tile.key} className="rounded-lg border p-3" style={{ borderColor: employeeColor(tile.key) }}>
                 <p className="text-xs" style={{ color: employeeColor(tile.key) }}>{employeeLabel(tile.key, t)}</p>

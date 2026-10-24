@@ -27,6 +27,7 @@ import {
   YAxis,
 } from "recharts";
 import { AppEmptyState } from "@/components/app";
+import { formatPct } from "@/lib/format/percent";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { Card, CardContent } from "@/components/ui/card";
@@ -468,7 +469,7 @@ function TrendKpis({ trend }: { trend: PerformanceTrend }) {
         },
         {
           label: t("kpiSla"),
-          value: now.sla_rate == null ? "—" : `${now.sla_rate}%`,
+          value: formatPct(now.sla_rate),
           icon: Timer,
           caption: <DeltaChip value={delta(now.sla_rate, prev.sla_rate)} />,
         },
