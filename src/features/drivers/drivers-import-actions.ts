@@ -1301,7 +1301,7 @@ export async function applyOneImportRow(
       credential = {
         rowIndex: row.rowIndex,
         full_name: row.full_name!.trim(),
-        employee_id: employeeId,
+        employee_id: employeeId ?? "",
         driver_code: driverCode ?? "",
         passcode: result.passcode,
         phone,
