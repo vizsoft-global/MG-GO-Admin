@@ -64,7 +64,7 @@ export function resolveExportColumnIds(
     ...customFields.map((field) => customExportColumnId(field.key)),
   ]);
   const picked = new Set(selected.filter((id) => allowed.has(id)));
-  const catalogIds = DRIVER_EXPORT_COLUMNS.map((column) => column.id).filter(
+  const catalogIds: string[] = DRIVER_EXPORT_COLUMNS.map((column) => column.id).filter(
     (id) => PINNED_EXPORT_IDS.has(id) || picked.has(id),
   );
   const extra = selected.filter(
