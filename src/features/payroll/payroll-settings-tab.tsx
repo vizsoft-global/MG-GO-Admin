@@ -41,13 +41,13 @@ import {
 } from "./payroll-rules-engine";
 import {
   conditionsToColumns,
-  columnsToConditions,
   payrollRulesSavePayload,
-  readsAs,
   summariseAudit,
+  zoneEditConditions,
   type RuleTableRow,
   type ZoneCategoryColumn,
 } from "./payroll-rule-table-model";
+import { PayrollRuleCriteria } from "./payroll-rule-criteria";
 import {
   useAddPayrollClient,
   useDeletePayrollClient,
@@ -145,13 +145,13 @@ export function PayrollSettingsTab({
   const [addName, setAddName] = useState("");
   const [addCopy, setAddCopy] = useState("none");
   const [addUsesZone, setAddUsesZone] = useState(true);
-  const [addUsesOrders, setAddUsesOrders] = useState(true);
-  const [addUsesHours, setAddUsesHours] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [simZoneName, setSimZoneName] = useState("any");
   const [simZone, setSimZone] = useState<ZoneCategory>("good");
   const [simOrders, setSimOrders] = useState("6");
   const [simHours, setSimHours] = useState("12");
+  const [simDpd, setSimDpd] = useState("");
+  const [simRiders, setSimRiders] = useState("");
   const [saveFlash, setSaveFlash] = useState<"idle" | "saving" | "saved">("idle");
 
   const skipRulesSave = useRef(true);
@@ -210,11 +210,15 @@ export function PayrollSettingsTab({
       conditions: r.conditions,
       result: r.result,
     }));
+    const dpd = simDpd.trim() === "" ? null : Number(simDpd);
+    const riders = simRiders.trim() === "" ? null : Number(simRiders);
     const facts = {
       zoneName: simZoneName === "any" ? null : simZoneName,
       zoneCategory: simZone,
       orders,
       hours,
+      dpd: dpd != null && Number.isFinite(dpd) ? dpd : null,
+      riders: riders != null && Number.isFinite(riders) ? riders : null,
     };
     if (!client) {
       const outcome = evalDay({
@@ -260,7 +264,7 @@ export function PayrollSettingsTab({
         customHours: client.defaultResult.hours ?? null,
       }),
     };
-  }, [simOrders, simHours, simZone, simZoneName, clientDraft, clientKey, rules, month.key]);
+  }, [simOrders, simHours, simDpd, simRiders, simZone, simZoneName, clientDraft, clientKey, rules, month.key]);
 
   function markSaving() {
     setSaveFlash("saving");
@@ -381,8 +385,8 @@ export function PayrollSettingsTab({
       {
         name,
         usesZone: addUsesZone,
-        usesOrders: addUsesOrders,
-        usesHours: addUsesHours,
+        usesOrders: true,
+        usesHours: false,
         copyFrom: addCopy === "none" ? null : addCopy,
         monthKey: month.key,
       },
@@ -444,9 +448,21 @@ export function PayrollSettingsTab({
         return {
           ...rule,
           label: patch.label ?? rule.label,
-          conditions: columnsToConditions(nextRow, uses),
+          conditions: zoneEditConditions(rule.conditions, nextRow, uses.usesZone),
           result: { kind: nextRow.result.kind, hours: nextRow.result.hours ?? null },
         };
+      }),
+    );
+  }
+
+  function patchCriteria(index: number, criteria: PayrollRuleCondition[]) {
+    setRules((prev) =>
+      prev.map((rule, i) => {
+        if (i !== index) return rule;
+        const zone = uses.usesZone
+          ? rule.conditions.filter((condition) => condition.field === "zone" || condition.field === "zone_category")
+          : [];
+        return { ...rule, conditions: [...zone, ...criteria] };
       }),
     );
   }
@@ -530,12 +546,6 @@ export function PayrollSettingsTab({
           <div className="flex flex-wrap gap-1.5">
             <ToggleChip selected={addUsesZone} icon={MapPin} onClick={() => setAddUsesZone((v) => !v)}>
               {t("criteria.usesZone")}
-            </ToggleChip>
-            <ToggleChip selected={addUsesOrders} icon={Check} onClick={() => setAddUsesOrders((v) => !v)}>
-              {t("criteria.usesOrders")}
-            </ToggleChip>
-            <ToggleChip selected={addUsesHours} icon={History} onClick={() => setAddUsesHours((v) => !v)}>
-              {t("criteria.usesHours")}
             </ToggleChip>
           </div>
           <div className="flex gap-2">
@@ -669,20 +679,6 @@ export function PayrollSettingsTab({
               >
                 {t("criteria.usesZone")}
               </ToggleChip>
-              <ToggleChip
-                selected={clientDraft.usesOrders}
-                icon={Check}
-                onClick={() => canManage && patchClient({ usesOrders: !clientDraft.usesOrders })}
-              >
-                {t("criteria.usesOrders")}
-              </ToggleChip>
-              <ToggleChip
-                selected={clientDraft.usesHours}
-                icon={History}
-                onClick={() => canManage && patchClient({ usesHours: !clientDraft.usesHours })}
-              >
-                {t("criteria.usesHours")}
-              </ToggleChip>
             </div>
           </div>
 
@@ -704,10 +700,7 @@ export function PayrollSettingsTab({
                         {
                           uid: nextUid(),
                           label: "",
-                          conditions: columnsToConditions(
-                            { ...conditionsToColumns([], { kind: "12", hours: null }), result: { kind: "12", hours: null } },
-                            uses,
-                          ),
+                          conditions: [],
                           result: { kind: "12", hours: null },
                         },
                       ])
@@ -752,12 +745,7 @@ export function PayrollSettingsTab({
                         <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.colZone")}</th>
                       </>
                     ) : null}
-                    {uses.usesHours ? (
-                      <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.colHours")}</th>
-                    ) : null}
-                    {uses.usesOrders ? (
-                      <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.colOrders")}</th>
-                    ) : null}
+                    <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.colCriteria")}</th>
                     <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.colThen")}</th>
                     <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.colReadsAs")}</th>
                     <th className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>{t("rules.actions")}</th>
@@ -817,46 +805,13 @@ export function PayrollSettingsTab({
                               </td>
                             </>
                           ) : null}
-                          {uses.usesHours ? (
-                            <td className="px-2 py-2">
-                              <HoursRangeInputs
-                                row={row}
-                                disabled={!canManage}
-                                onChange={(patch) => patchRuleRow(index, patch)}
-                              />
-                            </td>
-                          ) : null}
-                          {uses.usesOrders ? (
-                            <td className="px-2 py-2">
-                              <div className="flex items-center gap-1">
-                                <Input
-                                  className="h-9 w-16"
-                                  inputMode="numeric"
-                                  placeholder="min"
-                                  value={row.ordersMin ?? ""}
-                                  disabled={!canManage}
-                                  onChange={(e) =>
-                                    patchRuleRow(index, {
-                                      ordersMin: e.target.value === "" ? null : Number(e.target.value),
-                                    })
-                                  }
-                                />
-                                <span className="text-xs text-muted-foreground">–</span>
-                                <Input
-                                  className="h-9 w-16"
-                                  inputMode="numeric"
-                                  placeholder="max"
-                                  value={row.ordersMax ?? ""}
-                                  disabled={!canManage}
-                                  onChange={(e) =>
-                                    patchRuleRow(index, {
-                                      ordersMax: e.target.value === "" ? null : Number(e.target.value),
-                                    })
-                                  }
-                                />
-                              </div>
-                            </td>
-                          ) : null}
+                          <td className="px-2 py-2">
+                            <PayrollRuleCriteria
+                              conditions={rule.conditions}
+                              disabled={!canManage}
+                              onChange={(criteria) => patchCriteria(index, criteria)}
+                            />
+                          </td>
                           <td className="px-2 py-2">
                             <div className="flex flex-col gap-1">
                               <Select
@@ -897,7 +852,14 @@ export function PayrollSettingsTab({
                             </div>
                           </td>
                           <td className="max-w-[220px] px-2 py-2 text-xs leading-4 text-muted-foreground">
-                            {readsAs(row, uses) || "—"}
+                            {rule.conditions
+                              .map((condition) => {
+                                const value = Array.isArray(condition.value)
+                                  ? condition.value.join(", ")
+                                  : String(condition.value);
+                                return `${t(`field.${condition.field}`)} ${t(`op.${condition.op}`)} ${value}`;
+                              })
+                              .join(` ${t("rules.and")} `) || "—"}
                           </td>
                           <td className="px-2 py-2">
                             {canManage ? (
@@ -939,8 +901,7 @@ export function PayrollSettingsTab({
                     <td className="px-2 py-2 text-xs font-semibold" colSpan={uses.usesZone ? 3 : 1}>
                       {t("rules.defaultRow")}
                     </td>
-                    {uses.usesHours ? <td /> : null}
-                    {uses.usesOrders ? <td /> : null}
+                    <td />
                     <td className="px-2 py-2">
                       <Select
                         value={clientDraft.defaultResult.kind}
@@ -1038,6 +999,30 @@ export function PayrollSettingsTab({
                   onChange={(e) => setSimHours(e.target.value)}
                 />
               </div>
+              <div className="space-y-1">
+                <Label htmlFor="payroll-sim-dpd" className="text-xs">
+                  {t("simulator.dpd")}
+                </Label>
+                <Input
+                  id="payroll-sim-dpd"
+                  className="h-9 w-24"
+                  inputMode="decimal"
+                  value={simDpd}
+                  onChange={(e) => setSimDpd(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="payroll-sim-riders" className="text-xs">
+                  {t("simulator.riders")}
+                </Label>
+                <Input
+                  id="payroll-sim-riders"
+                  className="h-9 w-24"
+                  inputMode="numeric"
+                  value={simRiders}
+                  onChange={(e) => setSimRiders(e.target.value)}
+                />
+              </div>
             </div>
             {simulator ? (
               <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/50 bg-emerald-50 px-3 py-2 text-xs text-emerald-900">
@@ -1116,60 +1101,6 @@ export function PayrollSettingsTab({
           isPending={deleteClient.isPending}
         />
       ) : null}
-    </div>
-  );
-}
-
-function HoursRangeInputs({
-  row,
-  disabled,
-  onChange,
-}: {
-  row: RuleTableRow;
-  disabled: boolean;
-  onChange: (patch: Partial<RuleTableRow>) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      <Select
-        value={row.hoursMinOp}
-        onValueChange={(op) => onChange({ hoursMinOp: (op as "gte" | "gt") ?? "gte" })}
-      >
-        <SelectTrigger className="h-9 w-16" disabled={disabled}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="gte">≥</SelectItem>
-          <SelectItem value="gt">&gt;</SelectItem>
-        </SelectContent>
-      </Select>
-      <Input
-        className="h-9 w-14"
-        inputMode="decimal"
-        value={row.hoursMin ?? ""}
-        disabled={disabled}
-        onChange={(e) => onChange({ hoursMin: e.target.value === "" ? null : Number(e.target.value) })}
-      />
-      <span className="text-xs text-muted-foreground">and</span>
-      <Select
-        value={row.hoursMaxOp}
-        onValueChange={(op) => onChange({ hoursMaxOp: (op as "lt" | "lte") ?? "lt" })}
-      >
-        <SelectTrigger className="h-9 w-16" disabled={disabled}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="lt">&lt;</SelectItem>
-          <SelectItem value="lte">≤</SelectItem>
-        </SelectContent>
-      </Select>
-      <Input
-        className="h-9 w-14"
-        inputMode="decimal"
-        value={row.hoursMax ?? ""}
-        disabled={disabled}
-        onChange={(e) => onChange({ hoursMax: e.target.value === "" ? null : Number(e.target.value) })}
-      />
     </div>
   );
 }

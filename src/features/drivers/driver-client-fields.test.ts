@@ -149,9 +149,9 @@ describe("templateGuideAoa", () => {
     const nameRow = aoa.find((row) => row[0] === "Full Name")!;
     assert.equal(nameRow[1], "Required");
 
-    const zoneRow = aoa.find((row) => row[0] === "Zone ID")!;
+    const zoneRow = aoa.find((row) => row[0] === "Zone")!;
     assert.equal(zoneRow[1], "If no restaurant");
-    const restaurantRow = aoa.find((row) => row[0] === "Restaurant IDs")!;
+    const restaurantRow = aoa.find((row) => row[0] === "Restaurant")!;
     assert.equal(restaurantRow[1], "If no zone");
   });
 });
@@ -167,8 +167,8 @@ describe("templateDriversAoa", () => {
     const headers = aoa[0]!;
     const restaurantOnly = aoa[1]!;
     const zoneOnly = aoa[2]!;
-    const zoneAt = headers.indexOf("Zone ID");
-    const restaurantAt = headers.indexOf("Restaurant IDs");
+    const zoneAt = headers.indexOf("Zone");
+    const restaurantAt = headers.indexOf("Restaurant");
     assert.ok(zoneAt >= 0 && restaurantAt >= 0);
     assert.equal(restaurantOnly[restaurantAt], "RST-0001");
     assert.equal(restaurantOnly[zoneAt], "");

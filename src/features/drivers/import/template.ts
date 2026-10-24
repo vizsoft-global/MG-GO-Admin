@@ -62,22 +62,30 @@ const STANDARD_COLUMNS: Array<
   {
     field: "employee_id",
     header: "MG ID",
-    allowed: "Letters and digits, 1 to 100 characters. Unique — this is half the app login. Used to match an existing driver on Update.",
+    allowed:
+      "Letters and digits, 1 to 100 characters. Unique — this is half the app login. Used to match an existing driver on Update. Client ID is a second match key when MG ID is blank.",
     example: "EMP2048",
   },
   {
-    field: "zone_id",
-    header: "Zone ID",
+    field: "client_id",
+    header: "Client ID",
     allowed:
-      "Zone UUID from the Zones sheet ID column. Code or unique name also match. Required if Restaurant IDs is blank — a driver needs a zone or a restaurant.",
-    example: "55555555-5555-4555-8555-555555555555",
+      "Any text up to 64 characters. Riders on one platform contract may share it. Unique Client ID matches an existing rider when MG ID is blank. Two people with the same Client ID need MG ID. `-` clears.",
+    example: "105913",
+  },
+  {
+    field: "zone_id",
+    header: "Zone",
+    allowed:
+      "Zone name, code, or UUID from the Zones sheet. Required if Restaurant is blank — a driver needs a zone or a restaurant.",
+    example: "Hawally",
   },
   {
     field: "restaurant_ids",
-    header: "Restaurant IDs",
+    header: "Restaurant",
     allowed:
       "Restaurant name, RST code, or UUID. Separate several with commas. See the Restaurants sheet. Required if Zone is blank — a driver needs a zone or a restaurant.",
-    example: "RST-0001",
+    example: "KFC FAHAHEEL",
   },
   {
     field: "phone",
@@ -94,8 +102,8 @@ const STANDARD_COLUMNS: Array<
   },
   {
     field: "partner_id",
-    header: "Partner",
-    allowed: "Partner name or UUID. See the Partners sheet.",
+    header: "Project",
+    allowed: "Project name or UUID. See the Partners sheet.",
     example: "",
   },
   {
@@ -132,12 +140,6 @@ const STANDARD_COLUMNS: Array<
     example: "",
   },
   {
-    field: "client_id",
-    header: "Client ID",
-    allowed: "Any text up to 64 characters. Riders on one platform contract may share it.",
-    example: "CLI-204",
-  },
-  {
     field: "client_name",
     header: "Platform",
     allowed: "Any text up to 120 characters.",
@@ -159,9 +161,9 @@ const STANDARD_COLUMNS: Array<
   },
   { field: "passport_number", header: "Passport", allowed: "Passport number, or `-` to clear. Blank on update leaves the stored value.", example: "P1234567" },
   { field: "nationality", header: "Country", allowed: "Country name or ISO code.", example: "India" },
-  { field: "employee_status_key", header: "Employee Status", allowed: "A status from the employee catalog, e.g. running. `-` clears.", example: "running" },
-  { field: "section_keys", header: "Section", allowed: "Section names, comma-separated. `-` clears every section.", example: "" },
-  { field: "project_key", header: "Project", allowed: "A project key such as keeta or americana. `-` clears.", example: "" },
+  { field: "employee_status_key", header: "Employee Status", allowed: "A status from the employee catalog, e.g. running. A blank cell is skipped and does not fail the row. `-` clears.", example: "running" },
+  { field: "section_keys", header: "Employee Category", allowed: "Section names, comma-separated. A blank cell is skipped. `-` clears every section.", example: "" },
+  { field: "project_key", header: "Project key", allowed: "A project key such as keeta or americana. `-` clears.", example: "" },
   { field: "accommodation", header: "Accommodation", allowed: "Free text. `-` clears.", example: "" },
   { field: "work_start_date", header: "Work Start", allowed: "Date YYYY-MM-DD or DD-MM-YYYY. Stored as work_start_date. `-` clears.", example: "2024-01-15" },
   { field: "screenshots_allowed", header: "Screenshots", allowed: "yes or no. `-` turns the flag off.", example: "no" },

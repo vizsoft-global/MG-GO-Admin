@@ -18,4 +18,4 @@ export type EffectiveUiPreference<T> = {
   userOverride: T | null;
 };
 
-export const DRIVERS_LIST_COLUMNS_PREF_KEY = "drivers.list.columns";
+export const DRIVERS_LIST_COLUMNS_PREF_KEY = "drivers.list.columns.v2";

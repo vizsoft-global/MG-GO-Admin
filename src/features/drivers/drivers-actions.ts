@@ -130,6 +130,22 @@ async function requireDriversManager(verb: "create" | "edit" | "delete" = "edit"
   return { session };
 }
 
+async function requireDriversArchiver() {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !(
+      hasPermissionInSet(session.permissions, "drivers.delete", session.isSuperAdmin) ||
+      hasPermissionInSet(session.permissions, "drivers.bulk_delete", session.isSuperAdmin)
+    )
+  ) {
+    return { error: "not_authorized" as const };
+  }
+  return { session };
+}
+
+const BULK_ARCHIVE_CAP = 500;
+
 async function requireDriversView() {
   const session = await getSessionUser();
   if (
@@ -1162,6 +1178,58 @@ export async function archiveDriverIntake(
   });
 
   return { success: true, id: intakeId };
+}
+
+export async function archiveDriverIntakes(
+  intakeIds: string[],
+  reason: string,
+): Promise<{ archived: number; failed: number; truncated: boolean; error?: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) {
+    return { archived: 0, failed: 0, truncated: false, error: "not_authorized" };
+  }
+  const auth = await requireDriversArchiver();
+  if (auth.error) {
+    return { archived: 0, failed: 0, truncated: false, error: auth.error };
+  }
+  const archiveReason = reason.trim();
+  if (!archiveReason) {
+    return { archived: 0, failed: 0, truncated: false, error: "missing_archive_reason" };
+  }
+  const unique = [...new Set(intakeIds.map((id) => id.trim()).filter(Boolean))];
+  const truncated = unique.length > BULK_ARCHIVE_CAP;
+  const batch = unique.slice(0, BULK_ARCHIVE_CAP);
+  if (batch.length === 0) {
+    return { archived: 0, failed: 0, truncated: false, error: "missing_fields" };
+  }
+
+  const db = await staffClient();
+  let archived = 0;
+  let failed = 0;
+  for (const intakeId of batch) {
+    const { data, error } = await db.rpc("archive_driver_intake", {
+      p_intake_id: intakeId,
+      p_archive_reason: archiveReason,
+    });
+    const payload = (data ?? {}) as { ok?: boolean };
+    if (error || !payload.ok) {
+      failed += 1;
+      continue;
+    }
+    archived += 1;
+    const { data: row } = await db
+      .from("driver_intakes")
+      .select("linked_profile_id")
+      .eq("id", intakeId)
+      .maybeSingle();
+    void logDriverChange({
+      intakeId,
+      driverId: row?.linked_profile_id,
+      source: "archive",
+      context: { note: "archive" },
+    });
+  }
+  return { archived, failed, truncated };
 }
 
 export async function restoreDriverIntake(

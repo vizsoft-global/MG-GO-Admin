@@ -14,11 +14,17 @@ export function DriverArchiveDialog({
   onOpenChange,
   pending,
   onConfirm,
+  title,
+  subtitle,
+  confirmLabel,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pending: boolean;
   onConfirm: (reason: string) => void | Promise<void>;
+  title?: string;
+  subtitle?: string;
+  confirmLabel?: string;
 }) {
   const t = useTranslations("pages.driverDetail");
   const tCommon = useTranslations("common");
@@ -79,7 +85,10 @@ export function DriverArchiveDialog({
             ) : null}
           </div>
         </div>
-        <AppModalFooter title={t("archiveDriver")} subtitle={t("archiveConfirm")}>
+        <AppModalFooter
+          title={title ?? t("archiveDriver")}
+          subtitle={subtitle ?? t("archiveConfirm")}
+        >
           <Button
             type="button"
             variant="outline"
@@ -98,7 +107,11 @@ export function DriverArchiveDialog({
             onClick={() => void handleConfirm()}
             disabled={pending || invalid}
           >
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : t("archiveDriver")}
+            {pending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              (confirmLabel ?? t("archiveDriver"))
+            )}
           </Button>
         </AppModalFooter>
       </DialogContent>

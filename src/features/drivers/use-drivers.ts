@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   archiveDriverIntake,
+  archiveDriverIntakes,
   restoreDriverIntake,
   fetchDriverDetail,
   fetchDriverDeviceOverview,
@@ -106,6 +107,26 @@ export function useArchiveDriverIntake() {
     },
     onSuccess: async (_data, { intakeId }) => {
       await invalidateDriverCaches(queryClient, { intakeId });
+    },
+  });
+}
+
+export function useArchiveDriverIntakes() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      intakeIds,
+      reason,
+    }: {
+      intakeIds: string[];
+      reason: string;
+    }) => {
+      const result = await archiveDriverIntakes(intakeIds, reason);
+      if (result.error && result.archived === 0) throw new Error(result.error);
+      return result;
+    },
+    onSuccess: async () => {
+      await invalidateDriverCaches(queryClient);
     },
   });
 }

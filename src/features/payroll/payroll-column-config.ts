@@ -86,13 +86,19 @@ export function configByKey(
   return map;
 }
 
+const STALE_COLUMN_LABELS: Record<string, readonly string[]> = {
+  restaurant: ["Client Name", "اسم العميل"],
+  partner: ["Partner", "الشريك"],
+};
+
 export function resolveColumnLabel(
   columnKey: string,
   fallback: string,
   config: ReadonlyMap<string, PayrollColumnConfigRow>,
 ): string {
   const custom = config.get(columnKey)?.label?.trim();
-  return custom || fallback;
+  if (!custom || STALE_COLUMN_LABELS[columnKey]?.includes(custom)) return fallback;
+  return custom;
 }
 
 export function columnHiddenIn(

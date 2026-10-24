@@ -333,7 +333,7 @@ export function ApplicationAttendanceTab({
                       const identityField = payrollIdentityField(column.id);
                       const display =
                         column.id === "status" ? (
-                          <PayrollStatusCell row={row} today={today} canEdit={canManage} />
+                          <PayrollStatusCell row={row} today={today} canEdit={false} />
                         ) : identityField ? (
                           <PayrollIdentityCell
                             driverId={row.driverId}

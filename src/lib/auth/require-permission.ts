@@ -1,10 +1,19 @@
 import { redirect } from "@/i18n/navigation";
 import { getAppOpsSettings } from "./app-settings";
-import { getSessionOutcome } from "./get-session";
+import { getSessionOutcome, type SessionUser } from "./get-session";
 import { hasPermissionInSet, type Permission } from "./permissions";
+import { SessionUnprovenError } from "./session-unproven";
 import { panelGate } from "./staff-entry";
 
-export async function requireAuth(locale: string) {
+export type PanelAuth =
+  | { status: "ok"; session: SessionUser }
+  | { status: "unavailable" };
+
+/**
+ * Dashboard layout uses this so an unproven cookie paints SessionRecover
+ * instead of throwing into error.tsx. Pages still call requireAuth.
+ */
+export async function resolvePanelAuth(locale: string): Promise<PanelAuth> {
   const [{ session, unavailable, notAuthorized }, ops] = await Promise.all([
     getSessionOutcome(),
     getAppOpsSettings(),
@@ -24,11 +33,7 @@ export async function requireAuth(locale: string) {
 
   switch (gate) {
     case "unavailable":
-      // The auth backend did not answer, so the session is unproven rather than
-      // absent. Redirecting to /login here is a logout caused by a backend blip;
-      // throwing hands the request to the locale error boundary, which keeps the
-      // admin signed in and offers a retry.
-      throw new Error("auth_backend_unavailable");
+      return { status: "unavailable" };
     case "not_authorized":
       redirect({ href: "/login?error=not_authorized", locale });
       break;
@@ -53,9 +58,23 @@ export async function requireAuth(locale: string) {
   }
 
   if (!session) {
-    throw new Error("Unauthenticated");
+    return { status: "unavailable" };
   }
-  return session;
+  return { status: "ok", session };
+}
+
+export async function requireAuth(locale: string) {
+  const auth = await resolvePanelAuth(locale);
+  switch (auth.status) {
+    case "ok":
+      return auth.session;
+    case "unavailable":
+      throw new SessionUnprovenError();
+    default: {
+      const neverAuth: never = auth;
+      throw new Error(`unhandled panel auth: ${String(neverAuth)}`);
+    }
+  }
 }
 
 export async function requirePermission(locale: string, permission: Permission) {

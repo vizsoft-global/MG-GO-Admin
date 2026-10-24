@@ -6,6 +6,7 @@ import {
   payrollRulesSavePayload,
   readsAs,
   summariseAudit,
+  zoneEditConditions,
   type RuleTableRow,
 } from "./payroll-rule-table-model";
 import type { PayrollRuleCondition } from "./payroll-rules-engine";
@@ -148,5 +149,32 @@ describe("payrollRulesSavePayload", () => {
     assert.ok(Array.isArray(payload[0].conditions));
     assert.equal(payload[0].sortOrder, 1);
     assert.deepEqual(payload[0].conditions, [{ field: "hours", op: "gte", value: 6 }]);
+  });
+});
+
+describe("zoneEditConditions", () => {
+  it("keeps hours, DPD and rider criteria when the zone cell changes", () => {
+    const existing: PayrollRuleCondition[] = [
+      { field: "zone", op: "eq", value: "Old" },
+      { field: "hours", op: "gte", value: 0 },
+      { field: "hours", op: "lt", value: 12 },
+      { field: "dpd", op: "lt", value: 6 },
+      { field: "riders", op: "gte", value: 10 },
+    ];
+    const row = conditionsToColumns(existing, { kind: "12", hours: null });
+    row.zone = "Khiran";
+    row.zoneCategory = "low";
+    const next = zoneEditConditions(existing, row, true);
+    assert.deepEqual(
+      next.map((condition) => [condition.field, condition.op, condition.value]),
+      [
+        ["zone_category", "eq", "low"],
+        ["zone", "eq", "Khiran"],
+        ["hours", "gte", 0],
+        ["hours", "lt", 12],
+        ["dpd", "lt", 6],
+        ["riders", "gte", 10],
+      ],
+    );
   });
 });

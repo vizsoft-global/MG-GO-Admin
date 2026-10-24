@@ -286,7 +286,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
 
   return (
     <PayrollStatusContextProvider
-      value={{ canEdit: canManage, labels: statusLabels, savingId, save: saveStatus }}
+      value={{ canEdit: tab === "attendance-orders" && canManage, labels: statusLabels, savingId, save: saveStatus }}
     >
     <AppPage className="space-y-2">
       <PayrollAdjustProvider>

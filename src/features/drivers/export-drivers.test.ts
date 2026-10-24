@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  EMPLOYEE_IDENTITY_COLUMN_IDS,
+  employeeSheetHeader,
+} from "./employee-sheet-columns";
+import {
   APP_CODE_EXPORT_ID,
   DRIVER_EXPORT_PINNED_IDS,
   buildDriversExportAoa,
@@ -47,30 +51,41 @@ function row(overrides: Partial<DriverListRow> = {}): DriverListRow {
     project_key: null,
     civil_id: null,
     passport_number: null,
+    vehicle_id: null,
+    vehicle_label: null,
+    vehicle_type_key: null,
     ...overrides,
   };
 }
 
 describe("resolveExportColumnIds", () => {
   it("keeps identity columns even when the operator cleared them", () => {
-    assert.deepEqual(resolveExportColumnIds(["phone"]), [
-      ...DRIVER_EXPORT_PINNED_IDS,
-      "phone",
-    ]);
+    assert.deepEqual(resolveExportColumnIds(["phone"]), [...DRIVER_EXPORT_PINNED_IDS]);
   });
 });
 
 describe("buildDriversExportAoa", () => {
   it("writes only the chosen columns", () => {
     const aoa = buildDriversExportAoa([row()], ["phone", "zone"]);
-    assert.deepEqual(aoa[0], [
-      "driver_code",
-      "employee_id",
-      "full_name",
-      "phone",
-      "zone",
+    assert.deepEqual(
+      aoa[0],
+      EMPLOYEE_IDENTITY_COLUMN_IDS.map((id) => employeeSheetHeader(id)),
+    );
+    assert.deepEqual(aoa[1], [
+      "CLI-1",
+      "EMP1",
+      "in_house",
+      "",
+      "",
+      "Ahmed Ali",
+      "99123456",
+      "Burger Hub",
+      "Hawally",
+      "",
+      "",
+      "Talabat",
+      "new",
     ]);
-    assert.deepEqual(aoa[1], ["10001", "EMP1", "Ahmed Ali", "99123456", "Hawally"]);
   });
 
   it("keeps the app code off the sheet unless the toggle is on", () => {

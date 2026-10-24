@@ -374,7 +374,9 @@ export function guessColumnMapping(
       "merchant id",
     ),
     nationality: find("country"),
-    rider_category: find("rider category", "category", "outsourced", "in house"),
+    rider_category:
+      find("rider category", "outsourced", "in house") ??
+      findExcept(["employee", "nationality"], "category"),
     // A company's Client ID is derived, so a "Company Client ID" column is never
     // the company itself.
     source_company: findExcept(
@@ -404,11 +406,16 @@ export function guessColumnMapping(
     active: find("active", "approve"),
     off_days: find("number of offs", "number of off", "off days", "off_days"),
     employee_status_key: find("employee status", "employee_status", "hr status", "hr_status"),
-    section_keys: find("employee section", "section", "sections"),
+    section_keys: find(
+      "employee category",
+      "employee section",
+      "section",
+      "sections",
+    ),
     nationality_category_keys:
       find("nationality category", "nationality_category", "nationality group") ??
       findExcept(["country"], "nationality"),
-    project_key: find("project", "project key", "project_key"),
+    project_key: find("project key", "project_key"),
     accommodation: find("accommodation", "housing"),
     work_start_date: find(
       "work start",
@@ -474,6 +481,14 @@ export function guessColumnMapping(
   for (const key of customFieldKeys) {
     const hit = find(key.replace(/_/g, " "), key);
     if (hit) mapping[customFieldColumnId(key) as DriverImportTargetField] = hit;
+  }
+
+  const exactProject = lower.find((h) => h.key === "project")?.raw;
+  if (exactProject) {
+    if (!mapping.partner_id) mapping.partner_id = exactProject;
+    else if (!mapping.project_key && mapping.partner_id !== exactProject) {
+      mapping.project_key = exactProject;
+    }
   }
 
   return mapping;

@@ -384,10 +384,24 @@ type DayFactsInput = {
   adjustment: RawPayrollAdjustment | null;
 };
 
+function zoneRuleFacts(metric: PayrollZoneMetricRow | null): { zoneDpd: number | null; zoneRiders: number | null } {
+  if (!metric) return { zoneDpd: null, zoneRiders: null };
+  const zoneDpd = metric.dpdUsed != null && metric.dpdUsed > 0 ? metric.dpdUsed : metric.dpd;
+  return { zoneDpd, zoneRiders: metric.riderDays };
+}
+
 function dayInfoFrom(
   date: string,
   facts: DayFactsInput,
-  ctx: { today: string; client: PayrollClientConfig | null; rules: PayrollRule[]; zoneName: string | null; zoneCategory: ZoneCategory },
+  ctx: {
+    today: string;
+    client: PayrollClientConfig | null;
+    rules: PayrollRule[];
+    zoneName: string | null;
+    zoneCategory: ZoneCategory;
+    zoneDpd?: number | null;
+    zoneRiders?: number | null;
+  },
 ): { status: DayStatus; info: PayrollDayInfo; unjustified: boolean } {
   const base = {
     date,
@@ -396,6 +410,8 @@ function dayInfoFrom(
     rules: ctx.rules,
     zoneName: ctx.zoneName,
     zoneCategory: ctx.zoneCategory,
+    zoneDpd: ctx.zoneDpd ?? null,
+    zoneRiders: ctx.zoneRiders ?? null,
     loggedHours: facts.loggedHours,
     orders: facts.orders,
     cover: facts.cover,
@@ -663,12 +679,15 @@ export function assemblePayrollSnapshot(input: {
           hasCheckIn: Boolean(hoursByDate?.has(date)),
           adjustment: adjustmentPerDate.get(date) ?? null,
         };
+        const zoneFacts = zoneRuleFacts(metric);
         const resolved = dayInfoFrom(date, facts, {
-        today: input.today,
+          today: input.today,
           client,
           rules,
           zoneName,
           zoneCategory,
+          zoneDpd: zoneFacts.zoneDpd,
+          zoneRiders: zoneFacts.zoneRiders,
         });
         days.push(resolved.status);
         dayInfo.push(resolved.info);
@@ -1045,12 +1064,15 @@ export function snapshotFromRpc(
             }
           : null,
       };
+      const zoneFacts = zoneRuleFacts(metric);
       const resolved = dayInfoFrom(facts.date, facts, {
         today,
         client,
         rules: rulesFor,
         zoneName: row.zoneName,
         zoneCategory,
+        zoneDpd: zoneFacts.zoneDpd,
+        zoneRiders: zoneFacts.zoneRiders,
       });
       days.push(resolved.status);
       dayInfo.push(resolved.info);

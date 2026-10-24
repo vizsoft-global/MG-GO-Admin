@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  canContinueImportLookups,
   evaluateImportIdentity,
   isImportRowReady,
   shouldApproveImportRow,
@@ -13,6 +14,7 @@ function emptySeen(): ImportIdentitySeen {
     employeeIds: new Set(),
     phones: new Map(),
     civils: new Map(),
+    clientIds: new Map(),
   };
 }
 
@@ -21,6 +23,8 @@ function roster(partial: Partial<ImportIdentityRoster> = {}): ImportIdentityRost
     employeeIds: new Set(),
     phoneToEmployee: new Map(),
     civilToEmployee: new Map(),
+    clientIdToEmployees: new Map(),
+    employeeIdByKey: new Map(),
     ...partial,
   };
 }
@@ -95,6 +99,88 @@ describe("evaluateImportIdentity", () => {
     assert.equal(result.status, "ok");
     assert.equal(result.existingByEmployeeId, false);
     assert.equal(isImportRowReady(result, "skip"), true);
+  });
+
+  it("updates on a unique Client ID when MG ID is blank", () => {
+    const result = evaluateImportIdentity(
+      { full_name: null, employee_id: null, phone: null, civil_id: null, client_id: "105913" },
+      roster({
+        employeeIds: new Set(["emp2048"]),
+        clientIdToEmployees: new Map([["105913", new Set(["emp2048"])]]),
+        employeeIdByKey: new Map([["emp2048", "EMP2048"]]),
+      }),
+      emptySeen(),
+    );
+    assert.equal(result.status, "duplicate_client_id");
+    assert.equal(result.existingByClientId, true);
+    assert.equal(result.resolvedEmployeeId, "EMP2048");
+    assert.equal(isImportRowReady(result, "update"), true);
+    assert.equal(canContinueImportLookups(result), true);
+  });
+
+  it("refuses when Client ID and MG ID name different people", () => {
+    const result = evaluateImportIdentity(
+      { full_name: "Sara", employee_id: "EMP9", phone: null, civil_id: null, client_id: "105913" },
+      roster({
+        employeeIds: new Set(["emp2048", "emp9"]),
+        clientIdToEmployees: new Map([["105913", new Set(["emp2048"])]]),
+        employeeIdByKey: new Map([["emp2048", "EMP2048"]]),
+      }),
+      emptySeen(),
+    );
+    assert.equal(result.status, "client_id_mismatch");
+    assert.equal(isImportRowReady(result, "update"), false);
+  });
+
+  it("refuses a Client ID that matches more than one person when MG ID is blank", () => {
+    const result = evaluateImportIdentity(
+      { full_name: "Sara", employee_id: null, phone: null, civil_id: null, client_id: "105913" },
+      roster({
+        clientIdToEmployees: new Map([["105913", new Set(["emp1", "emp2"])]]),
+      }),
+      emptySeen(),
+    );
+    assert.equal(result.status, "ambiguous_client_id");
+    assert.equal(isImportRowReady(result, "update"), false);
+  });
+
+  it("treats a second sheet row with the same Client ID as a sheet duplicate", () => {
+    const seen = emptySeen();
+    const fleet = roster({
+      employeeIds: new Set(["emp2048"]),
+      clientIdToEmployees: new Map([["105913", new Set(["emp2048"])]]),
+      employeeIdByKey: new Map([["emp2048", "EMP2048"]]),
+    });
+    const first = evaluateImportIdentity(
+      { full_name: null, employee_id: null, phone: null, civil_id: null, client_id: "105913" },
+      fleet,
+      seen,
+    );
+    assert.equal(first.existingByClientId, true);
+    const second = evaluateImportIdentity(
+      { full_name: null, employee_id: null, phone: null, civil_id: null, client_id: "105913" },
+      fleet,
+      seen,
+    );
+    assert.equal(second.status, "duplicate_client_id");
+    assert.equal(second.existingByClientId, false);
+    assert.equal(isImportRowReady(second, "update"), false);
+  });
+
+  it("lets two creates share a Client ID that is not yet in the roster", () => {
+    const seen = emptySeen();
+    const first = evaluateImportIdentity(
+      { full_name: "A", employee_id: "EMP1", phone: null, civil_id: null, client_id: "NEW-1" },
+      roster(),
+      seen,
+    );
+    const second = evaluateImportIdentity(
+      { full_name: "B", employee_id: "EMP2", phone: null, civil_id: null, client_id: "NEW-1" },
+      roster(),
+      seen,
+    );
+    assert.equal(first.status, "ok");
+    assert.equal(second.status, "ok");
   });
 });
 

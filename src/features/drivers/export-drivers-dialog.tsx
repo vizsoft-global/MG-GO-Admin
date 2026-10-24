@@ -5,10 +5,14 @@ import { useTranslations } from "next-intl";
 import {
   Briefcase,
   Building2,
+  Car,
+  CircleDot,
   Clock,
+  Flag,
   Hash,
   IdCard,
   KeyRound,
+  Layers,
   Link2,
   ListChecks,
   MapPin,
@@ -16,10 +20,9 @@ import {
   Phone,
   Shield,
   Store,
+  Tag,
   User,
   Users,
-  Flag,
-  Tag,
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,17 +45,21 @@ import {
 import type { DriverListPageRow } from "./types";
 
 const COLUMN_ICONS = {
-  driver_code: Hash,
+  client_id: Briefcase,
   employee_id: IdCard,
-  full_name: User,
-  phone: Phone,
-  partner: Building2,
-  zone: MapPin,
-  restaurants: Store,
   rider_category: Users,
   company_client_id: Tag,
   company_name: Flag,
-  client_id: Briefcase,
+  full_name: User,
+  phone: Phone,
+  restaurants: Store,
+  zone: MapPin,
+  vehicle: Car,
+  section: Layers,
+  partner: Building2,
+  employee_status: CircleDot,
+  driver_code: Hash,
+  project_key: KeyRound,
   client_name: Building2,
   account_status: Shield,
   on_duty: Clock,
@@ -61,11 +68,8 @@ const COLUMN_ICONS = {
   linked: Link2,
 } as const;
 
-function defaultSelected(customFields: readonly DriverExportCustomField[]): string[] {
-  return [
-    ...DRIVER_EXPORT_COLUMNS.map((column) => column.id),
-    ...customFields.map((field) => customExportColumnId(field.key)),
-  ];
+function defaultSelected(): string[] {
+  return [...DRIVER_EXPORT_PINNED_IDS];
 }
 
 export function DriversExportDialog({
@@ -85,13 +89,13 @@ export function DriversExportDialog({
   customFields: DriverExportCustomField[];
 }) {
   const t = useTranslations("pages.drivers.exportDialog");
-  const [selected, setSelected] = useState<string[]>(() => defaultSelected(customFields));
+  const [selected, setSelected] = useState<string[]>(() => defaultSelected());
   const [includeAppCode, setIncludeAppCode] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setSelected(defaultSelected(customFields));
+    setSelected(defaultSelected());
     setIncludeAppCode(false);
   }, [open, customFields]);
 
@@ -155,7 +159,12 @@ export function DriversExportDialog({
                 variant="ghost"
                 size="sm"
                 className="h-8 cursor-pointer rounded-md px-2 text-xs"
-                onClick={() => setSelected(defaultSelected(customFields))}
+                onClick={() =>
+                  setSelected([
+                    ...DRIVER_EXPORT_COLUMNS.map((column) => column.id),
+                    ...customFields.map((field) => customExportColumnId(field.key)),
+                  ])
+                }
               >
                 {t("selectAll")}
               </Button>

@@ -11,6 +11,11 @@ import type { EnrichedProfile } from "@/lib/auth/profile-auth";
 import type { AdminApprovalStatus } from "@/lib/auth/permissions";
 import { asEpochReader, getEpochCache, type EpochCounters } from "@/lib/auth/epoch-cache";
 import { loadReadSession } from "@/lib/auth/epoch-session";
+import {
+  applyRememberedSession,
+  recallReadSession,
+  rememberReadSession,
+} from "@/lib/auth/session-memory";
 import type { StaffAccessKind } from "@/lib/auth/staff-access";
 
 export type SessionUser = {
@@ -38,45 +43,72 @@ const SESSION_BUDGET_MS = 8_000;
 
 /**
  * Page and layout cookie verify. The proxy stays on the 3s middleware budget.
- * A cold Admin init plus `verifySessionCookie` routinely exceeds 3s, and that
- * path throws `auth_backend_unavailable` into the locale error boundary.
+ * A cold Admin init plus `verifySessionCookie` routinely exceeds 15s after a
+ * Server Action RSC refresh; one retry with a longer budget is cheaper than
+ * throwing the locale error card.
  */
-const PAGE_SESSION_VERIFY_MS = 15_000;
+const PAGE_SESSION_VERIFY_MS = 20_000;
+const PAGE_SESSION_RETRY_MS = 25_000;
+
+async function cookieValue(): Promise<string> {
+  const cookieStore = await cookies();
+  return cookieStore.get(STAFF_SESSION_COOKIE)?.value ?? "";
+}
+
+function finishOutcome(cookie: string, outcome: SessionOutcome): SessionOutcome {
+  const applied = applyRememberedSession(outcome, recallReadSession(cookie));
+  if (applied.session && cookie) rememberReadSession(cookie, applied.session);
+  return applied;
+}
 
 async function loadSessionOutcome(): Promise<SessionOutcome> {
   try {
     return await loadSessionOutcomeUnsafe();
   } catch {
-    return { session: null, unavailable: true, notAuthorized: false };
+    const cookie = await cookieValue().catch(() => "");
+    return finishOutcome(cookie, { session: null, unavailable: true, notAuthorized: false });
   }
 }
 
 async function loadSessionOutcomeUnsafe(): Promise<SessionOutcome> {
-  const cookieStore = await cookies();
-  const cookie = cookieStore.get(STAFF_SESSION_COOKIE)?.value;
+  const cookie = await cookieValue();
 
-  const probe = await verifyStaffSessionCookie(cookie, {
+  let probe = await verifyStaffSessionCookie(cookie, {
     timeoutMs: PAGE_SESSION_VERIFY_MS,
     checkRevoked: false,
   });
+  if (!probe.uid && probe.unavailable && cookie) {
+    probe = await verifyStaffSessionCookie(cookie, {
+      timeoutMs: PAGE_SESSION_RETRY_MS,
+      checkRevoked: false,
+    });
+  }
 
   // The verifier did not answer, so the session is unproven rather than absent.
-  // Throwing would be a logout caused by a backend blip.
+  // A cookie this isolate already verified is restored instead of throwing.
   if (!probe.uid) {
-    return { session: null, unavailable: probe.unavailable, notAuthorized: false };
+    return finishOutcome(cookie, {
+      session: null,
+      unavailable: probe.unavailable,
+      notAuthorized: false,
+    });
   }
 
   const db = await getFirebaseFirestore();
   if (!db) {
-    return { session: null, unavailable: true, notAuthorized: false };
+    return finishOutcome(cookie, { session: null, unavailable: true, notAuthorized: false });
   }
 
-  const loaded = await loadReadSession(asEpochReader(db), getEpochCache(), probe);
-  return {
-    session: loaded.session,
-    unavailable: loaded.unavailable,
-    notAuthorized: loaded.notAuthorized,
-  };
+  try {
+    const loaded = await loadReadSession(asEpochReader(db), getEpochCache(), probe);
+    return finishOutcome(cookie, {
+      session: loaded.session,
+      unavailable: loaded.unavailable,
+      notAuthorized: loaded.notAuthorized,
+    });
+  } catch {
+    return finishOutcome(cookie, { session: null, unavailable: true, notAuthorized: false });
+  }
 }
 
 /**
