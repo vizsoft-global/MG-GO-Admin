@@ -144,7 +144,7 @@ async function requireDriversArchiver() {
   return { session };
 }
 
-export const BULK_ARCHIVE_CAP = 500;
+const BULK_ARCHIVE_CAP = 500;
 
 async function requireDriversView() {
   const session = await getSessionUser();
