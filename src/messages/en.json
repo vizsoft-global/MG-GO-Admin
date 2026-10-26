@@ -6754,7 +6754,8 @@
         "branches": "Branches",
         "branchesHint": "Visit locations",
         "reports": "Reports",
-        "reportsHint": "Visit volume and outcomes"
+        "reportsHint": "Visit volume and outcomes",
+        "departmentsHeading": "Departments"
       },
       "refresh": "Refresh",
       "viewDetails": "View details",
@@ -6777,7 +6778,13 @@
         "filterAllDepartments": "All departments",
         "filterAllStatus": "All statuses",
         "colVisId": "VIS ID",
-        "colSlot": "Slot"
+        "colSlot": "Slot",
+        "departmentsAll": "All departments",
+        "filterAllSlots": "All slots",
+        "filterVisId": "VIS ID",
+        "filterDriver": "Name or ID",
+        "sortCode": "Sort by VIS ID",
+        "sortDate": "Sort by date"
       },
       "bulk": {
         "selected": "{count} selected",
@@ -6885,6 +6892,11 @@
         "month": "This month",
         "week": "Week",
         "day": "Day",
+        "viewMonth": "Month",
+        "year": "Year",
+        "legendAvailable": "Available",
+        "legendHigh": "High volume",
+        "legendFull": "Full",
         "list": "List",
         "today": "Today",
         "branch": "Branch",

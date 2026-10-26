@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import {
   Activity,
@@ -40,7 +41,9 @@ import {
   type DateRangeValue,
 } from "@/components/app/date-range-filter";
 import { SortableTableHeadLabel } from "@/components/app/sortable-table-head-label";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -50,7 +53,7 @@ import {
 } from "@/components/ui/select";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { useAuth } from "@/contexts/auth-context";
-import { Link } from "@/i18n/navigation";
+import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { queryKeys } from "@/lib/query/query-keys";
 import { selectOptions, selectOptionsFrom } from "@/lib/select-items";
@@ -59,10 +62,12 @@ import {
   fetchAdminVisitsList,
   fetchVisitBranches,
   fetchVisitDepartments,
+  fetchVisitSlots,
   updateAdminVisitStatus,
   updateAdminVisitStatusBulk,
   type VisitListRow,
 } from "./visits-actions";
+import { departmentLabel, kpiListQuery, type VisitKpiCard } from "./visit-board";
 import { upcomingVisitCount } from "./visit-upcoming";
 import {
   avatarTintClass,
@@ -145,6 +150,9 @@ export function VisitsPageShell() {
   const labels = useListControlLabels();
   const { prefs, update: updateListPrefs } = useListViewPrefs("visits");
   const locale = useLocale();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
   const { can } = useAuth();
   const canOperate = can("visits.operate");
   const queryClient = useQueryClient();
@@ -152,21 +160,57 @@ export function VisitsPageShell() {
   const [tab, setTab] = useState<DataTab>("all");
   const [dateRange, setDateRange] = useState<DateRangeValue>(DATE_RANGE_ALL);
   const [branchFilter, setBranchFilter] = useState("all");
-  const [deptFilter, setDeptFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [slotFilter, setSlotFilter] = useState("all");
+  const [codeQuery, setCodeQuery] = useState("");
+  const [driverQuery, setDriverQuery] = useState("");
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<"code" | "date" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc" | false>(false);
+  const [kpiCard, setKpiCard] = useState<VisitKpiCard | null>(null);
+  const savedRange = useRef<DateRangeValue | null>(null);
+  const savedStatus = useRef<string | null>(null);
+  const deptFilter = searchParams.get("department") ?? "all";
+  const deferredCode = useDeferredValue(codeQuery);
+  const deferredDriver = useDeferredValue(driverQuery);
+  const today = kuwaitTodayYmd();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
 
+  const kpiWindow = kpiCard ? kpiListQuery(kpiCard, today) : null;
+  const serverNarrow =
+    Boolean(kpiCard) ||
+    deptFilter !== "all" ||
+    branchFilter !== "all" ||
+    statusFilter !== "all" ||
+    slotFilter !== "all" ||
+    deferredCode.trim() !== "" ||
+    deferredDriver.trim() !== "" ||
+    Boolean(dateRange.from || dateRange.to);
+  const listQuery = kpiWindow
+    ? {
+        dateFrom: kpiWindow.dateFrom,
+        dateTo: kpiWindow.dateTo ?? undefined,
+        status: kpiWindow.status ?? undefined,
+        department: deptFilter === "all" ? undefined : deptFilter,
+        branch: branchFilter === "all" ? undefined : branchFilter,
+        limit: 2000,
+      }
+    : {
+        dateFrom: isoDate(dateRange.from) || undefined,
+        dateTo: isoDate(dateRange.to) || undefined,
+        status: statusFilter === "all" ? undefined : statusFilter,
+        department: deptFilter === "all" ? undefined : deptFilter,
+        branch: branchFilter === "all" ? undefined : branchFilter,
+        driver: deferredDriver.trim() || undefined,
+        code: deferredCode.trim() || undefined,
+        slot: slotFilter === "all" ? undefined : slotFilter,
+        limit: serverNarrow ? 2000 : 200,
+      };
+
   const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: queryKeys.visits.list({ dateRange }),
-    queryFn: () =>
-      fetchAdminVisitsList({
-        dateFrom: isoDate(dateRange.from),
-        dateTo: isoDate(dateRange.to),
-        limit: 200,
-      }),
+    queryKey: queryKeys.visits.list(listQuery),
+    queryFn: () => fetchAdminVisitsList(listQuery),
   });
 
   const { data: branchesData } = useQuery({
@@ -177,24 +221,106 @@ export function VisitsPageShell() {
     queryKey: queryKeys.visits.departments(),
     queryFn: fetchVisitDepartments,
   });
+  const { data: slotsData } = useQuery({
+    queryKey: queryKeys.visits.slots(),
+    queryFn: fetchVisitSlots,
+  });
 
   const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
   const kpi = data?.kpi;
-  const today = kuwaitTodayYmd();
   const upcomingCount = useMemo(() => upcomingVisitCount(rows, today), [rows, today]);
 
-  const tabRows = useMemo(() => {
-    if (tab === "today") return rows.filter((r) => r.scheduled_date === today);
-    if (tab === "upcoming") return rows.filter((r) => r.scheduled_date > today);
-    if (tab === "past") return rows.filter((r) => r.scheduled_date < today);
-    return rows;
-  }, [rows, tab, today]);
+  const setDeptFilter = (key: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (key === "all") params.delete("department");
+    else params.set("department", key);
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname);
+  };
+
+  const clearKpiRestore = () => {
+    setKpiCard(null);
+    savedRange.current = null;
+    savedStatus.current = null;
+  };
+
+  const toggleKpi = (card: VisitKpiCard) => {
+    if (kpiCard === card) {
+      if (savedRange.current) setDateRange(savedRange.current);
+      if (savedStatus.current != null) setStatusFilter(savedStatus.current);
+      clearKpiRestore();
+      return;
+    }
+    if (!kpiCard) {
+      savedRange.current = dateRange;
+      savedStatus.current = statusFilter;
+    }
+    setTab("all");
+    setKpiCard(card);
+  };
+
+  const changeDateRange = (next: DateRangeValue) => {
+    setDateRange(next);
+    clearKpiRestore();
+  };
+
+  const changeStatus = (next: string) => {
+    setStatusFilter(next);
+    clearKpiRestore();
+  };
+
+  const selectTab = (id: DataTab) => {
+    if (kpiCard) {
+      if (savedRange.current) setDateRange(savedRange.current);
+      if (savedStatus.current != null) setStatusFilter(savedStatus.current);
+      clearKpiRestore();
+    }
+    setTab(id);
+  };
+
+  const onSort = (key: "code" | "date") => {
+    if (sortKey !== key || !sortDir) {
+      setSortKey(key);
+      setSortDir("asc");
+      return;
+    }
+    if (sortDir === "asc") {
+      setSortDir("desc");
+      return;
+    }
+    setSortKey(null);
+    setSortDir(false);
+  };
 
   const visibleRows = useMemo(() => {
-    let list = tabRows;
+    let list = rows;
+    if (!kpiCard) {
+      if (tab === "today") list = list.filter((r) => r.scheduled_date === today);
+      else if (tab === "upcoming") list = list.filter((r) => r.scheduled_date > today);
+      else if (tab === "past") list = list.filter((r) => r.scheduled_date < today);
+      if (statusFilter !== "all") list = list.filter((r) => r.status === statusFilter);
+      const from = isoDate(dateRange.from);
+      const to = isoDate(dateRange.to);
+      if (from) list = list.filter((r) => r.scheduled_date >= from);
+      if (to) list = list.filter((r) => r.scheduled_date <= to);
+    }
     if (branchFilter !== "all") list = list.filter((r) => r.branch_id === branchFilter);
     if (deptFilter !== "all") list = list.filter((r) => r.department_key === deptFilter);
-    if (statusFilter !== "all") list = list.filter((r) => r.status === statusFilter);
+    if (slotFilter !== "all") {
+      list = list.filter((r) => (r.slot_start ?? "").slice(0, 5) === slotFilter);
+    }
+    const codeNeedle = codeQuery.trim().toLowerCase();
+    if (codeNeedle) {
+      list = list.filter((r) => r.booking_code.toLowerCase().includes(codeNeedle));
+    }
+    const driverNeedle = driverQuery.trim().toLowerCase();
+    if (driverNeedle) {
+      list = list.filter(
+        (r) =>
+          r.driver_name.toLowerCase().includes(driverNeedle) ||
+          (r.driver_code ?? "").toLowerCase().includes(driverNeedle),
+      );
+    }
     list = list.filter((r) =>
       fieldSearchMatch(r, search, {
         name: (item) => item.driver_name,
@@ -203,15 +329,32 @@ export function VisitsPageShell() {
         code: (item) => item.booking_code,
       }),
     );
-    if (sortDir) {
-      list = [...list].sort((a, b) =>
-        sortDir === "asc"
-          ? a.booking_code.localeCompare(b.booking_code)
-          : b.booking_code.localeCompare(a.booking_code),
-      );
+    const effective = sortKey ?? (deptFilter !== "all" ? "date" : null);
+    const direction = sortDir || (effective === "date" && sortKey == null ? "asc" : false);
+    if (effective && direction) {
+      list = [...list].sort((a, b) => {
+        const left = effective === "code" ? a.booking_code : a.scheduled_date;
+        const right = effective === "code" ? b.booking_code : b.scheduled_date;
+        return direction === "asc" ? left.localeCompare(right) : right.localeCompare(left);
+      });
     }
     return list;
-  }, [tabRows, branchFilter, deptFilter, statusFilter, search, sortDir]);
+  }, [
+    rows,
+    kpiCard,
+    tab,
+    today,
+    statusFilter,
+    dateRange,
+    branchFilter,
+    deptFilter,
+    slotFilter,
+    codeQuery,
+    driverQuery,
+    search,
+    sortKey,
+    sortDir,
+  ]);
 
   const grouped = useMemo(
     () =>
@@ -336,17 +479,30 @@ export function VisitsPageShell() {
     ],
     [branchesData?.rows, t],
   );
+  const departments = useMemo(
+    () =>
+      (deptData?.rows ?? [])
+        .filter((dept) => dept.is_active)
+        .sort((a, b) => a.sort_order - b.sort_order),
+    [deptData?.rows],
+  );
   const deptItems = useMemo(
     () => [
       { value: "all", label: t("allVisits.filterAllDepartments") },
-      ...selectOptionsFrom(
-        deptData?.rows ?? [],
-        (d) => d.key,
-        (d) => d.label_en,
-      ),
+      ...selectOptionsFrom(departments, (d) => d.key, (d) => departmentLabel(d, locale)),
     ],
-    [deptData?.rows, t],
+    [departments, locale, t],
   );
+  const slotItems = useMemo(() => {
+    const times = new Set<string>();
+    for (const slot of slotsData?.rows ?? []) {
+      if (slot.start_time) times.add(slot.start_time.slice(0, 5));
+    }
+    return [
+      { value: "all", label: t("allVisits.filterAllSlots") },
+      ...[...times].sort().map((time) => ({ value: time, label: time })),
+    ];
+  }, [slotsData?.rows, t]);
   const statusItems = useMemo(
     () =>
       selectOptions([
@@ -402,8 +558,32 @@ export function VisitsPageShell() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <ToggleChip
+          size="md"
+          className="h-9"
+          selected={deptFilter === "all"}
+          onClick={() => setDeptFilter("all")}
+        >
+          {t("allVisits.departmentsAll")}
+        </ToggleChip>
+        {departments.map((dept) => (
+          <ToggleChip
+            key={dept.key}
+            size="md"
+            className="h-9"
+            selected={deptFilter === dept.key}
+            onClick={() => setDeptFilter(dept.key)}
+          >
+            {departmentLabel(dept, locale)}
+          </ToggleChip>
+        ))}
+      </div>
+
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <KpiTile
+          active={kpiCard === "today"}
+          onClick={() => toggleKpi("today")}
           icon={<FileText className="h-3.5 w-3.5" />}
           iconClass="bg-primary/10 text-primary"
           label={t("kpi.today")}
@@ -411,13 +591,17 @@ export function VisitsPageShell() {
           sub={t("allVisits.kpiTodaySub", { count: kpi?.today_checked_in ?? 0 })}
         />
         <KpiTile
+          active={kpiCard === "upcoming"}
+          onClick={() => toggleKpi("upcoming")}
           icon={<Clock className="h-3.5 w-3.5" />}
           iconClass="bg-warning/10 text-warning"
           label={t("kpi.upcoming")}
-          value={upcomingCount}
+          value={kpi?.upcoming ?? "—"}
           sub={t("allVisits.kpiUpcomingSub")}
         />
         <KpiTile
+          active={kpiCard === "awaiting"}
+          onClick={() => toggleKpi("awaiting")}
           icon={<Activity className="h-3.5 w-3.5" />}
           iconClass="bg-primary/10 text-primary"
           label={t("kpi.awaitingCheckin")}
@@ -426,6 +610,8 @@ export function VisitsPageShell() {
           accent="warning"
         />
         <KpiTile
+          active={kpiCard === "no_shows"}
+          onClick={() => toggleKpi("no_shows")}
           icon={<AlertTriangle className="h-3.5 w-3.5" />}
           iconClass="bg-danger/10 text-danger"
           label={t("kpi.noShows")}
@@ -440,7 +626,7 @@ export function VisitsPageShell() {
           <button
             key={item.id}
             type="button"
-            onClick={() => setTab(item.id)}
+            onClick={() => selectTab(item.id)}
             className={cn(
               "flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors",
               tab === item.id
@@ -469,68 +655,11 @@ export function VisitsPageShell() {
         onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
         tableViewLabel={labels.viewTable}
         cardsViewLabel={labels.viewCards}
-        filterSlot={
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              items={branchItems}
-              value={branchFilter}
-              onValueChange={(v) => v && setBranchFilter(v)}
-            >
-              <SelectTrigger className="h-9 min-w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {branchItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              items={deptItems}
-              value={deptFilter}
-              onValueChange={(v) => v && setDeptFilter(v)}
-            >
-              <SelectTrigger className="h-9 min-w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {deptItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              items={statusItems}
-              value={statusFilter}
-              onValueChange={(v) => v && setStatusFilter(v)}
-            >
-              <SelectTrigger className="h-9 min-w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {statusItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <DateRangeFilter
-              value={dateRange}
-              onChange={setDateRange}
-              allowFutureDates
-            />
-          </div>
-        }
         trailing={
           <p className="text-xs text-muted-foreground">
             {t("allVisits.countLabel", {
               shown: visibleRows.length,
-              total: tabRows.length,
+              total: rows.length,
             })}
           </p>
         }
@@ -641,21 +770,101 @@ export function VisitsPageShell() {
               {
                 id: "code",
                 label: (
-                  <SortableTableHeadLabel
-                    label={t("allVisits.colVisId")}
-                    direction={sortDir}
-                    onSort={() =>
-                      setSortDir((d) => (d === "asc" ? "desc" : d === "desc" ? false : "asc"))
-                    }
-                  />
+                  <HeaderFilter label={t("allVisits.colVisId")}>
+                    <SortableTableHeadLabel
+                      className="h-7"
+                      label={t("allVisits.sortCode")}
+                      direction={sortKey === "code" ? sortDir : false}
+                      onSort={() => onSort("code")}
+                    />
+                    <Input
+                      className="h-9"
+                      value={codeQuery}
+                      placeholder={t("allVisits.filterVisId")}
+                      onChange={(event) => setCodeQuery(event.target.value)}
+                    />
+                  </HeaderFilter>
                 ),
               },
-              { id: "driver", label: t("colDriver") },
-              { id: "branch", label: t("colBranch") },
-              { id: "dept", label: t("colDepartment") },
-              { id: "status", label: t("colStatus") },
-              { id: "time", label: t("allVisits.colSlot") },
-              { id: "date", label: t("colDate") },
+              {
+                id: "driver",
+                label: (
+                  <HeaderFilter label={t("colDriver")}>
+                    <Input
+                      className="h-9"
+                      value={driverQuery}
+                      placeholder={t("allVisits.filterDriver")}
+                      onChange={(event) => setDriverQuery(event.target.value)}
+                    />
+                  </HeaderFilter>
+                ),
+              },
+              {
+                id: "branch",
+                label: (
+                  <HeaderFilter label={t("colBranch")}>
+                    <HeaderSelect
+                      items={branchItems}
+                      value={branchFilter}
+                      onValueChange={setBranchFilter}
+                    />
+                  </HeaderFilter>
+                ),
+              },
+              {
+                id: "dept",
+                label: (
+                  <HeaderFilter label={t("colDepartment")}>
+                    <HeaderSelect
+                      items={deptItems}
+                      value={deptFilter}
+                      onValueChange={setDeptFilter}
+                    />
+                  </HeaderFilter>
+                ),
+              },
+              {
+                id: "status",
+                label: (
+                  <HeaderFilter label={t("colStatus")}>
+                    <HeaderSelect
+                      items={statusItems}
+                      value={statusFilter}
+                      onValueChange={changeStatus}
+                    />
+                  </HeaderFilter>
+                ),
+              },
+              {
+                id: "time",
+                label: (
+                  <HeaderFilter label={t("allVisits.colSlot")}>
+                    <HeaderSelect
+                      items={slotItems}
+                      value={slotFilter}
+                      onValueChange={setSlotFilter}
+                    />
+                  </HeaderFilter>
+                ),
+              },
+              {
+                id: "date",
+                label: (
+                  <HeaderFilter label={t("colDate")}>
+                    <SortableTableHeadLabel
+                      className="h-7"
+                      label={t("allVisits.sortDate")}
+                      direction={sortKey === "date" ? sortDir : false}
+                      onSort={() => onSort("date")}
+                    />
+                    <DateRangeFilter
+                      value={dateRange}
+                      onChange={changeDateRange}
+                      allowFutureDates
+                    />
+                  </HeaderFilter>
+                ),
+              },
               { id: "actions", label: t("colActions") },
             ]}
           >
@@ -806,6 +1015,46 @@ export function VisitsPageShell() {
   );
 }
 
+function HeaderFilter({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-w-[8.5rem] flex-col gap-1 py-1">
+      <span className="text-xs font-semibold text-accent">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function HeaderSelect({
+  items,
+  value,
+  onValueChange,
+}: {
+  items: { value: string; label: React.ReactNode }[];
+  value: string;
+  onValueChange: (value: string) => void;
+}) {
+  return (
+    <Select items={items} value={value} onValueChange={(next) => next && onValueChange(next)}>
+      <SelectTrigger className="h-9 w-full min-w-0 px-2 text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((item) => (
+          <SelectItem key={item.value} value={item.value}>
+            {item.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function KpiTile({
   icon,
   iconClass,
@@ -813,6 +1062,8 @@ function KpiTile({
   value,
   sub,
   accent,
+  active,
+  onClick,
 }: {
   icon: React.ReactNode;
   iconClass: string;
@@ -820,9 +1071,19 @@ function KpiTile({
   value: string | number;
   sub: string;
   accent?: "warning" | "danger";
+  active: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "rounded-xl border border-border bg-card p-4 text-start shadow-sm",
+        active && "ring-2 ring-primary",
+      )}
+    >
       <div className="flex items-center gap-2">
         <span
           className={cn("flex h-6 w-6 items-center justify-center rounded-md", iconClass)}
@@ -846,6 +1107,6 @@ function KpiTile({
       >
         {sub}
       </p>
-    </div>
+    </button>
   );
 }

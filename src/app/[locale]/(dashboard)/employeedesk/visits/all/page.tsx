@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { setRequestLocale } from "next-intl/server";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { VisitsPageShell } from "@/features/visits/visits-page-shell";
@@ -11,5 +12,9 @@ export default async function EmployeeDeskVisitsAllPage({
   const { locale } = await params;
   setRequestLocale(locale);
   await requirePermission(locale, "visits.view");
-  return <VisitsPageShell />;
+  return (
+    <Suspense fallback={null}>
+      <VisitsPageShell />
+    </Suspense>
+  );
 }

@@ -6754,7 +6754,8 @@
         "branches": "الفروع",
         "branchesHint": "مواقع الزيارة",
         "reports": "التقارير",
-        "reportsHint": "حجم الزيارات والنتائج"
+        "reportsHint": "حجم الزيارات والنتائج",
+        "departmentsHeading": "الأقسام"
       },
       "refresh": "تحديث",
       "viewDetails": "عرض التفاصيل",
@@ -6777,7 +6778,13 @@
         "filterAllDepartments": "كل الأقسام",
         "filterAllStatus": "كل الحالات",
         "colVisId": "رقم الزيارة",
-        "colSlot": "الموعد"
+        "colSlot": "الموعد",
+        "departmentsAll": "كل الأقسام",
+        "filterAllSlots": "كل المواعيد",
+        "filterVisId": "رقم الزيارة",
+        "filterDriver": "الاسم أو المعرف",
+        "sortCode": "ترتيب حسب رقم الزيارة",
+        "sortDate": "ترتيب حسب التاريخ"
       },
       "bulk": {
         "selected": "تم تحديد {count}",
@@ -6885,6 +6892,11 @@
         "month": "هذا الشهر",
         "week": "أسبوع",
         "day": "يوم",
+        "viewMonth": "شهر",
+        "year": "سنة",
+        "legendAvailable": "متاح",
+        "legendHigh": "إشغال مرتفع",
+        "legendFull": "مكتمل",
         "list": "قائمة",
         "today": "اليوم",
         "branch": "الفرع",

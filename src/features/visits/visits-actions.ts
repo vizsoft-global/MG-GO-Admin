@@ -11,6 +11,7 @@ import { sendPushBatch } from "@/lib/firebase/fcm-provider";
 import { buildActionPayload, buildFcmDataPayload } from "@/features/notifications/payload-contract";
 import { pickLatestPushTokenByDriver } from "@/features/notifications/push-token-select";
 import { lunchBreakOutsideHours, visitHoursInvalid } from "./visit-hours";
+import { aggregateVisitDays, type VisitDayCount } from "./visit-board";
 import {
   nextDefaultBranchUpdates,
   planVisitWeekdaySlotCopy,
@@ -352,6 +353,11 @@ export async function fetchAdminVisitsList(input?: {
   status?: string | null;
   dateFrom?: string | null;
   dateTo?: string | null;
+  department?: string | null;
+  branch?: string | null;
+  driver?: string | null;
+  code?: string | null;
+  slot?: string | null;
   limit?: number;
   offset?: number;
 }): Promise<{ rows: VisitListRow[]; kpi: VisitKpis; error?: string }> {
@@ -360,6 +366,11 @@ export async function fetchAdminVisitsList(input?: {
     p_date_from: input?.dateFrom || undefined,
     p_date_to: input?.dateTo || undefined,
     p_status: input?.status || undefined,
+    p_department_key: input?.department || undefined,
+    p_branch_id: input?.branch || undefined,
+    p_driver: input?.driver || undefined,
+    p_booking_code: input?.code || undefined,
+    p_slot_start: input?.slot || undefined,
     p_limit: input?.limit ?? 50,
     p_offset: input?.offset ?? 0,
   });
@@ -417,6 +428,45 @@ export async function fetchAdminVisitsList(input?: {
   };
 
   return { rows, kpi };
+}
+
+export async function fetchVisitDayCounts(input: {
+  dateFrom: string;
+  dateTo: string;
+  branch?: string | null;
+}): Promise<VisitDayCount[]> {
+  await requireVisitsView();
+  const { data, error } = await callAdminFunction("admin_list_visits", {
+    p_date_from: input.dateFrom,
+    p_date_to: input.dateTo,
+    p_branch_id: input.branch || undefined,
+    p_summary: "days",
+    p_limit: 5000,
+    p_offset: 0,
+  });
+  if (error) throw new Error(error.message);
+  const payload = data as {
+    ok?: boolean;
+    days?: VisitDayCount[];
+    rows?: Array<{
+      scheduled_date?: string;
+      status?: string;
+      department_key?: string;
+      branch_id?: string | null;
+    }>;
+    error?: string;
+  };
+  if (payload?.ok === false) throw new Error(payload.error ?? "failed");
+  if (Array.isArray(payload?.days)) return payload.days;
+  return aggregateVisitDays(
+    (payload?.rows ?? []).map((row) => ({
+      scheduled_date: String(row.scheduled_date ?? ""),
+      status: String(row.status ?? ""),
+      department_key: String(row.department_key ?? ""),
+      branch_id: row.branch_id != null ? String(row.branch_id) : null,
+    })),
+    input.branch ?? "",
+  );
 }
 
 export async function fetchAdminVisitDetail(

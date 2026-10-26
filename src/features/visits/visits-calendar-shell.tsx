@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { ArrowLeft, Building2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -29,6 +29,7 @@ import {
   fetchAdminVisitsList,
   fetchVisitBlockedDates,
   fetchVisitBookingConfigs,
+  fetchVisitDayCounts,
   fetchVisitDepartments,
   fetchVisitSlots,
   type VisitListRow,
@@ -36,8 +37,10 @@ import {
 } from "./visits-actions";
 import { DAY_OF_WEEK_LABELS } from "./visit-status-utils";
 import { isBranchWorkingDay } from "./visit-hours";
+import { departmentLabel, slotCapacityAt, visitHeat } from "./visit-board";
+import { VisitMonthGrid, VisitYearGrid, type CalendarDayStat } from "./visits-calendar-grids";
 
-type BoardMode = "day" | "week";
+type BoardMode = "day" | "week" | "month" | "year";
 
 type BoardColumn = {
   id: string;
@@ -52,7 +55,8 @@ type BoardCell = {
   booked: number;
   capacity: number;
   blocked: boolean;
-  first?: VisitListRow;
+  rows: VisitListRow[];
+  departments: Record<string, number>;
 };
 
 function dateKeyOf(d: Date): string {
@@ -93,14 +97,30 @@ export function VisitsCalendarShell({
   fromEsignHub?: boolean;
 }) {
   const t = useTranslations("pages.visitBookings");
+  const locale = useLocale();
   const [mode, setMode] = useState<BoardMode>("day");
   const [date, setDate] = useState(() => new Date());
   const [branchId, setBranchId] = useState<string | null>(null);
 
   const dateKey = dateKeyOf(date);
   const weekStart = useMemo(() => addDays(date, -date.getDay()), [date]);
-  const rangeFrom = mode === "day" ? dateKey : dateKeyOf(weekStart);
-  const rangeTo = mode === "day" ? dateKey : dateKeyOf(addDays(weekStart, 6));
+  const gridMode = mode === "month" || mode === "year";
+  const rangeFrom =
+    mode === "year"
+      ? dateKeyOf(new Date(date.getFullYear(), 0, 1))
+      : mode === "month"
+        ? dateKeyOf(new Date(date.getFullYear(), date.getMonth(), 1))
+        : mode === "day"
+          ? dateKey
+          : dateKeyOf(weekStart);
+  const rangeTo =
+    mode === "year"
+      ? dateKeyOf(new Date(date.getFullYear(), 11, 31))
+      : mode === "month"
+        ? dateKeyOf(new Date(date.getFullYear(), date.getMonth() + 1, 0))
+        : mode === "day"
+          ? dateKey
+          : dateKeyOf(addDays(weekStart, 6));
 
   const { data: configData } = useQuery({
     queryKey: queryKeys.visits.list({ bookingConfig: true }),
@@ -122,6 +142,22 @@ export function VisitsCalendarShell({
     queryKey: queryKeys.visits.list({ board: mode, from: rangeFrom, to: rangeTo }),
     queryFn: () =>
       fetchAdminVisitsList({ dateFrom: rangeFrom, dateTo: rangeTo, limit: 500 }),
+    enabled: !gridMode,
+  });
+  const { data: dayCounts, isLoading: countsLoading } = useQuery({
+    queryKey: queryKeys.visits.list({
+      summary: "days",
+      from: rangeFrom,
+      to: rangeTo,
+      branch: branchId,
+    }),
+    queryFn: () =>
+      fetchVisitDayCounts({
+        dateFrom: rangeFrom,
+        dateTo: rangeTo,
+        branch: branchId,
+      }),
+    enabled: gridMode,
   });
 
   const configs = useMemo(() => configData?.rows ?? [], [configData?.rows]);
@@ -216,6 +252,7 @@ export function VisitsCalendarShell({
   }, [config, step, lunch]);
 
   const columns = useMemo<BoardColumn[]>(() => {
+    if (mode === "month" || mode === "year") return [];
     if (mode === "week") {
       return Array.from({ length: 7 }, (_, i) => {
         const day = addDays(weekStart, i);
@@ -230,12 +267,12 @@ export function VisitsCalendarShell({
     }
     return departments.map((dept) => ({
       id: dept.key,
-      title: dept.label_en,
+      title: departmentLabel(dept, locale),
       subtitle: dept.desk_location ?? t("calendar.deskCount", { count: dept.desks_count }),
       date: dateKey,
       departmentKeys: [dept.key],
     }));
-  }, [mode, weekStart, departments, dateKey, t]);
+  }, [mode, weekStart, departments, dateKey, locale, t]);
 
   function cellFor(column: BoardColumn, time: string): BoardCell {
     const day = column.date;
@@ -245,7 +282,8 @@ export function VisitsCalendarShell({
     let capacity = 0;
     let booked = 0;
     let blockedSlots = 0;
-    let first: VisitListRow | undefined;
+    const rows: VisitListRow[] = [];
+    const counts: Record<string, number> = {};
 
     for (const deptKey of column.departmentKeys) {
       const slot = slotFor(day, dow, deptKey, time);
@@ -254,9 +292,10 @@ export function VisitsCalendarShell({
         continue;
       }
       capacity += slot?.capacity ?? config?.default_slot_capacity ?? 0;
-      const rows = bookings.get(`${day}|${deptKey}|${time}`) ?? [];
-      booked += rows.length;
-      if (!first && rows[0]) first = rows[0];
+      const found = bookings.get(`${day}|${deptKey}|${time}`) ?? [];
+      booked += found.length;
+      rows.push(...found);
+      if (found.length) counts[deptKey] = (counts[deptKey] ?? 0) + found.length;
     }
 
     const blocked =
@@ -264,7 +303,38 @@ export function VisitsCalendarShell({
       blockedDates.has(day) ||
       (blockedSlots > 0 && capacity === 0 && booked === 0);
 
-    return { booked, capacity, blocked, first };
+    return { booked, capacity, blocked, rows, departments: counts };
+  }
+
+  function statFor(day: string): CalendarDayStat | undefined {
+    const found = (dayCounts ?? []).find((entry) => entry.date === day);
+    const booked = found?.booked ?? 0;
+    const parsed = new Date(`${day}T12:00:00`);
+    const dow = parsed.getDay();
+    const closed =
+      config == null || !isBranchWorkingDay(config.working_dows, dow) || blockedDates.has(day);
+    let capacity = 0;
+    if (config && !closed) {
+      for (const dept of departments) {
+        for (const row of timeRows) {
+          capacity += slotCapacityAt(
+            slotsData?.rows ?? [],
+            config.branch_id,
+            day,
+            dow,
+            dept.key,
+            row.time,
+            config.default_slot_capacity,
+          );
+        }
+      }
+    }
+    if (!found && capacity === 0) return undefined;
+    return {
+      booked,
+      heat: visitHeat(booked, capacity),
+      departments: found?.departments ?? {},
+    };
   }
 
   const dayLabel = date.toLocaleDateString(undefined, {
@@ -342,12 +412,24 @@ export function VisitsCalendarShell({
               size="icon"
               className="h-7 w-7"
               aria-label={t("calendar.previous")}
-              onClick={() => setDate((d) => addDays(d, mode === "day" ? -1 : -7))}
+              onClick={() =>
+                setDate((current) => {
+                  if (mode === "year") return new Date(current.getFullYear() - 1, current.getMonth(), 1);
+                  if (mode === "month") return new Date(current.getFullYear(), current.getMonth() - 1, 1);
+                  return addDays(current, mode === "day" ? -1 : -7);
+                })
+              }
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="min-w-[92px] text-center text-sm font-semibold tabular-nums text-foreground">
-              {mode === "day" ? dayLabel : weekLabel}
+              {mode === "year"
+                ? String(date.getFullYear())
+                : mode === "month"
+                  ? date.toLocaleDateString(locale, { month: "long", year: "numeric" })
+                  : mode === "day"
+                    ? dayLabel
+                    : weekLabel}
             </span>
             <Button
               type="button"
@@ -355,7 +437,13 @@ export function VisitsCalendarShell({
               size="icon"
               className="h-7 w-7"
               aria-label={t("calendar.next")}
-              onClick={() => setDate((d) => addDays(d, mode === "day" ? 1 : 7))}
+              onClick={() =>
+                setDate((current) => {
+                  if (mode === "year") return new Date(current.getFullYear() + 1, current.getMonth(), 1);
+                  if (mode === "month") return new Date(current.getFullYear(), current.getMonth() + 1, 1);
+                  return addDays(current, mode === "day" ? 1 : 7);
+                })
+              }
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -374,13 +462,23 @@ export function VisitsCalendarShell({
 
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-wrap items-center gap-3">
-            <LegendDot className="bg-success" label={t("status.confirmed")} />
-            <LegendDot className="bg-primary" label={t("status.checked_in")} />
-            <LegendDot className="bg-danger" label={t("calendar.full")} />
+            {gridMode ? (
+              <>
+                <LegendDot className="bg-success" label={t("calendar.legendAvailable")} />
+                <LegendDot className="bg-warning" label={t("calendar.legendHigh")} />
+                <LegendDot className="bg-danger" label={t("calendar.legendFull")} />
+              </>
+            ) : (
+              <>
+                <LegendDot className="bg-success" label={t("status.confirmed")} />
+                <LegendDot className="bg-primary" label={t("status.checked_in")} />
+                <LegendDot className="bg-danger" label={t("calendar.full")} />
+              </>
+            )}
           </div>
           <span className="h-4 w-px bg-border" aria-hidden />
           <div className="inline-flex h-9 items-center rounded-lg bg-muted p-1">
-            {(["day", "week"] as const).map((value) => (
+            {(["day", "week", "month", "year"] as const).map((value) => (
               <button
                 key={value}
                 type="button"
@@ -393,7 +491,15 @@ export function VisitsCalendarShell({
                     : "font-medium text-muted-foreground hover:text-foreground",
                 )}
               >
-                {t(value === "day" ? "calendar.day" : "calendar.week")}
+                {t(
+                  value === "day"
+                    ? "calendar.day"
+                    : value === "week"
+                      ? "calendar.week"
+                      : value === "month"
+                        ? "calendar.viewMonth"
+                        : "calendar.year",
+                )}
               </button>
             ))}
           </div>
@@ -401,9 +507,41 @@ export function VisitsCalendarShell({
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        {isLoading ? (
+        {(gridMode ? countsLoading : isLoading) ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : gridMode ? (
+          <div className="max-h-[calc(100dvh-6.5rem)] overflow-auto p-3">
+            {mode === "year" ? (
+              <VisitYearGrid
+                year={date.getFullYear()}
+                statFor={statFor}
+                weekdayLabels={DAY_OF_WEEK_LABELS}
+                monthLabels={Array.from({ length: 12 }, (_, month) =>
+                  new Date(date.getFullYear(), month, 1).toLocaleDateString(locale, { month: "long" }),
+                )}
+                onOpenDay={(day) => {
+                  setDate(new Date(`${day}T12:00:00`));
+                  setMode("day");
+                }}
+                onOpenMonth={(month) => {
+                  setDate(new Date(date.getFullYear(), month, 1));
+                  setMode("month");
+                }}
+              />
+            ) : (
+              <VisitMonthGrid
+                year={date.getFullYear()}
+                month={date.getMonth()}
+                statFor={statFor}
+                weekdayLabels={DAY_OF_WEEK_LABELS}
+                onOpenDay={(day) => {
+                  setDate(new Date(`${day}T12:00:00`));
+                  setMode("day");
+                }}
+              />
+            )}
           </div>
         ) : timeRows.length === 0 || columns.length === 0 ? (
           <AppEmptyState
@@ -466,39 +604,54 @@ export function VisitsCalendarShell({
                           );
                         }
                         const isFull = cell.capacity > 0 && cell.booked >= cell.capacity;
-                        const checkedIn = cell.first?.status === "checked_in";
+                        const allChecked =
+                          cell.rows.length > 0 &&
+                          cell.rows.every((row) => row.status === "checked_in" || row.status === "completed");
+                        const deptLines = Object.entries(cell.departments).slice(0, 3);
                         return (
                           <td
                             key={column.id}
                             className={cn(
-                              "h-[38px] border-s border-border px-2 py-1 align-top",
+                              "min-h-[38px] border-s border-border px-2 py-1 align-top",
                               cell.booked === 0
                                 ? "bg-card"
                                 : isFull
                                   ? "bg-danger/10"
-                                  : checkedIn
+                                  : allChecked
                                     ? "bg-primary/10"
                                     : "bg-success/10",
                             )}
                           >
-                            {cell.first ? (
-                              <Link
-                                href={`/visit-bookings/${cell.first.id}`}
-                                className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card py-px pe-1.5 ps-1.5 text-xs font-medium leading-4 text-foreground hover:bg-muted/60"
-                              >
-                                <span
-                                  className={cn(
-                                    "h-[7px] w-[7px] shrink-0 rounded-full",
-                                    isFull
-                                      ? "bg-danger"
-                                      : checkedIn
-                                        ? "bg-primary"
-                                        : "bg-success",
-                                  )}
-                                />
-                                <span className="truncate">{cell.first.driver_name}</span>
-                              </Link>
-                            ) : null}
+                            {mode === "day"
+                              ? cell.rows.map((visit) => (
+                                  <Link
+                                    key={visit.id}
+                                    href={`/visit-bookings/${visit.id}`}
+                                    className="mb-0.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card py-px pe-1.5 ps-1.5 text-xs font-medium leading-4 text-foreground hover:bg-muted/60"
+                                  >
+                                    <span
+                                      className={cn(
+                                        "h-[7px] w-[7px] shrink-0 rounded-full",
+                                        visit.status === "confirmed"
+                                          ? "bg-success"
+                                          : visit.status === "checked_in" || visit.status === "completed"
+                                            ? "bg-primary"
+                                            : visit.status === "no_show" || visit.status === "cancelled"
+                                              ? "bg-danger"
+                                              : "bg-muted-foreground",
+                                      )}
+                                    />
+                                    <span className="truncate">{visit.driver_name}</span>
+                                  </Link>
+                                ))
+                              : deptLines.map(([key, count]) => {
+                                  const dept = departments.find((item) => item.key === key);
+                                  return (
+                                    <span key={key} className="block truncate text-[10px] text-muted-foreground">
+                                      {dept ? departmentLabel(dept, locale) : key} {count}
+                                    </span>
+                                  );
+                                })}
                             <span
                               className={cn(
                                 "block text-xs leading-4 tabular-nums",
@@ -506,7 +659,7 @@ export function VisitsCalendarShell({
                                   ? "font-medium text-muted-foreground/60"
                                   : isFull
                                     ? "font-semibold text-danger"
-                                    : checkedIn
+                                    : allChecked
                                       ? "font-semibold text-primary"
                                       : "font-semibold text-success",
                               )}
