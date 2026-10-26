@@ -51,7 +51,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { buttonVariants } from "@/components/ui/button";
-import { launcherGlyphPath, launcherGlyphSrc } from "@/lib/menu/launcher-glyphs";
+import { launcherGlyphSrc } from "@/lib/menu/launcher-glyphs";
 import { APP_NAV_KEY_BY_ID, ICON_MAP } from "@/lib/menu/menu-registry";
 import type { ResolvedMenuNode } from "@/lib/menu/menu-merge";
 import { cn } from "@/lib/utils";
@@ -99,36 +99,25 @@ function MenuIcon({
 }) {
   const src = id ? launcherGlyphSrc(id) : undefined;
   if (src) {
-    return <img src={src} alt="" width={20} height={20} className="size-5 object-contain" />;
-  }
-  const path = id ? launcherGlyphPath(id) : undefined;
-  if (path) {
-    return (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="#27273F"
-        strokeWidth={1.8}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className={className}
-        aria-hidden
-      >
-        <path d={path} />
-      </svg>
-    );
+    return <img src={src} alt="" width={12} height={12} className="size-3 object-contain" />;
   }
   const Icon = ICON_MAP[name] ?? LayoutDashboard;
-  return <Icon className={cn(className, "text-[#27273F]")} />;
+  return (
+    <Icon
+      className={cn("size-3 fill-[#27273F] text-[#27273F]", className)}
+      strokeWidth={2.4}
+      aria-hidden
+    />
+  );
 }
 
 function NavIcon({ id, name }: { id?: string; name: string }) {
   return (
     <span
-      className="grid size-7 shrink-0 place-items-center rounded-lg"
+      className="grid size-5 shrink-0 place-items-center rounded-md"
       style={{ backgroundColor: LAUNCHER_BRAND.tile }}
     >
-      <MenuIcon id={id} name={name} className="size-4" />
+      <MenuIcon id={id} name={name} />
     </span>
   );
 }

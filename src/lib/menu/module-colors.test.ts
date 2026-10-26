@@ -23,11 +23,11 @@ describe("moduleTint", () => {
   });
 
   it("matches the brand canvas chrome", () => {
-    assert.equal(LAUNCHER_BRAND.canvas, "#2b2b48");
+    assert.equal(LAUNCHER_BRAND.canvas, "#29293f");
     assert.equal(LAUNCHER_BRAND.topBar, "#383855");
     assert.equal(LAUNCHER_BRAND.logoChip, "#d9d2cf");
     assert.equal(LAUNCHER_BRAND.badge, "#e23d3d");
-    assert.equal(LAUNCHER_BRAND.badgeBorder, "#2b2b48");
+    assert.equal(LAUNCHER_BRAND.badgeBorder, "#29293f");
     assert.equal(LAUNCHER_BRAND.tile, "#d9d2cf");
     assert.equal(LAUNCHER_BRAND.footerBar, "#353555");
     assert.equal(LAUNCHER_BRAND.accent, "#d25335");

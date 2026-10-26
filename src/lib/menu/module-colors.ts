@@ -54,14 +54,14 @@ const BY_ID: Record<string, ModuleTint> = {
 export const LAUNCHER_BRAND_TINT: ModuleTint = PALETTE[0];
 
 export const LAUNCHER_BRAND = {
-  canvas: "#2b2b48",
+  canvas: "#29293f",
   topBar: "#383855",
   search: "rgba(0,0,0,0.25)",
   searchBorder: "rgba(255,255,255,0.2)",
   searchHint: "rgba(255,255,255,0.27)",
   logoChip: "#d9d2cf",
   badge: "#e23d3d",
-  badgeBorder: "#2b2b48",
+  badgeBorder: "#29293f",
   muted: "#999999",
   text: "#ffffff",
   subText: "#9898a7",
