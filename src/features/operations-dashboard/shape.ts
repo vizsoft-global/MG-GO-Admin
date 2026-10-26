@@ -99,8 +99,34 @@ export type RosterRow = {
   project: string;
   zone: string;
   status: RosterStatus;
+  statuses: RosterStatus[];
   joined: string;
   phone: string;
+};
+
+export const DASHBOARD_PERIODS = ["today", "yesterday", "thisWeek", "last7", "thisMonth", "lastMonth", "custom"] as const;
+
+export type DashboardPeriod = (typeof DASHBOARD_PERIODS)[number];
+
+export type ContractMonth = { yearMonth: string; count: number; rate: number };
+
+export type ContractTurnover = {
+  rate: number;
+  ended: number;
+  assumed: number;
+  total: number;
+  months: ContractMonth[];
+};
+
+export type HireGroup = { label: string; current: number; leaving: number };
+
+export type HiringPlan = {
+  current: number;
+  leaving: number;
+  horizon: string;
+  designation: HireGroup[];
+  zone: HireGroup[];
+  project: HireGroup[];
 };
 
 export type ZoneOption = { id: string; name: string };
@@ -122,6 +148,10 @@ export type OperationsDashboard = {
   jobEndCards: Record<JobEndCardKey, number>;
   ridersOnLeave: RiderOnLeaveRow[];
   roster: RosterRow[];
+  from: string;
+  to: string;
+  turnover: ContractTurnover;
+  hiring: HiringPlan;
   exportLeaveYear: PlainRow[];
   exportLeaveMonth: PlainRow[];
   exportJobEnd: PlainRow[];
@@ -220,6 +250,14 @@ function emptyOutlook(): Record<OutlookKey, LeavePlanRow[]> {
   };
 }
 
+function emptyTurnover(): ContractTurnover {
+  return { rate: 0, ended: 0, assumed: 0, total: 0, months: [] };
+}
+
+function emptyHiring(): HiringPlan {
+  return { current: 0, leaving: 0, horizon: "", designation: [], zone: [], project: [] };
+}
+
 export function emptyOperationsDashboard(): OperationsDashboard {
   return {
     today: "",
@@ -236,6 +274,10 @@ export function emptyOperationsDashboard(): OperationsDashboard {
     jobEndCards: { next30: 0, eoy: 0, next6m: 0, noRenewal: 0 },
     ridersOnLeave: [],
     roster: [],
+    from: "",
+    to: "",
+    turnover: emptyTurnover(),
+    hiring: emptyHiring(),
     exportLeaveYear: [],
     exportLeaveMonth: [],
     exportJobEnd: [],
@@ -288,10 +330,75 @@ export function rosterMatches(status: RosterStatus, filter: RosterFilter): boole
 export function filterRoster(rows: readonly RosterRow[], filter: RosterFilter, query: string): RosterRow[] {
   const needle = query.trim().toLowerCase();
   return rows.filter((row) => {
-    if (!rosterMatches(row.status, filter)) return false;
+    const statuses = row.statuses.length > 0 ? row.statuses : [row.status];
+    if (!statuses.some((status) => rosterMatches(status, filter))) return false;
     if (!needle) return true;
     return row.name.toLowerCase().includes(needle) || row.employeeId.toLowerCase().includes(needle);
   });
+}
+
+function readStatuses(raw: unknown, fallback: RosterStatus): RosterStatus[] {
+  const found: RosterStatus[] = [];
+  for (const item of list(raw)) {
+    const key = STATUS_ALIASES[text(item)] ?? text(item);
+    if (isRosterStatus(key) && !found.includes(key)) found.push(key);
+  }
+  return found.length > 0 ? found : [fallback];
+}
+
+function addUtcDays(ymd: string, days: number): string {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const next = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, (day ?? 1) + days));
+  const mm = String(next.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(next.getUTCDate()).padStart(2, "0");
+  return `${next.getUTCFullYear()}-${mm}-${dd}`;
+}
+
+function isPeriodYmd(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+export function periodBounds(period: DashboardPeriod, today: string, customFrom: string, customTo: string): { from: string; to: string } {
+  const to = isPeriodYmd(today) ? today : new Date().toISOString().slice(0, 10);
+  switch (period) {
+    case "today":
+      return { from: to, to };
+    case "yesterday": {
+      const yesterday = addUtcDays(to, -1);
+      return { from: yesterday, to: yesterday };
+    }
+    case "thisWeek": {
+      const dow = new Date(`${to}T00:00:00Z`).getUTCDay();
+      const back = (dow + 1) % 7;
+      return { from: addUtcDays(to, -back), to };
+    }
+    case "last7":
+      return { from: addUtcDays(to, -6), to };
+    case "thisMonth":
+      return { from: `${to.slice(0, 7)}-01`, to };
+    case "lastMonth": {
+      const first = `${to.slice(0, 7)}-01`;
+      const end = addUtcDays(first, -1);
+      return { from: `${end.slice(0, 7)}-01`, to: end };
+    }
+    case "custom": {
+      let end = isPeriodYmd(customTo) ? customTo : to;
+      if (end > to) end = to;
+      let start = isPeriodYmd(customFrom) ? customFrom : end;
+      if (start > end) {
+        const swap = start;
+        start = end;
+        end = swap;
+      }
+      const earliest = addUtcDays(end, -30);
+      if (start < earliest) start = earliest;
+      return { from: start, to: end };
+    }
+    default: {
+      const neverPeriod: never = period;
+      return neverPeriod;
+    }
+  }
 }
 
 function readRoster(raw: unknown): RosterRow[] {
@@ -307,6 +414,7 @@ function readRoster(raw: unknown): RosterRow[] {
       project: text(pick(row, ["project", "project_key"])),
       zone: text(pick(row, ["zone", "zone_name"])),
       status: statusRaw,
+      statuses: readStatuses(row.statuses, statusRaw),
       joined: text(pick(row, ["joined", "work_start_date", "workStart"])),
       phone: text(pick(row, ["phone"])),
     });
@@ -555,6 +663,55 @@ function readStatusProjects(raw: unknown): StatusProjectRow[] {
   return rows;
 }
 
+function readGroups(raw: unknown): HireGroup[] {
+  const groups: HireGroup[] = [];
+  for (const item of list(raw)) {
+    const row = record(item);
+    if (!row) continue;
+    groups.push({
+      label: text(pick(row, ["label"])),
+      current: num(pick(row, ["current"])),
+      leaving: num(pick(row, ["leaving"])),
+    });
+  }
+  return groups;
+}
+
+function readTurnover(raw: unknown): ContractTurnover {
+  const row = record(raw);
+  if (!row || row.ended == null && row.assumed == null && !Array.isArray(row.months)) return emptyTurnover();
+  const months: ContractMonth[] = [];
+  for (const item of list(row.months)) {
+    const month = record(item);
+    if (!month) continue;
+    months.push({
+      yearMonth: text(pick(month, ["yearMonth", "year_month"])),
+      count: num(pick(month, ["count"])),
+      rate: num(pick(month, ["rate"])),
+    });
+  }
+  return {
+    rate: num(pick(row, ["rate"])),
+    ended: num(pick(row, ["ended"])),
+    assumed: num(pick(row, ["assumed"])),
+    total: num(pick(row, ["total"])),
+    months,
+  };
+}
+
+function readHiring(raw: unknown): HiringPlan {
+  const row = record(raw);
+  if (!row || row.current == null && row.leaving == null && row.designation == null) return emptyHiring();
+  return {
+    current: num(pick(row, ["current"])),
+    leaving: num(pick(row, ["leaving"])),
+    horizon: text(pick(row, ["horizon"])),
+    designation: readGroups(row.designation),
+    zone: readGroups(row.zone),
+    project: readGroups(row.project),
+  };
+}
+
 export function normalizeOperationsDashboard(raw: unknown): OperationsDashboard {
   const row = record(raw) ?? {};
   const empty = emptyOperationsDashboard();
@@ -579,6 +736,10 @@ export function normalizeOperationsDashboard(raw: unknown): OperationsDashboard 
     jobEndCards: readJobCards(pick(row, ["jobEndCards", "job_end_cards"]) ?? jobEnd?.cards),
     ridersOnLeave: readRidersOnLeave(pick(row, ["ridersOnLeave", "riders_on_leave"])),
     roster: readRoster(pick(row, ["roster", "riders"])),
+    from: text(pick(row, ["from"])) || text(pick(row, ["today", "day"])),
+    to: text(pick(row, ["to"])) || text(pick(row, ["today", "day"])),
+    turnover: readTurnover(pick(row, ["turnover"])),
+    hiring: readHiring(pick(row, ["hiring"])),
     exportLeaveYear: plainRows(pick(row, ["exportLeaveYear", "export_leave_year"]) ?? exported.leaveYear),
     exportLeaveMonth: plainRows(pick(row, ["exportLeaveMonth", "export_leave_month"]) ?? exported.leaveMonth),
     exportJobEnd: plainRows(pick(row, ["exportJobEnd", "export_job_end"]) ?? exported.jobEnd),

@@ -469,7 +469,7 @@ export function dayClipboardToken(row: PayrollRiderRow, dayIndex: number): strin
     case "work":
       return String(PAYROLL_DAY_HOURS);
     case "reduced3":
-      return "3h";
+      return "3";
     case "half":
       return "half";
     case "actual":
@@ -490,7 +490,7 @@ export function dayClipboardToken(row: PayrollRiderRow, dayIndex: number): strin
       return "alo";
     case "custom": {
       const hours = row.dayInfo[dayIndex]?.creditedHours;
-      return hours == null ? "cus" : `${hours}h`;
+      return hours == null ? "cus" : String(hours);
     }
     default:
       return "";

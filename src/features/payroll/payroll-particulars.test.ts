@@ -41,8 +41,8 @@ describe("payroll particulars catalog", () => {
       ),
     );
     assert.equal(ADJUSTMENT_STATUS_TO_DAY.half, "half");
-    assert.equal(particularForAdjustment("half"), "6h");
-    assert.equal(dayGridLabel("half", 6), "6h");
+    assert.equal(particularForAdjustment("half"), "6");
+    assert.equal(dayGridLabel("half", 6), "6");
     assert.equal(parseAdjustmentCellText("6 Hours", 0)?.status, "half");
     assert.equal(parseAdjustmentCellText("6h", 0)?.status, "half");
     assert.equal(parseAdjustmentCellText("Half", 0)?.status, "half");
@@ -50,10 +50,10 @@ describe("payroll particulars catalog", () => {
   });
 
   it("prints the same token the cell uses for every selectable particular", () => {
-    assert.equal(particularForAdjustment("12"), "12h");
-    assert.equal(particularForAdjustment("3h"), "3h");
-    assert.equal(particularForAdjustment("half"), "6h");
-    assert.equal(particularForAdjustment("actual", 7.6), "7.6h");
+    assert.equal(particularForAdjustment("12"), "12");
+    assert.equal(particularForAdjustment("3h"), "3");
+    assert.equal(particularForAdjustment("half"), "6");
+    assert.equal(particularForAdjustment("actual", 7.6), "7.6");
     assert.equal(particularForAdjustment("off"), "OFF");
     assert.equal(particularForAdjustment("sick"), "Sick");
     assert.equal(particularForAdjustment("accident"), "Acc");
@@ -61,11 +61,11 @@ describe("payroll particulars catalog", () => {
     assert.equal(particularForAdjustment("absent"), "ABS");
     assert.equal(particularForAdjustment("abs_lh"), "Abs·LH");
     assert.equal(particularForAdjustment("abs_lo"), "Abs·LO");
-    assert.equal(particularForAdjustment("custom", 4), "4h");
-    assert.equal(particularForAdjustment("custom", 0), "0h");
-    // The label never goes past a full day: 12 and above print the 12h word.
-    assert.equal(particularForAdjustment("custom", 12.5), "12h");
-    assert.equal(particularForAdjustment("custom", 24), "12h");
+    assert.equal(particularForAdjustment("custom", 4), "4");
+    assert.equal(particularForAdjustment("custom", 0), "0");
+    // The label never goes past a full day: 12 and above print 12.
+    assert.equal(particularForAdjustment("custom", 12.5), "12");
+    assert.equal(particularForAdjustment("custom", 24), "12");
   });
 
   it("parses cell tokens and the named particulars back to the same statuses", () => {
@@ -80,7 +80,13 @@ describe("payroll particulars catalog", () => {
     assert.equal(parseAdjustmentCellText("Actual Hours", 0)?.status, "actual");
     assert.equal(parseAdjustmentCellText("9.5h", 0)?.status, "custom");
     assert.equal(parseAdjustmentCellText("9.5h", 0)?.hours, 9.5);
+    assert.equal(parseAdjustmentCellText("9.5", 0)?.status, "custom");
+    assert.equal(parseAdjustmentCellText("9.5", 0)?.hours, 9.5);
     assert.equal(parseAdjustmentCellText("0h", 0)?.status, "custom");
+    assert.equal(parseAdjustmentCellText("0", 0)?.status, "custom");
+    assert.equal(parseAdjustmentCellText("0", 0)?.hours, 0);
+    assert.equal(parseAdjustmentCellText("4.3", 0)?.status, "custom");
+    assert.equal(parseAdjustmentCellText("4.3", 0)?.hours, 4.3);
     assert.equal(parseAdjustmentCellText("24h", 0)?.hours, 24);
     assert.equal(parseAdjustmentCellText("25h", 0), null);
     assert.equal(parseAdjustmentCellText("–", 0)?.status, "auto");
@@ -106,29 +112,30 @@ describe("payroll particulars catalog", () => {
   });
 
   it("sorts numeric particulars before words", () => {
-    assert.deepEqual(sortParticularValues(["Sick", "7.6h", "ABS", "12h", "3h", "OFF"]), [
-      "3h",
-      "7.6h",
-      "12h",
+    assert.deepEqual(sortParticularValues(["Sick", "7.6", "ABS", "12", "3", "OFF"]), [
+      "3",
+      "7.6",
+      "12",
       "ABS",
       "OFF",
       "Sick",
     ]);
+    assert.deepEqual(sortParticularValues(["12h", "3"]), ["3", "12h"]);
   });
 
   it("prints the rule credit on PAYROLL and leaves logged hours off that token", () => {
     const hours = dayDisplayHours("work", { loggedHours: 23.8, elapsedHours: 23.8, creditedHours: 12 });
     assert.equal(hours, 12);
-    assert.equal(dayGridLabel("work", hours), "12h");
-    assert.equal(dayGridLabel("reduced3", 3), "3h");
+    assert.equal(dayGridLabel("work", hours), "12");
+    assert.equal(dayGridLabel("reduced3", 3), "3");
     assert.equal(dayGridLabel("absent", 0), "ABS");
     assert.equal(dayGridLabel("off", 0), "OFF");
   });
 
   it("rounds a custom credit to one decimal so cell, filter and Excel agree", () => {
-    assert.equal(dayGridLabel("custom", 4.25), "4.3h");
-    assert.equal(dayGridLabel("custom", 9), "9h");
-    assert.equal(dayGridLabel("actual", 7.75), "7.8h");
+    assert.equal(dayGridLabel("custom", 4.25), "4.3");
+    assert.equal(dayGridLabel("custom", 9), "9");
+    assert.equal(dayGridLabel("actual", 7.75), "7.8");
   });
 });
 

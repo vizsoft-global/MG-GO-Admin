@@ -150,61 +150,13 @@
   color: #fff;
 }
 
-.hrpay-legend {
-  display: flex;
-  flex: none;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 12px;
-  min-height: 24px;
-  overflow-x: auto;
-}
-
-.hrpay-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #292a3f;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.hrpay-legend-item[data-on="true"] {
-  text-decoration: underline;
-}
-
-.hrpay-legend-count {
-  color: #292a3f;
-  font-variant-numeric: tabular-nums;
-}
-
-.hrpay-dot {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  border-radius: 999px;
-}
-
-.hrpay-dot[data-split="true"] {
-  background: linear-gradient(135deg, #1e6b3a 50%, #d13b3b 50%);
-}
-
-.hrpay-dot[data-bordered="true"] {
-  border: 1px solid #292a3f;
-  background: transparent;
-}
-
 .hrpay-summary {
   display: flex;
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
   gap: 8px;
+  overflow: auto;
 }
 
 .hrpay-summarise {
@@ -491,5 +443,618 @@
 @media (prefers-reduced-motion: reduce) {
   .hrpay-flash td {
     background: #fff;
+  }
+}
+
+.hrpay-fbar {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 12px;
+  border: 1px solid #e4e4ea;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.hrpay-fbar label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: #52525b;
+}
+
+.hrpay-sort {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+}
+
+.hrpay-warn {
+  color: #9a3412;
+  font-weight: 600;
+}
+
+.hrpay-kpis-wrap {
+  flex-wrap: wrap;
+}
+
+.hrpay-charts {
+  display: grid;
+  flex: none;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.hrpay-chart {
+  padding: 12px;
+  border: 1px solid #e4e4ea;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.hrpay-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  height: 140px;
+  margin-top: 8px;
+}
+
+.hrpay-bars div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 100%;
+}
+
+.hrpay-bars span {
+  display: block;
+  width: 28px;
+  background: #292a3f;
+}
+
+.hrpay-bars .hrpay-bar-pay {
+  background: #b5401f;
+}
+
+.hrpay-multi {
+  position: relative;
+}
+
+.hrpay-multi summary {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid #e4e4ea;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  list-style: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hrpay-multi > div {
+  position: absolute;
+  inset-inline-start: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: max(100%, 240px);
+  max-height: 220px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #e4e4ea;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 16, 30, 0.12);
+}
+
+.hrpay-multi-opt {
+  position: static;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 4px 6px;
+  font-size: 13px;
+  font-weight: 400;
+  color: #18181b;
+  white-space: normal;
+}
+
+.hrpay-multi-opt input {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.hrpay-config-head,
+.hrpay-config-line {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.hrpay-config-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 16px;
+}
+
+.hrpay-config-line {
+  display: grid;
+  grid-template-columns: 120px minmax(160px, 1fr) minmax(180px, 1.2fr) 120px 36px;
+}
+
+.hrpay-config-line label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.hrpay-icon-btn {
+  height: 36px;
+  width: 36px;
+  border: 1px solid #e4e4ea;
+  border-radius: 8px;
+  background: #fff;
+  color: #9a3412;
+}
+
+.hrpay-summarise {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+
+.hrpay-stage {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+}
+
+.hrpay-stage .hrpay-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.hrpay-stage .hrpay-kpi {
+  padding: 10px 12px;
+}
+
+.hrpay-stage .hrpay-kpi-value {
+  margin-top: 4px;
+  font-size: 24px;
+}
+
+.hrpay-kpi-lead {
+  border-color: #292a3f;
+}
+
+.hrpay-select[data-on="true"] {
+  border-color: #b5401f;
+  background: #f8ece6;
+}
+
+.hrpay-stiles-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.hrpay-stiles-head h2 {
+  margin: 0;
+  color: #b5401f;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hrpay-stiles {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.hrpay-st {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e4e4ea;
+  border-radius: 10px;
+  background: #fff;
+  padding: 6px 8px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.hrpay-st[data-on="true"] {
+  border: 1.5px solid #292a3f;
+  background: #f4f4f6;
+}
+
+.hrpay-st-swatch {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 6px;
+}
+
+.hrpay-st-swatch[data-split="true"] {
+  background: linear-gradient(135deg, #d13b3b 50%, #1e6b3a 50%);
+}
+
+.hrpay-st-swatch[data-bordered="true"] {
+  border: 1px solid #292a3f;
+  background: transparent;
+}
+
+.hrpay-st b {
+  display: block;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.hrpay-st span {
+  display: block;
+  color: #52525b;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.hrpay-fbar,
+.hrpay-stage .hrpay-kpis,
+.hrpay-stiles-head,
+.hrpay-stiles,
+.hrpay-sumtop,
+.hrpay-summary > .hrpay-sub,
+.hrpay-summary .hrpay-kpis {
+  flex: none;
+}
+
+.hrpay-sheet {
+  display: flex;
+  min-height: 280px;
+  flex: 1 0 280px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e4e4ea;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.hrpay-sheet-summary {
+  min-height: 240px;
+  flex: 1 0 240px;
+  overflow: hidden;
+}
+
+.hrpay-sheet .hrpay-tools {
+  margin: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e4e4ea;
+}
+
+.hrpay-vt {
+  display: inline-flex;
+  height: 36px;
+  overflow: hidden;
+  border: 1px solid #e4e4ea;
+  border-radius: 8px;
+}
+
+.hrpay-vt button {
+  height: 36px;
+  border: 0;
+  background: #fff;
+  padding: 0 10px;
+  color: #52525b;
+  font-size: 12px;
+}
+
+.hrpay-vt button[data-on="true"] {
+  background: #292a3f;
+  color: #fff;
+}
+
+.hrpay-source {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #e4e4ea;
+  color: #52525b;
+  font-size: 11px;
+}
+
+.hrpay-source i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-end: 4px;
+  border-radius: 2px;
+}
+
+.hrpay-cards {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.hrpay-card {
+  border: 1px solid #e4e4ea;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.hrpay-card strong {
+  display: inline-block;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 13px;
+}
+
+.hrpay-sumtop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+
+.hrpay-sumtop .hrpay-btn {
+  margin-inline-start: auto;
+}
+
+.hrpay-summary .hrpay-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.hrpay-summary .hrpay-kpi {
+  padding: 10px 12px;
+}
+
+.hrpay-summary .hrpay-kpi-value {
+  margin-top: 4px;
+  font-size: 20px;
+}
+
+.hrpay-chart-legend {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+  color: #52525b;
+  font-size: 11px;
+}
+
+.hrpay-chart-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-inline-end: 4px;
+  border-radius: 2px;
+}
+
+.hrpay-config {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.hrpay-cfg-intro,
+.hrpay-hist p {
+  margin: 0;
+  max-width: 70ch;
+  color: #71717a;
+  font-size: 13px;
+}
+
+.hrpay-cfgform {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px;
+  border: 1px solid #e4e4ea;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.hrpay-cfgform-bar,
+.hrpay-cfg-actions,
+.hrpay-cfg-warn,
+.hrpay-cfg-ok {
+  flex-basis: 100%;
+}
+
+.hrpay-cfgform-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hrpay-hist > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hrpay-cfgform-bar > span,
+.hrpay-cfg-hint {
+  color: #71717a;
+  font-size: 12px;
+}
+
+.hrpay-cline {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  padding-top: 12px;
+  border-top: 1px dashed #e4e4ea;
+}
+
+.hrpay-cline:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.hrpay-cline > label,
+.hrpay-cline > .hrpay-field {
+  display: flex;
+  flex: 1 1 180px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.hrpay-cline-remove {
+  margin-top: 20px;
+  color: #b42318;
+}
+
+.hrpay-cfg-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+
+.hrpay-cfg-warn,
+.hrpay-cfg-ok {
+  border: 1px solid #e4e4ea;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.hrpay-cfg-warn {
+  border-color: #f3d2b0;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.hrpay-cfg-ok {
+  background: #ecfdf3;
+  color: #166534;
+}
+
+.hrpay-hist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.hrpay-hist h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+}
+
+.hrpay-hist-card {
+  overflow: hidden;
+  border: 1px solid #e4e4ea;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.hrpay-hist-tools {
+  padding: 10px 12px;
+}
+
+.hrpay-hist-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+  color: #71717a;
+}
+
+.hrpay-hist-search .hrpay-search {
+  flex: 1;
+}
+
+.hrpay-hist-card .hrpay-scroll {
+  max-height: 520px;
+  overflow: auto;
+  border-top: 1px solid #e4e4ea;
+}
+
+.hrpay-hist-card .hrpay-table {
+  width: 100%;
+  white-space: normal;
+}
+
+.hrpay-hist-card .hrpay-table th,
+.hrpay-hist-card .hrpay-table td {
+  padding: 8px 10px;
+  text-align: start;
+}
+
+.hrpay-hist-card .hrpay-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: #71717a;
+  background: #fafafa;
+}
+
+.hrpay-old {
+  color: #71717a;
+  text-decoration: line-through;
+}
+
+.hrpay-new {
+  font-weight: 600;
+}
+
+@media (max-width: 1300px) {
+  .hrpay-stiles,
+  .hrpay-fbar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .hrpay-summary .hrpay-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .hrpay-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

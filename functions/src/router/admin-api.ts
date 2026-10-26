@@ -53,7 +53,7 @@ function unwrapArgs(request: RouterRequest): unknown {
 /** The operations roster is new. A fresh cache key keeps an older snapshot from hiding it. */
 function snapshotArgs(fn: string, args: unknown): unknown {
   if (fn !== "adminOperationsDashboard") return args;
-  return { args, roster: 1 };
+  return { args, roster: 2 };
 }
 
 function toHttps(err: unknown): HttpsError {

@@ -265,6 +265,77 @@ export function mapRequestLeave(input: RequestLeaveFields): RequestLeaveRow | nu
   };
 }
 
+export type ContractEndRider = {
+  archived: boolean;
+  jobEnd: string | null;
+  undecided: boolean;
+};
+
+export function hiringWindowEnd(today: string): string {
+  const year = Number(today.slice(0, 4));
+  const month = Number(today.slice(5, 7));
+  const end = new Date(Date.UTC(year, month - 1 + 3, 0));
+  const mm = String(end.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(end.getUTCDate()).padStart(2, "0");
+  return `${end.getUTCFullYear()}-${mm}-${dd}`;
+}
+
+export function leavesInHiringWindow(
+  jobEnd: string | null,
+  today: string,
+  horizon: string,
+  noRenewal: boolean,
+): boolean {
+  if (!noRenewal || !jobEnd || !isYmd(jobEnd)) return false;
+  return jobEnd >= today && jobEnd <= horizon;
+}
+
+export function contractEndTurnover(
+  riders: readonly ContractEndRider[],
+  today: string,
+): {
+  rate: number;
+  ended: number;
+  assumed: number;
+  total: number;
+  months: { yearMonth: string; count: number; rate: number }[];
+} {
+  const year = today.slice(0, 4);
+  let live = 0;
+  let endedLive = 0;
+  let endedArchived = 0;
+  let assumed = 0;
+  const counts = Array.from({ length: 12 }, () => 0);
+  for (const rider of riders) {
+    if (!rider.archived) live += 1;
+    const jobEnd = rider.jobEnd && isYmd(rider.jobEnd) ? rider.jobEnd : "";
+    if (!jobEnd) continue;
+    if (jobEnd.slice(0, 4) === year) {
+      const index = Number(jobEnd.slice(5, 7)) - 1;
+      if (index >= 0 && index < 12) counts[index] = (counts[index] ?? 0) + 1;
+    }
+    if (jobEnd <= today) {
+      if (rider.archived) endedArchived += 1;
+      else endedLive += 1;
+    } else if (!rider.archived && rider.undecided) {
+      assumed += 1;
+    }
+  }
+  const ended = endedLive + endedArchived;
+  const total = live + endedArchived;
+  return {
+    rate: turnoverRate(ended + assumed, total),
+    ended,
+    assumed,
+    total,
+    months: counts.map((count, index) => ({
+      yearMonth: `${year}-${String(index + 1).padStart(2, "0")}`,
+      count,
+      rate: turnoverRate(count, total),
+    })),
+  };
+}
+
 export function leaveIdentity(row: { driverId: string; start: string; end: string; leaveType: string }): string {
   return `${row.driverId}|${row.start}|${row.end}|${row.leaveType}`;
 }

@@ -3,9 +3,12 @@ import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import {
+  contractEndTurnover,
   daysLeft,
+  hiringWindowEnd,
   isLeavePlanStatus,
   jobEndWindow,
+  leavesInHiringWindow,
   mapRequestLeave,
   mergeLeaveRows,
   monthCountsLeave,
@@ -30,6 +33,7 @@ type DriverRow = {
   zoneId: string;
   vehicle: string;
   phone: string;
+  designation: string;
 };
 
 type LeaveRow = {
@@ -110,6 +114,33 @@ function addDays(ymd: string, days: number): string {
   return `${next.getUTCFullYear()}-${mm}-${dd}`;
 }
 
+function eachDay(from: string, to: string): string[] {
+  const days: string[] = [];
+  let cursor = from;
+  while (cursor <= to && days.length < 31) {
+    days.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return days;
+}
+
+function resolveWindow(data: Dict, today: string): { from: string; to: string } {
+  const requestedFrom = pickText(data, "from");
+  const requestedTo = pickText(data, "to");
+  const requestedDay = pickText(data, "day");
+  let to = requestedTo && isRealYmd(requestedTo) ? requestedTo : requestedDay && isRealYmd(requestedDay) ? requestedDay : today;
+  if (to > today) to = today;
+  let from = requestedFrom && isRealYmd(requestedFrom) ? requestedFrom : to;
+  if (from > to) {
+    const swap = from;
+    from = to;
+    to = swap;
+  }
+  const earliest = addDays(to, -30);
+  if (from < earliest) from = earliest;
+  return { from, to };
+}
+
 function shiftMonth(yearMonth: string, delta: number): string {
   const index = Number(yearMonth.slice(0, 4)) * 12 + (Number(yearMonth.slice(5, 7)) - 1) + delta;
   const year = Math.floor(index / 12);
@@ -149,6 +180,7 @@ function parseDriver(id: string, data: Dict): DriverRow {
     zoneId: text(data["zone_id"]),
     vehicle: text(data["vehicle_type_key"]).toLowerCase(),
     phone: text(data["phone"]),
+    designation: text(data["job_position"]),
   };
 }
 
@@ -234,6 +266,50 @@ function tally(
       other: statusBar.other,
       accident,
       workingRate: turnoverRate(statusBar.working, assigned),
+    },
+  };
+}
+
+function tallyWindow(
+  drivers: DriverRow[],
+  days: string[],
+  byDriver: Map<string, LeaveRow[]>,
+  checkedInByDay: Map<string, Set<string>>,
+) {
+  const span = days.length;
+  const day = days[span - 1] ?? "";
+  if (span <= 1) return tally(drivers, day, day.slice(0, 7), byDriver, checkedInByDay.get(day) ?? new Set());
+  const sums: Record<BarKey, number> = { working: 0, sick: 0, onLeave: 0, absent: 0, other: 0 };
+  let live = 0;
+  let accident = 0;
+  for (const driver of drivers) {
+    if (driver.archived) continue;
+    live += 1;
+    if (driver.status === "accident") accident += 1;
+    for (const one of days) {
+      const checked = checkedInByDay.get(one) ?? new Set<string>();
+      const key = classify(driver, one, one.slice(0, 7), byDriver.get(driver.id) ?? [], checked.has(driver.id));
+      sums[key] += 1;
+    }
+  }
+  const statusBar: Record<BarKey, number> = {
+    working: Math.round(sums.working / span),
+    sick: Math.round(sums.sick / span),
+    onLeave: Math.round(sums.onLeave / span),
+    absent: Math.round(sums.absent / span),
+    other: Math.round(sums.other / span),
+  };
+  return {
+    statusBar,
+    kpis: {
+      assigned: live,
+      working: statusBar.working,
+      onLeave: statusBar.onLeave,
+      absent: statusBar.absent,
+      sick: statusBar.sick,
+      other: statusBar.other,
+      accident,
+      workingRate: turnoverRate(sums.working, live * span),
     },
   };
 }
@@ -581,37 +657,93 @@ function zoneLabel(zoneId: string, names: Map<string, string>): string {
   return names.get(zoneId) ?? zoneId;
 }
 
+function prefer(current: string, next: string): string {
+  return current.trim() !== "" ? current : next.trim();
+}
+
+function hiringGroups(
+  drivers: DriverRow[],
+  today: string,
+  zones: Map<string, string>,
+): {
+  current: number;
+  leaving: number;
+  horizon: string;
+  designation: { label: string; current: number; leaving: number }[];
+  zone: { label: string; current: number; leaving: number }[];
+  project: { label: string; current: number; leaving: number }[];
+} {
+  const horizon = hiringWindowEnd(today);
+  const live = drivers.filter((driver) => !driver.archived);
+  const buckets = (
+    labelOf: (driver: DriverRow) => string,
+  ) => {
+    const map = new Map<string, { label: string; current: number; leaving: number }>();
+    for (const driver of live) {
+      const label = labelOf(driver);
+      const row = map.get(label) ?? { label, current: 0, leaving: 0 };
+      row.current += 1;
+      const noRenewal = renewalDecision(driver.jobEndDescription, driver.jobEnd) === "no_renewal";
+      if (leavesInHiringWindow(driver.jobEnd, today, horizon, noRenewal)) row.leaving += 1;
+      map.set(label, row);
+    }
+    return [...map.values()].sort(
+      (left, right) => right.leaving - left.leaving || right.current - left.current || left.label.localeCompare(right.label),
+    );
+  };
+  let leaving = 0;
+  for (const driver of live) {
+    const noRenewal = renewalDecision(driver.jobEndDescription, driver.jobEnd) === "no_renewal";
+    if (leavesInHiringWindow(driver.jobEnd, today, horizon, noRenewal)) leaving += 1;
+  }
+  return {
+    current: live.length,
+    leaving,
+    horizon,
+    designation: buckets((driver) => driver.designation),
+    zone: buckets((driver) => zoneLabel(driver.zoneId, zones)),
+    project: buckets((driver) => driver.project),
+  };
+}
+
 function rosterRows(
   drivers: DriverRow[],
-  day: string,
-  todayYm: string,
+  days: string[],
   byDriver: Map<string, LeaveRow[]>,
-  checkedIn: Set<string>,
+  checkedInByDay: Map<string, Set<string>>,
   zones: Map<string, string>,
   includePhone: boolean,
 ) {
+  const last = days[days.length - 1] ?? "";
   const rows = [];
   for (const driver of drivers) {
     if (driver.archived) continue;
-    const status = classify(driver, day, todayYm, byDriver.get(driver.id) ?? [], checkedIn.has(driver.id));
-    const row: Record<string, string> = {
+    const seen = new Set<BarKey>();
+    for (const one of days) {
+      const checked = checkedInByDay.get(one) ?? new Set<string>();
+      seen.add(classify(driver, one, one.slice(0, 7), byDriver.get(driver.id) ?? [], checked.has(driver.id)));
+    }
+    const endChecked = checkedInByDay.get(last) ?? new Set<string>();
+    const status = classify(driver, last, last.slice(0, 7), byDriver.get(driver.id) ?? [], endChecked.has(driver.id));
+    const row: Record<string, unknown> = {
       employeeId: driver.employeeId,
       name: driver.name,
       project: driver.project,
       zone: zoneLabel(driver.zoneId, zones),
       status,
+      statuses: [...seen],
       joined: driver.workStart ?? "",
     };
     if (includePhone) row.phone = driver.phone;
     rows.push(row);
   }
-  rows.sort((left, right) => left.employeeId.localeCompare(right.employeeId) || left.name.localeCompare(right.name));
+  rows.sort((left, right) => String(left.employeeId).localeCompare(String(right.employeeId)) || String(left.name).localeCompare(String(right.name)));
   return rows;
 }
 
-async function loadDashboard(day: string) {
+async function loadDashboard(from: string, to = from) {
   const db = getFirestore();
-  const [driverSnap, leaveSnap, attendanceSnap, zoneSnap, requestSnap] = await Promise.all([
+  const [driverSnap, leaveSnap, attendanceSnap, zoneSnap, requestSnap, profileSnap, intakeSnap] = await Promise.all([
     readOrFail("drivers_read_failed", () =>
       db.collection(COLLECTIONS.drivers).select(
         "full_name",
@@ -625,6 +757,7 @@ async function loadDashboard(day: string) {
         "zone_id",
         "vehicle_type_key",
         "phone",
+        "job_position",
       ).get(),
     ),
     readOrFail("leave_plans_read_failed", () =>
@@ -642,7 +775,11 @@ async function loadDashboard(day: string) {
       ).get(),
     ),
     readOrFail("attendance_read_failed", () =>
-      db.collection(COLLECTIONS.attendanceLogs).where("log_date", "==", day).select("driver_id", "check_out_at").get(),
+      db.collection(COLLECTIONS.attendanceLogs)
+        .where("log_date", ">=", from)
+        .where("log_date", "<=", to)
+        .select("driver_id", "check_out_at", "log_date")
+        .get(),
     ),
     readOrFail("zones_read_failed", () => db.collection(COLLECTIONS.zones).select("name").get()),
     readOrFail("leave_requests_read_failed", () =>
@@ -651,8 +788,56 @@ async function loadDashboard(day: string) {
         .select("request_type", "status", "driver_id", "employee_id", "driver_name", "start_date", "end_date", "payload")
         .get(),
     ),
+    readOrFail("profiles_read_failed", () =>
+      db.collection(COLLECTIONS.profiles).select("full_name", "phone").get(),
+    ),
+    readOrFail("intakes_read_failed", () =>
+      db.collection(COLLECTIONS.driverIntakes).select(
+        "linked_profile_id",
+        "full_name",
+        "phone",
+        "zone_id",
+        "work_start_date",
+        "job_position",
+        "archived_at",
+      ).get(),
+    ),
   ]);
-  const drivers = driverSnap.docs.map((doc) => parseDriver(doc.id, dataOf(doc)));
+  const profiles = new Map<string, { name: string; phone: string }>();
+  for (const doc of profileSnap.docs) {
+    const row = dataOf(doc);
+    profiles.set(doc.id, { name: text(row["full_name"]), phone: text(row["phone"]) });
+  }
+  const intakes = new Map<string, { name: string; phone: string; zoneId: string; workStart: string; designation: string }>();
+  for (const doc of intakeSnap.docs) {
+    const row = dataOf(doc);
+    const archived = row["archived_at"];
+    if (archived != null && archived !== "" && archived !== false) continue;
+    const linked = text(row["linked_profile_id"]);
+    if (!linked) continue;
+    const next = {
+      name: text(row["full_name"]),
+      phone: text(row["phone"]),
+      zoneId: text(row["zone_id"]),
+      workStart: toYmd(row["work_start_date"]) ?? "",
+      designation: text(row["job_position"]),
+    };
+    const current = intakes.get(linked);
+    if (!current || (current.name.trim() === "" && next.name.trim() !== "")) intakes.set(linked, next);
+  }
+  const drivers = driverSnap.docs.map((doc) => {
+    const driver = parseDriver(doc.id, dataOf(doc));
+    const profile = profiles.get(driver.id);
+    const intake = intakes.get(driver.id);
+    return {
+      ...driver,
+      name: prefer(prefer(driver.name, profile?.name ?? ""), intake?.name ?? ""),
+      phone: prefer(prefer(driver.phone, profile?.phone ?? ""), intake?.phone ?? ""),
+      zoneId: prefer(driver.zoneId, intake?.zoneId ?? ""),
+      designation: prefer(driver.designation, intake?.designation ?? ""),
+      workStart: driver.workStart ?? (intake?.workStart ? intake.workStart : null),
+    };
+  });
   const driversById = new Map(drivers.map((driver) => [driver.id, driver]));
   const requestLeaves: LeaveRow[] = [];
   for (const doc of requestSnap.docs) {
@@ -669,7 +854,7 @@ async function loadDashboard(day: string) {
       project: "",
       start: toYmd(data["start_date"]) ?? "",
       end: toYmd(data["end_date"]) ?? "",
-      today: day,
+      today: to,
       leaveTypeRaw: text(payloadRow["leave_type"]) || text(payloadRow["leaveType"]),
     });
     if (!mapped) continue;
@@ -685,24 +870,29 @@ async function loadDashboard(day: string) {
     leaveSnap.docs.map((doc) => parseLeave(doc.id, dataOf(doc))),
     requestLeaves,
   );
-  const checkedIn = new Set<string>();
+  const checkedInByDay = new Map<string, Set<string>>();
   for (const doc of attendanceSnap.docs) {
     const data = dataOf(doc);
     const driverId = text(data["driver_id"]);
-    if (driverId && data["check_out_at"] == null) checkedIn.add(driverId);
+    const logDate = text(data["log_date"]);
+    if (!driverId || !logDate || data["check_out_at"] != null) continue;
+    const set = checkedInByDay.get(logDate) ?? new Set<string>();
+    set.add(driverId);
+    checkedInByDay.set(logDate, set);
   }
+  const checkedIn = checkedInByDay.get(to) ?? new Set<string>();
   const zones = new Map<string, string>();
   for (const doc of zoneSnap.docs) zones.set(doc.id, text(dataOf(doc)["name"]) || doc.id);
-  return { drivers, leaves, checkedIn, zones };
+  return { drivers, leaves, checkedIn, checkedInByDay, zones };
 }
 
 export const adminOperationsDashboard = onCall(async (request) => {
   const staff = await requireStaff(request, "operations_dashboard.view");
   const data = payloadOf(request);
   const today = kuwaitDayString(new Date());
-  const requestedDay = pickText(data, "day");
-  if (requestedDay && !isRealYmd(requestedDay)) throw new HttpsError("invalid-argument", "invalid_day");
-  const day = requestedDay ?? today;
+  const window = resolveWindow(data, today);
+  const day = window.to;
+  const days = eachDay(window.from, window.to);
   const todayYm = day.slice(0, 7);
   const requestedMonth = pickText(data, "month", "yearMonth", "year_month");
   if (requestedMonth && !isYearMonth(requestedMonth)) throw new HttpsError("invalid-argument", "invalid_month");
@@ -710,7 +900,7 @@ export const adminOperationsDashboard = onCall(async (request) => {
   const projectKey = scopedProjectKey(staff, pickText(data, "projectKey", "project_key"));
   const zoneId = pickText(data, "zoneId", "zone_id");
   const vehicle = pickText(data, "vehicle", "vehicleType", "vehicle_type")?.toLowerCase() ?? "";
-  const loaded = await loadDashboard(day);
+  const loaded = await loadDashboard(window.from, window.to);
   const narrowed = loaded.drivers.filter(
     (driver) => (!zoneId || driver.zoneId === zoneId) && vehicleMatches(driver.vehicle, vehicle),
   );
@@ -721,14 +911,26 @@ export const adminOperationsDashboard = onCall(async (request) => {
   );
   const scopedByDriver = indexLeaves(scopedLeaves);
   const allByDriver = indexLeaves(loaded.leaves);
-  const bar = tally(scopedDrivers, day, todayYm, scopedByDriver, loaded.checkedIn);
+  const bar = tallyWindow(scopedDrivers, days, scopedByDriver, loaded.checkedInByDay);
   const year = month.slice(0, 4);
   const yearLeaves = scopedLeaves.filter((plan) => plan.yearMonth.startsWith(year));
   const monthLeaves = scopedLeaves.filter((plan) => plan.yearMonth === month);
   const endings = jobEndBlocks(scopedDrivers, day);
   const live = liveOf(scopedDrivers);
+  const horizon = hiringWindowEnd(today);
+  const contract = contractEndTurnover(
+    scopedDrivers.map((driver) => ({
+      archived: driver.archived,
+      jobEnd: driver.jobEnd,
+      undecided: renewalDecision(driver.jobEndDescription, driver.jobEnd) === "no_renewal",
+    })),
+    today,
+  );
+  const hiring = hiringGroups(scopedDrivers, today, loaded.zones);
   return {
     today: day,
+    from: window.from,
+    to: window.to,
     projectKey,
     month,
     statusBar: bar.statusBar,
@@ -744,7 +946,9 @@ export const adminOperationsDashboard = onCall(async (request) => {
     jobEnd: endings.months,
     jobEndCards: endings.cards,
     ridersOnLeave: ridersOnLeave(scopedDrivers, scopedByDriver, day),
-    roster: rosterRows(scopedDrivers, day, todayYm, scopedByDriver, loaded.checkedIn, loaded.zones, !staff.isPartner),
+    roster: rosterRows(scopedDrivers, days, scopedByDriver, loaded.checkedInByDay, loaded.zones, !staff.isPartner),
+    turnover: contract,
+    hiring: { ...hiring, horizon },
     zones: [...loaded.zones.entries()]
       .map(([id, name]) => ({ id, name: name || id }))
       .sort((left, right) => left.name.localeCompare(right.name)),

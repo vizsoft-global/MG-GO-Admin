@@ -2,9 +2,9 @@
 
 import { useState, type JSX } from "react";
 import { HR_FOOTER_KEYS, HR_GROUP_FILL, hrGroupSpans, stickyOffsets } from "../../hr-payroll-columns";
-import type { HrColumn } from "../../hr-payroll-columns";
+import type { HrColumn, HrColumnKind } from "../../hr-payroll-columns";
 import { distinctHrValues, HR_AWAITING, hrColumnFilterMode, hrFooterTotals } from "../../hr-payroll-formulas";
-import { hrStatusPaint } from "../../hr-payroll-status";
+import { HR_STATUS_ORDER, hrStatusPaint } from "../../hr-payroll-status";
 import type { HrEditState, HrGroupBy, HrPayrollGroup, HrPayrollRow } from "../../hr-payroll-types";
 import { COLUMN_EDIT, money3, optionLabel } from "./hr-payroll-ui";
 import { PayrollIdentityCell, hrIdentityField } from "../../payroll-identity-cell";
@@ -30,18 +30,185 @@ function stickyBox(
   return { insetInlineStart: offsets[index] ?? 0, width, minWidth: width };
 }
 
+type HrSortMode = "az" | "za" | "small" | "large" | "colour";
+type HrSort = { key: string; mode: HrSortMode };
+
 function hrGroupValue(row: HrPayrollRow, groupBy: HrGroupBy): string {
   switch (groupBy) {
     case "company":
       return row.company;
     case "project":
+    case "clientName":
       return row.project;
     case "section":
       return row.section;
+    case "zone":
+      return row.zone;
+    case "vehicle":
+      return row.cells.vtype ?? "";
+    case "sponsor":
+      return row.sponsor;
+    case "rest":
+      return row.cells.rest ?? "";
+    case "status":
+      return row.cells.status ?? "";
+    case "natCat":
+      return row.cells.natCat ?? "";
+    case "hiring":
+      return row.cells.hiring ?? "";
     case "none":
       return "";
     default: {
       const unreachable: never = groupBy;
+      return unreachable;
+    }
+  }
+}
+
+function groupRank(row: HrPayrollRow, groupBy: HrGroupBy): string {
+  if (groupBy === "status") {
+    const index = (HR_STATUS_ORDER as readonly string[]).indexOf(row.statusKey);
+    return String(index < 0 ? 99 : index).padStart(2, "0");
+  }
+  return hrGroupValue(row, groupBy);
+}
+
+function numericKind(kind: HrColumnKind): boolean {
+  switch (kind) {
+    case "money":
+    case "dec2":
+    case "int":
+    case "pct":
+    case "index":
+    case "select":
+      return true;
+    case "text":
+      return false;
+    default: {
+      const unreachable: never = kind;
+      return unreachable;
+    }
+  }
+}
+
+function numericColumn(column: HrColumn): boolean {
+  switch (column.key) {
+    case "mg":
+    case "civil":
+    case "client":
+    case "rate":
+      return true;
+    default:
+      return numericKind(column.kind);
+  }
+}
+
+function nextSort(column: HrColumn, current: HrSort | null): HrSort | null {
+  const mode: HrSortMode | null = current?.key === column.key ? current.mode : null;
+  if (column.key === "name" || column.key === "status") {
+    switch (mode) {
+      case null:
+        return { key: column.key, mode: "colour" };
+      case "colour":
+        return { key: column.key, mode: "az" };
+      case "az":
+        return { key: column.key, mode: "za" };
+      case "za":
+        return null;
+      case "small":
+      case "large":
+        return { key: column.key, mode: "colour" };
+      default: {
+        const unreachable: never = mode;
+        return unreachable;
+      }
+    }
+  }
+  if (numericColumn(column)) {
+    switch (mode) {
+      case null:
+        return { key: column.key, mode: "small" };
+      case "small":
+        return { key: column.key, mode: "large" };
+      case "large":
+        return null;
+      case "colour":
+      case "az":
+      case "za":
+        return { key: column.key, mode: "small" };
+      default: {
+        const unreachable: never = mode;
+        return unreachable;
+      }
+    }
+  }
+  switch (mode) {
+    case null:
+      return { key: column.key, mode: "az" };
+    case "az":
+      return { key: column.key, mode: "za" };
+    case "za":
+      return null;
+    case "colour":
+    case "small":
+    case "large":
+      return { key: column.key, mode: "az" };
+    default: {
+      const unreachable: never = mode;
+      return unreachable;
+    }
+  }
+}
+
+function sortMark(mode: HrSortMode): string {
+  switch (mode) {
+    case "az":
+      return " A–Z";
+    case "za":
+      return " Z–A";
+    case "small":
+      return " ↑";
+    case "large":
+      return " ↓";
+    case "colour":
+      return " ●";
+    default: {
+      const unreachable: never = mode;
+      return unreachable;
+    }
+  }
+}
+
+function firstNumber(text: string): number {
+  const match = text.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  if (!match) return Number.POSITIVE_INFINITY;
+  const value = Number(match[0]);
+  return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
+}
+
+function compareSorted(a: HrPayrollRow, b: HrPayrollRow, key: string, mode: HrSortMode): number {
+  switch (mode) {
+    case "colour": {
+      const order = HR_STATUS_ORDER as readonly string[];
+      const left = order.indexOf(a.statusKey);
+      const right = order.indexOf(b.statusKey);
+      return (left < 0 ? 99 : left) - (right < 0 ? 99 : right);
+    }
+    case "small":
+    case "large": {
+      const delta = firstNumber(a.cells[key] ?? "") - firstNumber(b.cells[key] ?? "");
+      return mode === "small" ? delta : -delta;
+    }
+    case "az":
+    case "za": {
+      const delta = (a.cells[key] ?? "").localeCompare(b.cells[key] ?? "", undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+      return mode === "az" ? delta : -delta;
+    }
+    default: {
+      const unreachable: never = mode;
       return unreachable;
     }
   }
@@ -127,6 +294,7 @@ function renderHrCell(
   dataIndex: number,
   canManage: boolean,
   awaiting: string,
+  noRate: string,
   onSelect: (driverId: string, key: keyof HrEditState, value: number) => void,
   onAmount: (driverId: string, key: keyof HrEditState, value: number) => void,
 ): JSX.Element | string | number {
@@ -182,13 +350,14 @@ function renderHrCell(
         driverId={row.driverId}
         field={identityField}
         value={value}
-        canEdit={canManage}
+        canEdit={false}
         tone={tone}
       />
     );
   }
   const text = row.cells[column.key] ?? "";
   if (text === HR_AWAITING) return <span className="hrpay-await">{awaiting}</span>;
+  if (column.key === "rate" && text === noRate) return <span className="hrpay-warn">{text}</span>;
   return text;
 }
 
@@ -204,17 +373,24 @@ export function HrPayrollGrid(props: {
   headers: Readonly<Record<string, string>>;
   groupLabels: Readonly<Record<HrPayrollGroup, string>>;
   awaiting: string;
+  noRate: string;
+  blank: string;
   totalRiders: string;
   empty: string;
   all: string;
   onSelect: (driverId: string, key: keyof HrEditState, value: number) => void;
   onAmount: (driverId: string, key: keyof HrEditState, value: number) => void;
 }): JSX.Element {
+  const [sort, setSort] = useState<HrSort | null>(null);
   const offsets = stickyOffsets(props.columns);
-  const ordered =
-    props.groupBy === "none"
-      ? props.rows
-      : [...props.rows].sort((a, b) => hrGroupValue(a, props.groupBy).localeCompare(hrGroupValue(b, props.groupBy)));
+  const ordered = [...props.rows].sort((a, b) => {
+    if (props.groupBy !== "none") {
+      const group = groupRank(a, props.groupBy).localeCompare(groupRank(b, props.groupBy));
+      if (group !== 0) return group;
+    }
+    if (!sort) return 0;
+    return compareSorted(a, b, sort.key, sort.mode);
+  });
   const totals = hrFooterTotals(props.rows);
   const nameIndex = props.columns.findIndex((column) => column.key === "name");
   const riderLabelAt = nameIndex >= 0 ? nameIndex : 0;
@@ -232,9 +408,10 @@ export function HrPayrollGrid(props: {
       if (props.groupBy !== "none") {
         const value = hrGroupValue(row, props.groupBy);
         if (value !== previous) {
+          const shown = value && value !== "—" ? value : props.blank;
           body.push(
             <tr key={`group-${body.length}-${value}`} className="hrpay-group">
-              <td colSpan={props.columns.length}>{value}</td>
+              <td colSpan={props.columns.length}>{shown}</td>
             </tr>,
           );
           previous = value;
@@ -261,6 +438,7 @@ export function HrPayrollGrid(props: {
                 index,
                 props.canManage,
                 props.awaiting,
+                props.noRate,
                 props.onSelect,
                 props.onAmount,
               )}
@@ -305,7 +483,10 @@ export function HrPayrollGrid(props: {
                 className={withSticky("hrpay-colhead", index)}
                 style={stickyBox(index, offsets, column.width)}
               >
-                {props.headers[column.key] ?? column.header}
+                <button type="button" className="hrpay-sort" onClick={() => setSort((current) => nextSort(column, current))}>
+                  {props.headers[column.key] ?? column.header}
+                  {sort?.key === column.key ? sortMark(sort.mode) : ""}
+                </button>
               </th>
             ))}
           </tr>

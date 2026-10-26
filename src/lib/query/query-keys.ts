@@ -293,6 +293,7 @@ export const queryKeys = {
     riderStatuses: () => ["payroll", "rider-statuses"] as const,
     hrPayroll: (monthKey: string, locale: string) =>
       ["payroll", "hr-payroll", monthKey, locale] as const,
+    hrRates: () => ["payroll", "hr-rates"] as const,
   },
   wrongActions: {
     all: () => ["wrong-actions"] as const,

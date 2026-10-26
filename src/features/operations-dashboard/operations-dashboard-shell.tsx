@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Bike, ChevronRight, RefreshCw, Trash2 } from "lucide-react";
-import { defaultStartDate, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
+import { ChevronRight, Download, RefreshCw, Trash2 } from "lucide-react";
+import { Logo } from "@/components/brand/logo";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { AppPage } from "@/components/app/app-page";
@@ -37,6 +38,9 @@ import {
   filterRoster,
   jobEndExportRows,
   leaveExportRows,
+  periodBounds,
+  DASHBOARD_PERIODS,
+  type DashboardPeriod,
   type EmployeeStatusKey,
   type JobEndCardKey,
   type LeaveMonthBar,
@@ -498,14 +502,16 @@ export function OperationsDashboardShell() {
   const [loading, setLoading] = useState(true);
   const [projectKey, setProjectKey] = useState<string | undefined>();
   const [month, setMonth] = useState<string | undefined>();
-  const [day, setDay] = useState("");
+  const [period, setPeriod] = useState<DashboardPeriod>("today");
+  const [customFrom, setCustomFrom] = useState(kuwaitTodayYmd());
+  const [customTo, setCustomTo] = useState(kuwaitTodayYmd());
   const [zoneId, setZoneId] = useState("");
   const [vehicle, setVehicle] = useState("");
+  const [hireBy, setHireBy] = useState<"designation" | "zone" | "project">("designation");
   const [jobWindow, setJobWindow] = useState<JobWindow>("next6");
   const [leaveType, setLeaveType] = useState("");
   const [planProject, setPlanProject] = useState("");
   const today = kuwaitTodayYmd();
-  const yesterday = defaultStartDate(1);
   const [outlook, setOutlook] = useState<OutlookFilter | null>(null);
   const [showAllLeaveRiders, setShowAllLeaveRiders] = useState(false);
   const [showAllPlans, setShowAllPlans] = useState(false);
@@ -519,17 +525,19 @@ export function OperationsDashboardShell() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    const bounds = periodBounds(period, today, customFrom, customTo);
     const result = await fetchOperationsDashboard({
       projectKey,
       month,
-      day: day || undefined,
+      from: bounds.from,
+      to: bounds.to,
       zoneId: zoneId || undefined,
       vehicle: vehicle || undefined,
     });
     setDashboard(result.dashboard);
     setFailed(result.failed);
     setLoading(false);
-  }, [projectKey, month, day, zoneId, vehicle]);
+  }, [projectKey, month, period, customFrom, customTo, today, zoneId, vehicle]);
 
   useEffect(() => {
     void load();
@@ -550,23 +558,27 @@ export function OperationsDashboardShell() {
   };
 
   const shownDay = data?.today || today;
+  const shownFrom = data?.from || periodBounds(period, today, customFrom, customTo).from;
+  const shownTo = data?.to || periodBounds(period, today, customFrom, customTo).to;
+  const rangeActive = shownFrom !== shownTo;
   const activeProject = readOnly
     ? (data?.byProject.length === 1 ? data.byProject[0]?.key : undefined)
     : projectKey;
   const projectName = activeProject
     ? (data?.byProject.find((row) => row.key === activeProject)?.label ?? activeProject)
-    : t("projectAll");
-  const dateLabel = new Date(`${shownDay}T12:00:00`).toLocaleDateString(locale, {
+    : t("allProjects");
+  const formatDay = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString(locale === "ar" ? "ar" : "en-GB", {
     weekday: "long",
     day: "numeric",
     month: "short",
     year: "numeric",
   });
+  const dateLabel = rangeActive ? `${formatDay(shownFrom)} – ${formatDay(shownTo)}` : formatDay(shownDay);
   const barTotal = (data?.statusBar ?? []).reduce((sum, item) => sum + item.count, 0);
   const rosterBase = filterRoster(data?.roster ?? [], rosterFilter ?? "all", "");
   const rosterRows = filterRoster(data?.roster ?? [], rosterFilter ?? "all", rosterQuery);
   const showPhone = !readOnly && (data?.roster ?? []).some((row) => row.phone !== "");
-  const rosterProject = data?.byProject.find((project) => project.key === (readOnly ? data.byProject[0]?.key : projectKey))?.label ?? t("projectAll");
+  const rosterProject = data?.byProject.find((project) => project.key === (readOnly ? data.byProject[0]?.key : projectKey))?.label ?? t("allProjects");
 
   const openRoster = (filter: RosterFilter) => {
     setRosterFilter((current) => (current === filter ? null : filter));
@@ -638,6 +650,7 @@ export function OperationsDashboardShell() {
     { value: "past6", label: t("windowPast6") },
   ] as const;
   const titled = (label: string) => (activeProject ? `${label} — ${projectName}` : label);
+  const scopedTitle = (label: string) => `${label} — ${projectName}`;
   const leaveSum = chart.reduce((sum, item) => sum + item.count, 0);
   const busiest = chart.reduce<LeaveMonthBar | undefined>(
     (best, item) => (!best || item.count > best.count ? item : best),
@@ -676,12 +689,23 @@ export function OperationsDashboardShell() {
       <section className={card} style={{ borderColor: "#e3e5e8" }}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <span className="flex size-11 items-center justify-center rounded-xl text-white" style={{ background: "#714b67" }}>
-              <Bike className="size-5" />
-            </span>
+            <Logo framed size="lg" className="size-11 rounded-lg border-[#e3e5e8] bg-white p-1" />
             <div>
               <h1 className="type-h1 text-[#1f2328]">{t("title")}</h1>
-              <p className="text-sm text-[#5c6370]">{t("showing", { name: projectName, date: dateLabel })}</p>
+              <p className="text-sm text-[#5c6370]">
+                {rangeActive
+                  ? t.rich("showingRange", {
+                      name: projectName,
+                      from: formatDay(shownFrom),
+                      to: formatDay(shownTo),
+                      b: (chunks) => <span className="font-semibold text-[#1f2328]">{chunks}</span>,
+                    })
+                  : t.rich("showing", {
+                      name: projectName,
+                      date: dateLabel,
+                      b: (chunks) => <span className="font-semibold text-[#1f2328]">{chunks}</span>,
+                    })}
+              </p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -695,12 +719,23 @@ export function OperationsDashboardShell() {
             <Button className={HEADER_BTN} variant="outline" onClick={() => { setOutlook("pendingApproval"); scrollToLeave(); }}>
               {t("leaveRequests")}
             </Button>
+            <Button
+              className={HEADER_BTN}
+              variant="outline"
+              disabled={!data}
+              onClick={() => {
+                if (data) exportDashboard(data, t, projectName, periodLabel(period, t), dateLabel);
+              }}
+            >
+              <Download className="size-5" />
+              {t("exportDashboard")}
+            </Button>
           </div>
         </div>
         <p className="mb-2 mt-4 text-xs uppercase tracking-wide text-[#5c6370]">{t("colProject")}</p>
         <div className="flex flex-wrap gap-2">
           {readOnly ? null : (
-            <ProjectPill active={!projectKey} label={t("projectAll")} onClick={() => setProjectKey(undefined)} />
+            <ProjectPill active={!projectKey} label={t("allProjects")} onClick={() => setProjectKey(undefined)} />
           )}
           {(data?.byProject ?? []).map((project) => (
             <ProjectPill
@@ -713,10 +748,32 @@ export function OperationsDashboardShell() {
             />
           ))}
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <FilterSelect label={t("filterDate")} value={day || "today"} items={[{ value: "today", label: t("today") }, { value: "yesterday", label: t("yesterday") }]} onChange={(value) => setDay(value === "today" ? "" : value === "yesterday" ? yesterday : value)} />
+        <p className="mb-2 mt-4 text-xs uppercase tracking-wide text-[#5c6370]">{t("periodLabel")}</p>
+        <div className="flex flex-wrap gap-2">
+          {DASHBOARD_PERIODS.map((item) => (
+            <ProjectPill key={item} active={period === item} label={periodLabel(item, t)} onClick={() => setPeriod(item)} />
+          ))}
+        </div>
+        {period === "custom" ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <label className="block text-xs text-[#5c6370]">
+              {t("customFrom")}
+              <Input className="mt-1 h-9" type="date" max={today} value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} />
+            </label>
+            <label className="block text-xs text-[#5c6370]">
+              {t("customTo")}
+              <Input className="mt-1 h-9" type="date" max={today} value={customTo} onChange={(event) => setCustomTo(event.target.value)} />
+            </label>
+          </div>
+        ) : null}
+        <p className="mt-3 text-xs text-[#5c6370]">
+          {rangeActive
+            ? t("numbersForRange", { from: formatDay(shownFrom), to: formatDay(shownTo) })
+            : t("numbersFor", { date: dateLabel })}
+        </p>
+        {rangeActive ? <p className="text-xs text-[#5c6370]">{t("rangeHint")}</p> : null}
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <FilterSelect label={t("filterZone")} value={zoneId || "all"} items={zoneItems} onChange={(value) => setZoneId(value === "all" ? "" : value)} />
-          <FilterSelect label={t("filterSupervisor")} value="all" items={[{ value: "all", label: t("supervisorAll") }]} onChange={() => undefined} />
           <FilterSelect label={t("filterVehicle")} value={vehicle || "all"} items={[{ value: "all", label: t("vehicleAll") }, { value: "bike", label: t("vehicleBike") }, { value: "car", label: t("vehicleCar") }]} onChange={(value) => setVehicle(value === "all" ? "" : value)} />
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
@@ -1137,6 +1194,83 @@ export function OperationsDashboardShell() {
         </div>
       </section>
 
+      <section className={card} style={{ borderColor: "#e3e5e8" }}>
+        <h2 className="text-sm font-semibold text-[#1f2328]">{scopedTitle(t("turnoverContractTitle"))}</h2>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <Tile label={t("turnoverRate")} value={formatPct(data?.turnover.rate ?? 0)} color="#b71c1c" />
+          <Tile label={t("turnoverEnded")} value={data?.turnover.ended ?? 0} color="#b45309" />
+          <Tile label={t("turnoverAssumed")} value={data?.turnover.assumed ?? 0} color="#b45309" />
+          <Tile label={t("turnoverTotal")} value={data?.turnover.total ?? 0} color="#1f2328" />
+        </div>
+        <p className="mt-3 text-xs text-[#5c6370]">{t("turnoverNote")}</p>
+        {(data?.turnover.months.length ?? 0) === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">{t("turnoverEmpty")}</p>
+        ) : (
+          <Table className={`${DENSE_TABLE} mt-3`}>
+            <TableHeader>
+              <TableRow>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colMonth")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colCount")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("turnoverRate")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data?.turnover.months.map((monthRow) => (
+                <TableRow key={monthRow.yearMonth}>
+                  <TableCell>{monthLabel(monthRow.yearMonth, locale)}</TableCell>
+                  <TableCell>{monthRow.count}</TableCell>
+                  <TableCell>{formatPct(monthRow.rate)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </section>
+
+      <section className={card} style={{ borderColor: "#e3e5e8" }}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-[#1f2328]">{scopedTitle(t("hiringTitle"))}</h2>
+          <Select value={hireBy} onValueChange={(value) => setHireBy(hireByValue(value))}>
+            <SelectTrigger className="h-9 min-h-9 w-44 bg-white text-[#1f2328]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {hireByItems(t).map((item) => (
+                <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <Tile label={t("hiringCurrent")} value={data?.hiring.current ?? 0} color="#1f2328" />
+          <Tile label={t("hiringLeaving")} value={data?.hiring.leaving ?? 0} color="#b45309" />
+          <Tile label={t("hiringRequired")} value="—" color="#5c6370" />
+          <Tile label={t("hiringPipeline")} value="—" color="#5c6370" />
+          <Tile label={t("hiringToHire")} value="—" color="#5c6370" />
+        </div>
+        <p className="mt-3 text-xs text-[#5c6370]">{t("hiringNote")}</p>
+        {hiringRows(data?.hiring, hireBy).length === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">{t("hiringEmpty")}</p>
+        ) : (
+          <Table className={`${DENSE_TABLE} mt-3`}>
+            <TableHeader>
+              <TableRow>
+                <TableHead className={TABLE_HEAD_CLASS}>{hireBy === "designation" ? t("hiringDesignation") : hireBy === "zone" ? t("hiringZone") : t("hiringProject")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colCurrent")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colLeaving")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {hiringRows(data?.hiring, hireBy).map((row) => (
+                <TableRow key={row.label || "blank"}>
+                  <TableCell>{row.label || "—"}</TableCell>
+                  <TableCell>{row.current}</TableCell>
+                  <TableCell>{row.leaving}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-2">
       <section className={card} style={{ borderColor: "#e3e5e8" }}>
         <div className="mb-3 flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-white" style={{ background: "#1565c0" }}>
@@ -1337,6 +1471,83 @@ function Tile({ label, value, color, valueColor, action, onAction }: { label: st
       ) : null}
     </div>
   );
+}
+
+function periodLabel(period: DashboardPeriod, t: Translator): string {
+  switch (period) {
+    case "today":
+      return t("today");
+    case "yesterday":
+      return t("yesterday");
+    case "thisWeek":
+      return t("periodThisWeek");
+    case "last7":
+      return t("periodLast7");
+    case "thisMonth":
+      return t("periodThisMonth");
+    case "lastMonth":
+      return t("periodLastMonth");
+    case "custom":
+      return t("periodCustom");
+    default: {
+      const neverPeriod: never = period;
+      return neverPeriod;
+    }
+  }
+}
+
+function hireByValue(value: string | null): "designation" | "zone" | "project" {
+  if (value === "zone" || value === "project" || value === "designation") return value;
+  return "designation";
+}
+
+function hireByItems(t: Translator) {
+  return [
+    { value: "designation", label: t("hiringDesignation") },
+    { value: "zone", label: t("hiringZone") },
+    { value: "project", label: t("hiringProject") },
+  ];
+}
+
+function hiringRows(plan: OperationsDashboard["hiring"] | undefined, by: "designation" | "zone" | "project") {
+  if (!plan) return [];
+  switch (by) {
+    case "designation":
+      return plan.designation;
+    case "zone":
+      return plan.zone;
+    case "project":
+      return plan.project;
+    default: {
+      const neverBy: never = by;
+      return neverBy;
+    }
+  }
+}
+
+function monthLabel(yearMonth: string, locale: string): string {
+  return new Date(`${yearMonth}-01T12:00:00`).toLocaleDateString(locale, { month: "short", year: "numeric" });
+}
+
+function exportDashboard(data: OperationsDashboard, t: Translator, projectName: string, period: string, dateLabel: string) {
+  const other = data.statusBar.find((row) => row.key === "other")?.count ?? data.kpis.other;
+  downloadWorkbookXlsx("workforce-operations.xlsx", [{
+    name: "Dashboard",
+    aoa: [
+      [t("title")],
+      [dateLabel],
+      [t("periodLabel"), period],
+      [t("colProject"), projectName],
+      [t("kpiTotal"), data.kpis.assigned],
+      [t("kpiWorkingToday"), data.kpis.working],
+      [t("kpiOnLeave"), data.kpis.onLeave],
+      [t("kpiAbsent"), data.kpis.absent],
+      [t("kpiSick"), data.kpis.sick],
+      [t("kpiOther"), other],
+      [t("kpiAccident"), data.kpis.accident],
+      [t("kpiWorkingRate"), formatPct(data.kpis.workingRate)],
+    ],
+  }]);
 }
 
 function exportRoster(rows: readonly RosterRow[], showPhone: boolean, t: Translator, locale: string, projects: readonly ProjectRow[]) {

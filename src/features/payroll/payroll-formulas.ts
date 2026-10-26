@@ -1099,16 +1099,18 @@ export function dayStatusLabel(status: DayStatus): string {
  * Logged hours never appear here — those stay on the Actual Hours column.
  * Actual / custom still print their credited hours, never ACT / CUS, at one
  * decimal so a cell, a filter value and the Excel sheet agree on the string.
+ * Hour credits are plain numbers (`12`, `6`, `3`, `4.3`) so a CSV opens as
+ * values Excel can sum. Status words stay text.
  */
-/** The grid never labels more than a full day: every value at or above 12 prints `12h`. */
+/** The grid never labels more than a full day: every value at or above 12 prints `12`. */
 export const MAX_DAY_LABEL_HOURS = 12;
 
 export function dayGridLabel(status: DayStatus, hours: number): string {
   switch (status) {
     case "work":
-      return "12h";
+      return "12";
     case "reduced3":
-      return "3h";
+      return "3";
     case "off":
       return "OFF";
     case "sick":
@@ -1120,10 +1122,10 @@ export function dayGridLabel(status: DayStatus, hours: number): string {
     case "absent":
       return "ABS";
     case "half":
-      return "6h";
+      return "6";
     case "actual":
     case "custom":
-      return `${formatHoursToken(hours >= MAX_DAY_LABEL_HOURS ? MAX_DAY_LABEL_HOURS : hours)}h`;
+      return formatHoursToken(hours >= MAX_DAY_LABEL_HOURS ? MAX_DAY_LABEL_HOURS : hours);
     case "abs_lh":
       return "Abs·LH";
     case "abs_lo":

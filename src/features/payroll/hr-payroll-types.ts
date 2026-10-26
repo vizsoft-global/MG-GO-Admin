@@ -1,8 +1,20 @@
-export type HrPayrollGroup = "emp" | "ops" | "in" | "calc" | "imp" | "pay";
+export type HrPayrollGroup = "emp" | "cfg" | "ops" | "in" | "calc" | "imp" | "pay";
 
 export type HrSummaryBy = "company" | "sponsor" | "project" | "zone" | "section";
 
-export type HrGroupBy = "none" | "company" | "project" | "section";
+export type HrGroupBy =
+  | "none"
+  | "company"
+  | "project"
+  | "section"
+  | "clientName"
+  | "zone"
+  | "vehicle"
+  | "sponsor"
+  | "rest"
+  | "status"
+  | "natCat"
+  | "hiring";
 
 export type HrImportField =
   | "pendingSalary"
@@ -84,6 +96,9 @@ export type HrPayrollNumbers = {
   fourYearAmount: number;
   incentives: number;
   foodAllowance: number;
+  orders: number;
+  revenue: number;
+  contribution: number;
 };
 
 export type HrPayrollRow = {
@@ -122,6 +137,29 @@ export type HrSummaryLine = {
   totalAllowances: number;
   totalDeductions: number;
   riders: number;
+  vehicleType: string;
+  rateLabel: string;
+  orders: number;
+  revenue: number;
+  contribution: number;
+};
+
+export type HrSheetFilters = {
+  clientName: string;
+  zone: string;
+  vehicle: string;
+  nationality: string;
+  company: string;
+  store: string;
+};
+
+export const EMPTY_HR_SHEET_FILTERS: HrSheetFilters = {
+  clientName: "",
+  zone: "",
+  vehicle: "",
+  nationality: "",
+  company: "",
+  store: "",
 };
 
 export type HrColumnFilter = {
