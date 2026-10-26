@@ -99,7 +99,7 @@ describe("resolveBenchmark", () => {
     );
   });
 
-  it("no partner filter averages both when both exist", () => {
+  it("no partner filter uses the rider client, not an average", () => {
     assert.equal(
       resolveBenchmark({
         projectKey: "americana",
@@ -107,11 +107,11 @@ describe("resolveBenchmark", () => {
         storeDpd: 20,
         zoneVehicleDpd: 40,
       }),
-      30,
+      20,
     );
   });
 
-  it("assumption #2: missing side uses the side that exists (never 0)", () => {
+  it("a missing benchmark stays null and does not use the other side", () => {
     assert.equal(
       resolveBenchmark({
         projectKey: "keeta",
@@ -150,7 +150,19 @@ describe("resolveBenchmark", () => {
         storeDpd: 10,
         zoneVehicleDpd: 20,
       }),
-      15,
+      10,
+    );
+  });
+
+  it("Keeta with no zone-vehicle benchmark stays null", () => {
+    assert.equal(
+      resolveBenchmark({
+        projectKey: "keeta",
+        partnerKeys: [],
+        storeDpd: 22,
+        zoneVehicleDpd: null,
+      }),
+      null,
     );
   });
 });
@@ -714,6 +726,33 @@ describe("trend window + 4-week buckets", () => {
     assert.equal(rows[0]?.riders, 2);
     assert.equal(rows[0]?.orders, 3);
     assert.equal(rows[0]?.active_riders, 1);
+  });
+
+  it("company UTR is the sum of orders over the sum of hours", () => {
+    const rows = companyRowsFromRiders([
+      {
+        source_company: "mg",
+        orders: 35,
+        working_days: 5,
+        dpd_eff: 100,
+        tgt_eff: 100,
+        working_hours: 40,
+        delivery_minutes: 90,
+        delivery_count: 3,
+      },
+      {
+        source_company: "mg",
+        orders: 27,
+        working_days: 2,
+        dpd_eff: 50,
+        tgt_eff: 50,
+        working_hours: 0,
+        delivery_minutes: 50,
+        delivery_count: 1,
+      },
+    ]);
+    assert.equal(rows[0]?.utr, 62 / 40);
+    assert.equal(rows[0]?.avg_delivery_min, 140 / 4);
   });
 
   it("attachTrendEff mirrors the RPC tgt_eff formula", () => {

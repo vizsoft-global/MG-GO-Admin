@@ -1728,6 +1728,9 @@ function parseOpsKpis(raw: unknown): OpsKpis {
     active: asInt(o.active),
     active_prev: asInt(o.active_prev),
     working_days: asInt(o.working_days),
+    working_hours: numOrNull(o.working_hours) ?? 0,
+    utr: numOrNull(o.utr),
+    avg_delivery_min: numOrNull(o.avg_delivery_min),
     stores_above: asInt(o.stores_above),
     stores_below: asInt(o.stores_below),
   };
@@ -1746,6 +1749,9 @@ function parseDim(raw: unknown): OpsDimRow {
     dpd: numOrNull(o.dpd),
     dpd_eff: numOrNull(o.dpd_eff),
     tgt_eff: numOrNull(o.tgt_eff),
+    working_hours: numOrNull(o.working_hours) ?? 0,
+    utr: numOrNull(o.utr),
+    avg_delivery_min: numOrNull(o.avg_delivery_min),
     riders: asInt(o.riders),
     active_riders: o.active_riders == null ? undefined : asInt(o.active_riders),
     bikes: o.bikes == null ? undefined : asInt(o.bikes),
@@ -1795,6 +1801,11 @@ function parseOpsSnapshot(raw: unknown): OpsSnapshot {
             dpd: numOrNull(row.dpd),
             dpd_eff: numOrNull(row.dpd_eff),
             tgt_eff: numOrNull(row.tgt_eff),
+            working_hours: numOrNull(row.working_hours) ?? 0,
+            delivery_minutes: numOrNull(row.delivery_minutes) ?? 0,
+            delivery_count: asInt(row.delivery_count),
+            utr: numOrNull(row.utr),
+            avg_delivery_min: numOrNull(row.avg_delivery_min),
           };
         })
       : [],
@@ -1826,6 +1837,9 @@ function parseOpsSnapshot(raw: unknown): OpsSnapshot {
             riders: asInt(row.riders),
             active_riders: asInt(row.active_riders),
             store_dpd: numOrNull(row.store_dpd),
+            working_hours: numOrNull(row.working_hours) ?? 0,
+            utr: numOrNull(row.utr),
+            avg_delivery_min: numOrNull(row.avg_delivery_min),
           };
         })
       : [],
@@ -1854,6 +1868,11 @@ function parseOpsSnapshot(raw: unknown): OpsSnapshot {
             veh_zone_dpd: numOrNull(row.veh_zone_dpd),
             dpd_eff: numOrNull(row.dpd_eff),
             tgt_eff: numOrNull(row.tgt_eff),
+            working_hours: numOrNull(row.working_hours) ?? 0,
+            utr: numOrNull(row.utr),
+            avg_delivery_min: numOrNull(row.avg_delivery_min),
+            delivery_minutes: numOrNull(row.delivery_minutes) ?? 0,
+            delivery_count: asInt(row.delivery_count),
             status: row.status === "Active" ? "Active" : "Inactive",
           };
         })

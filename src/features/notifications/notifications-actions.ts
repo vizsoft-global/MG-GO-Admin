@@ -24,6 +24,8 @@ import { interpolateTemplate } from "./interpolate-template";
 import { pickLatestPushTokenByDriver } from "./push-token-select";
 import { resolveScreenshotRestricted } from "./screenshot-restriction";
 import { resolveDriversByLookupIds } from "@/features/drivers/resolve-drivers-by-lookup-ids";
+import { recipientIdsFromCompile } from "./audience-snapshot";
+import { statusesForListBucket } from "./notification-list-buckets";
 import { searchActiveDrivers } from "@/features/drivers/search-active-drivers";
 import { fetchDriversPage } from "@/features/drivers/drivers-list-actions";
 import { DEFAULT_DRIVERS_SORT } from "@/features/drivers/drivers-list-query";
@@ -979,13 +981,18 @@ export async function getNotificationDashboardKpis(): Promise<NotificationDashbo
 function applyNotificationCampaignFilters<
   T extends {
     eq: (column: string, value: string) => T;
+    in: (column: string, value: string[]) => T;
     or: (filters: string) => T;
     gte: (column: string, value: string) => T;
     lte: (column: string, value: string) => T;
   },
 >(query: T, filters: NotificationListFilters): T {
   let next = query;
-  if (filters.status && filters.status !== "all") {
+  if (filters.bucket && filters.bucket !== "all") {
+    const statuses = statusesForListBucket(filters.bucket);
+    if (statuses?.length === 1) next = next.eq("status", statuses[0]);
+    else if (statuses && statuses.length > 1) next = next.in("status", [...statuses]);
+  } else if (filters.status && filters.status !== "all") {
     next = next.eq("status", filters.status);
   }
   if (filters.category && filters.category !== "all") {
@@ -1062,6 +1069,8 @@ export type NotificationDispatchItemRow = {
   driver_label: string;
   engagement_seen: boolean;
   engagement_tapped: boolean;
+  resolved_title: string | null;
+  resolved_body: string | null;
 };
 
 export async function getNotificationDispatchItems(
@@ -1072,7 +1081,7 @@ export async function getNotificationDispatchItems(
   const { data, error } = await panel
     .from("notification_dispatch_items")
     .select(
-      "id, driver_id, status, error_code, error_message, sent_at, opened_at, clicked_at, delivered_at, drivers(driver_code, employee_id, profiles!drivers_id_fkey(full_name))",
+      "id, driver_id, status, error_code, error_message, sent_at, opened_at, clicked_at, delivered_at, resolved_title, resolved_body, drivers(driver_code, employee_id, profiles!drivers_id_fkey(full_name))",
     )
     .eq("campaign_id", campaignId)
     .order("created_at", { ascending: false });
@@ -1103,6 +1112,8 @@ export async function getNotificationDispatchItems(
       driver_label: `${code} · ${name}`,
       engagement_seen: Boolean(row.opened_at),
       engagement_tapped: Boolean(row.clicked_at),
+      resolved_title: typeof row.resolved_title === "string" ? row.resolved_title : null,
+      resolved_body: typeof row.resolved_body === "string" ? row.resolved_body : null,
     };
   });
 }
@@ -1420,17 +1431,18 @@ async function executeNotificationDispatch(
     const lookups = [
       ...new Set(
         importSpec.rows.flatMap((row) =>
-          [row.employee_id, row.driver_code].map((v) => v?.trim()).filter(Boolean),
+          [row.employee_id, row.driver_code, row.client_id].map((v) => v?.trim()).filter(Boolean),
         ),
       ),
     ] as string[];
     const { data: driverRows } = await service
       .from("drivers")
-      .select("id, employee_id, driver_code")
+      .select("id, employee_id, driver_code, client_id")
       .or(
         [
           lookups.length ? `employee_id.in.(${lookups.join(",")})` : "",
           lookups.length ? `driver_code.in.(${lookups.join(",")})` : "",
+          lookups.length ? `client_id.in.(${lookups.join(",")})` : "",
         ]
           .filter(Boolean)
           .join(","),
@@ -1438,16 +1450,30 @@ async function executeNotificationDispatch(
       .is("archived_at", null);
     const lookupToDriver = new Map<string, string>();
     for (const d of driverRows ?? []) {
-      const row = d as { id: string; employee_id: string | null; driver_code: string };
-      if (row.employee_id) lookupToDriver.set(row.employee_id, row.id);
-      if (row.driver_code) lookupToDriver.set(row.driver_code, row.id);
+      const row = d as {
+        id: string;
+        employee_id: string | null;
+        driver_code: string;
+        client_id?: string | null;
+      };
+      if (row.employee_id && !lookupToDriver.has(row.employee_id)) {
+        lookupToDriver.set(row.employee_id, row.id);
+      }
+      if (row.driver_code && !lookupToDriver.has(row.driver_code)) {
+        lookupToDriver.set(row.driver_code, row.id);
+      }
+      if (row.client_id && !lookupToDriver.has(row.client_id)) {
+        lookupToDriver.set(row.client_id, row.id);
+      }
     }
     importSpec.rows.forEach((row, index) => {
       const emp = row.employee_id?.trim();
       const code = row.driver_code?.trim();
+      const client = row.client_id?.trim();
       const driverId =
         (emp ? lookupToDriver.get(emp) : undefined) ??
-        (code ? lookupToDriver.get(code) : undefined);
+        (code ? lookupToDriver.get(code) : undefined) ??
+        (client ? lookupToDriver.get(client) : undefined);
       if (!driverId) return;
       personalizationByDriver.set(driverId, {
         title: interpolateTemplate(String(campaign.title), row),
@@ -1458,24 +1484,56 @@ async function executeNotificationDispatch(
     });
   }
 
-  const { data: snapshotId, error: snapshotError } = await service.rpc(
+  const { data: compiled, error: snapshotError } = await service.rpc(
     "compile_notification_audience",
     {
       p_campaign_id: campaignId,
       p_target_spec: targetSpec,
       p_exclusion_spec: exclusionSpec,
+      p_import_spec: importSpec,
     },
   );
   if (snapshotError) return { error: "dispatch_failed" };
 
-  const { data: snapshot } = await service
-    .from("notification_audience_snapshots")
-    .select("recipient_ids, recipient_count")
-    .eq("id", snapshotId)
-    .single();
-
-  const recipientIds = (snapshot?.recipient_ids ?? []) as string[];
-  if (recipientIds.length === 0) return { error: "empty_audience" };
+  const parsed = recipientIdsFromCompile(compiled);
+  let recipientIds = parsed.recipientIds ?? [];
+  if (!recipientIds.length && parsed.snapshotId) {
+    const { data: snapshot } = await service
+      .from("notification_audience_snapshots")
+      .select("recipient_ids, recipient_count")
+      .eq("id", parsed.snapshotId)
+      .single();
+    const stored =
+      snapshot && typeof snapshot === "object"
+        ? (snapshot as { recipient_ids?: unknown }).recipient_ids
+        : null;
+    recipientIds = Array.isArray(stored)
+      ? stored.filter((id): id is string => typeof id === "string" && id.length > 0)
+      : [];
+  }
+  if (!recipientIds.length) {
+    const { data: listed, error: listError } = await service.rpc(
+      "compile_notification_audience_ids",
+      {
+        p_target_spec: targetSpec,
+        p_exclusion_spec: exclusionSpec,
+        p_import_spec: importSpec,
+      },
+    );
+    if (!listError) {
+      const listedParsed = recipientIdsFromCompile(listed);
+      recipientIds =
+        listedParsed.recipientIds ??
+        (Array.isArray(listed)
+          ? listed.filter((id): id is string => typeof id === "string" && id.length > 0)
+          : []);
+    }
+  }
+  if (!recipientIds.length && personalizationByDriver.size) {
+    recipientIds = [...personalizationByDriver.keys()];
+  }
+  if (!recipientIds.length) return { error: "empty_audience" };
+  const snapshotId = parsed.snapshotId;
 
   const idempotencyKey = `campaign:${campaignId}:${Date.now()}`;
   const { data: run, error: runError } = await service
@@ -1989,7 +2047,7 @@ export async function previewNotificationImport(input: {
   const lookups = [
     ...new Set(
       input.importSpec.rows.flatMap((row) =>
-        [row.employee_id, row.driver_code].map((v) => v?.trim()).filter(Boolean),
+        [row.employee_id, row.driver_code, row.client_id].map((v) => v?.trim()).filter(Boolean),
       ),
     ),
   ] as string[];
@@ -1999,20 +2057,32 @@ export async function previewNotificationImport(input: {
   return input.importSpec.rows.map((row, row_index) => {
     const employee_id = row.employee_id?.trim() ?? "";
     const driver_code = row.driver_code?.trim() ?? "";
+    const client_id = row.client_id?.trim() ?? "";
+    const identity = employee_id || client_id;
     const toMatch = (r: (typeof resolved)[number] | undefined): ImportLookupMatch | null =>
       r ? lookupToImportMatch(r) : null;
     const decided = decideImportRowMatch({
-      employeeId: employee_id,
+      employeeId: identity,
       driverCode: driver_code,
-      byEmployee: toMatch(byLookup.get(employee_id)),
+      byEmployee: toMatch(byLookup.get(identity)),
       byCode: toMatch(byLookup.get(driver_code)),
     });
-    const status =
-      decided.status === "unknown_id" ? "unknown_employee_id" : decided.status;
+    let status = decided.status === "unknown_id" ? "unknown_employee_id" : decided.status;
+    if (employee_id && client_id) {
+      const byEmployee = toMatch(byLookup.get(employee_id));
+      const byClient = toMatch(byLookup.get(client_id));
+      if (
+        byEmployee?.driver_id &&
+        byClient?.driver_id &&
+        byEmployee.driver_id !== byClient.driver_id
+      ) {
+        status = "ambiguous";
+      }
+    }
 
     return {
       row_index,
-      employee_id: employee_id || driver_code,
+      employee_id: employee_id || client_id || driver_code,
       driver_code,
       driver_name: decided.driver?.full_name ?? null,
       status,
@@ -2038,6 +2108,8 @@ export async function exportNotificationDispatchItemsCsv(
   const header = [
     "driver",
     "employee_id",
+    "sent_title",
+    "sent_body",
     "delivery_status",
     "seen",
     "seen_at",
@@ -2045,10 +2117,15 @@ export async function exportNotificationDispatchItemsCsv(
     "tapped_at",
     "error",
   ];
+  const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  const fallbackTitle = campaign?.title ?? "";
+  const fallbackBody = campaign?.body ?? "";
   const lines = items.map((item) =>
     [
-      `"${item.driver_label.replace(/"/g, '""')}"`,
+      quote(item.driver_label),
       item.employee_id ?? "",
+      quote(item.resolved_title?.trim() || fallbackTitle),
+      quote(item.resolved_body?.trim() || fallbackBody),
       item.status,
       trackEngagement ? (item.engagement_seen ? "yes" : "no") : "not_tracked",
       trackEngagement ? (item.opened_at ?? "") : "",

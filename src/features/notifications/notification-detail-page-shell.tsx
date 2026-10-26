@@ -315,6 +315,8 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
               campaignId={campaign.id}
               items={dispatchItems}
               trackEngagement={campaign.track_engagement ?? true}
+              campaignTitle={campaign.title}
+              campaignBody={campaign.body}
             />
           ) : null}
           <div className="space-y-2 rounded-lg border border-border p-3">

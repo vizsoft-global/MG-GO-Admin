@@ -23,7 +23,7 @@ import { estimateNotificationAudience } from "./notifications-actions";
 import { useNotificationTargetingOptions } from "./use-notifications";
 import type { NotificationImportSpec, TargetSpec } from "./types";
 
-const DRIVER_STATUSES = ["active", "onboarding", "suspended", "inactive"] as const;
+const DRIVER_STATUSES = ["active", "pending", "suspended"] as const;
 
 type Props = {
   targetMode: TargetSpec["mode"];

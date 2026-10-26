@@ -260,7 +260,10 @@ describe("catalog lists", () => {
     assert.equal(fields.rows[0].field_key, "tenure_months");
 
     const tenure = await driverListTenureOptions.run(req());
-    assert.deepEqual(tenure.rows, [{ months: 3, label: "3 months" }]);
+    assert.equal(tenure.rows.length, 24);
+    assert.deepEqual(tenure.rows[0], { months: 1, label: "1 month" });
+    assert.deepEqual(tenure.rows[2], { months: 3, label: "3 months" });
+    assert.deepEqual(tenure.rows[23], { months: 24, label: "24 months" });
 
     const cats = await driverListComplaintCategories.run(req());
     assert.equal(cats.rows[0].key, "payments");

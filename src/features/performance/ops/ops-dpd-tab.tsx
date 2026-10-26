@@ -23,7 +23,9 @@ import {
   enrichOpsRider,
   formatDpd,
   formatInt,
+  formatMinutes,
   formatPct,
+  formatUtr,
   vehicleLabel,
 } from "../performance-ops-format";
 import { countryLabel } from "@/lib/geo/countries";
@@ -93,6 +95,7 @@ export function OpsDpdTab({
         items={[
           { label: t("kpi.orders"), value: formatInt(data.kpis.orders) },
           { label: t("kpi.overallDpd"), value: formatDpd(data.kpis.overall_dpd), accent: "primary" },
+          { label: t("kpi.utr"), value: formatUtr(data.kpis.utr) },
           { label: t("kpi.avgDpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
           { label: t("kpi.avgTgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
           { label: t("kpi.targetDpd"), value: formatDpd(data.target_dpd) },
@@ -255,12 +258,22 @@ export function OpsDpdTab({
                 downloadCsv(
                   "ops-dpd-stores",
                   toCsv(
-                    [t("col.store"), t("col.zone"), t("col.orders"), t("col.dpd"), t("col.riders")],
+                    [
+                      t("col.store"),
+                      t("col.zone"),
+                      t("col.orders"),
+                      t("col.dpd"),
+                      t("col.utr"),
+                      t("col.avgDelivery"),
+                      t("col.riders"),
+                    ],
                     data.stores.map((s) => [
                       s.store_name,
                       s.zone_name,
                       s.orders,
                       s.store_dpd,
+                      s.utr,
+                      s.avg_delivery_min,
                       s.active_riders,
                     ]),
                   ),
@@ -280,6 +293,8 @@ export function OpsDpdTab({
               { id: "zone", label: t("col.zone") },
               { id: "orders", label: t("col.orders"), className: "text-end" },
               { id: "dpd", label: t("col.dpd"), className: "text-end" },
+              { id: "utr", label: t("col.utr"), className: "text-end" },
+              { id: "avg", label: t("col.avgDelivery"), className: "text-end" },
               { id: "riders", label: t("col.riders"), className: "text-end" },
             ]}
           >
@@ -292,6 +307,12 @@ export function OpsDpdTab({
                 </TableCell>
                 <TableCell className="text-end tabular-nums text-sm">
                   {formatDpd(s.store_dpd)}
+                </TableCell>
+                <TableCell className="text-end tabular-nums text-sm">
+                  {formatUtr(s.utr)}
+                </TableCell>
+                <TableCell className="text-end tabular-nums text-sm">
+                  {formatMinutes(s.avg_delivery_min)}
                 </TableCell>
                 <TableCell className="text-end tabular-nums text-sm">
                   {formatInt(s.active_riders)}

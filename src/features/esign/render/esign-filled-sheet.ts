@@ -127,6 +127,18 @@ export function filledEsignDocumentInput(input: FilledSheetInput): EsignDocument
       source: "entry",
     });
   }
+  const requestedDocuments = fieldValues.requested_documents?.trim() ?? "";
+  if (requestedDocuments && !fields.some((field) => field.key === "requested_documents")) {
+    fields.push({
+      key: "requested_documents",
+      label: "Documents to request",
+      labelEn: "Documents to request",
+      labelAr: "المستندات المطلوبة",
+      value: requestedDocuments,
+      section: "document",
+      source: "entry",
+    });
+  }
   return {
     language: "en",
     kind: template.document_kind,

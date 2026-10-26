@@ -3,12 +3,17 @@ import { FieldValue, getFirestore } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { parseId, parseIdList } from "../core/query";
 import { requireStaff } from "../core/staff";
+import {
+  driverInPartner,
+  driverInZone,
+  driverStatusSelected,
+  partnerMatchKeys,
+  resolveImportHits,
+  statusWantedSet,
+} from "./notification-audience-match";
 
 /** Firestore `in` / `getAll` chunk, and the batch size for every id list here. */
 const ID_CHUNK = 30;
-
-/** `all` mode is the ONLY branch that filters on status — see the RPC's ELSE. */
-const ALL_MODE_STATUSES: readonly string[] = ["active", "pending", "suspended"];
 
 const AUDIENCE_MODES = ["all", "zone", "partner", "status", "custom", "group", "import"] as const;
 type AudienceMode = (typeof AUDIENCE_MODES)[number];
@@ -142,29 +147,82 @@ export async function resolveImportDriverIdsForSpec(
 
   const byEmployeeId = new Map<string, string[]>();
   const byDriverCode = new Map<string, string[]>();
+  const byClientId = new Map<string, string[]>();
   for (const row of await loadLiveDrivers()) {
     const employeeId = asText(row.data[FIELDS.drivers.employeeId]);
     const driverCode = asText(row.data[FIELDS.drivers.driverCode]);
+    const clientId = trimmedOrNull(row.data["client_id"]);
     if (employeeId) byEmployeeId.set(employeeId, [...(byEmployeeId.get(employeeId) ?? []), row.id]);
     if (driverCode) byDriverCode.set(driverCode, [...(byDriverCode.get(driverCode) ?? []), row.id]);
+    if (clientId) byClientId.set(clientId, [...(byClientId.get(clientId) ?? []), row.id]);
   }
 
-  const resolved = new Set<string>();
-  for (const row of rows) {
-    const employeeId = trimmedOrNull(row["employee_id"]);
-    const driverCode = trimmedOrNull(row["driver_code"]);
-    const employeeHit = employeeId ? firstId(byEmployeeId.get(employeeId)) : null;
-    const codeHit = driverCode ? firstId(byDriverCode.get(driverCode)) : null;
-    if (employeeHit && codeHit && employeeHit !== codeHit) continue;
-    const decided = employeeHit ?? codeHit;
-    if (decided) resolved.add(decided);
-  }
-  return [...resolved];
+  return resolveImportHits(rows, { byEmployeeId, byDriverCode, byClientId });
 }
 
-function firstId(ids: string[] | undefined): string | null {
-  if (!ids || !ids.length) return null;
-  return [...ids].sort((a, b) => a.localeCompare(b))[0] ?? null;
+type RestaurantAssignment = {
+  driverId: string;
+  partnerId: string | null;
+  zoneId: string | null;
+};
+
+async function loadAssignments(driverIds: readonly string[]): Promise<RestaurantAssignment[]> {
+  if (!driverIds.length) return [];
+  const db = getFirestore();
+  const rows: RestaurantAssignment[] = [];
+  for (let index = 0; index < driverIds.length; index += ID_CHUNK) {
+    const slice = driverIds.slice(index, index + ID_CHUNK);
+    const edges = await db.collection(COLLECTIONS.driverRestaurants).where("driver_id", "in", slice).get();
+    const restaurantIds = [
+      ...new Set(
+        edges.docs
+          .map((edge) => trimmedOrNull(edge.data()?.["restaurant_id"]))
+          .filter((id): id is string => id !== null && isDocumentId(id)),
+      ),
+    ];
+    const restaurants = new Map<string, Record<string, unknown>>();
+    for (let restaurantIndex = 0; restaurantIndex < restaurantIds.length; restaurantIndex += ID_CHUNK) {
+      const refs = restaurantIds
+        .slice(restaurantIndex, restaurantIndex + ID_CHUNK)
+        .map((id) => db.collection(COLLECTIONS.restaurants).doc(id));
+      if (!refs.length) continue;
+      const snaps = await db.getAll(...refs);
+      for (const snap of snaps) {
+        if (snap.exists) restaurants.set(snap.id, snap.data() ?? {});
+      }
+    }
+    for (const edge of edges.docs) {
+      const data = edge.data() ?? {};
+      const driverId = trimmedOrNull(data["driver_id"]);
+      const restaurantId = trimmedOrNull(data["restaurant_id"]);
+      if (!driverId) continue;
+      const restaurant = restaurantId ? restaurants.get(restaurantId) : undefined;
+      rows.push({
+        driverId,
+        partnerId: trimmedOrNull(restaurant?.["partner_id"]),
+        zoneId: trimmedOrNull(restaurant?.["zone_id"]),
+      });
+    }
+  }
+  return rows;
+}
+
+async function loadPartnerKeys(partnerIds: readonly string[]): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  const ids = partnerIds.filter(isDocumentId);
+  if (!ids.length) return map;
+  const db = getFirestore();
+  for (let index = 0; index < ids.length; index += ID_CHUNK) {
+    const refs = ids
+      .slice(index, index + ID_CHUNK)
+      .map((id) => db.collection(COLLECTIONS.partners).doc(id));
+    const snaps = await db.getAll(...refs);
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      map.set(snap.id, partnerMatchKeys(snap.data() ?? {}));
+    }
+  }
+  return map;
 }
 
 /** The mode switch exactly as the RPC writes it, before any exclusion. */
@@ -179,25 +237,60 @@ async function resolveBaseIds(
       return await resolveImportDriverIdsForSpec(importSpec);
     case "all": {
       const drivers = await loadLiveDrivers();
-      return drivers.filter((row) => ALL_MODE_STATUSES.includes(asText(row.data[FIELDS.drivers.status]) ?? "")).map((row) => row.id);
+      return drivers.map((row) => row.id);
     }
     case "zone": {
       const wanted = new Set(specIds(targetSpec, "zone_ids"));
       if (!wanted.size) return [];
       const drivers = await loadLiveDrivers();
-      return drivers.filter((row) => wanted.has(asText(row.data[FIELDS.drivers.zoneId]) ?? "")).map((row) => row.id);
+      const byDriver = new Map<string, string[]>();
+      for (const assignment of await loadAssignments(drivers.map((row) => row.id))) {
+        if (!assignment.zoneId) continue;
+        const list = byDriver.get(assignment.driverId) ?? [];
+        list.push(assignment.zoneId);
+        byDriver.set(assignment.driverId, list);
+      }
+      return drivers
+        .filter((row) =>
+          driverInZone({
+            zoneId: trimmedOrNull(row.data[FIELDS.drivers.zoneId]),
+            assignmentZoneIds: byDriver.get(row.id) ?? [],
+            wanted,
+          }),
+        )
+        .map((row) => row.id);
     }
     case "partner": {
       const wanted = new Set(specIds(targetSpec, "partner_ids"));
       if (!wanted.size) return [];
       const drivers = await loadLiveDrivers();
-      return drivers.filter((row) => wanted.has(asText(row.data[FIELDS.drivers.partnerId]) ?? "")).map((row) => row.id);
+      const byDriver = new Map<string, string[]>();
+      for (const assignment of await loadAssignments(drivers.map((row) => row.id))) {
+        if (!assignment.partnerId) continue;
+        const list = byDriver.get(assignment.driverId) ?? [];
+        list.push(assignment.partnerId);
+        byDriver.set(assignment.driverId, list);
+      }
+      const keys = await loadPartnerKeys([...wanted]);
+      return drivers
+        .filter((row) =>
+          driverInPartner({
+            partnerId: trimmedOrNull(row.data[FIELDS.drivers.partnerId]),
+            projectKey: trimmedOrNull(row.data["project_key"]),
+            assignmentPartnerIds: byDriver.get(row.id) ?? [],
+            wantedIds: wanted,
+            keysByPartnerId: keys,
+          }),
+        )
+        .map((row) => row.id);
     }
     case "status": {
-      const wanted = new Set(specIds(targetSpec, "statuses"));
+      const wanted = statusWantedSet(specIds(targetSpec, "statuses"));
       if (!wanted.size) return [];
       const drivers = await loadLiveDrivers();
-      return drivers.filter((row) => wanted.has(asText(row.data[FIELDS.drivers.status]) ?? "")).map((row) => row.id);
+      return drivers
+        .filter((row) => driverStatusSelected(asText(row.data[FIELDS.drivers.status]), wanted))
+        .map((row) => row.id);
     }
     case "custom": {
       const wanted = new Set(specIds(targetSpec, "driver_ids"));
@@ -319,8 +412,16 @@ export const compileNotificationAudience = onCall(async (request) => {
   const campaignRef = db.collection(COLLECTIONS.notificationCampaigns).doc(campaignId);
   const campaign = await campaignRef.get();
 
+  const requestedImport = asSpec(
+    pickValue(data, ["p_import_spec", "importSpec", "import_spec"]),
+  );
+  const storedImport = asSpec(campaign.data()?.["import_spec"]);
   const importSpec =
-    audienceMode(targetSpec) === "import" ? asSpec(campaign.data()?.["import_spec"]) : {};
+    audienceMode(targetSpec) === "import"
+      ? importRows(requestedImport).length
+        ? requestedImport
+        : storedImport
+      : {};
 
   const recipientIds = await resolveAudienceIds(targetSpec, exclusionSpec, importSpec);
 

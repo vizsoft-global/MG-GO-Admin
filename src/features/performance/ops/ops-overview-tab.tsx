@@ -9,7 +9,9 @@ import {
   formatDelta,
   formatDpd,
   formatInt,
+  formatMinutesCard,
   formatPct,
+  formatUtr,
   partnerLabel,
   vehicleLabel,
 } from "../performance-ops-format";
@@ -70,6 +72,8 @@ export function OpsOverviewTab({
       caption: <OpsKpiDelta {...formatDelta(k.avg_tgt_eff, k.avg_tgt_eff_prev)} />,
       accent: "success" as const,
     },
+    { label: t("kpi.utr"), value: formatUtr(k.utr), accent: "primary" as const },
+    { label: t("kpi.avgDelivery"), value: formatMinutesCard(k.avg_delivery_min) },
     {
       label: t("kpi.riders"),
       value: formatInt(k.riders),

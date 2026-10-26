@@ -38,46 +38,22 @@ export function lookupReconCount<T extends { orders: number }>(
   return null;
 }
 
-/** Day statuses that keep no orders on the Attendance & Orders sheet. */
-const NO_ORDERS_STATUSES = new Set<string>([
-  "off",
-  "sick",
-  "accident",
-  "vehicle",
-  "absent",
-  "abs_lh",
-  "abs_lo",
-  "cancelled",
-  "leave",
-  "terminated",
-  "phone_issue",
-  "id_suspended",
-  "new_hire",
-  "training",
-]);
-
-export function dayKeepsOrders(status: string | null | undefined): boolean {
-  if (!status || status === "blank") return true;
-  return !NO_ORDERS_STATUSES.has(status);
-}
-
 /**
  * Grid / CSV number. Recon wins; completed deliveries fill a missing recon row.
  * Never write this onto the rule engine's `orders`.
  *
- * A day the PAYROLL column marked as not worked reads 0 here, because the
- * ORDERS column on the same row is the same edit seen from the other side:
- * recon still holds the sheet's number, and printing it beside `Sick` or `OFF`
- * would claim the rider delivered on a day payroll says they did not.
+ * The PAYROLL status (OFF, Absent, Sick, …) does not change this number.
+ * An overnight shift can finish after 05:00 on a day payroll marks OFF, and
+ * those orders still belong on that date. Zeroing them would drop them from
+ * the day cell and from any total built out of the day cells.
  */
 export function aoShownOrders(
   info: {
     orders: number;
     displayOrders?: number;
   } | null | undefined,
-  status?: string | null,
+  _status?: string | null,
 ): number {
-  if (!dayKeepsOrders(status)) return 0;
   if (!info) return 0;
   if (typeof info.displayOrders === "number" && Number.isFinite(info.displayOrders)) {
     return info.displayOrders;

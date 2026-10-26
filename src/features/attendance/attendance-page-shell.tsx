@@ -35,11 +35,14 @@ import { StatusPill } from "@/components/dashboard/status-pill";
 import { TrackingTableToolbar } from "@/features/driver-tracking/table-toolbar";
 import {
   AppListControls,
+  GroupHeaderBar,
   fieldSearchMatch,
   groupRows,
+  useGroupedListView,
   useListControlLabels,
   useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import { ListPager } from "@/components/app/app-list-controls/group-list-chrome";
 import { downloadCsv } from "@/features/driver-tracking/csv-export";
 import { Link } from "@/i18n/navigation";
 import { LIST_SEARCH_DEBOUNCE_MS } from "@/lib/menu/sidebar-menu-query";
@@ -83,11 +86,7 @@ import {
   type HistoryGroupKey,
 } from "./attendance-list-utils";
 import { AttendanceResolveSheet } from "./attendance-resolve-sheet";
-import {
-  AttendancePaginationFooter,
-  AttendancePaginationSummary,
-  AttendanceTableShell,
-} from "./attendance-table-shell";
+import { AttendanceTableShell } from "./attendance-table-shell";
 import { isAutoCheckoutReason } from "./auto-checkout-rules";
 import { attendanceWindowTooLarge } from "./attendance-query-error";
 import { exportAttendanceDailyCsv } from "./attendance-reporting-actions";
@@ -107,7 +106,7 @@ import {
   resolveWorkingSeconds,
 } from "./working-hours";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 80;
 
 function countActiveFilters(filters: AttendanceFiltersState): number {
   return [
@@ -572,6 +571,11 @@ function AttendancePageContent() {
       zone: (row) => row.zone_name,
     });
   }, [dailyRows, prefs.groupBy]);
+  const listView = useGroupedListView(
+    groupedSections,
+    prefs.groupBy !== "none",
+    `${prefs.groupBy}\u0001${search}\u0001${tab}\u0001${fromDate}\u0001${toDate}`,
+  );
 
   const sortColumnHeader = (column: AttendanceSortColumn, label: string) => (
     <SortableTableHeadLabel
@@ -741,12 +745,13 @@ function AttendancePageContent() {
                   sortVariant="menu"
                   sortLabel={t("sortBy")}
                   resultSummary={
-                    <AttendancePaginationSummary
-                      page={page}
-                      pageSize={PAGE_SIZE}
-                      totalCount={totalCount}
-                      className="text-xs"
-                    />
+                    totalCount > PAGE_SIZE ? (
+                      <ListPager
+                        page={page}
+                        total={totalCount}
+                        onStep={(dir) => setPage((current) => Math.max(0, current + dir))}
+                      />
+                    ) : null
                   }
                   onRefresh={() => void handleRefresh()}
                   isRefreshing={isRefreshing}
@@ -835,14 +840,6 @@ function AttendancePageContent() {
                 description={rangeTooLarge ? t("windowTooLargeHint") : t("emptyFiltersHint")}
               />
             }
-            footer={
-              <AttendancePaginationFooter
-                page={page}
-                pageSize={PAGE_SIZE}
-                totalCount={totalCount}
-                onPageChange={setPage}
-              />
-            }
           >
             {isLoading ? (
               <div className="flex justify-center py-16">
@@ -890,18 +887,22 @@ function AttendancePageContent() {
                 })}
               </AppDataTable>
             ) : prefs.viewMode === "cards" ? (
-              groupedSections.map((section) => (
+              listView.sections.map((section) => (
                 <div key={section.key} className="space-y-2 p-3">
-                  {section.label ? (
-                    <p className="text-xs font-semibold text-foreground">
-                      {section.label}
-                      <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
-                        {section.rows.length}
-                      </span>
-                    </p>
+                  {section.showHeader ? (
+                    <GroupHeaderBar
+                      label={section.label}
+                      total={section.total}
+                      open={section.open}
+                      page={section.page}
+                      showPager={section.showPager}
+                      onToggle={() => listView.toggle(section.key)}
+                      onStep={(dir) => listView.step(section.key, dir)}
+                    />
                   ) : null}
+                  {section.open || !section.showHeader ? (
                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                    {section.rows.map((row) => (
+                    {section.visibleRows.map((row) => (
                       <div
                         key={`${row.driver_id}-${row.log_date}`}
                         className="rounded-xl border border-border bg-card p-4 shadow-sm"
@@ -919,19 +920,30 @@ function AttendancePageContent() {
                       </div>
                     ))}
                   </div>
+                  ) : null}
                 </div>
               ))
             ) : (
-              groupedSections.map((section) => (
+              listView.sections.map((section) => (
                 <div key={section.key}>
-                  {section.label ? (
-                    <p className="border-b border-border bg-muted/20 px-4 py-2 text-sm font-semibold">
-                      {section.label}
-                    </p>
+                  {section.showHeader ? (
+                    <div className="border-b border-border bg-muted/20 px-4 py-1.5">
+                      <GroupHeaderBar
+                        label={section.label}
+                        total={section.total}
+                        open={section.open}
+                        page={section.page}
+                        showPager={section.showPager}
+                        onToggle={() => listView.toggle(section.key)}
+                        onStep={(dir) => listView.step(section.key, dir)}
+                      />
+                    </div>
                   ) : null}
+                  {section.open || !section.showHeader ? (
                   <AppDataTable columns={dailyColumns}>
-                    {section.rows.map((row) => renderDailyRow(row))}
+                    {section.visibleRows.map((row) => renderDailyRow(row))}
                   </AppDataTable>
+                  ) : null}
                 </div>
               ))
             )}

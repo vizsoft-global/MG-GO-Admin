@@ -22,6 +22,20 @@ export type AccidentRequestKind = (typeof ACCIDENT_REQUEST_KINDS)[number]["value
 
 const KIND_VALUES = new Set<string>(ACCIDENT_REQUEST_KINDS.map((kind) => kind.value));
 
+export function requestedDocumentLines(raw: unknown): string[] {
+  const text = typeof raw === "string" ? raw : "";
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const part of text.split(/\r?\n|,/)) {
+    const line = part.trim();
+    if (!line || seen.has(line.toLowerCase())) continue;
+    seen.add(line.toLowerCase());
+    lines.push(line);
+    if (lines.length === 12) break;
+  }
+  return lines;
+}
+
 export function normalizeAccidentKind(raw: unknown): AccidentRequestKind {
   const value = typeof raw === "string" ? raw.trim() : "";
   return KIND_VALUES.has(value) ? (value as AccidentRequestKind) : "accident";
@@ -95,6 +109,7 @@ export function withAccidentFields(
 /** Keys the accident sheet consumes, so they never reprint in the tail. */
 export const ACCIDENT_CONSUMED_KEYS = [
   REQUEST_KIND_KEY,
+  "requested_documents",
   "accident_date",
   "report_date",
   ...ABSENCE_FROM_KEYS,

@@ -49,10 +49,14 @@ export function NotificationEngagementReport({
   campaignId,
   items,
   trackEngagement,
+  campaignTitle = "",
+  campaignBody = "",
 }: {
   campaignId: string;
   items: NotificationDispatchItemRow[];
   trackEngagement: boolean;
+  campaignTitle?: string;
+  campaignBody?: string;
 }) {
   const t = useTranslations("pages.notifications");
   const [tab, setTab] = useState<EngagementTab>("all");
@@ -207,6 +211,8 @@ export function NotificationEngagementReport({
             <TableRow>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colDriver")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS}>{t("colSentTitle")}</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS}>{t("colSentBody")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("engagementColSeen")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("engagementColTapped")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("engagementColDelivery")}</TableHead>
@@ -217,6 +223,12 @@ export function NotificationEngagementReport({
               <TableRow key={item.id}>
                 <TableCell>{item.driver_label}</TableCell>
                 <TableCell>{item.employee_id ?? "—"}</TableCell>
+                <TableCell className="max-w-[240px] whitespace-normal">
+                  {item.resolved_title?.trim() || campaignTitle || "—"}
+                </TableCell>
+                <TableCell className="max-w-[360px] whitespace-normal">
+                  {item.resolved_body?.trim() || campaignBody || "—"}
+                </TableCell>
                 <TableCell>
                   {trackEngagement ? (
                     <>

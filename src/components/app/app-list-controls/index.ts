@@ -1,6 +1,9 @@
 export { AppListControls } from "./app-list-controls";
+export { FlatListPager, GroupHeaderBar, GroupTableHeaderRow } from "./group-list-chrome";
 export { GroupedSections } from "./grouped-sections";
 export { groupCounts, groupRows } from "./group-rows";
+export { scopeSelectionState, toggleScopeSelection } from "./list-page";
+export { useGroupedListView } from "./use-grouped-list-view";
 export { fieldSearchMatch } from "./search-match";
 export { useListViewPrefs } from "./use-list-view-prefs";
 export { useListControlLabels } from "./use-list-control-labels";

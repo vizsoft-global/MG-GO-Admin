@@ -8,14 +8,16 @@
  * `driver_list_appointments` (20260827104100),
  * `driver_respond_appointment` (20260908150000).
  *
- * Signed-PDF compose is the staff callable `esignComposeSignedDocument`.
- * This module still returns storage keys as-is and does not change rider error codes.
+ * Signed-PDF compose runs in-process from `driverSubmitEsignature` via
+ * `composeSignedEsignRequest`, so the rider download includes their ink
+ * before HR countersigns. Staff still call `esignComposeSignedDocument`.
  */
 import { onCall, type CallableRequest } from "firebase-functions/v2/https";
 import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireRider, riderError } from "../core/rider";
+import { composeSignedEsignRequest } from "./esign-compose";
 import { voidPendingStaffSigners } from "./esign-signer-void";
 import {
   dataOf,
@@ -347,7 +349,7 @@ export const driverGetEsignRequest = onCall(async (request) => {
 /**
  * Registers a rider-uploaded supporting document. The bytes are PUT to R2 with
  * the presigned URL from `driverGetUploadUrl`; this call only records the key
- * after checking the request is still pending and belongs to the caller.
+ * after checking the request is pending or already signed and belongs to the caller.
  */
 export const driverAddEsignAttachment = onCall(async (request) => {
   const ctx = await requireRider(request);
@@ -365,7 +367,8 @@ export const driverAddEsignAttachment = onCall(async (request) => {
   const snap = await db.collection(COLLECTIONS.esignRequests).doc(requestId).get();
   const row = dataOf(snap);
   if (!snap.exists || row.driver_id !== ctx.uid) return fail("not_found");
-  if (String(row.status ?? "") !== "pending") return fail("not_pending");
+  const attachmentStatus = String(row.status ?? "");
+  if (attachmentStatus !== "pending" && attachmentStatus !== "signed") return fail("not_pending");
 
   const existing = await db
     .collection(COLLECTIONS.esignRequestAttachments)
@@ -405,7 +408,14 @@ export const driverAddEsignAttachment = onCall(async (request) => {
   };
 });
 
-export const driverSubmitEsignature = onCall(async (request) => {
+export const driverSubmitEsignature = onCall(
+  {
+    memory: "1GiB",
+    cpu: 1,
+    timeoutSeconds: 120,
+    concurrency: 1,
+  },
+  async (request) => {
   const ctx = await requireRider(request);
   const data = asData(request);
   const id = pickId(data, "id", "p_id");
@@ -467,6 +477,12 @@ export const driverSubmitEsignature = onCall(async (request) => {
     recordId: id,
     detail: { request_code: row.request_code, first_view_was_capture: firstView },
   });
+
+  try {
+    await composeSignedEsignRequest(id, { force: true, actorId: null });
+  } catch (error) {
+    console.error("rider esign compose", error);
+  }
 
   return { ok: true, status: "signed" };
 });

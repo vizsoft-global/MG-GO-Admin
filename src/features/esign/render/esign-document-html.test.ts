@@ -53,13 +53,13 @@ describe("buildEsignDocumentHtml", () => {
             label_ar: "نوع الطلب",
             section_key: "document",
             source_kind: "entry",
-            options: ["accident", "sick_leave"],
+            options: ["accident", "sick_leave", "declaration"],
           },
         ],
       },
       snapshot: sampleEmployee(),
       fieldValues: {
-        request_kind: "accident",
+        request_kind: "declaration",
         accident_date: "2026-10-18",
         report_date: "2026-10-19",
         rider_name: "Ahmed Ali",
@@ -73,9 +73,46 @@ describe("buildEsignDocumentHtml", () => {
     assert.match(html, /Police traffic report/);
     assert.match(html, /Initial medical report/);
     assert.match(html, /data-slot-role="employee"/);
-    // The reference is a declaration sheet, not a dated incident report.
     assert.doesNotMatch(html, /Accident date/);
     assert.doesNotMatch(html, /2026-10-18/);
+  });
+
+  it("prints a blank documents sheet for every accident kind except declaration", () => {
+    const input = filledEsignDocumentInput({
+      template: {
+        document_kind: "general",
+        header_en: "Accident",
+        header_ar: "حادث",
+        body_en: "",
+        body_ar: "",
+        declaration_en: "",
+        declaration_ar: "",
+        fields: [
+          {
+            field_key: "request_kind",
+            label_en: "Request kind",
+            label_ar: "نوع الطلب",
+            section_key: "document",
+            source_kind: "entry",
+            options: ["accident", "declaration"],
+          },
+        ],
+      },
+      snapshot: sampleEmployee(),
+      fieldValues: {
+        request_kind: "accident",
+        rider_name: "Ahmed Ali",
+        requested_documents: "Sick leave form\nMedical report",
+      },
+      description: "",
+    });
+    const html = buildEsignDocumentHtml(input);
+    assert.match(html, /Documents requested/);
+    assert.match(html, /المستندات المطلوبة/);
+    assert.match(html, /Sick leave form/);
+    assert.match(html, /Medical report/);
+    assert.match(html, /data-slot-role="employee"/);
+    assert.doesNotMatch(html, /Police traffic report/);
   });
 
   it("prints long sheets across two pages without splitting boxes", () => {
@@ -639,7 +676,7 @@ describe("buildEsignDocumentHtml", () => {
     assert.match(html, /Sara Ahmed/);
   });
 
-  it("prints the branding logo on every document kind and nothing when unset", () => {
+  it("prints the branding logo on every document kind except the payslip", () => {
     for (const kind of ["penalty", "loan", "payslip", "general"] as const) {
       const branded = buildEsignDocumentHtml({
         language: "en",
@@ -647,9 +684,11 @@ describe("buildEsignDocumentHtml", () => {
         logoUrl: "https://cdn.example/brand.png",
         employee: sampleEmployee(),
       });
-      // Each reference masthead prints the company mark, so a branded sheet has
-      // to carry it — the old "no logo anywhere" rule predates the redesign.
-      assert.match(branded, /cdn\.example\/brand\.png/, kind);
+      if (kind === "payslip") {
+        assert.doesNotMatch(branded, /cdn\.example\/brand\.png/, kind);
+      } else {
+        assert.match(branded, /cdn\.example\/brand\.png/, kind);
+      }
       assert.doesNotMatch(branded, /data-logo="1"/, kind);
       assert.doesNotMatch(branded, /class="logo-img"/, kind);
       const unbranded = buildEsignDocumentHtml({

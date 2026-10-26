@@ -7,9 +7,12 @@ import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
   AppListControls,
+  FlatListPager,
   GroupedSections,
+  GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
+  useGroupedListView,
   useListControlLabels,
   useListViewPrefs,
 } from "@/components/app/app-list-controls";
@@ -121,6 +124,11 @@ export function FleetRequestPageShell({
       ),
     [prefs.groupBy, visible],
   );
+  const listView = useGroupedListView(
+    grouped,
+    prefs.groupBy !== "none",
+    `${prefs.groupBy}\u0001${search}\u0001${projectKey}`,
+  );
   const selected = rows.find((row) => row.id === selectedId) ?? null;
 
   const body = (
@@ -191,7 +199,7 @@ export function FleetRequestPageShell({
             <AppEmptyState title={t("emptyFilters")} />
           ) : (
             <div className="p-4">
-              <GroupedSections groups={grouped}>
+              <GroupedSections groups={grouped} paged resetKey={`${prefs.groupBy}\u0001${search}\u0001${projectKey}`}>
                 {(groupRowsList) => (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {groupRowsList.map((row) => (
@@ -219,6 +227,8 @@ export function FleetRequestPageShell({
             </div>
           )
         ) : (
+          <>
+          <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
           <AppDataTable
             columns={
               isAsset
@@ -258,23 +268,23 @@ export function FleetRequestPageShell({
             }
             empty={visible.length === 0 ? <AppDataTableEmpty>{t("emptyFilters")}</AppDataTableEmpty> : null}
           >
-            {grouped.flatMap((group) => [
-              ...(prefs.groupBy !== "none"
+            {listView.sections.flatMap((section) => [
+              ...(section.showHeader
                 ? [
-                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
-                      <TableCell
-                        colSpan={tableColCount}
-                        className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
-                      >
-                        {group.label}
-                        <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
-                          {group.rows.length}
-                        </span>
-                      </TableCell>
-                    </AppDataTableRow>,
+                    <GroupTableHeaderRow
+                      key={`g-${section.key}`}
+                      colSpan={tableColCount}
+                      label={section.label}
+                      total={section.total}
+                      open={section.open}
+                      page={section.page}
+                      showPager={section.showPager}
+                      onToggle={() => listView.toggle(section.key)}
+                      onStep={(dir) => listView.step(section.key, dir)}
+                    />,
                   ]
                 : []),
-              ...group.rows.map((row) => (
+              ...section.visibleRows.map((row) => (
                 <FleetRequestRow
                   key={row.id}
                   row={row}
@@ -285,6 +295,7 @@ export function FleetRequestPageShell({
               )),
             ])}
           </AppDataTable>
+          </>
         )}
       </AppListCard>
       <FleetRequestDialog

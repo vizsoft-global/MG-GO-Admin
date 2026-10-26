@@ -17,9 +17,12 @@ import {
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
   AppListControls,
+  FlatListPager,
   GroupedSections,
+  GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
+  useGroupedListView,
   useListControlLabels,
   useListViewPrefs,
 } from "@/components/app/app-list-controls";
@@ -252,6 +255,11 @@ function RestaurantsPageContent() {
         "—",
       ),
     [prefs.groupBy, visible],
+  );
+  const listView = useGroupedListView(
+    grouped,
+    prefs.groupBy !== "none",
+    `${prefs.groupBy}\u0001${search}\u0001${statusFilter}\u0001${partnerFilter}\u0001${zoneFilter}\u0001${hasDriversFilter}\u0001${hasLocationFilter}`,
   );
 
   const handleRefresh = async () => {
@@ -640,7 +648,11 @@ function RestaurantsPageContent() {
                 description={t("emptySearchDescription")}
               />
             ) : (
-              <GroupedSections groups={grouped}>
+              <GroupedSections
+                groups={grouped}
+                paged
+                resetKey={`${prefs.groupBy}\u0001${search}\u0001${statusFilter}\u0001${partnerFilter}\u0001${zoneFilter}\u0001${hasDriversFilter}\u0001${hasLocationFilter}`}
+              >
                 {(rows) => (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {rows.map((row) => (
@@ -677,6 +689,7 @@ function RestaurantsPageContent() {
           </CardContent>
         ) : (
           <CardContent className="p-0">
+            <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
             <AppDataTable
               columns={tableColumns}
               empty={
@@ -691,26 +704,23 @@ function RestaurantsPageContent() {
               }
             >
               {!showEmptySearch
-                ? grouped.flatMap((group) => [
-                    ...(prefs.groupBy !== "none"
+                ? listView.sections.flatMap((section) => [
+                    ...(section.showHeader
                       ? [
-                          <AppDataTableRow
-                            key={`g-${group.key}`}
-                            className="hover:bg-transparent"
-                          >
-                            <TableCell
-                              colSpan={tableColumns.length}
-                              className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
-                            >
-                              {group.label}
-                              <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
-                                {group.rows.length}
-                              </span>
-                            </TableCell>
-                          </AppDataTableRow>,
+                          <GroupTableHeaderRow
+                            key={`g-${section.key}`}
+                            colSpan={tableColumns.length}
+                            label={section.label}
+                            total={section.total}
+                            open={section.open}
+                            page={section.page}
+                            showPager={section.showPager}
+                            onToggle={() => listView.toggle(section.key)}
+                            onStep={(dir) => listView.step(section.key, dir)}
+                          />,
                         ]
                       : []),
-                    ...group.rows.map((row) => (
+                    ...section.visibleRows.map((row) => (
                     <AppDataTableRow
                       key={row.id}
                       tabIndex={0}

@@ -77,7 +77,9 @@
       "groupProject": "Project",
       "viewTable": "Table",
       "viewCards": "Cards",
-      "clearSearch": "Clear search"
+      "clearSearch": "Clear search",
+      "pagerPrevious": "Previous",
+      "pagerNext": "Next"
     }
   },
   "nav": {
@@ -262,6 +264,8 @@
       "accident": {
         "requestKind": "Request kind",
         "requestDetails": "Request details",
+        "requestedDocuments": "Documents to request",
+        "requestedDocumentsHint": "One document per line, such as a sick leave form or a medical report",
         "kind": {
           "accident": "Accident",
           "sick_leave": "Sick leave",
@@ -6130,6 +6134,7 @@
           "downloadAll": "Download all signed",
           "downloadAllPayslips": "Download all signed payslips",
           "sentBanner": "Sent to {count} employees - they've been notified to e-sign.",
+          "searchEmployees": "Search employee",
           "remindAction": "Remind",
           "colSignedOn": "Signed on",
           "remindPreviewBody": "Reminder: your {title} is waiting for your e-signature in the MGGO app.",
@@ -7540,6 +7545,22 @@
       "colStatus": "Status",
       "colSent": "Sent At",
       "colActions": "Actions",
+      "listTabAll": "All",
+      "listTabSent": "Sent",
+      "listTabDrafts": "Drafts",
+      "listTabScheduled": "Scheduled",
+      "listTabFailed": "Failed",
+      "filterCategory": "Category",
+      "filterFrom": "From",
+      "filterTo": "To",
+      "filterAllCategories": "All categories",
+      "exportList": "Export",
+      "audienceOpen": "Sent to {count}",
+      "audienceDialogTitle": "Sent to {count} employees",
+      "audienceDialogSubtitle": "Employee ID and the message each person received.",
+      "audienceEmpty": "No recipients on this notification yet.",
+      "colSentTitle": "Sent title",
+      "colSentBody": "Sent message",
       "emptyTitle": "No notifications yet",
       "emptyDescription": "Create your first campaign to reach drivers via Firebase push.",
       "recentCampaigns": "Recent campaigns",
@@ -7714,6 +7735,7 @@
       },
       "driverStatuses": {
         "active": "Active",
+        "pending": "Pending",
         "onboarding": "Onboarding",
         "suspended": "Suspended",
         "inactive": "Inactive"
@@ -10177,7 +10199,8 @@
           "orders": "Orders",
           "dpd": "DPD",
           "dpd_eff": "DPD Efficiency",
-          "tgt_eff": "Target Efficiency"
+          "tgt_eff": "Target Efficiency",
+          "utr": "UTR"
         },
         "show": {
           "label": "Show",
@@ -10261,6 +10284,9 @@
           "storesBelow": "Stores below target",
           "targetDpd": "Target DPD",
           "workingDays": "Total working days",
+          "workingHours": "Total Working Hours",
+          "utr": "Overall UTR",
+          "avgDelivery": "Avg Delivery Time",
           "ridersInView": "Riders in view"
         },
         "chart": {
@@ -10306,6 +10332,9 @@
           "vehicle": "Vehicle",
           "orders": "Orders",
           "days": "Working Days",
+          "hours": "Working Hours",
+          "utr": "UTR",
+          "avgDelivery": "Avg Delivery (min)",
           "dpd": "DPD",
           "tgtEff": "Target eff.",
           "dpdEff": "DPD eff.",
@@ -11070,6 +11099,11 @@
           },
           "summaryRows": "{count} rows",
           "summaryReady": "{count} ready",
+          "willReceive": "{count} employees will receive this payslip",
+          "filterAll": "All rows",
+          "filterReady": "Will receive",
+          "filterFix": "Needs fixing",
+          "searchEmployees": "Search employee",
           "summaryFix": "{count} need fixing",
           "reviewTitle": "Review {count} rows · {template}",
           "reviewHelper": "Green columns were filled from the system using the Employee ID. The rest came from your sheet.",

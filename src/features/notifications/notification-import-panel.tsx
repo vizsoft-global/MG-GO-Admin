@@ -45,6 +45,7 @@ type Props = {
  */
 const AM_ID_HEADER = /employee\s*(?:id|code|no|num|number|#)|emp\s*(?:id|code|no|num|number)|am\s*(?:id|code)|staff\s*(?:id|code)|^\s*id\s*$/i;
 const MG_ID_HEADER = /driver\s*(?:id|code|no|num|number|#)|mg\s*(?:id|code)|rider\s*(?:id|code|no|num|number)|plat(?:form)?\s*id/i;
+const CLIENT_ID_HEADER = /client\s*id/i;
 
 function summarizeImportPreview(
   preview: Array<{ status: string }>,
@@ -129,10 +130,17 @@ export function NotificationImportPanel({
         toast.error(t("importEmptyFile"));
         return;
       }
-      const employeeHeader = parsed.headers.find((h) => AM_ID_HEADER.test(h)) ?? "";
+      const employeeHeader =
+        parsed.headers.find((h) => AM_ID_HEADER.test(h) && !CLIENT_ID_HEADER.test(h)) ?? "";
       const codeHeader =
-        parsed.headers.find((h) => h !== employeeHeader && MG_ID_HEADER.test(h)) ?? "";
-      const identityHeaders = new Set([employeeHeader, codeHeader].filter(Boolean));
+        parsed.headers.find(
+          (h) => h !== employeeHeader && MG_ID_HEADER.test(h) && !CLIENT_ID_HEADER.test(h),
+        ) ?? "";
+      const clientHeader =
+        parsed.headers.find(
+          (h) => CLIENT_ID_HEADER.test(h) && h !== employeeHeader && h !== codeHeader,
+        ) ?? "";
+      const identityHeaders = new Set([employeeHeader, codeHeader, clientHeader].filter(Boolean));
       // QA #38: with no "Employee ID" column the first column used to be copied
       // into `employee_id`, so an MG-ID-only sheet was resolved as if its values
       // were AM IDs. Keep each column under the name it actually carries and leave
@@ -141,6 +149,7 @@ export function NotificationImportPanel({
       const mapping: NotificationImportSpec["column_mapping"] = {
         employee_id: employeeHeader,
         driver_code: codeHeader,
+        client_id: clientHeader,
       };
       const variable_columns = parsed.headers.filter((h) => !identityHeaders.has(h));
       const rows: NotificationImportRow[] = parsed.rows.map((cells) => {
@@ -151,7 +160,9 @@ export function NotificationImportPanel({
               ? "employee_id"
               : header === codeHeader
                 ? "driver_code"
-                : header.replace(/\s+/g, "_").toLowerCase();
+                : header === clientHeader
+                  ? "client_id"
+                  : header.replace(/\s+/g, "_").toLowerCase();
           row[key] = cells[idx] ?? "";
         });
         return row;

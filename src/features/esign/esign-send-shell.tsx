@@ -108,6 +108,16 @@ const PAYSLIP_MONEY_CODES: Record<string, string> = {
   previous_loan_outstanding_kwd: "OUT",
 };
 
+const LOAN_INSTALLMENT_KEYS = new Set([
+  "installments",
+  "installments_period",
+  "tenure",
+  "instalments_period",
+  "tenure_months",
+]);
+
+const LOAN_INSTALLMENT_CHOICES = Array.from({ length: 24 }, (_, index) => String(index + 1));
+
 const PAYSLIP_KD_KEYS = new Set([
   "admin_deduction",
   "extra_input",
@@ -250,6 +260,7 @@ export function EsignSendShell({
   const draftAppliedRef = useRef(false);
 
   const isPayslip = template?.document_kind === "payslip";
+  const isLoan = template?.document_kind === "loan" || template?.category_key === "loan";
   const isPenalty = template?.document_kind === "penalty";
   const isAccident = template?.category_key === "accident";
   const [accidentKind, setAccidentKind] = useState<AccidentRequestKind>("accident");
@@ -484,6 +495,18 @@ export function EsignSendShell({
       toast.error(t("errors.missingFields"));
       return;
     }
+    if (
+      isPayslip &&
+      template?.fields.some(
+        (field) =>
+          isSheetInput(field) &&
+          field.is_required &&
+          !(values[field.field_key] ?? "").trim(),
+      )
+    ) {
+      toast.error(t("errors.missingFields"));
+      return;
+    }
     if (!isEsignDueDateAllowed(dueAt, kuwaitTodayYmd())) {
       toast.error(t("errors.due_in_past"));
       return;
@@ -612,8 +635,15 @@ export function EsignSendShell({
   }
 
   function renderField(field: EsignTemplateFieldRow, code?: string) {
-    const options = selectOptionsForField(field, template?.category_key ?? "");
+    const installment = isLoan && LOAN_INSTALLMENT_KEYS.has(field.field_key);
+    const options = installment
+      ? LOAN_INSTALLMENT_CHOICES
+      : selectOptionsForField(field, template?.category_key ?? "");
     const placeholder = fieldInputPlaceholder(field);
+    const missing =
+      isPayslip && field.is_required && !(values[field.field_key] ?? "").trim();
+    const controlClass = cn(missing && "border-destructive ring-1 ring-destructive/40");
+    const useSelect = installment || (field.field_type === "select" && options.length > 0);
     return (
       <div key={field.id} className="space-y-1">
         <div className="flex items-center justify-between gap-2">
@@ -640,7 +670,7 @@ export function EsignSendShell({
             {t("hideField")}
           </button>
         </div>
-        {field.field_type === "select" && options.length > 0 ? (
+        {useSelect ? (
           options.length > 30 ? (
             <SearchSelect
               items={options.map((option) => ({
@@ -655,7 +685,7 @@ export function EsignSendShell({
               placeholder={t("fieldSelectPlaceholder")}
               searchPlaceholder={t("fieldSelectSearch")}
               recentsKey={`esign-send-select-${field.field_key}`}
-              className="w-full"
+              className={cn("w-full", controlClass)}
             />
           ) : (
             <Select
@@ -664,7 +694,7 @@ export function EsignSendShell({
                 setValues((prev) => ({ ...prev, [field.field_key]: next ?? "" }))
               }
             >
-              <SelectTrigger className="h-9 w-full">
+              <SelectTrigger className={cn("h-9 w-full", controlClass)}>
                 <SelectValue placeholder={t("fieldSelectPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
@@ -678,7 +708,7 @@ export function EsignSendShell({
           )
         ) : field.field_type === "textarea" ? (
           <Textarea
-            className="min-h-16"
+            className={cn("min-h-16", controlClass)}
             value={values[field.field_key] ?? ""}
             placeholder={placeholder}
             onChange={(e) =>
@@ -687,7 +717,7 @@ export function EsignSendShell({
           />
         ) : (
           <Input
-            className="h-9"
+            className={cn("h-9", controlClass)}
             type={field.field_type === "number" ? "number" : field.field_type === "date" ? "date" : "text"}
             value={values[field.field_key] ?? ""}
             placeholder={placeholder}
@@ -1021,6 +1051,19 @@ export function EsignSendShell({
                   </SelectContent>
                 </Select>
               </div>
+              {accidentKind !== "declaration" ? (
+                <div className="space-y-1">
+                  <Label>{tAccident("requestedDocuments")}</Label>
+                  <Textarea
+                    className="min-h-16"
+                    value={values.requested_documents ?? ""}
+                    placeholder={tAccident("requestedDocumentsHint")}
+                    onChange={(event) =>
+                      setValues((prev) => ({ ...prev, requested_documents: event.target.value }))
+                    }
+                  />
+                </div>
+              ) : null}
             </div>
           ) : null}
 
