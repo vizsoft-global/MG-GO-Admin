@@ -779,29 +779,6 @@ export function HrPayrollTab(props: {
               </select>
             </label>
           </div>
-          <div className="hrpay-legend">
-            {HR_STATUS_ORDER.map((key) => {
-              const paint = hrStatusPaint(key, "", true);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  className="hrpay-legend-item"
-                  data-on={statusKey === key ? "true" : "false"}
-                  onClick={() => setStatusKey((current) => (current === key ? "" : key))}
-                >
-                  <span
-                    className="hrpay-dot"
-                    data-split={paint.split ? "true" : undefined}
-                    data-bordered={paint.bordered ? "true" : undefined}
-                    style={paint.split || paint.bordered ? undefined : { background: paint.fill }}
-                  />
-                  <span>{statusLabels[key]}</span>
-                  <span className="hrpay-legend-count">{statusCounts.get(key) ?? 0}</span>
-                </button>
-              );
-            })}
-          </div>
           <div className="hrpay-kpis">
             <div className="hrpay-kpi hrpay-kpi-lead">
               <div className="hrpay-kpi-label">{t("kpiRiders")}</div>
