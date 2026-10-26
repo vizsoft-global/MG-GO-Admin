@@ -58,6 +58,7 @@ import {
   type FleetKpis,
   type FleetRail,
   type FleetSnapshot,
+  type RosterLine,
   type FleetZone,
   type FleetZoneCount,
 } from "./fleet-types";
@@ -163,6 +164,11 @@ export class FleetStore {
   private readonly feedIds = new Set<string>();
   private feedPaused = false;
   private filters: FleetFilters = emptyFleetFilters();
+  private rosterRestricted = false;
+  private rosterIds: Set<string> | null = null;
+  private readonly rosterLines = new Map<string, RosterLine>();
+  private rosterRestaurantId: string | null = null;
+  private rosterDuty: string | null = null;
   private selectedDriverId: string | null = null;
 
   private connection: FleetConnectionState = {
@@ -271,6 +277,32 @@ export class FleetStore {
     persistFleetFilters(this.filters);
     this.publish();
     this.onFiltersChanged?.(this.filters);
+  }
+
+  setRosterScope(input: {
+    restricted: boolean;
+    drivers: Array<RosterLine & { driverId: string }>;
+  }): void {
+    this.rosterRestricted = input.restricted;
+    this.rosterIds = input.restricted ? new Set(input.drivers.map((driver) => driver.driverId)) : null;
+    this.rosterLines.clear();
+    for (const driver of input.drivers) {
+      this.rosterLines.set(driver.driverId, {
+        status: driver.status,
+        start: driver.start,
+        end: driver.end,
+        actualIn: driver.actualIn,
+        earlyDrop: driver.earlyDrop,
+        restaurantId: driver.restaurantId,
+      });
+    }
+    this.publish();
+  }
+
+  setRosterFilters(input: { restaurantId: string | null; duty: string | null }): void {
+    this.rosterRestaurantId = input.restaurantId;
+    this.rosterDuty = input.duty;
+    this.publish();
   }
 
   resetFilters(): void {
@@ -839,6 +871,14 @@ export class FleetStore {
 
   private matchesFilters(driver: FleetDriver): boolean {
     const { search, statuses, zoneId, partnerId, alertsOnly } = this.filters;
+    if (this.rosterRestricted && this.rosterIds && !this.rosterIds.has(driver.driverId)) return false;
+    const line = this.rosterLines.get(driver.driverId);
+    if (this.rosterRestaurantId && line?.restaurantId !== this.rosterRestaurantId) return false;
+    if (this.rosterDuty === "early_drop") {
+      if (!line?.earlyDrop) return false;
+    } else if (this.rosterDuty && line?.status !== this.rosterDuty) {
+      return false;
+    }
 
     if (alertsOnly) {
       if (!isFleetAlert(driver.status, driver.flags)) return false;
@@ -908,6 +948,7 @@ export class FleetStore {
     let speedCount = 0;
 
     for (const driver of this.drivers.values()) {
+      if (this.rosterRestricted && this.rosterIds && !this.rosterIds.has(driver.driverId)) continue;
       if (driver.meta.partnerId && driver.meta.partnerName) {
         partners.set(driver.meta.partnerId, driver.meta.partnerName);
       }
@@ -1000,6 +1041,7 @@ export class FleetStore {
       feedPaused: this.feedPaused,
       selectedDriverId: this.selectedDriverId,
       filters: this.filters,
+      rosterLines: Object.fromEntries(this.rosterLines),
       version: this.version,
     };
   }

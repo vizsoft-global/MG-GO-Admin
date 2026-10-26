@@ -3308,6 +3308,7 @@
         "loading": "Loading tracking data…",
         "divergenceWarning": "Coordinates differ",
         "coordsMatch": "Coords match",
+        "earlyDrop": "Early drop",
         "trackingCoords": "Tracking RPC coords",
         "pickupCoords": "Pickup record coords",
         "deliveryCoords": "Delivery record coords",
@@ -11421,6 +11422,10 @@
             "title": "Attendance",
             "body": "Daily check-ins, shifts and the exceptions behind them."
           },
+          "roster": {
+            "title": "Shift attendance",
+            "body": "Upload the weekly roster, zone access, and attendance alerts."
+          },
           "orderExceptions": {
             "title": "Order exceptions",
             "body": "Rejected or cancelled orders with the rider's proof attached."
@@ -11470,6 +11475,73 @@
             "body": "Kuwait banks used for employee payment details."
           }
         }
+      }
+    },
+    "roster": {
+      "title": "Shift attendance",
+      "subtitle": "One row per rider per day. Shift 1 and shift 2 on the same date become a split shift.",
+      "upload": "Upload schedule",
+      "template": "Download template",
+      "report": "Report",
+      "alerts": "Alerts",
+      "thresholds": "Alert thresholds",
+      "lateGrace": "Late login grace (minutes)",
+      "earlyGrace": "Early logout grace (minutes)",
+      "nearMeters": "Early drop near restaurant (meters)",
+      "minMinutes": "Early drop under (minutes)",
+      "missingProof": "Flag a missing pickup proof",
+      "save": "Save",
+      "saved": "Saved",
+      "staff": "Zone staff",
+      "restaurantImport": "Assign restaurants to zones",
+      "apply": "Apply",
+      "preview": "Preview",
+      "ready": "Ready",
+      "failed": "Failed",
+      "written": "Written",
+      "export": "Export Excel",
+      "from": "From",
+      "to": "To",
+      "zone": "Zone",
+      "restaurant": "Restaurant",
+      "company": "Company",
+      "rider": "Rider",
+      "all": "All",
+      "allRestaurants": "All restaurants",
+      "allStatuses": "All schedule statuses",
+      "status": "Status",
+      "schedule": "Shift attendance",
+      "noRows": "No rows",
+      "cancel": "Cancel",
+      "chooseFile": "Choose a file",
+      "week": "This week",
+      "statuses": {
+        "on_shift": "On shift",
+        "late": "Late",
+        "not_logged_in": "Not logged in",
+        "logged_out_early": "Logged out early",
+        "off": "Off today",
+        "no_show": "No-show",
+        "scheduled": "Scheduled",
+        "early_drop": "Early drop"
+      },
+      "errors": {
+        "empty": "The sheet is empty.",
+        "missing_columns": "Driver Id and Date columns are required.",
+        "unknown_driver": "Unknown driver",
+        "ambiguous_driver": "More than one driver matches",
+        "unknown_restaurant": "Unknown restaurant",
+        "unknown_zone": "Unknown zone",
+        "range_too_large": "Choose 31 days or fewer.",
+        "not_authorized": "Not authorized",
+        "not_configured": "Not configured",
+        "bad_date": "Bad date",
+        "bad_time": "Bad time",
+        "bad_shift_no": "Shift no. must be 1 or 2",
+        "off_and_work": "OFF cannot also have a shift",
+        "duplicate_shift": "Duplicate shift",
+        "missing_shift_1": "Shift 2 needs shift 1",
+        "missing_driver": "Missing driver"
       }
     },
     "orderExceptions": {

@@ -34,6 +34,7 @@ import {
   hasLiveTelemetry,
 } from "./fleet-status";
 import { FLEET_TONE_BADGE, FLEET_TONE_DOT } from "./fleet-tone";
+import type { RosterLine } from "./fleet-types";
 import { useFleetDriver } from "./use-fleet";
 
 const MS_PER_MINUTE = 60_000;
@@ -60,6 +61,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
   driverId,
   nowMs,
   selected,
+  rosterLine,
   onSelect,
   onFocus,
 }: {
@@ -67,10 +69,12 @@ export const FleetDriverCard = memo(function FleetDriverCard({
   /** Server clock, ticked by the rail. See `useRailClock`. */
   nowMs: number;
   selected: boolean;
+  rosterLine?: RosterLine | null;
   onSelect: (driverId: string) => void;
   onFocus: (driverId: string) => void;
 }) {
   const t = useTranslations("pages.liveTrackingV2");
+  const rosterT = useTranslations("pages.roster");
   const driver = useFleetDriver(driverId);
 
   if (!driver) return null;
@@ -161,6 +165,17 @@ export const FleetDriverCard = memo(function FleetDriverCard({
             </span>
             <span className="truncate">{meta.currentZoneName ?? meta.zoneName ?? t("rail.noZone")}</span>
           </div>
+          {rosterLine ? (
+            <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+              {rosterT(`statuses.${rosterLine.status}`)}
+              {" · "}
+              {rosterLine.start ?? "—"}–{rosterLine.end ?? "—"}
+              {rosterLine.actualIn ? ` · ${rosterLine.actualIn.slice(11, 16)}` : ""}
+              {rosterLine.earlyDrop ? (
+                <span className="ms-1 font-semibold text-destructive">{rosterT("statuses.early_drop")}</span>
+              ) : null}
+            </p>
+          ) : null}
           {/*
             QA #48: On Delivery stays the badge above; this is its second half — progressing or
             parked. `fleetMotion` runs the same `speed or >= 15 m moved` rule the status machine

@@ -172,6 +172,7 @@ export function FleetRail({
                     driverId={driverId}
                     nowMs={nowMs}
                     selected={driverId === snapshot.selectedDriverId}
+                    rosterLine={snapshot.rosterLines[driverId] ?? null}
                     onSelect={(id) => {
                       // Same-marker click deselects (§12); same-row click re-opens
                       // Rider Details after Back (id does not change, so the canvas

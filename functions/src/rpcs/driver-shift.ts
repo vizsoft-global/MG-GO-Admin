@@ -311,6 +311,23 @@ function addKuwaitDays(day: string, days: number): string {
   return kuwaitDayString(kuwaitDayStart(day).getTime() + days * DAY_MS);
 }
 
+async function rawShift(driverId: string, shiftDate: string): Promise<{ id: string; data: Dict } | null> {
+  const snap = await getFirestore()
+    .collection(COLLECTIONS.driverDailyShifts)
+    .where("driver_id", "==", driverId)
+    .where("shift_date", "==", shiftDate)
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  return { id: snap.docs[0].id, data: (snap.docs[0].data() ?? {}) as Dict };
+}
+
+/** A roster OFF day has no session times, so `shiftFromDoc` drops it. Clock-in must not demand a rider shift. */
+export async function rosterOffToday(driverId: string, now: Date): Promise<boolean> {
+  const raw = await rawShift(driverId, kuwaitDayString(now));
+  return raw?.data["is_off"] === true && raw.data["source"] === "roster";
+}
+
 async function loadShiftOnDate(driverId: string, shiftDate: string): Promise<ShiftRow | null> {
   const snap = await getFirestore()
     .collection(COLLECTIONS.driverDailyShifts)
@@ -365,6 +382,11 @@ export const driverSubmitDailyShift = onCall(async (request) => {
   });
   if (!validated.ok) throwShiftError(validated.error);
 
+  const raw = await rawShift(uid, validated.value.shift_date);
+  if (raw?.data["source"] === "roster") {
+    throw riderError("failed-precondition", "shift_locked", { shift_date: validated.value.shift_date });
+  }
+
   const existing = await loadShiftOnDate(uid, validated.value.shift_date);
   if (existing) {
     const lockedUntil = shiftEndAt(existing);
@@ -391,6 +413,8 @@ export const driverSubmitDailyShift = onCall(async (request) => {
     session2_end_day_offset: validated.value.session2_end_day_offset,
     submitted_at: stamp,
     updated_at: FieldValue.serverTimestamp(),
+    source: "rider",
+    is_off: false,
   };
 
   const ref = existing

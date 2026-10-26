@@ -540,25 +540,31 @@ async function pageDeliveryRows(
 
 async function hydrateListRows(db: Firestore, rows: Row[]): Promise<DeliveryDbRowForList[]> {
   const driverIds = rows.map((row) => str(row.driver_id)).filter(Boolean);
-  const [drivers, profiles, partners, restaurants, zones] = await Promise.all([
+  const [drivers, profiles, partners, restaurants] = await Promise.all([
     rowsByIds(db, COLLECTIONS.drivers, driverIds),
     rowsByIds(db, COLLECTIONS.profiles, driverIds),
     rowsByIds(db, COLLECTIONS.partners, rows.map((row) => str(row.partner_id)).filter(Boolean)),
     rowsByIds(db, COLLECTIONS.restaurants, rows.map((row) => str(row.restaurant_id)).filter(Boolean)),
-    rowsByIds(db, COLLECTIONS.zones, rows.map((row) => str(row.zone_id)).filter(Boolean)),
   ]);
+  const zoneIds = new Set(rows.map((row) => str(row.zone_id)).filter(Boolean));
+  for (const restaurant of restaurants.values()) {
+    const zoneId = str(restaurant.zone_id);
+    if (zoneId) zoneIds.add(zoneId);
+  }
+  const zones = await rowsByIds(db, COLLECTIONS.zones, [...zoneIds]);
   return rows.map((row) => {
     const driver = drivers.get(str(row.driver_id));
     const profile = profiles.get(str(row.driver_id));
     const partner = partners.get(str(row.partner_id));
     const restaurant = restaurants.get(str(row.restaurant_id));
-    const zone = zones.get(str(row.zone_id));
+    const zoneId = str(row.zone_id) || str(restaurant?.zone_id);
+    const zone = zoneId ? zones.get(zoneId) : undefined;
     return {
       id: row.id,
       driver_id: str(row.driver_id),
       partner_id: strOrNull(row.partner_id),
       restaurant_id: strOrNull(row.restaurant_id),
-      zone_id: strOrNull(row.zone_id),
+      zone_id: zoneId,
       external_order_id: strOrNull(row.external_order_id),
       order_proof_url: strOrNull(row.order_proof_url),
       order_proof_urls: Array.isArray(row.order_proof_urls) ? (row.order_proof_urls as string[]) : null,
@@ -1188,17 +1194,22 @@ export async function fetchDeliveriesForExport(params: DeliveriesQueryFilter): P
     return page.rows;
   });
   const driverIds = collected.map((row) => str(row.driver_id)).filter(Boolean);
-  const [drivers, profiles, restaurants, zones] = await Promise.all([
+  const [drivers, profiles, restaurants] = await Promise.all([
     rowsByIds(db, COLLECTIONS.drivers, driverIds),
     rowsByIds(db, COLLECTIONS.profiles, driverIds),
     rowsByIds(db, COLLECTIONS.restaurants, collected.map((row) => str(row.restaurant_id)).filter(Boolean)),
-    rowsByIds(db, COLLECTIONS.zones, collected.map((row) => str(row.zone_id)).filter(Boolean)),
   ]);
+  const exportZoneIds = new Set(collected.map((row) => str(row.zone_id)).filter(Boolean));
+  for (const restaurant of restaurants.values()) {
+    const zoneId = str(restaurant.zone_id);
+    if (zoneId) exportZoneIds.add(zoneId);
+  }
+  const zones = await rowsByIds(db, COLLECTIONS.zones, [...exportZoneIds]);
   return collected.map((row) => {
     const driver = drivers.get(str(row.driver_id));
     const profile = profiles.get(str(row.driver_id));
     const restaurant = restaurants.get(str(row.restaurant_id));
-    const zone = zones.get(str(row.zone_id));
+    const zone = zones.get(str(row.zone_id) || str(restaurant?.zone_id));
     const restaurantName = restaurant ? str(restaurant.name) : "—";
     return {
       short_id: shortId(row.id),

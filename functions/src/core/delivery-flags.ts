@@ -71,6 +71,37 @@ export function isEarlyDrop(distanceM: number | null, thresholdMeters: number): 
   return distanceM <= threshold;
 }
 
+export type RosterEarlyDropReason = "near_restaurant" | "short_duration" | "missing_proof" | "far_customer";
+
+/** Keep in sync with `src/features/roster/early-drop-eval.ts`. Functions cannot import `src/`. */
+export function evaluateRosterEarlyDrop(input: {
+  pickupToDropMeters: number | null;
+  restaurantToDropMeters: number | null;
+  durationMinutes: number | null;
+  missingPickupProof: boolean;
+  customerToDropMeters: number | null;
+  nearMeters: number;
+  minMinutes: number;
+  customerFarMeters: number;
+  flagMissingProof: boolean;
+}): { early: boolean; reasons: RosterEarlyDropReason[] } {
+  const reasons: RosterEarlyDropReason[] = [];
+  const near = (meters: number | null) => meters != null && Number.isFinite(meters) && meters <= input.nearMeters;
+  if (near(input.pickupToDropMeters) || near(input.restaurantToDropMeters)) reasons.push("near_restaurant");
+  if (input.durationMinutes != null && Number.isFinite(input.durationMinutes) && input.durationMinutes < input.minMinutes) {
+    reasons.push("short_duration");
+  }
+  if (input.flagMissingProof && input.missingPickupProof) reasons.push("missing_proof");
+  if (
+    input.customerToDropMeters != null &&
+    Number.isFinite(input.customerToDropMeters) &&
+    input.customerToDropMeters > input.customerFarMeters
+  ) {
+    reasons.push("far_customer");
+  }
+  return { early: reasons.length > 0, reasons };
+}
+
 /** Stable order: the list chip reads early drop, then zone. */
 export function flagLabelsFor(input: { earlyDrop: boolean; outOfZone: boolean | null }): string[] {
   const labels: string[] = [];

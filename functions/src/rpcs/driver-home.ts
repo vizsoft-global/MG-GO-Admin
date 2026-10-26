@@ -54,6 +54,7 @@ import {
 } from "./check-in-gate";
 import {
   findActiveShift,
+  rosterOffToday,
   parseShiftTime,
   shiftEndAt,
   shiftSessionInstant,
@@ -2042,7 +2043,7 @@ export const driverSetDutyState = measureOnCall("driverSetDutyState", async (req
       throw riderError("failed-precondition", "inactive");
     }
     activeShift = await findActiveShift(ctx.uid, now);
-    if (!activeShift) {
+    if (!activeShift && !(await rosterOffToday(ctx.uid, now))) {
       throw riderError("failed-precondition", "shift_required");
     }
   }

@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import {
   Crosshair,
@@ -45,14 +46,32 @@ import { FleetStatusFilter } from "./fleet-status-filter";
 import { routeGeometryPositions, type FleetRouteGeometry } from "./fleet-route";
 import { type FleetStatus } from "./fleet-status";
 import { toggleFleetAlertsOnly, toggleFleetStatusChip } from "./fleet-types";
+import { fetchRosterLive } from "@/features/roster/roster-actions";
 import { useFleetSnapshot, useFleetStore } from "./use-fleet";
 
 import "./fleet-theme.css";
 
 export function FleetCanvas() {
   const t = useTranslations("pages.liveTrackingV2");
+  const rosterT = useTranslations("pages.roster");
   const store = useFleetStore();
   const snapshot = useFleetSnapshot();
+  const [rosterRestaurant, setRosterRestaurant] = useState<string | null>(null);
+  const [rosterDuty, setRosterDuty] = useState<string | null>(null);
+  const rosterQuery = useQuery({
+    queryKey: ["roster", "live"],
+    queryFn: () => fetchRosterLive(),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+  useEffect(() => {
+    const data = rosterQuery.data;
+    if (!data || !("restricted" in data)) return;
+    store.setRosterScope({ restricted: data.restricted, drivers: data.drivers });
+  }, [rosterQuery.data, store]);
+  useEffect(() => {
+    store.setRosterFilters({ restaurantId: rosterRestaurant, duty: rosterDuty });
+  }, [rosterRestaurant, rosterDuty, store]);
 
   const shellRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<FleetMapHandle | null>(null);
@@ -404,6 +423,38 @@ export function FleetCanvas() {
                   clearable={false}
                 />
 
+                <SearchSelect
+                  items={[
+                    { value: "all", label: rosterT("allRestaurants") },
+                    ...(rosterQuery.data && "restaurants" in rosterQuery.data
+                      ? rosterQuery.data.restaurants.map((row) => ({ value: row.id, label: row.name }))
+                      : []),
+                  ]}
+                  value={rosterRestaurant ?? "all"}
+                  onChange={(value) => setRosterRestaurant(!value || value === "all" ? null : value)}
+                  className="h-9 min-w-[88px] flex-[0_1_140px]"
+                  placeholder={rosterT("allRestaurants")}
+                  searchPlaceholder={rosterT("restaurant")}
+                  recentsKey="fleet-v2-roster-restaurant"
+                  clearable={false}
+                />
+
+                <SearchSelect
+                  items={[
+                    { value: "all", label: rosterT("allStatuses") },
+                    ...["on_shift", "late", "not_logged_in", "logged_out_early", "off", "no_show", "early_drop"].map(
+                      (status) => ({ value: status, label: rosterT(`statuses.${status}`) }),
+                    ),
+                  ]}
+                  value={rosterDuty ?? "all"}
+                  onChange={(value) => setRosterDuty(!value || value === "all" ? null : value)}
+                  className="h-9 min-w-[88px] flex-[0_1_140px]"
+                  placeholder={rosterT("allStatuses")}
+                  searchPlaceholder={rosterT("status")}
+                  recentsKey="fleet-v2-roster-duty"
+                  clearable={false}
+                />
+
                 {filtersDirty ? (
                   <Button
                     type="button"
@@ -412,7 +463,11 @@ export function FleetCanvas() {
                     className="size-9 shrink-0"
                     aria-label={t("controls.reset")}
                     title={t("controls.reset")}
-                    onClick={() => store.resetFilters()}
+                    onClick={() => {
+                      store.resetFilters();
+                      setRosterRestaurant(null);
+                      setRosterDuty(null);
+                    }}
                   >
                     <RotateCcw className="size-3.5" aria-hidden />
                   </Button>
