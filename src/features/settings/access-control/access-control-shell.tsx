@@ -244,7 +244,6 @@ function StaffAccessWorkspace({
   const [partnerProject, setPartnerProject] = useState<PartnerProjectKey>(initialProject);
   const [access, setAccess] = useState<AppAccessMap>(initialAccess);
   const [unknown, setUnknown] = useState<string[]>(() => preservedUnknownSlugs(row.slugs));
-  const [department, setDepartment] = useState<StaffDepartment | null>(row.staffDepartment);
   const [roleId, setRoleId] = useState<string | null>(row.roleId);
   const [grants, setGrants] = useState<RequestTypeGrant[]>([]);
   const [esignGrants, setEsignGrants] = useState<EsignCategoryGrant[]>([]);
@@ -253,7 +252,6 @@ function StaffAccessWorkspace({
     kind: initialKind,
     partnerProject: initialProject,
     access: initialAccess,
-    department: row.staffDepartment,
     roleId: row.roleId,
     grants: [] as RequestTypeGrant[],
     esignGrants: [] as EsignCategoryGrant[],
@@ -302,13 +300,12 @@ function StaffAccessWorkspace({
     let count = 0;
     if (kind !== baseline.kind) count += 1;
     if (partnerProject !== baseline.partnerProject) count += 1;
-    if (department !== baseline.department) count += 1;
     if (roleId !== baseline.roleId) count += 1;
     if (grantsKey(grants) !== grantsKey(baseline.grants)) count += 1;
     if (grantsKeyForEsign(esignGrants) !== grantsKeyForEsign(baseline.esignGrants)) count += 1;
     if (!fullAccess) count += diffAccess(baseline.access, access).changeCount;
     return count;
-  }, [access, baseline, department, esignGrants, fullAccess, grants, kind, partnerProject, roleId]);
+  }, [access, baseline, esignGrants, fullAccess, grants, kind, partnerProject, roleId]);
 
   useEffect(() => {
     unsavedRef.current = unsaved;
@@ -383,7 +380,6 @@ function StaffAccessWorkspace({
         accessKind: kind,
         slugs: draftTicks,
         partnerProjectKey: kind === "partner" ? partnerProject : null,
-        department,
         roleId,
         requestTypes: grants,
         esignCategories: esignGrants,
@@ -395,7 +391,7 @@ function StaffAccessWorkspace({
       toast.success(t("saved"));
       applyEpochs(result.epochs);
       void queryClient.invalidateQueries({ queryKey: queryKeys.menu.all() });
-      setBaseline({ kind, partnerProject, access, department, roleId, grants, esignGrants });
+      setBaseline({ kind, partnerProject, access, roleId, grants, esignGrants });
       router.refresh();
     });
   };
@@ -404,7 +400,6 @@ function StaffAccessWorkspace({
     setKind(baseline.kind);
     setPartnerProject(baseline.partnerProject);
     setAccess(baseline.access);
-    setDepartment(baseline.department);
     setRoleId(baseline.roleId);
     setGrants(baseline.grants);
     setEsignGrants(baseline.esignGrants);
@@ -474,8 +469,7 @@ function StaffAccessWorkspace({
           roleName={draftRole?.name ?? row.roleName}
           lastChanged={lastChanged}
           locale={locale}
-          department={department}
-          onDepartment={setDepartment}
+          department={row.staffDepartment}
           roleId={roleId}
           roles={roles}
           onRoleId={applyRole}

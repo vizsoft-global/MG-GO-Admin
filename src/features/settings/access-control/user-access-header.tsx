@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { selectOptionsFrom } from "@/lib/select-items";
 import { useTranslations } from "next-intl";
-import { STAFF_DEPARTMENTS, type StaffDepartment } from "@/lib/auth/app-access";
+import type { StaffDepartment } from "@/lib/auth/app-access";
 import {
   parsePartnerProjectKey,
   PARTNER_PROJECT_KEYS,
@@ -33,7 +33,6 @@ export function UserAccessHeader({
   lastChanged,
   locale,
   department,
-  onDepartment,
   roleId,
   roles,
   onRoleId,
@@ -50,7 +49,6 @@ export function UserAccessHeader({
   lastChanged: StaffLastChanged;
   locale: string;
   department: StaffDepartment | null;
-  onDepartment: (value: StaffDepartment | null) => void;
   roleId: string | null;
   roles: AdminRoleRow[];
   onRoleId: (roleId: string) => void;
@@ -75,11 +73,6 @@ export function UserAccessHeader({
     roles,
     (role) => role.id,
     (role) => role.name,
-  );
-  const deptItems = selectOptionsFrom(
-    ["none", ...STAFF_DEPARTMENTS],
-    (value) => value,
-    (value) => (value === "none" ? t("departmentUnset") : t(`dept.${value}`)),
   );
   const changed =
     lastChanged.at != null
@@ -139,26 +132,6 @@ export function UserAccessHeader({
             </SelectContent>
           </Select>
         ) : null}
-        <Select
-          items={deptItems}
-          value={department ?? "none"}
-          onValueChange={(value) =>
-            onDepartment(value && value !== "none" ? (value as StaffDepartment) : null)
-          }
-          disabled={disabled}
-        >
-          <SelectTrigger className="h-9 w-[184px] rounded-lg border-[#E4E4E7] bg-white text-xs">
-            <SelectValue placeholder={t("department")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">{t("departmentUnset")}</SelectItem>
-            {STAFF_DEPARTMENTS.map((dept) => (
-              <SelectItem key={dept} value={dept}>
-                {t(`dept.${dept}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <div className="flex flex-col items-end gap-2">
         <div className="flex h-9 items-center gap-px rounded-lg bg-[#F1F3F5] p-[3px]">
           {(
