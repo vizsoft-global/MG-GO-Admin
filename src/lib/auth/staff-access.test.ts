@@ -12,6 +12,7 @@ import {
   permissionGrantedByTicks,
   resolveSessionPermissionSlugs,
   roleSlugsForSave,
+  staffRolePrivilegeChange,
 } from "./staff-access";
 
 const OPERATOR_ROLE = [
@@ -26,6 +27,56 @@ const OPERATOR_ROLE = [
   "settings.view",
   "users.manage",
 ] as const;
+
+describe("staff role privilege change", () => {
+  it("lets a super admin move someone off Super Admin when another remains", () => {
+    assert.equal(
+      staffRolePrivilegeChange({
+        callerIsSuperAdmin: true,
+        previousIsSuperAdmin: true,
+        nextIsSuperAdmin: false,
+        otherSuperAdminCount: 1,
+      }),
+      "ok",
+    );
+  });
+
+  it("refuses to remove the last Super Admin", () => {
+    assert.equal(
+      staffRolePrivilegeChange({
+        callerIsSuperAdmin: true,
+        previousIsSuperAdmin: true,
+        nextIsSuperAdmin: false,
+        otherSuperAdminCount: 0,
+      }),
+      "last_super_admin",
+    );
+  });
+
+  it("refuses a non-super admin granting Super Admin", () => {
+    assert.equal(
+      staffRolePrivilegeChange({
+        callerIsSuperAdmin: false,
+        previousIsSuperAdmin: false,
+        nextIsSuperAdmin: true,
+        otherSuperAdminCount: 1,
+      }),
+      "not_authorized",
+    );
+  });
+
+  it("allows an ordinary role change", () => {
+    assert.equal(
+      staffRolePrivilegeChange({
+        callerIsSuperAdmin: false,
+        previousIsSuperAdmin: false,
+        nextIsSuperAdmin: false,
+        otherSuperAdminCount: 0,
+      }),
+      "ok",
+    );
+  });
+});
 
 describe("staff access ticks", () => {
   it("expands CRUD manage into create/edit/delete and keeps extra verbs", () => {

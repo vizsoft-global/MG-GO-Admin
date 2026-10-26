@@ -91,6 +91,21 @@ function rowKind(row: StaffAccessListRow): StaffAccessKind {
   return row.isSuperAdmin ? "manager" : (row.accessKind ?? "user");
 }
 
+function accessErrorKey(
+  code: string,
+): "errors.invalidRole" | "errors.lastSuperAdmin" | "errors.notAuthorized" | "errors.saveFailed" {
+  switch (code) {
+    case "invalid_role":
+      return "errors.invalidRole";
+    case "last_super_admin":
+      return "errors.lastSuperAdmin";
+    case "super_admin_forbidden":
+      return "errors.notAuthorized";
+    default:
+      return "errors.saveFailed";
+  }
+}
+
 export function AccessControlShell({
   rows,
   loadError,
@@ -230,6 +245,7 @@ function StaffAccessWorkspace({
   const [access, setAccess] = useState<AppAccessMap>(initialAccess);
   const [unknown, setUnknown] = useState<string[]>(() => preservedUnknownSlugs(row.slugs));
   const [department, setDepartment] = useState<StaffDepartment | null>(row.staffDepartment);
+  const [roleId, setRoleId] = useState<string | null>(row.roleId);
   const [grants, setGrants] = useState<RequestTypeGrant[]>([]);
   const [esignGrants, setEsignGrants] = useState<EsignCategoryGrant[]>([]);
   const [lastChanged, setLastChanged] = useState<StaffLastChanged>(row.lastChanged);
@@ -238,6 +254,7 @@ function StaffAccessWorkspace({
     partnerProject: initialProject,
     access: initialAccess,
     department: row.staffDepartment,
+    roleId: row.roleId,
     grants: [] as RequestTypeGrant[],
     esignGrants: [] as EsignCategoryGrant[],
   });
@@ -246,8 +263,9 @@ function StaffAccessWorkspace({
   const [downgradeOpen, setDowngradeOpen] = useState(false);
   const [pendingKind, setPendingKind] = useState<StaffAccessKind>("user");
 
-  const isSuperAdmin = row.isSuperAdmin;
-  const fullAccess = isSuperAdmin || kind === "manager";
+  const draftRole = roles.find((role) => role.id === roleId) ?? null;
+  const draftIsSuperAdmin = draftRole?.isSuperAdmin === true;
+  const fullAccess = draftIsSuperAdmin || kind === "manager";
   const cardsLocked = fullAccess;
   const displayAccess = fullAccess ? fullAccessMap() : access;
 
@@ -285,24 +303,31 @@ function StaffAccessWorkspace({
     if (kind !== baseline.kind) count += 1;
     if (partnerProject !== baseline.partnerProject) count += 1;
     if (department !== baseline.department) count += 1;
+    if (roleId !== baseline.roleId) count += 1;
     if (grantsKey(grants) !== grantsKey(baseline.grants)) count += 1;
     if (grantsKeyForEsign(esignGrants) !== grantsKeyForEsign(baseline.esignGrants)) count += 1;
     if (!fullAccess) count += diffAccess(baseline.access, access).changeCount;
     return count;
-  }, [access, baseline, department, esignGrants, fullAccess, grants, kind, partnerProject]);
+  }, [access, baseline, department, esignGrants, fullAccess, grants, kind, partnerProject, roleId]);
 
   useEffect(() => {
     unsavedRef.current = unsaved;
   }, [unsaved, unsavedRef]);
 
   const applyKind = (next: StaffAccessKind) => {
-    if (isSuperAdmin) return;
+    if (draftIsSuperAdmin) return;
     if (kind === "manager" && next !== "manager") {
       setPendingKind(next);
       setDowngradeOpen(true);
       return;
     }
     setKind(next);
+  };
+
+  const applyRole = (nextId: string) => {
+    setRoleId(nextId);
+    const next = roles.find((role) => role.id === nextId);
+    if (next?.isSuperAdmin) setKind("manager");
   };
 
   const confirmDowngrade = () => {
@@ -359,17 +384,18 @@ function StaffAccessWorkspace({
         slugs: draftTicks,
         partnerProjectKey: kind === "partner" ? partnerProject : null,
         department,
+        roleId,
         requestTypes: grants,
         esignCategories: esignGrants,
       });
       if (result.error) {
-        toast.error(t("errors.saveFailed"));
+        toast.error(t(accessErrorKey(result.error)));
         return;
       }
       toast.success(t("saved"));
       applyEpochs(result.epochs);
       void queryClient.invalidateQueries({ queryKey: queryKeys.menu.all() });
-      setBaseline({ kind, partnerProject, access, department, grants, esignGrants });
+      setBaseline({ kind, partnerProject, access, department, roleId, grants, esignGrants });
       router.refresh();
     });
   };
@@ -379,17 +405,18 @@ function StaffAccessWorkspace({
     setPartnerProject(baseline.partnerProject);
     setAccess(baseline.access);
     setDepartment(baseline.department);
+    setRoleId(baseline.roleId);
     setGrants(baseline.grants);
     setEsignGrants(baseline.esignGrants);
   };
 
   const resetRole = () => {
-    if (!row.roleId) {
+    if (!roleId) {
       toast.error(t("errors.noRole"));
       return;
     }
     startTransition(async () => {
-      const loaded = await copyRoleTemplateTicks(row.roleId!);
+      const loaded = await copyRoleTemplateTicks(roleId);
       if (loaded.error || !loaded.slugs) {
         toast.error(t("errors.copyFailed"));
         return;
@@ -444,16 +471,20 @@ function StaffAccessWorkspace({
         <UserAccessHeader
           name={name}
           email={row.email}
-          roleName={row.roleName}
+          roleName={draftRole?.name ?? row.roleName}
           lastChanged={lastChanged}
           locale={locale}
           department={department}
           onDepartment={setDepartment}
+          roleId={roleId}
+          roles={roles}
+          onRoleId={applyRole}
           accessKind={kind}
           onAccessKind={applyKind}
           partnerProjectKey={partnerProject}
           onPartnerProject={setPartnerProject}
-          disabled={isPending || isSuperAdmin}
+          disabled={isPending}
+          kindDisabled={draftIsSuperAdmin}
         />
         <div className="flex flex-wrap items-center gap-2 px-4 py-3">
           <div className="flex h-9 items-center gap-px rounded-lg bg-[#EAEAEC] p-[3px]">
@@ -485,7 +516,7 @@ function StaffAccessWorkspace({
             variant="outline"
             className="h-9 cursor-pointer rounded-lg border-[#E4E4E7] bg-white px-2.5 text-xs font-medium text-[#18181B]"
             onClick={resetRole}
-            disabled={isPending || isSuperAdmin}
+            disabled={isPending}
           >
             <RotateCcw className="me-1.5 size-3.5" />
             {t("resetRole")}
@@ -581,7 +612,7 @@ function StaffAccessWorkspace({
         totalApps={LAUNCHER_TILE_IDS.length}
         unsavedCount={unsaved}
         saving={isPending}
-        disabled={isSuperAdmin}
+        disabled={isPending}
         onDiscard={discard}
         onSave={save}
         onCopy={() => setCopyOpen(true)}

@@ -187,6 +187,21 @@ export function resolveSessionPermissionSlugs(input: {
   return grantDataCleanupIfBulkDelete(new Set(input.roleSlugs));
 }
 
+export type StaffRolePrivilegeChange = "ok" | "not_authorized" | "last_super_admin";
+
+/** Granting or removing Super Admin needs a super admin, and the last one stays. */
+export function staffRolePrivilegeChange(input: {
+  callerIsSuperAdmin: boolean;
+  previousIsSuperAdmin: boolean;
+  nextIsSuperAdmin: boolean;
+  otherSuperAdminCount: number;
+}): StaffRolePrivilegeChange {
+  if (input.previousIsSuperAdmin === input.nextIsSuperAdmin) return "ok";
+  if (!input.callerIsSuperAdmin) return "not_authorized";
+  if (input.previousIsSuperAdmin && input.otherSuperAdminCount < 1) return "last_super_admin";
+  return "ok";
+}
+
 /** After backfill, every old role slug must still pass the User tick set. */
 export function migratedSessionIsSupersetOfRole(
   oldRoleSlugs: readonly string[],

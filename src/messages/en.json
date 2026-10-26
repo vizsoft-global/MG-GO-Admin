@@ -8155,6 +8155,7 @@
         "deptAdmin": "Admin",
         "deptOperations": "Operations & Fleet",
         "department": "Department",
+        "role": "Role",
         "departmentUnset": "No department",
         "dept": {
           "hr": "HR",
@@ -8270,7 +8271,10 @@
           "saveFailed": "Could not save staff access.",
           "copyFailed": "Could not copy access.",
           "copySourceRequired": "Choose a source first.",
-          "noRole": "This user has no role default to reset to."
+          "noRole": "This user has no role default to reset to.",
+          "invalidRole": "That role is no longer available.",
+          "lastSuperAdmin": "This is the last Super Admin. Assign another Super Admin first.",
+          "notAuthorized": "Only a Super Admin can grant or remove Super Admin."
         }
       },
       "roles": {
