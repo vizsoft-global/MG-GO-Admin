@@ -764,11 +764,11 @@ function DriversPageContent() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => setColumnFilters({})}
+                    aria-label={t("clearAllFilters")}
                   >
                     <FilterX className="h-3.5 w-3.5" aria-hidden />
-                    <span className="hidden 2xl:inline">{t("clearAllFilters")}</span>
                     <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-white tabular-nums">
                       {activeFilterCount}
                     </span>
@@ -783,17 +783,12 @@ function DriversPageContent() {
                   onReset={resetColumns}
                   sourceLabel={columnSourceLabel}
                   hiddenCount={hiddenToggleableCount}
+                  iconOnly
                 />
               </>
             }
             trailing={
             <div className="flex shrink-0 items-center gap-1.5">
-              {!isLoading ? (
-                <p className="hidden text-xs tabular-nums text-muted-foreground 2xl:inline">
-                  {t("showingCount", { visible: filteredTotal, total: tabTotal })}
-                </p>
-              ) : null}
-              <div className="hidden h-6 w-px shrink-0 bg-border sm:block" aria-hidden />
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -821,13 +816,12 @@ function DriversPageContent() {
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
+                      className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
                       onClick={() => setExportOpen(true)}
                       disabled={filteredTotal === 0}
                       aria-label={t("export")}
                     >
                       <Download className="h-4 w-4" />
-                      <span className="ms-1.5 hidden 2xl:inline">{t("export")}</span>
                     </Button>
                   }
                 />
@@ -841,13 +835,12 @@ function DriversPageContent() {
                         type="button"
                         variant="outline"
                         size="icon"
-                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg text-destructive hover:bg-destructive/10 sm:w-auto sm:px-2.5"
+                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg text-destructive hover:bg-destructive/10"
                         onClick={() => setArchiveOpen(true)}
                         disabled={filteredTotal === 0 && selectedIds.size === 0}
                         aria-label={t("bulkArchive")}
                       >
                         <Trash2 className="h-4 w-4" />
-                        <span className="ms-1.5 hidden 2xl:inline">{t("bulkArchive")}</span>
                       </Button>
                     }
                   />
@@ -862,12 +855,11 @@ function DriversPageContent() {
                         type="button"
                         variant="outline"
                         size="icon"
-                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
+                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
                         onClick={() => setBulkOpen(true)}
                         aria-label={t("bulkImport")}
                       >
                         <Upload className="h-4 w-4" />
-                        <span className="ms-1.5 hidden 2xl:inline">{t("bulkImport")}</span>
                       </Button>
                     }
                   />
@@ -877,15 +869,22 @@ function DriversPageContent() {
               <ClearAllModuleButton entity="drivers" compact />
               <ClearFilteredModuleButton entity="drivers" compact />
               {canCreate ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-9 shrink-0 cursor-pointer rounded-lg px-2.5"
-                  onClick={() => setAddOpen(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                  <span className="ms-1.5 hidden sm:inline">{t("addDriver")}</span>
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        size="icon"
+                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
+                        onClick={() => setAddOpen(true)}
+                        aria-label={t("addDriver")}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent>{t("addDriver")}</TooltipContent>
+                </Tooltip>
               ) : null}
             </div>
             }

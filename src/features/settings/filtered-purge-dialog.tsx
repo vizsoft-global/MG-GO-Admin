@@ -652,9 +652,10 @@ export function ClearFilteredModuleButton({
       <Button
         type="button"
         variant="outline"
-        size="sm"
-        className={`h-9 shrink-0 cursor-pointer rounded-lg px-2.5 ${className ?? ""}`}
+        size={compact ? "icon" : "sm"}
+        className={`h-9 shrink-0 cursor-pointer rounded-lg ${compact ? "w-9" : "px-2.5"} ${className ?? ""}`}
         onClick={() => setOpen(true)}
+        aria-label={t("button")}
       >
         <Filter className="h-4 w-4" />
         {compact ? null : (
