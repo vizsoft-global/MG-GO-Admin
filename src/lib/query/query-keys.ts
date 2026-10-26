@@ -35,6 +35,7 @@ export const queryKeys = {
       ["drivers", "extra-documents", intakeId, profileId] as const,
     importJobs: () => ["drivers", "import-jobs"] as const,
     importJob: (id: string) => ["drivers", "import-job", id] as const,
+    importJournal: (id: string) => ["drivers", "import-journal", id] as const,
     loginVerifications: (
       driverId: string,
       startDate: string | null,

@@ -11,6 +11,7 @@ import { requireDriversManager } from "../drivers-import-actions";
 import { staffClient } from "../driver-uniqueness";
 import { syncImportRestaurants } from "./driver-import-write";
 import {
+  effectiveReplay,
   nextUndoSeq,
   redoRowPlan,
   redoTargetId,
@@ -40,6 +41,8 @@ function asJournal(row: Record<string, unknown>): DriverImportJournal {
     passcode: (row.passcode as string | null) ?? null,
     before: (row.before as DriverImportSnapshot | null) ?? null,
     after: (row.after as DriverImportSnapshot | null) ?? null,
+    replay:
+      row.replay === "applied" || row.replay === "undone" ? row.replay : null,
   };
 }
 
@@ -195,7 +198,77 @@ async function rewriteCreated(row: DriverImportJournal): Promise<string | null> 
   return writeSnapshot(snap, intakeId, row.driver_id);
 }
 
-export async function undoDriverImport(): Promise<{ success: true } | { error: string }> {
+function withReplay(
+  rows: DriverImportJournal[],
+  indexes: number[],
+  replay: "applied" | "undone",
+): DriverImportJournal[] {
+  const picked = new Set(indexes);
+  return rows.map((row) => (picked.has(row.row_index) ? { ...row, replay } : row));
+}
+
+async function markReplay(batchId: string, indexes: number[], replay: "applied" | "undone") {
+  const db = await staffClient();
+  for (let i = 0; i < indexes.length; i += 30) {
+    const slice = indexes.slice(i, i + 30);
+    await db
+      .from("driver_import_rows")
+      .update({ replay })
+      .eq("batch_id", batchId)
+      .in("row_index", slice);
+  }
+}
+
+async function syncBatchReplay(
+  batchId: string,
+  rows: DriverImportJournal[],
+  viewed: "applied" | "undone",
+) {
+  const actionable = rows.filter((row) => undoRowPlan(row) || redoRowPlan(row));
+  const allUndone =
+    actionable.length === 0 ||
+    actionable.every((row) => effectiveReplay(row.replay, viewed) === "undone");
+  const allApplied = actionable.every(
+    (row) => effectiveReplay(row.replay, viewed) === "applied",
+  );
+  const db = await staffClient();
+  if (allUndone && viewed !== "undone") {
+    await db
+      .from("driver_import_batches")
+      .update({ status: "undone", undo_seq: nextUndoSeq(await loadTips()), redoable: true })
+      .eq("id", batchId);
+  } else if (allApplied && viewed === "undone") {
+    await db.from("driver_import_batches").update({ status: "applied" }).eq("id", batchId);
+  }
+}
+
+async function applyUndo(row: DriverImportJournal): Promise<"skip" | "done" | { error: string }> {
+  const plan = undoRowPlan(row);
+  if (plan === "delete") {
+    const error = await deleteCreated(row);
+    return error ? { error } : "done";
+  }
+  if (plan === "restore") {
+    if (!row.before || !row.intake_id) return { error: "missing_snapshot" };
+    const error = await writeSnapshot(row.before, row.intake_id, row.driver_id);
+    return error ? { error } : "done";
+  }
+  return "skip";
+}
+
+async function applyRedo(row: DriverImportJournal): Promise<"skip" | "done" | { error: string }> {
+  const plan = redoRowPlan(row);
+  if (!plan || !row.after || !row.intake_id) return "skip";
+  const error =
+    row.outcome === "create"
+      ? await rewriteCreated(row)
+      : await writeSnapshot(row.after, row.intake_id, row.driver_id);
+  return error ? { error } : "done";
+}
+
+export async function undoDriverImport(): Promise<
+  { success: true; count: number } | { error: string }
+> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager("edit");
@@ -204,26 +277,21 @@ export async function undoDriverImport(): Promise<{ success: true } | { error: s
   const target = undoTargetId(tips);
   if (!target) return { error: "nothing_to_undo" };
   const rows = await loadRows(target);
+  const touched: number[] = [];
   for (const row of rows) {
-    const plan = undoRowPlan(row);
-    if (plan === "delete") {
-      const error = await deleteCreated(row);
-      if (error) return { error };
-    } else if (plan === "restore") {
-      if (!row.before || !row.intake_id) return { error: "missing_snapshot" };
-      const error = await writeSnapshot(row.before, row.intake_id, row.driver_id);
-      if (error) return { error };
-    }
+    if (effectiveReplay(row.replay, "applied") === "undone") continue;
+    const result = await applyUndo(row);
+    if (typeof result === "object") return result;
+    if (result === "done") touched.push(row.row_index);
   }
-  const db = await staffClient();
-  await db
-    .from("driver_import_batches")
-    .update({ status: "undone", undo_seq: nextUndoSeq(tips), redoable: true })
-    .eq("id", target);
-  return { success: true };
+  if (touched.length > 0) await markReplay(target, touched, "undone");
+  await syncBatchReplay(target, withReplay(rows, touched, "undone"), "applied");
+  return { success: true, count: touched.length };
 }
 
-export async function redoDriverImport(): Promise<{ success: true } | { error: string }> {
+export async function redoDriverImport(): Promise<
+  { success: true; count: number } | { error: string }
+> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireDriversManager("edit");
@@ -232,16 +300,108 @@ export async function redoDriverImport(): Promise<{ success: true } | { error: s
   const target = redoTargetId(tips);
   if (!target) return { error: "nothing_to_redo" };
   const rows = await loadRows(target);
+  const touched: number[] = [];
   for (const row of rows) {
-    const plan = redoRowPlan(row);
-    if (!plan || !row.after || !row.intake_id) continue;
-    const error =
-      row.outcome === "create"
-        ? await rewriteCreated(row)
-        : await writeSnapshot(row.after, row.intake_id, row.driver_id);
-    if (error) return { error };
+    if (effectiveReplay(row.replay, "undone") === "applied") continue;
+    const result = await applyRedo(row);
+    if (typeof result === "object") return result;
+    if (result === "done") touched.push(row.row_index);
   }
+  if (touched.length > 0) await markReplay(target, touched, "applied");
+  await syncBatchReplay(target, withReplay(rows, touched, "applied"), "undone");
+  return { success: true, count: touched.length };
+}
+
+async function replaySelected(
+  batchId: string,
+  rowIndexes: number[],
+  direction: "undo" | "redo",
+): Promise<{ success: true; count: number } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+  const auth = await requireDriversManager("edit");
+  if (auth.error) return { error: auth.error };
+  const tips = await loadTips();
+  const viewed = tips.find((tip) => tip.id === batchId);
+  const status: "applied" | "undone" = viewed?.status === "undone" ? "undone" : "applied";
+  const wanted = new Set(rowIndexes);
+  const rows = (await loadRows(batchId)).filter((row) => wanted.has(row.row_index));
+  const touched: number[] = [];
+  for (const row of rows) {
+    if (direction === "undo") {
+      if (effectiveReplay(row.replay, status) === "undone") continue;
+      const result = await applyUndo(row);
+      if (typeof result === "object") return result;
+      if (result === "done") touched.push(row.row_index);
+    } else {
+      if (effectiveReplay(row.replay, status) === "applied") continue;
+      const result = await applyRedo(row);
+      if (typeof result === "object") return result;
+      if (result === "done") touched.push(row.row_index);
+    }
+  }
+  if (touched.length === 0) {
+    return { error: direction === "undo" ? "nothing_to_undo" : "nothing_to_redo" };
+  }
+  const next = direction === "undo" ? "undone" : "applied";
+  await markReplay(batchId, touched, next);
+  await syncBatchReplay(batchId, withReplay(await loadRows(batchId), touched, next), status);
+  return { success: true, count: touched.length };
+}
+
+export async function undoDriverImportRows(
+  batchId: string,
+  rowIndexes: number[],
+): Promise<{ success: true; count: number } | { error: string }> {
+  return replaySelected(batchId, rowIndexes, "undo");
+}
+
+export async function redoDriverImportRows(
+  batchId: string,
+  rowIndexes: number[],
+): Promise<{ success: true; count: number } | { error: string }> {
+  return replaySelected(batchId, rowIndexes, "redo");
+}
+
+export type DriverImportJournalLine = {
+  rowIndex: number;
+  outcome: DriverImportJournal["outcome"];
+  intakeId: string | null;
+  driverId: string | null;
+  replay: "applied" | "undone";
+  name: string;
+  employeeId: string;
+};
+
+function snapIdentity(snap: DriverImportSnapshot | null): { name: string; employeeId: string } {
+  const intake = snap?.intake;
+  const name = typeof intake?.full_name === "string" ? intake.full_name : "";
+  const employeeId = typeof intake?.employee_id === "string" ? intake.employee_id : "";
+  return { name, employeeId };
+}
+
+export async function listDriverImportJournal(batchId: string): Promise<DriverImportJournalLine[]> {
+  const auth = await requireDriversManager("edit");
+  if (auth.error) return [];
   const db = await staffClient();
-  await db.from("driver_import_batches").update({ status: "applied" }).eq("id", target);
-  return { success: true };
+  const batch = await db
+    .from("driver_import_batches")
+    .select("status")
+    .eq("id", batchId)
+    .maybeSingle();
+  const status = String(batch.data?.status ?? "applied");
+  const rows = await loadRows(batchId);
+  return rows.map((row) => {
+    const after = snapIdentity(row.after);
+    const before = snapIdentity(row.before);
+    return {
+      rowIndex: row.row_index,
+      outcome: row.outcome,
+      intakeId: row.intake_id,
+      driverId: row.driver_id,
+      replay: effectiveReplay(row.replay, status),
+      name: after.name || before.name,
+      employeeId: after.employeeId || before.employeeId,
+    };
+  });
 }

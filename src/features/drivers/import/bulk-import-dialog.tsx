@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -35,6 +36,7 @@ import { listSourceCompanies } from "../source-companies-actions";
 import { getDriverImportJob } from "../drivers-import-job-actions";
 import { useDriverImportJob } from "./driver-import-job-provider";
 import { ImportJobHistory } from "./import-job-history";
+import { ImportJournalPanel } from "./import-journal-panel";
 import {
   canCancelImportJob,
   canPauseImportJob,
@@ -113,6 +115,7 @@ export function DriverBulkImportDialog({
   const [headerSignature, setHeaderSignature] = useState("");
   const [mapping, setMapping] = useState<Partial<Record<DriverImportTargetField, string>>>({});
   const [preview, setPreview] = useState<DriverImportPreviewRow[]>([]);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
   const [duplicateStrategy, setDuplicateStrategy] = useState<"skip" | "update">("update");
   const [approveImmediately, setApproveImmediately] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -204,6 +207,7 @@ export function DriverBulkImportDialog({
     setHeaderSignature("");
     setMapping({});
     setPreview([]);
+    setPicked(new Set());
     setApproveImmediately(false);
     setDragActive(false);
     setPanel("new");
@@ -227,10 +231,6 @@ export function DriverBulkImportDialog({
     const missingRequired = DRIVER_IMPORT_REQUIRED_FIELDS.filter((field) => !mapping[field]);
     if (missingRequired.length > 0) {
       toast.error(t("mappingRequired"));
-      return;
-    }
-    if (!mapping.zone_id && !mapping.restaurant_ids) {
-      toast.error(t("assignmentMappingRequired"));
       return;
     }
     saveStoredMapping(headerSignature, mapping);
@@ -264,10 +264,24 @@ export function DriverBulkImportDialog({
   };
 
   const duplicateHeaders = useMemo(() => duplicateHeaderFields(mapping), [mapping]);
+  const readyIndexes = useMemo(
+    () =>
+      preview
+        .filter((row) => isImportRowReady(row, duplicateStrategy))
+        .map((row) => row.rowIndex),
+    [preview, duplicateStrategy],
+  );
+  const importCount = readyIndexes.filter((index) => picked.has(index)).length;
+
+  useEffect(() => {
+    setPicked(new Set(readyIndexes));
+  }, [preview, duplicateStrategy, readyIndexes]);
 
   const handleImport = () => {
     if (duplicateHeaders.length > 0) return;
-    const ready = preview.filter((row) => isImportRowReady(row, duplicateStrategy));
+    const ready = preview.filter(
+      (row) => isImportRowReady(row, duplicateStrategy) && picked.has(row.rowIndex),
+    );
     if (ready.length === 0) return;
     void (async () => {
       const job = await start({
@@ -371,9 +385,7 @@ export function DriverBulkImportDialog({
     });
   };
 
-  const requiredMapped =
-    DRIVER_IMPORT_REQUIRED_FIELDS.every((field) => mapping[field]) &&
-    Boolean(mapping.zone_id || mapping.restaurant_ids);
+  const requiredMapped = DRIVER_IMPORT_REQUIRED_FIELDS.every((field) => mapping[field]);
 
   return (
     <Dialog
@@ -642,6 +654,9 @@ export function DriverBulkImportDialog({
                   ) : null}
                 </div>
               ) : null}
+              {liveJob && !isActiveImportJob(liveJob.status) ? (
+                <ImportJournalPanel batchId={liveJob.id} />
+              ) : null}
             </div>
           ) : null}
 
@@ -649,6 +664,9 @@ export function DriverBulkImportDialog({
             <>
               {!requiredMapped ? (
                 <p className="text-xs text-destructive">{t("mappingRequired")}</p>
+              ) : null}
+              {!mapping.zone_id && !mapping.restaurant_ids ? (
+                <p className="text-[10px] text-muted-foreground">{t("assignmentMappingRequired")}</p>
               ) : null}
               <DriverMappingBoard
                 headers={headers}
@@ -669,6 +687,7 @@ export function DriverBulkImportDialog({
                   invalid: summary.invalid,
                 })}
               </p>
+              <p className="text-[10px] text-muted-foreground">{t("selectReadyHint")}</p>
               {duplicateHeaders.length > 0 ? (
                 <p className="text-xs text-destructive">{t("duplicateHeader")}</p>
               ) : null}
@@ -736,6 +755,16 @@ export function DriverBulkImportDialog({
                   <table className="w-full text-left text-xs">
                     <thead className="sticky top-0 bg-muted/80">
                       <tr>
+                        <th className="w-8 px-2 py-1.5">
+                          <Checkbox
+                            className="cursor-pointer"
+                            checked={readyIndexes.length > 0 && readyIndexes.every((index) => picked.has(index))}
+                            aria-label={t("selectReadyHint")}
+                            onCheckedChange={(checked) => {
+                              setPicked(checked === true ? new Set(readyIndexes) : new Set());
+                            }}
+                          />
+                        </th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colStatus")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colName")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colPhone")}</th>
@@ -750,8 +779,27 @@ export function DriverBulkImportDialog({
                       </tr>
                     </thead>
                     <tbody>
-                      {preview.slice(0, 200).map((row) => (
+                      {preview.slice(0, 200).map((row) => {
+                        const ready = isImportRowReady(row, duplicateStrategy);
+                        return (
                         <tr key={row.rowIndex} className="border-t border-border/60">
+                          <td className="px-2 py-1">
+                            {ready ? (
+                              <Checkbox
+                                className="cursor-pointer"
+                                checked={picked.has(row.rowIndex)}
+                                aria-label={row.employee_id ?? row.full_name ?? String(row.rowIndex)}
+                                onCheckedChange={(checked) => {
+                                  setPicked((prev) => {
+                                    const next = new Set(prev);
+                                    if (checked === true) next.add(row.rowIndex);
+                                    else next.delete(row.rowIndex);
+                                    return next;
+                                  });
+                                }}
+                              />
+                            ) : null}
+                          </td>
                           <td className="px-2 py-1">
                             <StatusPill variant={previewVariant(row, duplicateStrategy)} dot={false}>
                               {isImportRowReady(row, duplicateStrategy) &&
@@ -789,7 +837,8 @@ export function DriverBulkImportDialog({
                               : t("activeNo")}
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -858,10 +907,10 @@ export function DriverBulkImportDialog({
                   type="button"
                   size="sm"
                   className="h-9 cursor-pointer rounded-md px-4"
-                  disabled={summary.ready === 0}
+                  disabled={importCount === 0}
                   onClick={handleImport}
                 >
-                  {t("import", { count: summary.ready })}
+                  {t("import", { count: importCount })}
                 </Button>
               </>
             ) : null}

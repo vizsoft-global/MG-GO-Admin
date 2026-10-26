@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildImportWritePatch, duplicateHeaderFields, writesCell } from "./driver-import-patch";
-import { clearRedo, redoRowPlan, undoRowPlan } from "./driver-import-stack";
+import { buildImportWritePatch, duplicateHeaderFields, importRowMissingAssignment, writesCell } from "./driver-import-patch";
+import { clearRedo, effectiveReplay, redoRowPlan, undoRowPlan } from "./driver-import-stack";
 import { resolveTemplateColumns, templateDriversAoa } from "./template";
 import { DRIVER_IMPORT_FIELDS, type DriverImportMappedRow } from "../types";
 
@@ -139,6 +139,79 @@ test("the sample template lists every writable column", () => {
   );
   assert.equal(headers.length, DRIVER_IMPORT_FIELDS.length);
   assert.equal(new Set(headers).size, headers.length);
+});
+
+test("a civil id update does not demand a new assignment", () => {
+  assert.equal(
+    importRowMissingAssignment({
+      existingByEmployeeId: true,
+      ops_required: true,
+      zone_id: null,
+      restaurant_ids: [],
+      cleared: {},
+    }),
+    false,
+  );
+  const patch = buildImportWritePatch({
+    row: row({
+      present: { employee_id: true, civil_id: true, zone_id: true, restaurant_ids: true },
+      civil_id: "281010100001",
+      employee_id: "1360",
+      zone_id: null,
+      restaurant_ids: null,
+    }),
+    mode: "update",
+    resolved: { employee_id: "1360", civil_id: "281010100001" },
+    existingCustom: {},
+    existingBank: null,
+  });
+  assert.equal(patch.intake.civil_id, "281010100001");
+  assert.equal("zone_id" in patch.intake, false);
+  assert.equal(
+    writesCell({ present: { zone_id: true }, cleared: {} }, "zone_id", false, "update"),
+    false,
+  );
+});
+
+test("assignment is required only for a new operational rider", () => {
+  assert.equal(importRowMissingAssignment({ ops_required: true, zone_id: null, restaurant_ids: [] }), true);
+  assert.equal(importRowMissingAssignment({ ops_required: false, zone_id: null, restaurant_ids: [] }), false);
+  assert.equal(
+    importRowMissingAssignment({
+      existingByEmployeeId: true,
+      ops_required: true,
+      zone_id: null,
+      restaurant_ids: [],
+      cleared: { zone_id: true, restaurant_ids: true },
+    }),
+    true,
+  );
+  assert.equal(
+    importRowMissingAssignment({
+      existingByEmployeeId: true,
+      ops_required: true,
+      zone_id: null,
+      restaurant_ids: [],
+      cleared: { zone_id: true },
+    }),
+    false,
+  );
+  assert.equal(
+    importRowMissingAssignment({
+      existingByEmployeeId: true,
+      ops_required: true,
+      zone_id: "zone-1",
+      restaurant_ids: [],
+    }),
+    false,
+  );
+});
+
+test("replay follows the row flag, then the batch", () => {
+  assert.equal(effectiveReplay(null, "undone"), "undone");
+  assert.equal(effectiveReplay(null, "applied"), "applied");
+  assert.equal(effectiveReplay("applied", "undone"), "applied");
+  assert.equal(effectiveReplay("undone", "applied"), "undone");
 });
 
 test("a new apply retires older redo", () => {

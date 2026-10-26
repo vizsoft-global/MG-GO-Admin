@@ -1,5 +1,6 @@
 import { DEFAULT_PAYMENT_CURRENCY, type PaymentCurrencyCode } from "@/lib/currencies";
 import type { DriverBankDetails } from "@/features/employees/bank-details";
+import { hasOpsAssignment } from "../driver-assignment";
 import type { DriverImportPreviewRow, DriverImportTargetField } from "../types";
 
 export type ImportWriteMode = "create" | "update";
@@ -37,6 +38,31 @@ export function writesCell(
   if (row.cleared?.[field]) return true;
   if (mode === "create") return true;
   return hasValue;
+}
+
+function restaurantIds(value: readonly string[] | string | null | undefined): string[] {
+  if (Array.isArray(value)) return value.filter((id) => id.trim().length > 0);
+  if (typeof value === "string") {
+    return value.split(",").map((id) => id.trim()).filter((id) => id.length > 0);
+  }
+  return [];
+}
+
+/** A new operational rider needs a zone or a restaurant. An update keeps a blank assignment. */
+export function importRowMissingAssignment(row: {
+  ops_required?: boolean;
+  zone_id?: string | null;
+  restaurant_ids?: readonly string[] | string | null;
+  existingByEmployeeId?: boolean;
+  existingByClientId?: boolean;
+  cleared?: { zone_id?: boolean; restaurant_ids?: boolean };
+}): boolean {
+  if (row.ops_required === false) return false;
+  const has = hasOpsAssignment(row.zone_id ?? null, restaurantIds(row.restaurant_ids));
+  const existing = Boolean(row.existingByEmployeeId || row.existingByClientId);
+  if (!existing) return !has;
+  if (has) return false;
+  return Boolean(row.cleared?.zone_id && row.cleared?.restaurant_ids);
 }
 
 function cleared(row: DriverImportPreviewRow, field: DriverImportTargetField): boolean {
