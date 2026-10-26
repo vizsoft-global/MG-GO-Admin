@@ -21,7 +21,7 @@ import {
   useState,
 } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import type { GoogleMapsOverlay } from "@deck.gl/google-maps";
 import type { PathStyleExtension, PathStyleExtensionProps } from "@deck.gl/extensions";
 import type {
@@ -31,10 +31,13 @@ import type {
   PathLayer,
   PolygonLayer,
   ScatterplotLayer,
+  TextLayer,
 } from "deck.gl";
 
+import { Button } from "@/components/ui/button";
 import { useBrandingOptional } from "@/contexts/branding-context";
 import { loadGoogleMaps } from "@/lib/google-maps/load";
+import { formatKuwaitTime } from "@/features/driver-tracking/shift-adherence-display";
 import { GoogleMapsStatusBanner } from "@/features/restaurants/google-maps-status-banner";
 import { cn } from "@/lib/utils";
 
@@ -147,6 +150,18 @@ function asIconAtlasProp(image: FleetIconAtlas): IconLayerProps["iconAtlas"] {
   return image as unknown as IconLayerProps["iconAtlas"];
 }
 
+function earlyDropDetail(
+  t: ReturnType<typeof useTranslations<"pages.roster">>,
+  orderId: string | null | undefined,
+  at: string | null | undefined,
+): string {
+  if (orderId) {
+    return t("earlyDropLine", { order: orderId, time: formatKuwaitTime(at) });
+  }
+  const label = t("statuses.early_drop");
+  return at ? `${label} · ${formatKuwaitTime(at)}` : label;
+}
+
 export type FleetRouteStop = {
   id: string;
   /** [lng, lat], GeoJSON order, as everything in this feature uses. */
@@ -173,6 +188,13 @@ export type FleetMapHandle = {
   resize: () => void;
 };
 
+export type FleetRestaurantPin = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+};
+
 type FleetMapProps = {
   className?: string;
   routeGeometry?: FleetRouteGeometry | null;
@@ -180,6 +202,7 @@ type FleetMapProps = {
   playheadPosition?: [number, number] | null;
   showZones?: boolean;
   mapTypeId?: "roadmap" | "hybrid";
+  places?: FleetRestaurantPin[];
 };
 
 /** One drawable driver. Mutated in place every frame — never re-created. */
@@ -202,6 +225,7 @@ type LayerClasses = {
   PathLayer: typeof PathLayer;
   PolygonLayer: typeof PolygonLayer;
   ScatterplotLayer: typeof ScatterplotLayer;
+  TextLayer: typeof TextLayer;
   /** Screen-space dashes for the gap connectors. See `ROUTE_GAP_RGB`. */
   PathStyleExtension: typeof PathStyleExtension;
 };
@@ -249,10 +273,12 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     playheadPosition = null,
     showZones = true,
     mapTypeId = "roadmap",
+    places = [],
   },
   ref,
 ) {
   const t = useTranslations("pages.liveTrackingV2");
+  const rosterT = useTranslations("pages.roster");
   const store = useFleetStore();
   const transport = useFleetTransport();
   const snapshot = useFleetSnapshot();
@@ -296,6 +322,8 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
 
   const didFitRef = useRef(false);
   const [status, setStatus] = useState<"loading" | "ready" | "unavailable">("loading");
+  const [earlyDropDriverId, setEarlyDropDriverId] = useState<string | null>(null);
+  const earlyDropNamesRef = useRef(new Map<string, string>());
 
   const iconMapping = useMemo(() => fleetIconMapping(), []);
   const [iconAtlas, setIconAtlas] = useState<FleetIconAtlas | null>(null);
@@ -318,6 +346,10 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     lastFollowCheckRef.current = 0;
     if (!selectedDriverId) playbackFollowRef.current = false;
   }, [selectedDriverId]);
+
+  useEffect(() => {
+    if (snapshot.selectedDriverId == null) setEarlyDropDriverId(null);
+  }, [snapshot.selectedDriverId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -433,6 +465,7 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
         PathLayer: layerModule.PathLayer,
         PolygonLayer: layerModule.PolygonLayer,
         ScatterplotLayer: layerModule.ScatterplotLayer,
+        TextLayer: layerModule.TextLayer,
         PathStyleExtension: extensionModule.PathStyleExtension,
       };
 
@@ -569,8 +602,12 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       PathLayer: Path,
       PolygonLayer: Polygon,
       ScatterplotLayer: Scatter,
+      TextLayer: Text,
       PathStyleExtension: DashExtension,
     } = classes;
+    const restaurantPins = places.filter(
+      (place) => Number.isFinite(place.lat) && Number.isFinite(place.lng),
+    );
     const layers: DeckLayer[] = [];
     const revision = revisionRef.current;
     const trailRevision = store.trails.revision;
@@ -862,15 +899,88 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
       );
     }
 
+    if (restaurantPins.length > 0 && Text) {
+      layers.push(
+        new Scatter({
+          id: "fleet-restaurant-pins",
+          data: restaurantPins,
+          pickable: false,
+          stroked: false,
+          filled: true,
+          radiusUnits: "pixels",
+          getPosition: (place: FleetRestaurantPin) => [place.lng, place.lat],
+          getRadius: 9,
+          getFillColor: [29, 27, 26, 235],
+        }),
+        new Text({
+          id: "fleet-restaurant-labels",
+          data: restaurantPins,
+          pickable: false,
+          characterSet: ["R"],
+          fontFamily: "sans-serif",
+          fontWeight: 700,
+          getPosition: (place: FleetRestaurantPin) => [place.lng, place.lat],
+          getText: () => "R",
+          getSize: 11,
+          sizeUnits: "pixels",
+          getColor: [255, 255, 255, 255],
+          getTextAnchor: "middle",
+          getAlignmentBaseline: "center",
+        }),
+      );
+    }
+
+    const earlyMarks = drawable.filter(
+      (entity) => entity.located && snapshot.rosterLines[entity.driverId]?.earlyDrop === true,
+    );
+    if (earlyMarks.length > 0) {
+      layers.push(
+        new Text<FleetEntity>({
+          id: "fleet-early-drop-marks",
+          data: earlyMarks,
+          pickable: true,
+          characterSet: ["!"],
+          fontFamily: "sans-serif",
+          fontWeight: 700,
+          sizeUnits: "pixels",
+          getText: () => "!",
+          getPosition: (entity) => entity.position,
+          getPixelOffset: () => [16, -18],
+          getColor: [180, 35, 24, 255],
+          getSize: 18,
+          updateTriggers: {
+            getPosition: revision,
+          },
+          onClick: (info) => {
+            if (!info.object) return false;
+            pickHandledRef.current = true;
+            window.setTimeout(() => {
+              pickHandledRef.current = false;
+            }, 0);
+            const driverId = info.object.driverId;
+            earlyDropNamesRef.current.set(driverId, info.object.name);
+            if (selectedDriverIdRef.current !== driverId && selectedDriverId !== driverId) {
+              selectedDriverIdRef.current = driverId;
+              store.selectDriver(driverId);
+            }
+            setEarlyDropDriverId((current) => (current === driverId ? null : driverId));
+            return true;
+          },
+        }),
+      );
+    }
+
     return layers;
   }, [
     iconAtlas,
     iconMapping,
+    places,
     playheadPosition,
     routeGeometry,
     routeStops,
     selectedDriverId,
     showZones,
+    snapshot.rosterLines,
     store,
     zoneData,
   ]);
@@ -1056,9 +1166,35 @@ export const FleetMap = forwardRef<FleetMapHandle, FleetMapProps>(function Fleet
     [store],
   );
 
+  const earlyDropLine = earlyDropDriverId ? snapshot.rosterLines[earlyDropDriverId] : null;
+  const earlyDropName = earlyDropDriverId
+    ? (earlyDropNamesRef.current.get(earlyDropDriverId) ?? "")
+    : "";
+
   return (
     <div className={cn("relative h-full w-full overflow-hidden", className)}>
       <div ref={containerRef} className="h-full w-full" aria-label={t("map.label")} />
+
+      {earlyDropDriverId ? (
+        <div className="pointer-events-auto absolute bottom-3 start-3 z-30 max-w-xs rounded-lg border bg-card p-2 text-xs shadow-sm">
+          <div className="flex items-start gap-2">
+            <div className="min-w-0">
+              {earlyDropName ? <p className="font-semibold">{earlyDropName}</p> : null}
+              <p>{earlyDropDetail(rosterT, earlyDropLine?.earlyDropOrderId, earlyDropLine?.earlyDropAt)}</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-xs"
+              className="size-6 shrink-0"
+              aria-label={rosterT("cancel")}
+              onClick={() => setEarlyDropDriverId(null)}
+            >
+              <X className="size-3.5" aria-hidden />
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {status === "loading" ? (
         <div className="pointer-events-none absolute inset-0 grid place-items-center bg-background/60">

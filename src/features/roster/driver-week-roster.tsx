@@ -27,6 +27,10 @@ export function DriverWeekRoster({ driverId }: { driverId: string }) {
               {day.off ? t("statuses.off") : `${day.start ?? "—"}–${day.end ?? "—"}`}
               {day.storeName ? ` · ${day.storeName}` : ""}
             </p>
+            {day.originalStart || day.originalEnd ? (
+              <p className="text-muted-foreground">{t("originalShift")} {day.originalStart ?? "—"}–{day.originalEnd ?? "—"}</p>
+            ) : null}
+            {day.changeApprovedBy ? <p className="text-muted-foreground">{t("approvedBy")} {day.changeApprovedBy}</p> : null}
           </div>
         ))}
       </div>

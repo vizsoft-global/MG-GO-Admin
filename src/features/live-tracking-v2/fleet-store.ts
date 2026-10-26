@@ -169,6 +169,7 @@ export class FleetStore {
   private readonly rosterLines = new Map<string, RosterLine>();
   private rosterRestaurantId: string | null = null;
   private rosterDuty: string | null = null;
+  private rosterCompany: string | null = null;
   private selectedDriverId: string | null = null;
 
   private connection: FleetConnectionState = {
@@ -287,6 +288,7 @@ export class FleetStore {
     this.rosterIds = input.restricted ? new Set(input.drivers.map((driver) => driver.driverId)) : null;
     this.rosterLines.clear();
     for (const driver of input.drivers) {
+      const company = (driver.company ?? "").trim();
       this.rosterLines.set(driver.driverId, {
         status: driver.status,
         start: driver.start,
@@ -294,14 +296,30 @@ export class FleetStore {
         actualIn: driver.actualIn,
         earlyDrop: driver.earlyDrop,
         restaurantId: driver.restaurantId,
+        earlyDropOrderId: driver.earlyDropOrderId ?? null,
+        earlyDropAt: driver.earlyDropAt ?? null,
+        actualOut: driver.actualOut ?? null,
+        restaurantName: driver.restaurantName ?? null,
+        company: company === "" ? null : company,
+        minutesLate: driver.minutesLate ?? 0,
+        minutesEarly: driver.minutesEarly ?? 0,
+        lateGraceMin: driver.lateGraceMin ?? 0,
+        originalStart: driver.originalStart ?? null,
+        originalEnd: driver.originalEnd ?? null,
+        changeApprovedBy: driver.changeApprovedBy ?? null,
       });
     }
     this.publish();
   }
 
-  setRosterFilters(input: { restaurantId: string | null; duty: string | null }): void {
+  setRosterFilters(input: {
+    restaurantId: string | null;
+    duty: string | null;
+    company?: string | null;
+  }): void {
     this.rosterRestaurantId = input.restaurantId;
     this.rosterDuty = input.duty;
+    this.rosterCompany = input.company ?? null;
     this.publish();
   }
 
@@ -878,6 +896,10 @@ export class FleetStore {
       if (!line?.earlyDrop) return false;
     } else if (this.rosterDuty && line?.status !== this.rosterDuty) {
       return false;
+    }
+    const companyFilter = this.rosterCompany?.trim() ?? "";
+    if (companyFilter) {
+      if (!line || (line.company ?? "").trim() !== companyFilter) return false;
     }
 
     if (alertsOnly) {

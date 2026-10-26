@@ -21,12 +21,15 @@ export function rosterDutyStatus(input: {
   now: Date;
   lateGraceMin?: number;
   earlyGraceMin?: number;
+  /** Minutes after start with no login before the not-logged-in alert. Omit to use the late grace. */
+  noLoginGraceMin?: number;
 }): { status: RosterDutyStatus; minutesLate: number; minutesEarly: number } {
   if (input.off || !input.start || !input.end) {
     return { status: "off", minutesLate: 0, minutesEarly: 0 };
   }
   const lateGrace = (input.lateGraceMin ?? DEFAULT_LATE_GRACE_MINUTES) * 60_000;
   const earlyGrace = (input.earlyGraceMin ?? DEFAULT_EARLY_GRACE_MINUTES) * 60_000;
+  const absentAfter = (input.noLoginGraceMin ?? input.lateGraceMin ?? DEFAULT_LATE_GRACE_MINUTES) * 60_000;
   const minutesLate = input.checkIn
     ? Math.max(0, Math.round((input.checkIn.getTime() - input.start.getTime()) / 60_000))
     : 0;
@@ -39,7 +42,7 @@ export function rosterDutyStatus(input: {
   }
   if (!input.checkIn) {
     return {
-      status: input.now.getTime() >= input.end.getTime() ? "no_show" : input.now.getTime() >= input.start.getTime() + lateGrace ? "not_logged_in" : "scheduled",
+      status: input.now.getTime() >= input.end.getTime() ? "no_show" : input.now.getTime() >= input.start.getTime() + absentAfter ? "not_logged_in" : "scheduled",
       minutesLate: 0,
       minutesEarly: 0,
     };

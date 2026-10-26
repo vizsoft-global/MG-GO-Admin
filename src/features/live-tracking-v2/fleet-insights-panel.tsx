@@ -11,11 +11,13 @@
  */
 
 import { useMemo, type WheelEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   Gauge,
   MapPinOff,
   Package,
@@ -25,7 +27,12 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
+import { kuwaitToday } from "@/features/driver-tracking/kuwait-time";
+import { formatKuwaitTime } from "@/features/driver-tracking/shift-adherence-display";
+import { fetchRosterAlerts } from "@/features/roster/roster-actions";
+import { rosterError } from "@/features/roster/roster-result";
 
 import { FleetEventFeed } from "./fleet-event-feed";
 import {
@@ -61,6 +68,55 @@ function stopWheelFromReachingMap(event: WheelEvent) {
   event.stopPropagation();
 }
 
+type RosterAlertRow = {
+  id: string;
+  kind: string;
+  driverName: string;
+  restaurantName: string;
+  at: string | null;
+};
+
+function alertKindLabel(
+  t: ReturnType<typeof useTranslations<"pages.roster">>,
+  kind: string,
+): string {
+  switch (kind) {
+    case "late":
+      return t("statuses.late");
+    case "not_logged_in":
+      return t("statuses.not_logged_in");
+    case "no_show":
+      return t("statuses.no_show");
+    case "logged_out_early":
+      return t("statuses.logged_out_early");
+    case "early_drop":
+      return t("statuses.early_drop");
+    default:
+      return kind;
+  }
+}
+
+function latestRosterAlerts(data: unknown): RosterAlertRow[] {
+  if (
+    rosterError(data) !== null ||
+    typeof data !== "object" ||
+    data === null ||
+    !("rows" in data) ||
+    !Array.isArray(data.rows)
+  ) {
+    return [];
+  }
+  const rows = data.rows as RosterAlertRow[];
+  return [...rows]
+    .sort((a, b) => {
+      if (!a.at && !b.at) return 0;
+      if (!a.at) return 1;
+      if (!b.at) return -1;
+      return a.at < b.at ? 1 : a.at > b.at ? -1 : 0;
+    })
+    .slice(0, 5);
+}
+
 export function FleetInsightsPanel({
   collapsed,
   onCollapsedChange,
@@ -69,7 +125,16 @@ export function FleetInsightsPanel({
   onCollapsedChange?: (collapsed: boolean) => void;
 }) {
   const t = useTranslations("pages.liveTrackingV2");
+  const rosterT = useTranslations("pages.roster");
   const snapshot = useFleetSnapshot();
+  const today = kuwaitToday();
+  const alertsQuery = useQuery({
+    queryKey: ["roster", "alerts", today, "live-insights"],
+    queryFn: () => fetchRosterAlerts({ day: today }),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+  const alertRows = useMemo(() => latestRosterAlerts(alertsQuery.data), [alertsQuery.data]);
 
   const segments = useMemo(
     () => fleetDistributionBarSegments(snapshot.counts, snapshot.kpis.alerts),
@@ -252,6 +317,46 @@ export function FleetInsightsPanel({
               })}
             </ul>
           )}
+        </section>
+
+        <section className="shrink-0 border-b border-border/60 px-2 py-2">
+          <div className="flex items-center gap-2">
+            <p className="min-w-0 truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {rosterT("alertsToday")}
+            </p>
+            <Button
+              variant="outline"
+              size="lg"
+              className="ms-auto h-9 gap-1.5 px-2.5 text-xs"
+              nativeButton={false}
+              render={<Link href="/operations/roster/alerts" />}
+            >
+              <ExternalLink className="size-3.5" aria-hidden />
+              {rosterT("navAlerts")}
+            </Button>
+          </div>
+          <div className="mt-1.5 max-h-36 overflow-y-auto overscroll-contain">
+            {alertsQuery.isPending ? (
+              <p className="text-xs text-muted-foreground">…</p>
+            ) : alertRows.length === 0 ? (
+              <p className="text-xs text-muted-foreground">{rosterT("noRows")}</p>
+            ) : (
+              <ul className="space-y-1">
+                {alertRows.map((row) => (
+                  <li key={row.id} className="flex items-baseline gap-1.5 text-xs">
+                    <span className="shrink-0 font-semibold">{alertKindLabel(rosterT, row.kind)}</span>
+                    <span className="min-w-0 truncate">{row.driverName}</span>
+                    {row.restaurantName ? (
+                      <span className="min-w-0 truncate text-muted-foreground">{row.restaurantName}</span>
+                    ) : null}
+                    <span className="ms-auto shrink-0 tabular-nums text-muted-foreground">
+                      {formatKuwaitTime(row.at)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
 
         <div className="flex min-h-[10rem] flex-1 flex-col overflow-hidden">
