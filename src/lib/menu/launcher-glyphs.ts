@@ -19,6 +19,10 @@ export const LAUNCHER_GLYPH: Record<LauncherTileId, string> = {
   notifications: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4z M10 21h4",
   attendance: "M12 21a9 9 0 1 0 0-18a9 9 0 1 0 0 18z M12 7v5l3 2",
   profile: "M4 6h10 M18 6h2 M4 12h4 M12 12h8 M4 18h12 M14 4v4 M8 10v4 M16 16v4",
+  restaurants: "M4 10l8-6 8 6v10H4z M10 20v-6h4v6",
+  roles: "M12 3l7 3v6c0 4-3 7-7 8-4-1-7-4-7-8V6z",
+  "document-expiry": "M6 3h8l4 4v14H6z M14 3v5h5 M9 14h6 M9 17h4",
+  "driver-app": "M8 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M11 18h2",
   assets: "M3 4h18v4H3z M5 8v12h14V8 M10 12h4",
   "operations-hub": "M4 21V5h10v16 M14 9h6v12 M2 21h20 M8 9h2 M8 13h2 M8 17h2",
   vehicles:

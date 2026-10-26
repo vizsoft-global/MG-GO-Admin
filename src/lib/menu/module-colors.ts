@@ -54,20 +54,24 @@ const BY_ID: Record<string, ModuleTint> = {
 export const LAUNCHER_BRAND_TINT: ModuleTint = PALETTE[0];
 
 export const LAUNCHER_BRAND = {
-  canvas: "#d9d2cf",
-  topBar: "#27273f",
-  search: "rgba(255,255,255,0.08)",
-  searchBorder: "rgba(255,255,255,0.14)",
-  searchHint: "transparent",
-  logoChip: "#dad2cf",
-  badge: "#27273f",
-  badgeBorder: "#d9d2cf",
-  muted: "#dad2cf",
-  text: "#27273f",
-  subText: "#55535f",
-  tileLabel: "#3a3a52",
-  footer: "#5a5a6e",
-  accent: "#a73c24",
+  canvas: "#2b2b48",
+  topBar: "#383855",
+  search: "rgba(0,0,0,0.25)",
+  searchBorder: "rgba(255,255,255,0.2)",
+  searchHint: "rgba(255,255,255,0.27)",
+  logoChip: "#d9d2cf",
+  badge: "#e23d3d",
+  badgeBorder: "#2b2b48",
+  muted: "#999999",
+  text: "#ffffff",
+  subText: "#9898a7",
+  tile: "#d9d2cf",
+  tileLabel: "#ffffff",
+  footer: "rgba(255,255,255,0.5)",
+  footerBar: "#353555",
+  meta: "#d9d2cf",
+  accent: "#d25335",
+  mark: "#e64b26",
 } as const;
 
 /**

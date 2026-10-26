@@ -1,20 +1,30 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/auth-context";
 import { useSidebarMenu } from "@/hooks/use-sidebar-menu";
-import { useBranding } from "@/contexts/branding-context";
 import { useNavBadges } from "@/hooks/use-nav-badges";
 import { Link } from "@/i18n/navigation";
 import { signOut } from "@/features/auth/actions";
 import { launcherFontClassName } from "@/lib/fonts/app-fonts";
+import { kuwaitClock } from "@/lib/launcher/kuwait-clock";
+import {
+  formatTempC,
+  readLauncherWeather,
+  WEATHER_REFRESH_MS,
+  weatherKind,
+  type LauncherWeather,
+  type WeatherKind,
+} from "@/lib/launcher/weather";
 import {
   filterLauncherTiles,
   greetingBucket,
   kuwaitHour,
   LAUNCHER_LABEL_OVERRIDE,
+  LAUNCHER_RELEASE,
   launcherTilesFromMenu,
   mergeLauncherTiles,
   type LauncherTile,
@@ -23,7 +33,7 @@ import {
 } from "@/lib/menu/launcher-modules";
 import { launcherGlyphPath } from "@/lib/menu/launcher-glyphs";
 import { APP_NAV_KEY_BY_ID, resolveIcon } from "@/lib/menu/menu-registry";
-import { LAUNCHER_BRAND, launcherTileHex } from "@/lib/menu/module-colors";
+import { LAUNCHER_BRAND } from "@/lib/menu/module-colors";
 import type { Permission } from "@/lib/auth/permissions";
 import {
   DropdownMenu,
@@ -35,11 +45,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const TILE_SHADOW =
-  "inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -2px 0 rgba(0,0,0,0.10), 0 1px 2px rgba(41,41,63,0.12), 0 8px 18px -6px rgba(41,41,63,0.28)";
-
-const TILE_GRID =
-  "grid w-full grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-x-3 gap-y-5";
+const EMPTY_WEATHER: LauncherWeather = { tempC: null, code: null, isDay: true };
 
 function formatAdminRole(slug: string): string {
   if (!slug) return "";
@@ -54,12 +60,12 @@ function LauncherGlyph({ id, icon }: { id: string; icon: string }) {
   if (path) {
     return (
       <svg
-        width={24}
-        height={24}
+        width={30}
+        height={30}
         viewBox="0 0 24 24"
         fill="none"
-        stroke="#ffffff"
-        strokeWidth="2"
+        stroke="#2b2b48"
+        strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden
@@ -69,7 +75,59 @@ function LauncherGlyph({ id, icon }: { id: string; icon: string }) {
     );
   }
   const Icon = resolveIcon(icon);
-  return <Icon className="size-6 text-white" strokeWidth={2} aria-hidden />;
+  return <Icon className="size-[30px] text-[#2b2b48]" strokeWidth={1.8} aria-hidden />;
+}
+
+function SkyGlyph({ kind }: { kind: WeatherKind }) {
+  const stroke = "#D9D2CF";
+  switch (kind) {
+    case "clear":
+      return (
+        <svg width={24} height={24} viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M16 14a5 5 0 1 0-4-8 4 4 0 1 0-4 8h8z" stroke={stroke} strokeWidth={1.6} />
+        </svg>
+      );
+    case "cloud":
+    case "fog":
+      return (
+        <svg width={24} height={24} viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M7 17h10a4 4 0 0 0 0-8 5 5 0 0 0-9.5-1A3.5 3.5 0 0 0 7 17z" stroke={stroke} strokeWidth={1.6} />
+          {kind === "fog" ? <path d="M6 20h12" stroke={stroke} strokeWidth={1.6} strokeLinecap="round" /> : null}
+        </svg>
+      );
+    case "rain":
+      return (
+        <svg width={24} height={24} viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M7 14h10a4 4 0 0 0 0-8 5 5 0 0 0-9.5-1A3.5 3.5 0 0 0 7 14z" stroke={stroke} strokeWidth={1.6} />
+          <path d="M9 17l-1 3M13 17l-1 3M17 17l-1 3" stroke={stroke} strokeWidth={1.6} strokeLinecap="round" />
+        </svg>
+      );
+    case "snow":
+      return (
+        <svg width={24} height={24} viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M12 4v16M6 8l12 8M18 8L6 16" stroke={stroke} strokeWidth={1.6} strokeLinecap="round" />
+        </svg>
+      );
+    case "storm":
+      return (
+        <svg width={24} height={24} viewBox="0 0 24 24" fill="none" aria-hidden>
+          <path d="M7 13h10a4 4 0 0 0 0-8 5 5 0 0 0-9.5-1A3.5 3.5 0 0 0 7 13z" stroke={stroke} strokeWidth={1.6} />
+          <path d="M13 14l-3 5h3l-1 4 5-6h-3l2-3z" fill={stroke} />
+        </svg>
+      );
+    default: {
+      const _never: never = kind;
+      return _never;
+    }
+  }
+}
+
+function WeatherGlyph({ weather }: { weather: LauncherWeather }) {
+  const kind = weather.code == null ? "clear" : weatherKind(weather.code);
+  if (kind === "clear" && weather.isDay) {
+    return <img src="/launcher/v5/sun.svg" alt="" width={24} height={24} />;
+  }
+  return <SkyGlyph kind={kind} />;
 }
 
 export function AppLauncherShell() {
@@ -77,14 +135,16 @@ export function AppLauncherShell() {
   const tNav = useTranslations();
   const tCommon = useTranslations("common");
   const locale = useLocale();
-  const branding = useBranding();
   const { fullName, email, permissions, isSuperAdmin, adminRoleSlug } = useAuth();
   const badges = useNavBadges();
   const { tree } = useSidebarMenu();
   const [query, setQuery] = useState("");
+  const [now, setNow] = useState<Date | null>(null);
+  const [weather, setWeather] = useState<LauncherWeather>(EMPTY_WEATHER);
   const searchRef = useRef<HTMLInputElement>(null);
-  const hour = kuwaitHour();
+  const hour = kuwaitHour(now ?? undefined);
   const greeting = greetingBucket(hour);
+  const clock = now ? kuwaitClock(now, locale) : null;
 
   const tiles = useMemo(
     () =>
@@ -97,10 +157,10 @@ export function AppLauncherShell() {
 
   const labels = useMemo(() => {
     const map = new Map<string, string>();
-    const translate = (key: string): string | null =>
-      tNav.has(key) ? tNav(key) : null;
+    const translate = (key: string): string | null => (tNav.has(key) ? tNav(key) : null);
     for (const item of tiles) {
-      const override = LAUNCHER_LABEL_OVERRIDE[item.id as LauncherTileId];
+      const override =
+        locale === "ar" ? undefined : LAUNCHER_LABEL_OVERRIDE[item.id as LauncherTileId];
       const navKey = APP_NAV_KEY_BY_ID[item.id];
       if (override) {
         map.set(item.id, override);
@@ -112,52 +172,12 @@ export function AppLauncherShell() {
       map.set(item.id, fromNav ?? item.label);
     }
     return map;
-  }, [tiles, tNav]);
+  }, [tiles, tNav, locale]);
 
   const visible = useMemo(
     () => filterLauncherTiles(tiles, query, labels),
     [tiles, query, labels],
   );
-
-  const renderTile = (item: LauncherTile) => {
-    const badge = badges[item.id];
-    return (
-      <Link
-        key={item.id}
-        href={item.href}
-        className="group/hub flex flex-col items-center gap-2.5 text-center"
-      >
-        <span
-          className="relative grid size-14 place-items-center overflow-visible rounded-[18px]"
-          style={{
-            backgroundColor: launcherTileHex(item.id),
-            boxShadow: TILE_SHADOW,
-          }}
-        >
-          <span className="inline-grid origin-center transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none motion-reduce:group-hover/hub:scale-100 [@media(hover:hover)_and_(pointer:fine)]:group-hover/hub:scale-[1.4]">
-            <LauncherGlyph id={item.id} icon={item.icon} />
-          </span>
-          {badge ? (
-            <span
-              className="absolute -end-[7px] -top-[7px] z-10 inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-[11px] px-[5px] text-xs font-normal tabular-nums text-white"
-              style={{
-                backgroundColor: LAUNCHER_BRAND.badge,
-                border: `2px solid ${LAUNCHER_BRAND.badgeBorder}`,
-              }}
-            >
-              {badge > 999 ? "999+" : badge}
-            </span>
-          ) : null}
-        </span>
-        <span
-          className="text-xs font-normal leading-[1.3]"
-          style={{ color: LAUNCHER_BRAND.tileLabel }}
-        >
-          {labels.get(item.id) ?? item.label}
-        </span>
-      </Link>
-    );
-  };
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -170,114 +190,163 @@ export function AppLauncherShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    tick();
+    const id = window.setInterval(tick, 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const response = await fetch("/api/launcher/weather");
+        if (!response.ok) return;
+        const next = readLauncherWeather(await response.json());
+        if (!cancelled && next) setWeather(next);
+      } catch {
+        /* keep the last reading */
+      }
+    }
+    void load();
+    const id = window.setInterval(() => void load(), WEATHER_REFRESH_MS);
+    const onFocus = () => void load();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
   const displayName = (fullName ?? "").trim() || t("colleague");
   const initials = (fullName ?? email ?? "A").slice(0, 2).toUpperCase();
   const roleLabel = formatAdminRole(adminRoleSlug);
 
+  const renderTile = (item: LauncherTile) => {
+    const badge = badges[item.id];
+    return (
+      <Link
+        key={item.id}
+        href={item.href}
+        className="group/hub flex w-[90px] flex-col items-center text-center"
+      >
+        <span
+          className="relative grid size-16 place-items-center overflow-visible rounded-2xl border border-black/15"
+          style={{
+            backgroundColor: LAUNCHER_BRAND.tile,
+            backgroundImage: "linear-gradient(180deg, transparent, rgba(0,0,0,0.15))",
+            boxShadow: "0 3px 10px rgba(0,0,0,0.2)",
+          }}
+        >
+          <span className="inline-grid origin-center transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none motion-reduce:group-hover/hub:scale-100 [@media(hover:hover)_and_(pointer:fine)]:group-hover/hub:scale-[1.4]">
+            <LauncherGlyph id={item.id} icon={item.icon} />
+          </span>
+          {badge ? (
+            <span
+              className="absolute -end-1.5 -top-1.5 z-10 inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-1 text-[11px] font-semibold tabular-nums text-white"
+              style={{
+                backgroundColor: LAUNCHER_BRAND.badge,
+                border: `2px solid ${LAUNCHER_BRAND.badgeBorder}`,
+              }}
+            >
+              {badge > 999 ? "999+" : badge}
+            </span>
+          ) : null}
+        </span>
+        <span className="mt-2.5 text-[13px] leading-tight font-medium text-white">
+          {labels.get(item.id) ?? item.label}
+        </span>
+      </Link>
+    );
+  };
+
   return (
     <div
-      className={`${launcherFontClassName} relative flex h-full min-h-svh flex-col overflow-hidden font-medium`}
+      className={`${launcherFontClassName} relative flex h-full min-h-0 flex-col overflow-hidden`}
       style={{
         backgroundColor: LAUNCHER_BRAND.canvas,
         color: LAUNCHER_BRAND.text,
         fontFamily: '"Gotham", "GE SS TWO", "Noto Sans Arabic", sans-serif',
       }}
     >
-      <img
-        src="/launcher-mg-watermark.png"
-        alt=""
-        aria-hidden
-        className="pointer-events-none absolute -bottom-[150px] -end-10 w-[520px] opacity-60"
-      />
-
       <header
-        className="relative z-10 flex shrink-0 flex-wrap items-center justify-between gap-4 px-6 py-2.5 text-white"
-        style={{ backgroundColor: LAUNCHER_BRAND.topBar }}
+        className="relative z-20 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-white/10 px-6 md:px-10"
+        style={{
+          backgroundColor: LAUNCHER_BRAND.topBar,
+          boxShadow: "0 5px 100px rgba(0,0,0,0.25)",
+        }}
       >
-        <Link href="/dashboard" className="flex shrink-0 items-center gap-[10px]">
-          <img
-            src="/launcher-mark.png"
-            alt={branding.appName}
-            className="h-[26px] w-auto"
-          />
-          <span className="flex min-w-0 flex-col leading-[1.15]">
-            <span className="truncate text-sm font-bold tracking-[0.04em]">
-              {branding.appName}
-            </span>
-            <span className="truncate text-xs font-normal" style={{ color: LAUNCHER_BRAND.muted }}>
-              {branding.appSubtitle}
+        <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
+          <span
+            className="grid size-7 place-items-center overflow-hidden rounded-lg"
+            style={{ backgroundColor: LAUNCHER_BRAND.logoChip }}
+          >
+            <img src="/launcher-mark.png" alt="" className="size-5 object-contain" />
+          </span>
+          <span className="flex min-w-0 flex-col leading-tight">
+            <span className="text-[13px] font-medium text-white">{t("wordmark")}</span>
+            <span className="text-[11px]" style={{ color: LAUNCHER_BRAND.muted }}>
+              {t("panel")}
             </span>
           </span>
         </Link>
 
         <label
-          className="relative flex min-w-[200px] flex-[0_1_380px] items-center gap-2 rounded-lg px-3 py-[7px]"
+          className="relative flex h-9 min-w-0 max-w-[440px] flex-1 items-center gap-2 rounded-xl px-3"
           style={{
             backgroundColor: LAUNCHER_BRAND.search,
-            border: `1px solid ${LAUNCHER_BRAND.searchBorder}`,
+            border: `1.2px solid ${LAUNCHER_BRAND.searchBorder}`,
           }}
         >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke={LAUNCHER_BRAND.muted}
-            strokeWidth="2"
-            strokeLinecap="round"
-            aria-hidden
-          >
-            <path d="M11 18a7 7 0 1 0 0-14a7 7 0 1 0 0 14z M20 20l-4-4" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" aria-hidden>
+            <path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4" />
           </svg>
           <Input
             ref={searchRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("searchPlaceholder")}
-            className="h-auto w-full flex-1 border-0 bg-transparent p-0 text-sm font-normal text-white shadow-none focus-visible:border-0 focus-visible:ring-0"
+            className="h-9 w-full flex-1 border-0 bg-transparent p-0 text-[13px] text-white shadow-none placeholder:text-white/50 focus-visible:border-0 focus-visible:ring-0"
           />
           <kbd
-            className="hidden shrink-0 rounded px-[5px] py-px text-xs sm:inline"
+            className="hidden shrink-0 rounded px-1.5 py-px text-[11px] text-white sm:inline"
             style={{
-              color: LAUNCHER_BRAND.muted,
-              border: "1px solid rgba(255,255,255,0.2)",
+              backgroundColor: LAUNCHER_BRAND.searchHint,
+              border: "0.7px solid rgba(255,255,255,0.15)",
             }}
           >
             {t("searchHint")}
           </kbd>
         </label>
 
-        <div className="flex shrink-0 items-center gap-3.5">
+        <div className="flex shrink-0 items-center gap-2.5">
           <Link
             href="/notifications"
-            className="grid size-9 place-items-center rounded-full text-white hover:bg-white/10"
+            className="grid size-[35px] place-items-center rounded-full text-white"
+            style={{ backgroundColor: LAUNCHER_BRAND.search }}
             aria-label={tNav("nav.notifications")}
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#ffffff"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z M10 21h4" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+              <path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4" />
             </svg>
           </Link>
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex cursor-pointer items-center gap-2 rounded-full pe-1 hover:bg-white/10">
+            <DropdownMenuTrigger
+              className="flex h-9 cursor-pointer items-center gap-2 rounded-full py-1 ps-1 pe-2.5"
+              style={{ backgroundColor: LAUNCHER_BRAND.search }}
+            >
               <span
-                className="grid size-[30px] place-items-center rounded-full text-xs font-normal text-white"
+                className="grid size-7 place-items-center rounded-full text-[11px] font-medium text-white"
                 style={{ backgroundColor: LAUNCHER_BRAND.accent }}
               >
                 {initials}
               </span>
-              <span className="hidden max-w-[140px] truncate text-start text-sm font-normal leading-tight lg:block">
+              <span className="hidden max-w-[120px] truncate text-[12px] text-white lg:block">
                 {roleLabel || displayName}
               </span>
+              <ChevronDown className="size-3.5 text-white" aria-hidden />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuGroup>
@@ -300,54 +369,81 @@ export function AppLauncherShell() {
         </div>
       </header>
 
-      <main className="relative z-10 flex min-h-0 flex-1 flex-col px-6 pt-6 pb-6 sm:px-12 sm:pt-7 sm:pb-6">
-        <div className="flex flex-col items-start gap-1.5">
-          <span
-            aria-hidden
-            className="mb-1.5 h-0.5 w-6"
-            style={{ backgroundColor: LAUNCHER_BRAND.accent }}
-          />
-          <h1
-            className="m-0 text-2xl font-bold tracking-[0.01em]"
-            style={{ color: LAUNCHER_BRAND.text }}
-          >
-            {t(`greeting.${greeting}`)}, <span className="font-bold">{displayName}</span>
-          </h1>
-          <p className="m-0 text-xs font-normal" style={{ color: LAUNCHER_BRAND.subText }}>
-            {t("subtitle")}
-          </p>
-        </div>
-
-        <div className="mx-auto mt-8 flex w-full max-w-[720px] flex-col">
-          <nav aria-label={t("title")} className="flex w-full flex-col gap-6">
-            <div className={TILE_GRID}>{visible.map(renderTile)}</div>
-          </nav>
-
-          <div className="relative mx-auto mt-8 pt-[9px] ps-[15px]">
-            <img
-              src="/launcher-passion.png"
-              alt=""
-              aria-hidden
-              className="absolute start-0 top-0 w-[17px]"
-            />
-            <div
-              className="text-xs font-normal tracking-[0.22em] whitespace-nowrap"
-              style={{ color: LAUNCHER_BRAND.text }}
-            >
-              {t("slogan")}
+      <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-auto px-4 pt-8 pb-4">
+        <div className="mx-auto flex w-full max-w-[754px] items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5 ps-1">
+            <img src="/launcher/v5/mark.svg" alt="" width={38} height={44} />
+            <div className="min-w-0">
+              <p className="m-0 text-[13px]" style={{ color: LAUNCHER_BRAND.subText }}>
+                {t(`greeting.${greeting}`)},
+              </p>
+              <p className="m-0 truncate text-2xl font-bold text-white">{displayName}</p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-4 text-white">
+            <div className="flex items-center gap-2">
+              <WeatherGlyph weather={weather} />
+              <span className="flex flex-col leading-tight">
+                <span className="text-sm font-semibold" style={{ color: LAUNCHER_BRAND.meta }}>
+                  {weather.tempC == null ? "—" : formatTempC(weather.tempC)}
+                </span>
+                <span className="text-[10px]" style={{ color: "rgba(217,210,207,0.6)" }}>
+                  {t("weatherCity")}
+                </span>
+              </span>
+            </div>
+            <span className="h-5 w-px bg-white/20" aria-hidden />
+            <div className="flex items-center gap-2">
+              <img src="/launcher/v5/calendar.svg" alt="" width={20} height={20} />
+              <span className="flex flex-col leading-tight">
+                <span className="text-sm font-semibold" style={{ color: LAUNCHER_BRAND.meta }}>
+                  {clock ? `${clock.weekday}, ${clock.dayLabel}` : "—"}
+                </span>
+                <span className="text-[10px]" style={{ color: "rgba(217,210,207,0.6)" }}>
+                  {clock?.month ?? ""}
+                </span>
+              </span>
+            </div>
+            <span className="h-5 w-px bg-white/20" aria-hidden />
+            <div className="flex items-center gap-2">
+              <img src="/launcher/v5/clock.svg" alt="" width={20} height={20} />
+              <span className="text-sm font-semibold" style={{ color: LAUNCHER_BRAND.meta }}>
+                {clock?.time ?? "—"}
+              </span>
             </div>
           </div>
         </div>
+
+        <nav aria-label={t("title")} className="mx-auto mt-10 w-full max-w-[754px]">
+          <div className="grid w-full grid-cols-2 justify-items-center gap-x-[30px] gap-y-5 sm:grid-cols-3 md:grid-cols-6">
+            {visible.map(renderTile)}
+          </div>
+        </nav>
       </main>
 
       <footer
-        className="relative z-10 shrink-0 px-4 pt-[18px] pb-[22px] text-center text-xs font-normal"
-        style={{ color: LAUNCHER_BRAND.footer }}
+        className="relative z-10 shrink-0 px-4 py-2 text-center"
+        style={{
+          backgroundColor: LAUNCHER_BRAND.footerBar,
+          boxShadow: "0 -5px 50px rgba(0,0,0,0.25)",
+        }}
       >
-        <span className="font-bold" style={{ color: LAUNCHER_BRAND.text }}>
-          {t("company")}
-        </span>
+        <img src="/launcher-mark.png" alt="" className="mx-auto mb-1 h-[30px] w-auto brightness-0 invert" />
+        <p className="m-0 text-[10px]" style={{ color: LAUNCHER_BRAND.footer }}>
+          {t("footer", {
+            name: t("wordmark"),
+            subtitle: t("panel"),
+            version: LAUNCHER_RELEASE,
+          })}{" "}
+          <span className="font-semibold text-white">{t("company")}</span>
+        </p>
       </footer>
+      <img
+        src="/launcher-mg-watermark.png"
+        alt=""
+        aria-hidden
+        className="pointer-events-none absolute -end-6 -bottom-16 z-0 w-[420px] opacity-25"
+      />
     </div>
   );
 }

@@ -164,7 +164,7 @@ Match density, column count, and architecture from user-provided screenshots. As
 
 The PDFs *New Musallam DPD Home Launcher* and *New Musallam RCM* (plus the 21 screenshots) are the mandatory UI source for `/dashboard` (launcher), the global sidebar, and the RCM V2 surfaces under `/employeedesk` (hub, templates, outgoing, incoming, remind / decline / forward / upload / decision modals). Where they conflict with this rulebook, the reference wins. Scoped to those screens only:
 
-- **Cream full-bleed launcher** on `/dashboard`: no sidebar, canvas `#f9f1eb` + navy `#29293f` header from Claude artifact `Main.dc.html` (A · Odoo Classic). Tile fills come from that file’s `LIST` hex — not `LAUNCHER_BRAND_TINT` teal, not the old BajajCare `#212134` canvas. Font family / sizes / bold classes stay as they are. The rest of the panel keeps the Shopify-style light shell.
+- **Dark v5 launcher** on `/dashboard` only (BajajCare frame `6979:13150`): no sidebar, canvas `#2b2b48`, top bar `#383855`, beige 64px tiles, footer `#353555`, live Kuwait weather, date and clock. EmployeeDesk hub stays cream `#f9f1eb`. Do not port this dark chrome off `/dashboard`.
 - **Sidebar active state:** white pill (`bg-white text-slate-900`) instead of `data-active:bg-sidebar-accent`. Hover stays a subtle navy highlight.
 - **RCM V2 modals:** title header + body + action footer (reference layout), not footer-first. Close may sit in the header. Every other rule still applies — `h-9` controls, no `transition-all`, motion ≤300ms, reduced motion, `SearchSelect` for dynamic lists, emerald for selected chips.
 

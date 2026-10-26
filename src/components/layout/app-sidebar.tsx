@@ -51,6 +51,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { buttonVariants } from "@/components/ui/button";
+import { launcherGlyphPath } from "@/lib/menu/launcher-glyphs";
 import { APP_NAV_KEY_BY_ID, ICON_MAP } from "@/lib/menu/menu-registry";
 import type { ResolvedMenuNode } from "@/lib/menu/menu-merge";
 import { cn } from "@/lib/utils";
@@ -87,7 +88,32 @@ function writePanelGroupOpen(groupId: string, open: boolean) {
   );
 }
 
-function MenuIcon({ name, className }: { name: string; className?: string }) {
+function MenuIcon({
+  name,
+  id,
+  className,
+}: {
+  name: string;
+  id?: string;
+  className?: string;
+}) {
+  const path = id ? launcherGlyphPath(id) : undefined;
+  if (path) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+        aria-hidden
+      >
+        <path d={path} />
+      </svg>
+    );
+  }
   const Icon = ICON_MAP[name] ?? LayoutDashboard;
   return <Icon className={className} />;
 }
@@ -208,7 +234,7 @@ function NavItemLink({
               className="grid size-6 shrink-0 place-items-center rounded-md"
               style={moduleChipStyle(node.id)}
             >
-              <MenuIcon name={node.icon} className="size-5" />
+              <MenuIcon id={node.id} name={node.icon} className="size-5" />
             </span>
             <span>{label}</span>
             {badge ? (
@@ -272,7 +298,7 @@ function NavGroup({
           className="h-8 cursor-pointer rounded-md px-2.5 text-sm font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-normal data-active:text-slate-900 data-active:shadow-sm"
           render={
             <Link href={href} prefetch onMouseEnter={() => prefetchAdminRoute(queryClient, href)}>
-              <MenuIcon name={node.icon} className="size-5 shrink-0" />
+              <MenuIcon id={node.id} name={node.icon} className="size-5 shrink-0" />
               <span>{groupLabel}</span>
             </Link>
           }

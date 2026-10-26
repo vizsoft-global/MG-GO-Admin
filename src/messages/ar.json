@@ -866,14 +866,17 @@
       "subtitle": "اختر وحدة للبدء",
       "colleague": "هناك",
       "hello": "مرحباً، {name}",
-      "searchPlaceholder": "ابحث",
+      "wordmark": "MGGO",
+      "panel": "لوحة التوصيل",
+      "weatherCity": "مدينة الكويت",
+      "searchPlaceholder": "Search apps… / ابحث",
       "searchHint": "⌘K",
       "greeting": {
         "morning": "صباح الخير",
         "afternoon": "طاب يومك",
         "evening": "مساء الخير"
       },
-      "footer": "{name} · {subtitle} v{version} ·",
+      "footer": "{name} · {subtitle} v{version}",
       "company": "Al‑Musallam Group Holding Company",
       "slogan": "POWERED BY PASSION"
     },

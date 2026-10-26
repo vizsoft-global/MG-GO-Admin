@@ -38,7 +38,6 @@ import {
   type IncomingHubFilter,
 } from "./rcm-access";
 import { useAuth } from "@/contexts/auth-context";
-import { LAUNCHER_BRAND } from "@/lib/menu/module-colors";
 
 const NO_BATCHES: EsignBatchRow[] = [];
 
@@ -393,7 +392,7 @@ export function RcmV2HubShell() {
   return (
     <div
       className="-m-3 flex min-h-svh flex-col [color-scheme:light] bg-[#f9f1eb] text-[#18181b] dark:bg-[#f9f1eb] dark:text-[#18181b]"
-      style={{ backgroundColor: LAUNCHER_BRAND.canvas, colorScheme: "light" }}
+      style={{ colorScheme: "light" }}
     >
       <p className="px-6 pt-4 text-sm font-normal text-[#71717a]">{t("hubTitle")}</p>
       <div className="flex items-center justify-between gap-3 border-b border-[#ececee] px-6 py-2.5">

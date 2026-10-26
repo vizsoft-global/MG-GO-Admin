@@ -30,7 +30,7 @@ export function DashboardFrame({ children }: { children: ReactNode }) {
   if (isLauncher) {
     return (
       <div className="flex h-svh w-full overflow-hidden" style={{ backgroundColor: LAUNCHER_BRAND.canvas }}>
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</main>
       </div>
     );
   }

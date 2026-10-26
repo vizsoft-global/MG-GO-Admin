@@ -866,14 +866,17 @@
       "subtitle": "Pick a module to get started",
       "colleague": "there",
       "hello": "Hello, {name}",
-      "searchPlaceholder": "Search apps...",
+      "wordmark": "MGGO",
+      "panel": "Delivery Panel",
+      "weatherCity": "Kuwait City",
+      "searchPlaceholder": "Search apps… / ابحث",
       "searchHint": "⌘K",
       "greeting": {
-        "morning": "Good morning",
-        "afternoon": "Good afternoon",
-        "evening": "Good evening"
+        "morning": "Good Morning",
+        "afternoon": "Good Afternoon",
+        "evening": "Good Evening"
       },
-      "footer": "{name} · {subtitle} v{version} ·",
+      "footer": "{name} · {subtitle} v{version}",
       "company": "Al‑Musallam Group Holding Company",
       "slogan": "POWERED BY PASSION"
     },

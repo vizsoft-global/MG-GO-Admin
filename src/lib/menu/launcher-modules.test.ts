@@ -13,7 +13,6 @@ import {
   launcherTilesFromMenu,
   mergeLauncherTiles,
   visibleLauncherTiles,
-  type LauncherTileId,
 } from "./launcher-modules";
 
 describe("launcher modules", () => {
@@ -29,10 +28,13 @@ describe("launcher modules", () => {
     assert.equal(LAUNCHER_LABEL_OVERRIDE.payroll, "Payroll");
     assert.equal(items.find((item) => item.id === "visit-bookings")?.href, "/visit-bookings");
     assert.equal(items.find((item) => item.id === "assets")?.href, "/assets");
+    assert.equal(LAUNCHER_TILE_IDS[0], "dashboard-ops");
     assert.equal(
       LAUNCHER_TILE_IDS[LAUNCHER_TILE_IDS.indexOf("assets") + 1],
-      "profile",
+      "operations-dashboard",
     );
+    assert.ok(LAUNCHER_TILE_IDS.includes("restaurants"));
+    assert.ok(LAUNCHER_TILE_IDS.includes("driver-app"));
     assert.equal(LAUNCHER_TILE_IDS.includes("performance"), false);
     for (const id of LAUNCHER_TILE_IDS) {
       assert.ok(LAUNCHER_GLYPH[id]?.length, id);
@@ -57,10 +59,11 @@ describe("launcher modules", () => {
     assert.ok(tiles.some((item) => item.id === "profile"));
     assert.ok(tiles.some((item) => item.id === "operations-hub"));
     assert.ok(tiles.some((item) => item.id === "assets"));
+    assert.ok(tiles.some((item) => item.id === "restaurants"));
+    assert.ok(tiles.some((item) => item.id === "roles"));
+    assert.ok(tiles.some((item) => item.id === "document-expiry"));
+    assert.ok(tiles.some((item) => item.id === "driver-app"));
     assert.ok(!tiles.some((item) => item.id === "performance"));
-    for (const id of ["restaurants", "roles", "document-expiry", "driver-app"]) {
-      assert.ok(!tiles.some((item) => item.id === id), id);
-    }
   });
 
   it("filters by English and Arabic labels", () => {
@@ -109,7 +112,7 @@ describe("launcher modules", () => {
     assert.equal(hrefs.filter((href) => href === "/settings").length, 1);
   });
 
-  it("drops Dashboard, Payroll, Earnings, Verification, Assets and Driver groups from the launcher only", () => {
+  it("keeps the v5 doors and still hides Payroll behind Payroll Hub", () => {
     const derived = launcherTilesFromMenu(buildInitialTree(() => true, true));
     const merged = mergeLauncherTiles(derived, launcherRegistryItems());
     const ids = merged.map((tile) => tile.id);
@@ -119,9 +122,9 @@ describe("launcher modules", () => {
     }
     assert.ok(ids.includes("payroll-hub"));
 
-    for (const id of ["dpd-verification", "assets", "driver-groups"]) {
-      assert.ok(LAUNCHER_HIDDEN_TILE_IDS.has(id), id);
-      assert.ok(LAUNCHER_TILE_IDS.includes(id as LauncherTileId), `${id} keeps its tile slot`);
+    for (const id of ["dpd-verification", "assets", "driver-groups", "restaurants", "attendance"]) {
+      assert.ok(!LAUNCHER_HIDDEN_TILE_IDS.has(id), id);
+      assert.ok(ids.includes(id), id);
     }
 
     assert.ok(ids.includes("visit-bookings"), "Visit Slots stays a Home tile");
@@ -133,7 +136,8 @@ describe("launcher modules", () => {
     }
   });
 
-  it("splits the Kuwait day into greeting buckets", () => {    assert.equal(greetingBucket(8), "morning");
+  it("splits the Kuwait day into greeting buckets", () => {
+    assert.equal(greetingBucket(8), "morning");
     assert.equal(greetingBucket(14), "afternoon");
     assert.equal(greetingBucket(20), "evening");
   });
