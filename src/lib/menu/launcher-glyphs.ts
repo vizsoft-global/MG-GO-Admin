@@ -33,10 +33,41 @@ export const LAUNCHER_GLYPH: Record<LauncherTileId, string> = {
 };
 
 /**
+ * Colored BajajCare frame glyphs (node 6979:13151). The file is the art; do not
+ * redraw it. `live-tracking` is the sidebar twin of the v2 door.
+ */
+const LAUNCHER_GLYPH_FILE: Record<string, string> = {
+  "dashboard-ops": "dashboard.svg",
+  "live-tracking": "live-tracking.svg",
+  "live-tracking-v2": "live-tracking.svg",
+  "driver-groups": "driver-groups.svg",
+  drivers: "drivers.svg",
+  deliveries: "deliveries.svg",
+  employeedesk: "employeedesk.svg",
+  "visit-bookings": "visit-bookings.svg",
+  "dpd-verification": "verification.svg",
+  earnings: "earnings.svg",
+  restaurants: "restaurants.svg",
+  notifications: "notifications.svg",
+  attendance: "attendance.svg",
+  roles: "roles.svg",
+  profile: "settings.svg",
+  "document-expiry": "document-expiry.svg",
+  "driver-app": "driver-app.svg",
+  assets: "assets.svg",
+};
+
+/**
  * The artifact glyph for a known tile, or `undefined` so the caller can draw the
  * sidebar's own Lucide icon instead. A row the sidebar gained should not need a
  * second drawing pass to appear on the launcher.
  */
 export function launcherGlyphPath(id: string): string | undefined {
   return (LAUNCHER_GLYPH as Record<string, string>)[id];
+}
+
+/** Public path of the frame SVG, when this menu id has one. */
+export function launcherGlyphSrc(id: string): string | undefined {
+  const file = LAUNCHER_GLYPH_FILE[id];
+  return file ? `/launcher/v5/glyphs/${file}` : undefined;
 }

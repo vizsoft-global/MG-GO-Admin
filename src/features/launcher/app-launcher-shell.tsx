@@ -31,7 +31,7 @@ import {
   type LauncherTileId,
   visibleLauncherTiles,
 } from "@/lib/menu/launcher-modules";
-import { launcherGlyphPath } from "@/lib/menu/launcher-glyphs";
+import { launcherGlyphPath, launcherGlyphSrc } from "@/lib/menu/launcher-glyphs";
 import { APP_NAV_KEY_BY_ID, resolveIcon } from "@/lib/menu/menu-registry";
 import { LAUNCHER_BRAND } from "@/lib/menu/module-colors";
 import type { Permission } from "@/lib/auth/permissions";
@@ -56,6 +56,10 @@ function formatAdminRole(slug: string): string {
 }
 
 function LauncherGlyph({ id, icon }: { id: string; icon: string }) {
+  const src = launcherGlyphSrc(id);
+  if (src) {
+    return <img src={src} alt="" width={30} height={30} />;
+  }
   const path = launcherGlyphPath(id);
   if (path) {
     return (
@@ -414,8 +418,11 @@ export function AppLauncherShell() {
           </div>
         </div>
 
-        <nav aria-label={t("title")} className="mx-auto mt-10 w-full max-w-[754px]">
-          <div className="grid w-full grid-cols-2 justify-items-center gap-x-[30px] gap-y-5 sm:grid-cols-3 md:grid-cols-6">
+        <nav
+          aria-label={t("title")}
+          className="mx-auto mt-8 w-full max-w-[754px] rounded-[32px] border border-white/15 bg-white/5 p-[25px] shadow-[0_11px_50px_rgba(5,5,18,0.2)]"
+        >
+          <div className="flex flex-wrap justify-center gap-x-[30px] gap-y-[15px]">
             {visible.map(renderTile)}
           </div>
         </nav>

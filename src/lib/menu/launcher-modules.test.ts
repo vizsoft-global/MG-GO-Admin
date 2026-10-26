@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Permission } from "@/lib/auth/permissions";
 import { buildInitialTree } from "./menu-merge";
-import { LAUNCHER_GLYPH } from "./launcher-glyphs";
+import { LAUNCHER_GLYPH, launcherGlyphSrc } from "./launcher-glyphs";
 import {
   filterLauncherTiles,
   greetingBucket,
@@ -39,6 +39,9 @@ describe("launcher modules", () => {
     for (const id of LAUNCHER_TILE_IDS) {
       assert.ok(LAUNCHER_GLYPH[id]?.length, id);
     }
+    assert.equal(launcherGlyphSrc("drivers"), "/launcher/v5/glyphs/drivers.svg");
+    assert.equal(launcherGlyphSrc("live-tracking"), "/launcher/v5/glyphs/live-tracking.svg");
+    assert.equal(launcherGlyphSrc("vehicles"), undefined);
   });
 
   it("does not duplicate tile ids", () => {
@@ -112,7 +115,7 @@ describe("launcher modules", () => {
     assert.equal(hrefs.filter((href) => href === "/settings").length, 1);
   });
 
-  it("keeps the v5 doors and still hides Payroll behind Payroll Hub", () => {
+  it("drops the boxed hubs from Home and still hides Payroll behind Payroll Hub", () => {
     const derived = launcherTilesFromMenu(buildInitialTree(() => true, true));
     const merged = mergeLauncherTiles(derived, launcherRegistryItems());
     const ids = merged.map((tile) => tile.id);
@@ -122,12 +125,24 @@ describe("launcher modules", () => {
     }
     assert.ok(ids.includes("payroll-hub"));
 
-    for (const id of ["dpd-verification", "assets", "driver-groups", "restaurants", "attendance"]) {
-      assert.ok(!LAUNCHER_HIDDEN_TILE_IDS.has(id), id);
-      assert.ok(ids.includes(id), id);
+    for (const id of [
+      "dashboard-ops",
+      "driver-groups",
+      "dpd-verification",
+      "earnings",
+      "restaurants",
+      "attendance",
+      "document-expiry",
+      "assets",
+    ]) {
+      assert.ok(LAUNCHER_HIDDEN_TILE_IDS.has(id), id);
+      assert.ok(!ids.includes(id), id);
     }
 
     assert.ok(ids.includes("visit-bookings"), "Visit Slots stays a Home tile");
+    assert.ok(ids.includes("operations-dashboard"));
+    assert.ok(ids.includes("client-portal"));
+    assert.ok(ids.includes("assistant"));
     assert.ok(!LAUNCHER_HIDDEN_TILE_IDS.has("visit-bookings"));
 
     const visible = visibleLauncherTiles(new Set(), true).map((tile) => tile.id);

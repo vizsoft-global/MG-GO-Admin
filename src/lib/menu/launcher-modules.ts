@@ -43,9 +43,20 @@ export type LauncherTileId = (typeof LAUNCHER_TILE_IDS)[number];
  * `mergeLauncherTiles`, so `LAUNCHER_TILE_IDS` (and the Roles app catalogue)
  * still describes every real surface.
  *
- * Payroll stays behind Payroll Hub. The v5 frame doors stay on the grid.
+ * Payroll stays behind Payroll Hub. The eight hubs the operator boxed on the
+ * live grid stay off Home too: they keep their sidebar row and route.
  */
-export const LAUNCHER_HIDDEN_TILE_IDS: ReadonlySet<string> = new Set(["payroll"]);
+export const LAUNCHER_HIDDEN_TILE_IDS: ReadonlySet<string> = new Set([
+  "payroll",
+  "dashboard-ops",
+  "driver-groups",
+  "dpd-verification",
+  "earnings",
+  "restaurants",
+  "attendance",
+  "document-expiry",
+  "assets",
+]);
 
 /**
  * Apps that no longer carry a Home tile (they live inside Operations or
