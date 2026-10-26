@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Bike, ChevronRight, RefreshCw, Trash2 } from "lucide-react";
 import { defaultStartDate, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
@@ -21,6 +21,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { downloadCsv } from "@/lib/csv/client-download";
+import { downloadWorkbookXlsx } from "@/features/drivers/import/export-xlsx";
 import { formatPct, roundPercent } from "@/lib/format/percent";
 import { selectOptions } from "@/lib/select-items";
 import { useRouter } from "@/i18n/navigation";
@@ -33,6 +34,7 @@ import {
   upsertLeavePlan,
 } from "./operations-dashboard-actions";
 import {
+  filterRoster,
   jobEndExportRows,
   leaveExportRows,
   type EmployeeStatusKey,
@@ -42,8 +44,10 @@ import {
   type OperationsDashboard,
   type OutlookFilter,
   type OutlookKey,
-  type PlainRow,
   type ProjectRow,
+  type RosterFilter,
+  type RosterRow,
+  type PlainRow,
 } from "./shape";
 
 const PLAN_STATUSES = ["pending", "approved", "taken", "rejected"] as const;
@@ -242,6 +246,34 @@ function dailyLabel(key: string, t: Translator): string {
     default:
       return key;
   }
+}
+
+function rosterSubtitle(filter: RosterFilter, count: number, t: Translator): string {
+  switch (filter) {
+    case "all":
+      return t("rosterEveryone", { count });
+    case "notWorking":
+      return t("rosterNotWorking", { count });
+    case "working":
+    case "onLeave":
+    case "absent":
+    case "sick":
+    case "other":
+      return t("rosterStatusCount", { count, status: dailyLabel(filter, t) });
+    default: {
+      const neverFilter: never = filter;
+      return neverFilter;
+    }
+  }
+}
+
+function formatJoined(value: string, locale: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value || "—";
+  return new Date(`${value}T12:00:00`).toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function projectLabelOf(key: string, projects: readonly ProjectRow[], fallback: string): string {
+  return projects.find((row) => row.key === key)?.label || key || fallback;
 }
 
 function employeeLabel(key: EmployeeStatusKey, t: Translator): string {
@@ -480,6 +512,9 @@ export function OperationsDashboardShell() {
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [rosterFilter, setRosterFilter] = useState<RosterFilter | null>(null);
+  const [rosterQuery, setRosterQuery] = useState("");
+  const rosterRef = useRef<HTMLElement | null>(null);
   const [pending, startTransition] = useTransition();
 
   const load = useCallback(async () => {
@@ -528,6 +563,20 @@ export function OperationsDashboardShell() {
     year: "numeric",
   });
   const barTotal = (data?.statusBar ?? []).reduce((sum, item) => sum + item.count, 0);
+  const rosterBase = filterRoster(data?.roster ?? [], rosterFilter ?? "all", "");
+  const rosterRows = filterRoster(data?.roster ?? [], rosterFilter ?? "all", rosterQuery);
+  const showPhone = !readOnly && (data?.roster ?? []).some((row) => row.phone !== "");
+  const rosterProject = data?.byProject.find((project) => project.key === (readOnly ? data.byProject[0]?.key : projectKey))?.label ?? t("projectAll");
+
+  const openRoster = (filter: RosterFilter) => {
+    setRosterFilter((current) => (current === filter ? null : filter));
+    setRosterQuery("");
+  };
+
+  useEffect(() => {
+    if (!rosterFilter) return;
+    rosterRef.current?.scrollIntoView({ block: "nearest" });
+  }, [rosterFilter]);
   const statusTotal = (data?.employeeStatus ?? []).reduce((sum, row) => sum + row.count, 0);
   const typedPlans = plans.filter((row) => {
     if (leaveType && row.leaveType !== leaveType) return false;
@@ -640,8 +689,8 @@ export function OperationsDashboardShell() {
               <RefreshCw className="size-5" />
               {t("refresh")}
             </Button>
-            <Button className={HEADER_BTN} variant="outline" onClick={() => router.push(readOnly ? employeesHref : projectKey ? `/drivers?project=${encodeURIComponent(projectKey)}` : "/drivers")}>
-              {t("allRiders")}
+            <Button className={HEADER_BTN} variant="outline" onClick={() => openRoster("all")}>
+              {rosterFilter === "all" ? t("showingList") : t("allRiders")}
             </Button>
             <Button className={HEADER_BTN} variant="outline" onClick={() => { setOutlook("pendingApproval"); scrollToLeave(); }}>
               {t("leaveRequests")}
@@ -674,10 +723,10 @@ export function OperationsDashboardShell() {
           {(["working", "onLeave", "absent", "sick", "other"] as const).map((key) => {
             const count = data?.statusBar.find((item) => item.key === key)?.count ?? 0;
             return (
-              <span key={key} className="inline-flex items-center gap-1" style={{ color: legendColor(key) }}>
+              <button key={key} type="button" className="inline-flex cursor-pointer items-center gap-1" style={{ color: legendColor(key) }} onClick={() => openRoster(key)}>
                 <span className="size-2.5 rounded-sm" style={{ background: dailyColor(key) }} />
                 {dailyLabel(key, t)} {count}
-              </span>
+              </button>
             );
           })}
           <span className="ms-auto text-[#1f2328]">{t("totalRiders", { count: barTotal })}</span>
@@ -697,14 +746,71 @@ export function OperationsDashboardShell() {
       {loading && !data ? <p className="text-sm text-[#5c6370]">{t("loading")}</p> : null}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
-        <Tile label={t("kpiTotal")} value={data?.kpis.assigned ?? 0} color="#714b67" />
-        <Tile label={t("kpiWorkingToday")} value={data?.kpis.working ?? 0} color="#22863a" valueColor="#1e7e34" />
-        <Tile label={t("kpiOnLeave")} value={data?.kpis.onLeave ?? 0} color="#1565c0" />
-        <Tile label={t("kpiAbsent")} value={data?.kpis.absent ?? 0} color="#c62828" valueColor="#b71c1c" />
-        <Tile label={t("kpiSick")} value={data?.kpis.sick ?? 0} color="#e8710a" valueColor="#b45309" />
-        <Tile label={t("kpiWorkingRate")} value={formatPct(data?.kpis.workingRate ?? 0)} color="#0f6e78" />
+        <Tile label={t("kpiTotal")} value={data?.kpis.assigned ?? 0} color="#714b67" action={rosterFilter === "all" ? t("showingList") : t("seeWho")} onAction={() => openRoster("all")} />
+        <Tile label={t("kpiWorkingToday")} value={data?.kpis.working ?? 0} color="#22863a" valueColor="#1e7e34" action={rosterFilter === "working" ? t("showingList") : t("seeWho")} onAction={() => openRoster("working")} />
+        <Tile label={t("kpiOnLeave")} value={data?.kpis.onLeave ?? 0} color="#1565c0" action={rosterFilter === "onLeave" ? t("showingList") : t("seeWho")} onAction={() => openRoster("onLeave")} />
+        <Tile label={t("kpiAbsent")} value={data?.kpis.absent ?? 0} color="#c62828" valueColor="#b71c1c" action={rosterFilter === "absent" ? t("showingList") : t("seeWho")} onAction={() => openRoster("absent")} />
+        <Tile label={t("kpiSick")} value={data?.kpis.sick ?? 0} color="#e8710a" valueColor="#b45309" action={rosterFilter === "sick" ? t("showingList") : t("seeWho")} onAction={() => openRoster("sick")} />
+        <Tile label={t("kpiWorkingRate")} value={formatPct(data?.kpis.workingRate ?? 0)} color="#0f6e78" action={rosterFilter === "notWorking" ? t("showingList") : t("seeWhoNotWorking")} onAction={() => openRoster("notWorking")} />
         <Tile label={t("kpiAccident")} value={data?.kpis.accident ?? 0} color="#5c6370" />
       </div>
+
+      {rosterFilter ? (
+        <section ref={rosterRef} className={card} style={{ borderColor: "#e3e5e8" }}>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-[#1f2328]">{t("allRiders")} — {rosterProject}</p>
+              <p className="text-xs text-[#5c6370]">{rosterSubtitle(rosterFilter, rosterBase.length, t)}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input className="h-9 w-56" value={rosterQuery} placeholder={t("rosterSearch")} onChange={(event) => setRosterQuery(event.target.value)} />
+              <Button className={HEADER_BTN} variant="outline" onClick={() => exportRoster(rosterBase, showPhone, t, locale, data?.byProject ?? [])}>
+                {t("rosterExport")}
+              </Button>
+              <Button className={HEADER_BTN} variant="outline" onClick={() => setRosterFilter(null)}>
+                {t("rosterClose")}
+              </Button>
+            </div>
+          </div>
+          {rosterRows.length === 0 ? (
+            <p className="text-sm text-[#5c6370]">{t("rosterEmpty")}</p>
+          ) : (
+            <div className="max-h-[min(360px,40dvh)] overflow-auto">
+              <Table className={DENSE_TABLE}>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("colProject")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("colZone")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
+                    <TableHead className={TABLE_HEAD_CLASS}>{t("colJoined")}</TableHead>
+                    {showPhone ? <TableHead className={TABLE_HEAD_CLASS}>{t("colPhone")}</TableHead> : null}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rosterRows.map((row, index) => (
+                    <TableRow key={`${row.employeeId}-${index}`}>
+                      <TableCell>{row.employeeId || "—"}</TableCell>
+                      <TableCell>{row.name || "—"}</TableCell>
+                      <TableCell>{projectLabelOf(row.project, data?.byProject ?? [], "—")}</TableCell>
+                      <TableCell>{row.zone || "—"}</TableCell>
+                      <TableCell>
+                        <span className="inline-flex h-6 items-center rounded-full border px-2 text-[10px] font-semibold" style={{ color: dailyColor(row.status), borderColor: dailyColor(row.status) }}>
+                          {dailyLabel(row.status, t)}
+                        </span>
+                      </TableCell>
+                      <TableCell>{formatJoined(row.joined, locale)}</TableCell>
+                      {showPhone ? <TableCell>{row.phone || "—"}</TableCell> : null}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          <p className="mt-2 text-[10px] text-[#5c6370]">{t("rosterFoot", { shown: rosterRows.length, total: rosterBase.length })}</p>
+        </section>
+      ) : null}
 
       <section className={card} style={{ borderColor: "#e3e5e8" }}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-white" style={{ background: "#714b67" }}>
@@ -1219,13 +1325,41 @@ function ProjectPill({ active, label, onClick }: { active: boolean; label: strin
   );
 }
 
-function Tile({ label, value, color, valueColor }: { label: string; value: string | number; color: string; valueColor?: string }) {
+function Tile({ label, value, color, valueColor, action, onAction }: { label: string; value: string | number; color: string; valueColor?: string; action?: string; onAction?: () => void }) {
   return (
     <div className="rounded-xl border bg-white px-3 py-2" style={{ borderColor: "#e3e5e8", borderTop: `3px solid ${color}` }}>
       <p className="text-xl tabular-nums" style={{ color: valueColor ?? color }}>{value}</p>
       <p className="type-caption mt-1 uppercase tracking-wide text-[#5c6370]">{label}</p>
+      {action && onAction ? (
+        <button type="button" className="mt-1 cursor-pointer text-xs text-primary underline" onClick={onAction}>
+          {action}
+        </button>
+      ) : null}
     </div>
   );
+}
+
+function exportRoster(rows: readonly RosterRow[], showPhone: boolean, t: Translator, locale: string, projects: readonly ProjectRow[]) {
+  const headers = [t("colEmployeeId"), t("colName"), t("colProject"), t("colZone"), t("colStatus"), t("colJoined")];
+  if (showPhone) headers.push(t("colPhone"));
+  downloadWorkbookXlsx("riders.xlsx", [{
+    name: "Riders",
+    aoa: [
+      headers,
+      ...rows.map((row) => {
+        const cells: Array<string | number> = [
+          row.employeeId,
+          row.name,
+          projectLabelOf(row.project, projects, ""),
+          row.zone,
+          dailyLabel(row.status, t),
+          formatJoined(row.joined, locale),
+        ];
+        if (showPhone) cells.push(row.phone);
+        return cells;
+      }),
+    ],
+  }]);
 }
 
 function FilterSelect({

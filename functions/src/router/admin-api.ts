@@ -50,6 +50,12 @@ function unwrapArgs(request: RouterRequest): unknown {
   return (data as { data?: unknown }).data;
 }
 
+/** The operations roster is new. A fresh cache key keeps an older snapshot from hiding it. */
+function snapshotArgs(fn: string, args: unknown): unknown {
+  if (fn !== "adminOperationsDashboard") return args;
+  return { args, roster: 1 };
+}
+
 function toHttps(err: unknown): HttpsError {
   if (err instanceof HttpsError) return err;
   return new HttpsError("internal", "INTERNAL");
@@ -132,7 +138,7 @@ export async function dispatchAdminLane(
         const outcome = await readThroughScanSnapshot({
           fn,
           scope: snapshotScope(staff),
-          args: unwrapArgs(request),
+          args: snapshotArgs(fn, unwrapArgs(request)),
           load: () => runLane(lane, request, fn, load),
         });
         snapshot = outcome.snapshot;

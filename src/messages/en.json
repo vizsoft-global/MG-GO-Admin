@@ -11803,7 +11803,21 @@
       "totalRiders": "Total riders: {count}",
       "zoneAll": "All zones",
       "leaveMatrixNote": "Leave starts by project and month.",
-      "jobMatrixNote": "Job ends by project and month."
+      "jobMatrixNote": "Job ends by project and month.",
+      "seeWho": "See who",
+      "seeWhoNotWorking": "See who is not working",
+      "showingList": "Showing list",
+      "rosterEveryone": "{count} people · everyone assigned",
+      "rosterStatusCount": "{count} people · {status}",
+      "rosterNotWorking": "{count} people · not working",
+      "rosterSearch": "Name or Employee ID",
+      "rosterExport": "Export to Excel",
+      "rosterClose": "Close",
+      "rosterEmpty": "No riders in this list.",
+      "rosterFoot": "Showing {shown} of {total}. Export downloads the full list with the same columns.",
+      "colZone": "Zone",
+      "colJoined": "Joined",
+      "colPhone": "Phone"
     },
     "clientPortal": {
       "title": "Your Riders Today",
