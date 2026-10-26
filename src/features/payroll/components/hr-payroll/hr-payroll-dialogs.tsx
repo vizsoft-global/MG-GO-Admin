@@ -59,6 +59,7 @@ function groupLabel(
   group: HrPayrollGroup,
   labels: {
     emp: string;
+    cfg: string;
     ops: string;
     in: string;
     calc: string;
@@ -69,6 +70,8 @@ function groupLabel(
   switch (group) {
     case "emp":
       return labels.emp;
+    case "cfg":
+      return labels.cfg;
     case "ops":
       return labels.ops;
     case "in":
@@ -189,6 +192,7 @@ export function HrColumnsDialog(props: {
     title: string;
     done: string;
     emp: string;
+    cfg: string;
     ops: string;
     in: string;
     calc: string;

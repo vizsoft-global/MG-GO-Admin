@@ -10,6 +10,7 @@ import {
   hrKpis,
   summarizeHr,
 } from "./hr-payroll-formulas";
+import type { HrRateLine } from "./hr-rate";
 import type { HrBundle } from "./hr-payroll-types";
 import type { PayrollRiderRow } from "./payroll-types";
 
@@ -269,14 +270,63 @@ describe("buildHrPayrollRows", () => {
         "i", "client", "mg", "name", "civil", "bankNo", "bank", "cur", "payment",
         "clientName", "zone", "rest", "nationality", "natCat", "status", "start",
         "endDate", "endDesc", "company", "sponsor", "position", "hiring", "section",
-        "fixed", "wps", "inc2", "inc4", "offs", "fwd", "fwh", "hourly", "orders",
+        "fixed", "wps", "rate", "vtype", "inc2", "inc4", "offs", "fwd", "fwh", "hourly", "orders",
         "wd", "ah", "restDpd", "riderDpd", "eff", "salH", "inc2v", "inc4v", "incent",
         "food", "sick", "sickR", "pending", "traffic", "loan", "allow", "ded", "total",
       ],
     );
     assert.equal(HR_COLUMNS[8]?.key, "payment");
     assert.equal(HR_COLUMNS[23]?.key, "fixed");
-    assert.equal(HR_COLUMNS[25]?.group, "in");
+    assert.equal(HR_COLUMNS[27]?.key, "inc2");
+    assert.equal(HR_COLUMNS[27]?.group, "in");
+    assert.equal(HR_COLUMNS.find((column) => column.key === "rate")?.group, "cfg");
+    assert.equal(HR_COLUMNS.find((column) => column.key === "vtype")?.group, "cfg");
+  });
+
+  it("joins both matching rates and multiplies approved orders by their sum", () => {
+    const rates: HrRateLine[] = [
+      { id: "r1", vehicle: "Bike", project: "keeta", zones: ["Hawally"], rate: 0.25 },
+      { id: "r2", vehicle: "Bike", project: "Keeta", zones: ["Hawally"], rate: 0.5 },
+    ];
+    const rows = buildHrPayrollRows({
+      riders: [rider({ driverId: "d1" })],
+      bundle: bundle(true),
+      monthDays: 30,
+      rates,
+    });
+    assert.equal(rows[0]?.cells.rate, `${(0.25).toFixed(3)} · ${(0.5).toFixed(3)}`);
+    assert.equal(rows[0]?.numbers.revenue, 140 * (0.25 + 0.5));
+  });
+
+  it("prints the missing rate when no config matches the rider", () => {
+    const rates: HrRateLine[] = [
+      { id: "other-zone", vehicle: "Bike", project: "keeta", zones: ["Salmiya"], rate: 0.4 },
+    ];
+    const rows = buildHrPayrollRows({
+      riders: [rider({ driverId: "d1" })],
+      bundle: bundle(true),
+      monthDays: 30,
+      rates,
+      noRateLabel: "No rate",
+    });
+    assert.equal(rows[0]?.cells.rate, "No rate");
+    assert.equal(rows[0]?.cells.vtype, "—");
+    assert.equal(rows[0]?.numbers.revenue, 0);
+  });
+
+  it("ignores a bike-only rate when the vehicle is a car or van", () => {
+    const rates: HrRateLine[] = [
+      { id: "bike-only", vehicle: "Bike", project: "keeta", zones: ["Hawally"], rate: 0.3 },
+    ];
+    const rows = buildHrPayrollRows({
+      riders: [rider({ driverId: "d1", vehicleKey: "van" })],
+      bundle: bundle(true),
+      monthDays: 30,
+      rates,
+      noRateLabel: "No rate",
+    });
+    assert.equal(rows[0]?.cells.rate, "No rate");
+    assert.equal(rows[0]?.cells.vtype, "—");
   });
 
   it("summarises approved incentives separately from allowances", () => {

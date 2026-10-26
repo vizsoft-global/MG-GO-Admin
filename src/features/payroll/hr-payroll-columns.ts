@@ -15,10 +15,11 @@ export type HrColumn = {
   mono?: boolean;
 };
 
-export const HR_GROUP_ORDER = ["emp", "ops", "in", "calc", "imp", "pay"] as const;
+export const HR_GROUP_ORDER = ["emp", "cfg", "ops", "in", "calc", "imp", "pay"] as const;
 
 export const HR_GROUP_FILL: Record<HrPayrollGroup, string> = {
   emp: "#EDEEF6",
+  cfg: "#E7F0FA",
   ops: "#F8ECE6",
   calc: "#EAF3EF",
   in: "#FBF4E2",
@@ -56,6 +57,8 @@ export const HR_COLUMNS: readonly HrColumn[] = [
   { key: "section", header: "Section", group: "emp", kind: "text", width: 150, filter: "auto" },
   { key: "fixed", header: "Fixed Salary", group: "emp", kind: "money", width: 130, filter: "contains" },
   { key: "wps", header: "Work Permit Salary", group: "emp", kind: "money", width: 160, filter: "contains" },
+  { key: "rate", header: "Rate", group: "cfg", kind: "text", width: 88, filter: "contains" },
+  { key: "vtype", header: "Vehicle Type", group: "cfg", kind: "text", width: 110, filter: "auto" },
   { key: "inc2", header: "2 Years Increment Applicable", group: "in", kind: "select", width: 200, select: INC, unit: " KWD", editable: "select", filter: "exact" },
   { key: "inc4", header: "4 Years Increment Applicable", group: "in", kind: "select", width: 200, select: INC, unit: " KWD", editable: "select", filter: "exact" },
   { key: "offs", header: "No. of Offs", group: "ops", kind: "int", width: 110, filter: "contains" },

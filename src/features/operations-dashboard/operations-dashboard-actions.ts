@@ -24,6 +24,8 @@ export async function fetchOperationsDashboard(input: {
   projectKey?: string;
   month?: string;
   day?: string;
+  from?: string;
+  to?: string;
   zoneId?: string;
   vehicle?: string;
 }): Promise<{ dashboard: OperationsDashboard; failed: boolean }> {
@@ -33,6 +35,8 @@ export async function fetchOperationsDashboard(input: {
   if (input.projectKey) args.projectKey = input.projectKey;
   if (input.month) args.month = input.month;
   if (input.day) args.day = input.day;
+  if (input.from) args.from = input.from;
+  if (input.to) args.to = input.to;
   if (input.zoneId) args.zoneId = input.zoneId;
   if (input.vehicle) args.vehicle = input.vehicle;
   const { data, error } = await callAdminFunction<unknown>("adminOperationsDashboard", args);

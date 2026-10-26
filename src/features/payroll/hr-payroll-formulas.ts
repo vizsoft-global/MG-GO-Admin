@@ -2,6 +2,7 @@ import { formatUnitPct } from "@/lib/format/percent";
 import { countryLabel } from "@/lib/geo/countries";
 import type { PayrollRiderRow } from "./payroll-types";
 import { HR_COLUMNS, HR_FOOTER_KEYS, HR_OPS_KEYS } from "./hr-payroll-columns";
+import { hrRateLabel, hrRateRevenue, hrVehicleLabel, matchHrRates, type HrRateLine } from "./hr-rate";
 import { isHrActive } from "./hr-payroll-status";
 import type {
   HrBundle,
@@ -10,6 +11,7 @@ import type {
   HrEditState,
   HrPayrollNumbers,
   HrPayrollRow,
+  HrSheetFilters,
   HrSummaryBy,
   HrSummaryLine,
 } from "./hr-payroll-types";
@@ -200,6 +202,8 @@ export function buildHrPayrollRows(args: {
   monthDays: number;
   edits?: Readonly<Record<string, Partial<HrEditState>>>;
   statusLabels?: Readonly<Record<string, string>>;
+  rates?: readonly HrRateLine[];
+  noRateLabel?: string;
 }): HrPayrollRow[] {
   const byId = new Map((args.bundle?.rows ?? []).map((row) => [row.driverId, row]));
   const approved = args.bundle?.opsApproved ?? false;
@@ -233,6 +237,21 @@ export function buildHrPayrollRows(args: {
     });
     const statusKey = identity?.statusKey ?? "";
     const statusLabel = args.statusLabels?.[statusKey] || identity?.statusLabel || statusKey;
+    const projectText = projectLabel(identity?.projectKey || rider.projectKey || "", identity?.clientName ?? "");
+    const rateProjects = [projectText, identity?.clientName ?? "", identity?.projectKey ?? "", rider.projectKey ?? ""].filter(
+      (value) => {
+        const trimmed = value.trim();
+        return trimmed.length > 0 && trimmed !== DASH;
+      },
+    );
+    const rateHits = matchHrRates({
+      vehicleKey: rider.vehicleKey,
+      projects: rateProjects,
+      zone: rider.zone.trim(),
+      lines: args.rates ?? [],
+    });
+    const orderCount = rider.finalOrders;
+    const revenue = approved ? hrRateRevenue(orderCount, rateHits) : 0;
     const clientId = shownIdentity(rider.restaurantClientId) || shownIdentity(identity?.clientId);
     const mgId = shownIdentity(rider.amId) || shownIdentity(identity?.employeeId);
     const name = shownIdentity(rider.name) || shownIdentity(identity?.fullName);
@@ -246,7 +265,7 @@ export function buildHrPayrollRows(args: {
       bank: dash(identity?.bankName ?? ""),
       cur: dash(identity?.currency || "KWD"),
       payment: money(computed.payment),
-      clientName: projectLabel(identity?.projectKey || rider.projectKey || "", identity?.clientName ?? ""),
+      clientName: projectText,
       zone,
       rest: restaurant,
       nationality: nationalityText(identity?.nationality || rider.nationality || ""),
@@ -262,6 +281,8 @@ export function buildHrPayrollRows(args: {
       section: dash(identity?.section ?? ""),
       fixed: money(identity?.fixedSalary ?? 0),
       wps: money(identity?.workPermitSalary ?? 0),
+      rate: hrRateLabel(rateHits, args.noRateLabel),
+      vtype: hrVehicleLabel(rateHits),
       inc2: selectText(edit.twoYear, " KWD", false),
       inc4: selectText(edit.fourYear, " KWD", false),
       offs: opsText(approved, "offs", plain(rider.offStructureDays)),
@@ -305,6 +326,9 @@ export function buildHrPayrollRows(args: {
       fourYearAmount: computed.fourYearAmount,
       incentives: computed.incentivesPaid,
       foodAllowance: edit.food,
+      orders: orderCount,
+      revenue,
+      contribution: revenue - computed.payment,
     };
     return {
       driverId: rider.driverId,
@@ -345,6 +369,18 @@ export function filterHrRows(
       if (filter.mode === "exact") return text === filter.value;
       return text.toLowerCase().includes(filter.value.trim().toLowerCase());
     });
+  });
+}
+
+export function filterHrSheet(rows: readonly HrPayrollRow[], filters: HrSheetFilters): HrPayrollRow[] {
+  return rows.filter((row) => {
+    if (filters.clientName && row.project !== filters.clientName) return false;
+    if (filters.zone && row.zone !== filters.zone) return false;
+    if (filters.vehicle && (row.cells.vtype ?? "") !== filters.vehicle) return false;
+    if (filters.nationality && (row.cells.nationality ?? "") !== filters.nationality) return false;
+    if (filters.company && row.company !== filters.company) return false;
+    if (filters.store && (row.cells.rest ?? "") !== filters.store) return false;
+    return true;
   });
 }
 
@@ -408,23 +444,35 @@ export function hrFooterTotals(rows: readonly HrPayrollRow[]): Record<(typeof HR
   return totals;
 }
 
+function summaryLabel(row: HrPayrollRow, by: HrSummaryBy): string {
+  switch (by) {
+    case "company":
+      return row.company;
+    case "sponsor":
+      return row.sponsor;
+    case "project":
+      return row.project;
+    case "zone":
+      return row.zone;
+    case "section":
+      return row.section;
+    default: {
+      const unreachable: never = by;
+      return unreachable;
+    }
+  }
+}
+
 export function summarizeHr(rows: readonly HrPayrollRow[], by: HrSummaryBy): HrSummaryLine[] {
   const groups = new Map<string, HrSummaryLine>();
   for (const row of rows) {
-    const label =
-      by === "company"
-        ? row.company
-        : by === "sponsor"
-          ? row.sponsor
-          : by === "project"
-            ? row.project
-            : by === "zone"
-              ? row.zone
-              : row.section;
-    const key = label || DASH;
+    const label = summaryLabel(row, by) || DASH;
+    const vehicleType = row.cells.vtype || DASH;
+    const rateLabel = row.cells.rate || DASH;
+    const key = `${label}\u0000${vehicleType}\u0000${rateLabel}`;
     const line = groups.get(key) ?? {
       key,
-      label: key,
+      label,
       payment: 0,
       salaryAsPerHours: 0,
       incentives: 0,
@@ -435,6 +483,11 @@ export function summarizeHr(rows: readonly HrPayrollRow[], by: HrSummaryBy): HrS
       totalAllowances: 0,
       totalDeductions: 0,
       riders: 0,
+      vehicleType,
+      rateLabel,
+      orders: 0,
+      revenue: 0,
+      contribution: 0,
     };
     line.payment += row.numbers.payment;
     line.salaryAsPerHours += row.numbers.salaryAsPerHours;
@@ -445,6 +498,9 @@ export function summarizeHr(rows: readonly HrPayrollRow[], by: HrSummaryBy): HrS
     line.loanDeduction += row.numbers.loanDeduction;
     line.totalAllowances += row.numbers.totalAllowances;
     line.totalDeductions += row.numbers.totalDeductions;
+    line.orders += row.numbers.orders;
+    line.revenue += row.numbers.revenue;
+    line.contribution += row.numbers.contribution;
     line.riders += 1;
     groups.set(key, line);
   }

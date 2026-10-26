@@ -9,6 +9,9 @@ import {
   renewalDecision,
   turnoverComparison,
   turnoverRate,
+  contractEndTurnover,
+  hiringWindowEnd,
+  leavesInHiringWindow,
 } from "./operations-dashboard-math";
 
 const TODAY = "2026-10";
@@ -145,5 +148,34 @@ describe("mapRequestLeave", () => {
     );
     assert.equal(merged.length, 1);
     assert.equal(merged[0]?.source, "request");
+  });
+});
+
+describe("contractEndTurnover", () => {
+  it("counts ended contracts and open ones with no decision", () => {
+    const today = "2026-10-26";
+    const result = contractEndTurnover([
+      { archived: false, jobEnd: "2026-08-15", undecided: false },
+      { archived: true, jobEnd: "2026-09-02", undecided: false },
+      { archived: false, jobEnd: "2026-11-20", undecided: true },
+      { archived: false, jobEnd: "2026-12-01", undecided: false },
+      { archived: false, jobEnd: null, undecided: false },
+    ], today);
+    assert.equal(result.ended, 2);
+    assert.equal(result.assumed, 1);
+    assert.equal(result.total, 5);
+    assert.equal(result.rate, turnoverRate(3, 5));
+    assert.equal(result.months[7]?.count, 1);
+    assert.equal(result.months[10]?.count, 1);
+    assert.equal(result.months[11]?.count, 1);
+  });
+});
+
+describe("hiring window", () => {
+  it("ends on the last day two months ahead", () => {
+    assert.equal(hiringWindowEnd("2026-10-26"), "2026-12-31");
+    assert.equal(leavesInHiringWindow("2026-11-20", "2026-10-26", "2026-12-31", true), true);
+    assert.equal(leavesInHiringWindow("2026-11-20", "2026-10-26", "2026-12-31", false), false);
+    assert.equal(leavesInHiringWindow("2027-01-02", "2026-10-26", "2026-12-31", true), false);
   });
 });

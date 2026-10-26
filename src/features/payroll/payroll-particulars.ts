@@ -9,10 +9,10 @@ import type { PayrollRiderRow } from "./payroll-types";
 /**
  * The one string a payroll day prints. Editor options, filters, Combined,
  * Attendance & Orders and Excel export all read this so a cell that says
- * `6h` cannot be offered as `pages.payroll.adjust.status.half`.
+ * `6` cannot be offered as `pages.payroll.adjust.status.half`.
  *
- * `half` is still the 6-hour adjustment status. The PAYROLL cell prints `6h`.
- * `absent` prints `ABS`. Custom hours stay 0–24 and print as `{n}h`.
+ * `half` is still the 6-hour adjustment status. The PAYROLL cell prints `6`.
+ * `absent` prints `ABS`. Custom hours stay 0–24 and print as a plain number.
  */
 export function cellParticular(row: PayrollRiderRow, dayIndex: number): string {
   const status = row.days[dayIndex];
