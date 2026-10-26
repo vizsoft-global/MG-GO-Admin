@@ -63,6 +63,7 @@ export function UserAccessHeader({
   const projectLabel: Record<PartnerProjectKey, string> = {
     keeta: "Keeta",
     americana: "Americana",
+    unassigned: "Unassigned",
   };
   const projectItems = selectOptionsFrom(
     PARTNER_PROJECT_KEYS,

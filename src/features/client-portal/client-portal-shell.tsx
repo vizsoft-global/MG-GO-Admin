@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,21 +14,19 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AppPage } from "@/components/app/app-page";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
-import { signOut } from "@/features/auth/actions";
 import { downloadCsv } from "@/lib/csv/client-download";
 import { defaultStartDate, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { formatPct } from "@/lib/format/percent";
 import { selectOptions } from "@/lib/select-items";
 import { leaveExportRows, type LeaveMonthBar } from "@/features/operations-dashboard/shape";
 import { fetchClientPortalDashboard } from "./client-portal-actions";
+import { ClientPortalNav } from "./client-portal-nav";
 import {
   riderExportRows,
   turnoverExportRows,
   type ClientPortalDashboard,
   type RiderStatusKey,
 } from "./shape";
-
-const HEADER_BTN = "h-9 cursor-pointer px-3";
 
 type Translator = ReturnType<typeof useTranslations<"pages.clientPortal">>;
 
@@ -155,7 +153,6 @@ export function ClientPortalShell() {
   const [dashboard, setDashboard] = useState<ClientPortalDashboard | null>(null);
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [pending, startTransition] = useTransition();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -219,18 +216,7 @@ export function ClientPortalShell() {
           <h1 className="type-h1 text-[#1f2328]">{t("title")}</h1>
           <p className="text-sm text-[#5c6370]">{t("updatedLine", { date: dateLabel, time: clock })}</p>
         </div>
-        <Button
-          variant="outline"
-          className={HEADER_BTN}
-          disabled={pending}
-          onClick={() => {
-            startTransition(() => {
-              void signOut(locale);
-            });
-          }}
-        >
-          {t("signOut")}
-        </Button>
+        <ClientPortalNav />
       </div>
 
       <div className="flex flex-wrap items-end gap-2">

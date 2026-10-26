@@ -18,7 +18,8 @@ import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, Timestamp, type Firestore } from "../core/fs";
 import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { COLLECTIONS } from "../core/collections";
-import { requireStaff, requireStaffFresh } from "../core/staff";
+import { projectKeyMatches } from "../core/project-key";
+import { requireStaff, requireStaffAny, requireStaffFresh, scopedProjectKey } from "../core/staff";
 import { maskDriverForPartner } from "../core/partner-mask";
 import { riderIsNonOperational } from "../core/operational-sections";
 import { digitSubsequenceMatch, textContainsMatch } from "../core/search-text";
@@ -691,8 +692,9 @@ function rowsForCaller(
   staff: { isPartner: boolean; partnerProjectKey: string | null },
 ): Dict[] {
   if (!staff.isPartner) return rows;
-  const project = staff.partnerProjectKey ?? "";
-  return rows.filter((row) => String(row["project_key"] ?? "").trim().toLowerCase() === project);
+  const locked = staff.partnerProjectKey;
+  if (!locked) return [];
+  return rows.filter((row) => projectKeyMatches(row["project_key"], locked));
 }
 
 function kpisFromRows(base: Dict[]): DriverKpis {
@@ -897,7 +899,9 @@ async function loadDriversForList(
 export const adminListDriversPage = measureOnCall("adminListDriversPage", async (request) => {
   const phases: PhaseMarks = {};
   try {
-  const staff = await timedPhase(phases, "requireStaffMs", () => requireStaff(request, "drivers.view"));
+  const staff = await timedPhase(phases, "requireStaffMs", () =>
+    requireStaffAny(request, ["drivers.view", "client_portal.view"]),
+  );
 
   const data = (request.data ?? {}) as Dict;
   const tab = (pickText(data, "tab", "p_tab") ?? "all").toLowerCase();
@@ -923,8 +927,23 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
   });
 
   const loaded = await loadDriversForList(tab === "archived", search, phases, deferLive);
-  const base = rowsForCaller(loaded.rows, staff);
-  const rosterKpi = staff.isPartner ? kpisFromRows(base) : loaded.kpis;
+  const seesFleet =
+    staff.isSuperAdmin ||
+    staff.permissionSlugs.has("drivers.view") ||
+    staff.permissionSlugs.has("drivers.manage") ||
+    staff.permissionSlugs.has("drivers.create") ||
+    staff.permissionSlugs.has("drivers.edit");
+  let base = rowsForCaller(loaded.rows, staff);
+  if (!staff.isPartner) {
+    const project = scopedProjectKey(staff, pickText(data, "project", "p_project"));
+    if (!seesFleet) {
+      base = project ? base.filter((row) => projectKeyMatches(row["project_key"], project)) : [];
+    } else if (project) {
+      base = base.filter((row) => projectKeyMatches(row["project_key"], project));
+    }
+  }
+  const narrow = staff.isPartner || !seesFleet;
+  const rosterKpi = narrow ? kpisFromRows(base) : loaded.kpis;
   const tabbed = base.filter((row) => tabMatches(row, tab));
   const filtered = tabbed.filter(
     (row) => searchMatches(row, search, searchField) && rowMatches(row, filters),
@@ -970,7 +989,7 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
   if (deferLive) await hydrateDeferredPage(pageRows, phases);
 
   return {
-    rows: staff.isPartner ? pageRows.map((row) => maskDriverForPartner(row)) : pageRows,
+    rows: narrow ? pageRows.map((row) => maskDriverForPartner(row)) : pageRows,
     filtered_total: filtered.length,
     tab_total: rosterKpi
       ? tab === "multi_device"

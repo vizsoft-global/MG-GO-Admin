@@ -24,6 +24,7 @@ import { downloadCsv } from "@/lib/csv/client-download";
 import { formatPct, roundPercent } from "@/lib/format/percent";
 import { selectOptions } from "@/lib/select-items";
 import { useRouter } from "@/i18n/navigation";
+import { useAuth } from "@/contexts/auth-context";
 import {
   deleteLeavePlan,
   fetchOperationsDashboard,
@@ -457,6 +458,9 @@ export function OperationsDashboardShell() {
   const t = useTranslations("pages.operationsDashboard");
   const locale = useLocale();
   const router = useRouter();
+  const { accessKind } = useAuth();
+  const readOnly = accessKind === "partner";
+  const employeesHref = readOnly ? "/client-portal/employees" : "/drivers";
   const [dashboard, setDashboard] = useState<OperationsDashboard | null>(null);
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -511,8 +515,11 @@ export function OperationsDashboardShell() {
   };
 
   const shownDay = data?.today || today;
-  const projectName = projectKey
-    ? (data?.byProject.find((row) => row.key === projectKey)?.label ?? projectKey)
+  const activeProject = readOnly
+    ? (data?.byProject.length === 1 ? data.byProject[0]?.key : undefined)
+    : projectKey;
+  const projectName = activeProject
+    ? (data?.byProject.find((row) => row.key === activeProject)?.label ?? activeProject)
     : t("projectAll");
   const dateLabel = new Date(`${shownDay}T12:00:00`).toLocaleDateString(locale, {
     weekday: "long",
@@ -581,7 +588,7 @@ export function OperationsDashboardShell() {
     { value: "next12", label: t("windowNext12") },
     { value: "past6", label: t("windowPast6") },
   ] as const;
-  const titled = (label: string) => (projectKey ? `${label} — ${projectName}` : label);
+  const titled = (label: string) => (activeProject ? `${label} — ${projectName}` : label);
   const leaveSum = chart.reduce((sum, item) => sum + item.count, 0);
   const busiest = chart.reduce<LeaveMonthBar | undefined>(
     (best, item) => (!best || item.count > best.count ? item : best),
@@ -633,7 +640,7 @@ export function OperationsDashboardShell() {
               <RefreshCw className="size-5" />
               {t("refresh")}
             </Button>
-            <Button className={HEADER_BTN} variant="outline" onClick={() => router.push(projectKey ? `/drivers?project=${encodeURIComponent(projectKey)}` : "/drivers")}>
+            <Button className={HEADER_BTN} variant="outline" onClick={() => router.push(readOnly ? employeesHref : projectKey ? `/drivers?project=${encodeURIComponent(projectKey)}` : "/drivers")}>
               {t("allRiders")}
             </Button>
             <Button className={HEADER_BTN} variant="outline" onClick={() => { setOutlook("pendingApproval"); scrollToLeave(); }}>
@@ -643,9 +650,18 @@ export function OperationsDashboardShell() {
         </div>
         <p className="mb-2 mt-4 text-xs uppercase tracking-wide text-[#5c6370]">{t("colProject")}</p>
         <div className="flex flex-wrap gap-2">
-          <ProjectPill active={!projectKey} label={t("projectAll")} onClick={() => setProjectKey(undefined)} />
+          {readOnly ? null : (
+            <ProjectPill active={!projectKey} label={t("projectAll")} onClick={() => setProjectKey(undefined)} />
+          )}
           {(data?.byProject ?? []).map((project) => (
-            <ProjectPill key={project.key} active={projectKey === project.key} label={project.label} onClick={() => setProjectKey(project.key)} />
+            <ProjectPill
+              key={project.key}
+              active={activeProject === project.key}
+              label={project.label}
+              onClick={() => {
+                if (!readOnly) setProjectKey(project.key);
+              }}
+            />
           ))}
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -693,7 +709,7 @@ export function OperationsDashboardShell() {
       <section className={card} style={{ borderColor: "#e3e5e8" }}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-white" style={{ background: "#714b67" }}>
           <p className="text-sm uppercase">{titled(t("byProjectTitle"))}</p>
-          {projectKey ? (
+          {projectKey && !readOnly ? (
             <button type="button" className="cursor-pointer text-xs underline" onClick={() => setProjectKey(undefined)}>
               {t("showAllProjects")}
             </button>
@@ -723,7 +739,9 @@ export function OperationsDashboardShell() {
                     <button
                       type="button"
                       className="cursor-pointer text-[var(--btn-secondary-fg)]"
-                      onClick={() => setProjectKey(project.key)}
+                      onClick={() => {
+                        if (!readOnly) setProjectKey(project.key);
+                      }}
                     >
                       {project.label}
                     </button>
@@ -765,7 +783,7 @@ export function OperationsDashboardShell() {
       <section className={card} style={{ borderColor: "#e3e5e8" }}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-white" style={{ background: "#714b67" }}>
           <p className="text-sm uppercase">{titled(t("employeeStatusTitle"))}</p>
-          <button type="button" className="cursor-pointer text-xs underline" onClick={() => router.push("/drivers")}>
+          <button type="button" className="cursor-pointer text-xs underline" onClick={() => router.push(employeesHref)}>
             {t("viewEmployees")}
           </button>
         </div>
@@ -862,10 +880,12 @@ export function OperationsDashboardShell() {
           months={chart.map((item) => item.yearMonth)}
           matrix={leaveMatrix}
           locale={locale}
-          selected={projectKey}
+          selected={activeProject}
           totalLabel={t("colTotal")}
           allLabel={t("allProjects")}
-          onProject={(key) => setProjectKey(key || undefined)}
+          onProject={(key) => {
+            if (!readOnly) setProjectKey(key || undefined);
+          }}
         />
         <div id="leave-plans" className="mt-4 rounded-xl border p-4" style={{ borderColor: "#e3e5e8" }}>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -878,12 +898,16 @@ export function OperationsDashboardShell() {
                 {t("clearFilter")}
               </Button>
             ) : null}
-            <Button variant="outline" className="h-9 cursor-pointer" onClick={() => setAddOpen(true)}>
-              {t("addLeave")}
-            </Button>
-            <Button variant="outline" className="h-9 cursor-pointer" onClick={() => setImportOpen(true)}>
-              {t("bulkImport")}
-            </Button>
+            {readOnly ? null : (
+              <Button variant="outline" className="h-9 cursor-pointer" onClick={() => setAddOpen(true)}>
+                {t("addLeave")}
+              </Button>
+            )}
+            {readOnly ? null : (
+              <Button variant="outline" className="h-9 cursor-pointer" onClick={() => setImportOpen(true)}>
+                {t("bulkImport")}
+              </Button>
+            )}
             <Button
               variant="outline"
               className="h-9 cursor-pointer"
@@ -938,6 +962,7 @@ export function OperationsDashboardShell() {
               });
             }}
             onDelete={setDeleteId}
+            readOnly={readOnly}
           />
           {typedPlans.length > visiblePlans.length ? (
             <button type="button" className="mt-2 cursor-pointer text-xs text-[var(--btn-secondary-fg)]" onClick={() => setShowAllPlans((open) => !open)}>
@@ -992,10 +1017,12 @@ export function OperationsDashboardShell() {
           months={jobMonths}
           matrix={jobMatrix}
           locale={locale}
-          selected={projectKey}
+          selected={activeProject}
           totalLabel={t("colTotal")}
           allLabel={t("allProjects")}
-          onProject={(key) => setProjectKey(key || undefined)}
+          onProject={(key) => {
+            if (!readOnly) setProjectKey(key || undefined);
+          }}
         />
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {(["next30", "eoy", "next6m", "noRenewal"] as const).map((key) => (
@@ -1067,7 +1094,7 @@ export function OperationsDashboardShell() {
                     <button
                       type="button"
                       className="flex h-9 w-full cursor-pointer items-center justify-between text-sm"
-                      onClick={() => router.push("/drivers")}
+                      onClick={() => router.push(employeesHref)}
                     >
                       <span>{outlookLabel(key, t)}</span>
                       <span className="flex items-center gap-2 text-muted-foreground">
@@ -1237,12 +1264,14 @@ function PlanTable({
   t,
   onStatus,
   onDelete,
+  readOnly = false,
 }: {
   rows: LeavePlanRow[];
   statusItems: ReturnType<typeof selectOptions>;
   t: Translator;
   onStatus: (id: string, status: string) => void;
   onDelete: (id: string) => void;
+  readOnly?: boolean;
 }) {
   return (
     <Table className={DENSE_TABLE}>
@@ -1278,7 +1307,7 @@ function PlanTable({
               <TableCell>{row.end || "—"}</TableCell>
               <TableCell>{row.days || "—"}</TableCell>
               <TableCell>
-                {row.source === "request" ? (
+                {readOnly || row.source === "request" ? (
                   <span>{planStatusLabel(statusValue, t)}</span>
                 ) : (
                   <Select
@@ -1303,7 +1332,7 @@ function PlanTable({
                 )}
               </TableCell>
               <TableCell>
-                {row.source === "request" ? null : (
+                {readOnly || row.source === "request" ? null : (
                   <Button
                     variant="ghost"
                     size="icon"

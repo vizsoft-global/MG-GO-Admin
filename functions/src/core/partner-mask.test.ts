@@ -8,6 +8,15 @@ describe("maskDriverForPartner", () => {
       id: "d1",
       full_name: "Sam",
       project_key: "keeta",
+      civil_id: "visible",
+      phone: "965000",
+      passport_number: "P1",
+      nationality: "IN",
+      nationality_category_keys: "indian",
+      source_company: "mg",
+      company_name: "MG",
+      sponsorship_key: "in_house",
+      hiring_type: "direct",
       fixed_salary: 120,
       work_permit_salary: 90,
       app_passcode: "123456",
@@ -18,6 +27,15 @@ describe("maskDriverForPartner", () => {
     });
     assert.equal(masked.full_name, "Sam");
     assert.equal(masked.project_key, "keeta");
+    assert.equal(masked.civil_id, "visible");
+    assert.equal("phone" in masked, false);
+    assert.equal("passport_number" in masked, false);
+    assert.equal("nationality" in masked, false);
+    assert.equal("nationality_category_keys" in masked, false);
+    assert.equal("source_company" in masked, false);
+    assert.equal("company_name" in masked, false);
+    assert.equal("sponsorship_key" in masked, false);
+    assert.equal("hiring_type" in masked, false);
     assert.equal("fixed_salary" in masked, false);
     assert.equal("work_permit_salary" in masked, false);
     assert.equal("app_passcode" in masked, false);

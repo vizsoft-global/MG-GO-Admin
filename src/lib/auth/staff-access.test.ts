@@ -8,6 +8,7 @@ import {
   managerDowngradeSeedTicks,
   migratedSessionIsSupersetOfRole,
   parsePartnerProjectKey,
+  partnerProjectMatches,
   parseStaffAccessKind,
   permissionGrantedByTicks,
   resolveSessionPermissionSlugs,
@@ -255,7 +256,7 @@ describe("resolveSessionPermissionSlugs", () => {
     assert.ok(slugs.has("data.cleanup"));
   });
 
-  it("gives a partner only client_portal.view and drivers.view", () => {
+  it("gives a partner only client_portal.view and operations_dashboard.view", () => {
     const slugs = resolveSessionPermissionSlugs({
       isSuperAdmin: false,
       accessKind: "partner",
@@ -263,7 +264,7 @@ describe("resolveSessionPermissionSlugs", () => {
       roleSlugs: ["payroll.view", "settings.view"],
       catalogSlugs: ["payroll.view", "settings.view", "drivers.view", "client_portal.view"],
     });
-    assert.deepEqual([...slugs].sort(), ["client_portal.view", "drivers.view"].sort());
+    assert.deepEqual([...slugs].sort(), ["client_portal.view", "operations_dashboard.view"].sort());
     assert.equal(slugs.has("payroll.view"), false);
     assert.equal(slugs.has("settings.view"), false);
   });
@@ -274,6 +275,13 @@ describe("resolveSessionPermissionSlugs", () => {
     assert.equal(parsePartnerProjectKey(""), null);
     assert.equal(parsePartnerProjectKey("keeta"), "keeta");
     assert.equal(parsePartnerProjectKey("americana"), "americana");
+    assert.equal(parsePartnerProjectKey("unassigned"), "unassigned");
+    assert.equal(parsePartnerProjectKey(" UNASSIGNED "), "unassigned");
+    assert.equal(partnerProjectMatches("", "unassigned"), true);
+    assert.equal(partnerProjectMatches("Unassigned", "unassigned"), true);
+    assert.equal(partnerProjectMatches("keeta", "unassigned"), false);
+    assert.equal(partnerProjectMatches("Keeta", "keeta"), true);
+    assert.equal(partnerProjectMatches("", "keeta"), false);
   });
 });
 
