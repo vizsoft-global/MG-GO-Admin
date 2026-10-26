@@ -236,6 +236,15 @@ export type FleetKpis = {
   avgSpeedKmh: number;
 };
 
+export type RosterLine = {
+  status: string;
+  start: string | null;
+  end: string | null;
+  actualIn: string | null;
+  earlyDrop: boolean;
+  restaurantId: string | null;
+};
+
 export type FleetSnapshot = {
   connection: FleetConnectionState;
   /** Filtered and sorted; the rail renders these ids and subscribes per driver. */
@@ -252,6 +261,7 @@ export type FleetSnapshot = {
   feedPaused: boolean;
   selectedDriverId: string | null;
   filters: FleetFilters;
+  rosterLines: Record<string, RosterLine>;
   /** Bumped on every structural change, so `useSyncExternalStore` can compare by
    *  identity without deep equality. */
   version: number;

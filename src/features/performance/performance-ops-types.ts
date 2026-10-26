@@ -56,6 +56,9 @@ export type OpsKpis = {
   active: number;
   active_prev: number;
   working_days: number;
+  working_hours: number;
+  utr: number | null;
+  avg_delivery_min: number | null;
   stores_above: number;
   stores_below: number;
 };
@@ -67,6 +70,11 @@ export type OpsTrendPoint = {
   dpd: number | null;
   dpd_eff: number | null;
   tgt_eff: number | null;
+  working_hours?: number;
+  delivery_minutes?: number;
+  delivery_count?: number;
+  utr?: number | null;
+  avg_delivery_min?: number | null;
 };
 
 export type OpsDimRow = {
@@ -78,6 +86,9 @@ export type OpsDimRow = {
   dpd: number | null;
   dpd_eff: number | null;
   tgt_eff: number | null;
+  working_hours?: number;
+  utr?: number | null;
+  avg_delivery_min?: number | null;
   riders: number;
   active_riders?: number;
   bikes?: number;
@@ -94,6 +105,9 @@ export type OpsStoreRow = {
   riders: number;
   active_riders: number;
   store_dpd: number | null;
+  working_hours: number;
+  utr: number | null;
+  avg_delivery_min: number | null;
 };
 
 export type OpsRiderRow = {
@@ -118,6 +132,11 @@ export type OpsRiderRow = {
   veh_zone_dpd: number | null;
   dpd_eff: number | null;
   tgt_eff: number | null;
+  working_hours: number;
+  utr: number | null;
+  avg_delivery_min: number | null;
+  delivery_minutes: number;
+  delivery_count: number;
   status: "Active" | "Inactive";
 };
 

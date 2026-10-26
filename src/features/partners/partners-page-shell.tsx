@@ -15,9 +15,11 @@ import {
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
   AppListControls,
+  FlatListPager,
   GroupedSections,
   fieldSearchMatch,
   groupRows,
+  useGroupedListView,
   useListControlLabels,
   useListViewPrefs,
 } from "@/components/app/app-list-controls";
@@ -145,6 +147,11 @@ function PartnersPageContent() {
   const grouped = useMemo(
     () => groupRows(visible, "none", {}, {}, "—"),
     [visible],
+  );
+  const listView = useGroupedListView(
+    grouped,
+    false,
+    `${search}\u0001${driversFilter}\u0001${logoFilter}`,
   );
 
   const invalidatePartners = useCallback(() => {
@@ -413,7 +420,7 @@ function PartnersPageContent() {
                 description={t("emptySearchDescription")}
               />
             ) : (
-              <GroupedSections groups={grouped}>
+              <GroupedSections groups={grouped} paged resetKey={`${search}\u0001${driversFilter}\u0001${logoFilter}`}>
                 {(rows) => (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {rows.map((partner) => (
@@ -439,6 +446,7 @@ function PartnersPageContent() {
           </CardContent>
         ) : (
           <CardContent className="p-0">
+            <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
             <AppDataTable
               columns={tableColumns}
               empty={
@@ -453,8 +461,8 @@ function PartnersPageContent() {
               }
             >
               {!showEmptySearch
-                ? grouped.flatMap((group) =>
-                    group.rows.map((partner) => (
+                ? listView.sections.flatMap((section) =>
+                    section.visibleRows.map((partner) => (
                     <AppDataTableRow
                       key={partner.id}
                       role={canManage ? "button" : undefined}

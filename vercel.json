@@ -32,6 +32,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/roster-alerts",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/requests-sweep",
       "schedule": "0 * * * *"
     },

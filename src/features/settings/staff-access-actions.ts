@@ -16,6 +16,7 @@ import {
   parsePartnerProjectKey,
   parseStaffAccessKind,
   PARTNER_PERMISSION_SLUGS,
+  staffRolePrivilegeChange,
   type PartnerProjectKey,
   type StaffAccessKind,
 } from "@/lib/auth/staff-access";
@@ -386,12 +387,26 @@ export async function listRequestTypeOptions(): Promise<{
   return { rows };
 }
 
+async function countOtherSuperAdmins(db: Firestore, excludeUserId: string): Promise<number> {
+  const roles = await db.collection(COLLECTIONS.adminRoles).where("is_super_admin", "==", true).get();
+  const ids = roles.docs.map((doc) => doc.id).slice(0, 30);
+  if (ids.length === 0) return 0;
+  const profiles = await db.collection(COLLECTIONS.profiles).where("admin_role_id", "in", ids).get();
+  return profiles.docs.filter((doc) => {
+    if (doc.id === excludeUserId) return false;
+    const data = doc.data();
+    if (data.role !== "staff" || data.archived_at) return false;
+    return data.approval_status !== "rejected" && data.approval_status !== "pending";
+  }).length;
+}
+
 export async function saveStaffAccess(input: {
   userId: string;
   accessKind: StaffAccessKind;
   slugs: string[];
   partnerProjectKey?: string | null;
   department?: StaffDepartment | null;
+  roleId?: string | null;
   requestTypes?: RequestTypeGrant[];
   esignCategories?: EsignCategoryGrant[];
 }): Promise<{ error?: string; success?: boolean; epochs?: EpochCounters }> {
@@ -444,6 +459,7 @@ export async function saveStaffAccess(input: {
     partner_project_key: string | null;
     updated_at: Date;
     staff_department?: string | null;
+    admin_role_id?: string;
   } = {
     access_kind: kind,
     partner_project_key: partnerProjectKey,
@@ -453,10 +469,40 @@ export async function saveStaffAccess(input: {
     profilePatch.staff_department = input.department;
   }
 
+  const requestedRoleId = input.roleId?.trim() ?? "";
+  let previousIsSuperAdmin = false;
+  let nextIsSuperAdmin = false;
+  if (requestedRoleId) {
+    const roleSnap = await db.collection(COLLECTIONS.adminRoles).doc(requestedRoleId).get();
+    if (!roleSnap.exists) return { error: "invalid_role" };
+    nextIsSuperAdmin = roleSnap.data()?.is_super_admin === true;
+    const previousRoleId = typeof profile.admin_role_id === "string" ? profile.admin_role_id : "";
+    if (previousRoleId && previousRoleId !== requestedRoleId) {
+      const previousRole = await db.collection(COLLECTIONS.adminRoles).doc(previousRoleId).get();
+      previousIsSuperAdmin = previousRole.data()?.is_super_admin === true;
+    } else if (previousRoleId === requestedRoleId) {
+      previousIsSuperAdmin = nextIsSuperAdmin;
+    }
+    const otherSuperAdminCount =
+      previousIsSuperAdmin && !nextIsSuperAdmin
+        ? await countOtherSuperAdmins(db, input.userId)
+        : 0;
+    const decision = staffRolePrivilegeChange({
+      callerIsSuperAdmin: auth.session.isSuperAdmin,
+      previousIsSuperAdmin,
+      nextIsSuperAdmin,
+      otherSuperAdminCount,
+    });
+    if (decision === "not_authorized") return { error: "super_admin_forbidden" };
+    if (decision !== "ok") return { error: decision };
+    profilePatch.admin_role_id = requestedRoleId;
+  }
+
   const previousKind = parseStaffAccessKind(profile.access_kind);
   const demoted =
     (previousKind === "manager" && (kind === "user" || kind === "partner")) ||
-    (kind === "user" && previousTicks.some((tick) => !slugs.includes(tick)));
+    (kind === "user" && previousTicks.some((tick) => !slugs.includes(tick))) ||
+    (requestedRoleId !== "" && previousIsSuperAdmin !== nextIsSuperAdmin);
 
   let requestDocs: QueryDocumentSnapshot[] = [];
   let esignDocs: QueryDocumentSnapshot[] = [];
@@ -546,6 +592,7 @@ export async function saveStaffAccess(input: {
       tick_count: slugs.length,
       previous_kind: profile.access_kind,
       department: input.department ?? profile.staff_department,
+      role_id: profilePatch.admin_role_id ?? profile.admin_role_id,
       diff: {
         added: accessDiff.addedApps,
         removed: accessDiff.removedApps,

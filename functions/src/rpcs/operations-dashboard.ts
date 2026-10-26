@@ -29,6 +29,7 @@ type DriverRow = {
   jobEndDescription: string;
   zoneId: string;
   vehicle: string;
+  phone: string;
 };
 
 type LeaveRow = {
@@ -147,6 +148,7 @@ function parseDriver(id: string, data: Dict): DriverRow {
     jobEndDescription: text(data["job_end_description"]),
     zoneId: text(data["zone_id"]),
     vehicle: text(data["vehicle_type_key"]).toLowerCase(),
+    phone: text(data["phone"]),
   };
 }
 
@@ -579,6 +581,34 @@ function zoneLabel(zoneId: string, names: Map<string, string>): string {
   return names.get(zoneId) ?? zoneId;
 }
 
+function rosterRows(
+  drivers: DriverRow[],
+  day: string,
+  todayYm: string,
+  byDriver: Map<string, LeaveRow[]>,
+  checkedIn: Set<string>,
+  zones: Map<string, string>,
+  includePhone: boolean,
+) {
+  const rows = [];
+  for (const driver of drivers) {
+    if (driver.archived) continue;
+    const status = classify(driver, day, todayYm, byDriver.get(driver.id) ?? [], checkedIn.has(driver.id));
+    const row: Record<string, string> = {
+      employeeId: driver.employeeId,
+      name: driver.name,
+      project: driver.project,
+      zone: zoneLabel(driver.zoneId, zones),
+      status,
+      joined: driver.workStart ?? "",
+    };
+    if (includePhone) row.phone = driver.phone;
+    rows.push(row);
+  }
+  rows.sort((left, right) => left.employeeId.localeCompare(right.employeeId) || left.name.localeCompare(right.name));
+  return rows;
+}
+
 async function loadDashboard(day: string) {
   const db = getFirestore();
   const [driverSnap, leaveSnap, attendanceSnap, zoneSnap, requestSnap] = await Promise.all([
@@ -594,6 +624,7 @@ async function loadDashboard(day: string) {
         "job_end_description",
         "zone_id",
         "vehicle_type_key",
+        "phone",
       ).get(),
     ),
     readOrFail("leave_plans_read_failed", () =>
@@ -713,6 +744,7 @@ export const adminOperationsDashboard = onCall(async (request) => {
     jobEnd: endings.months,
     jobEndCards: endings.cards,
     ridersOnLeave: ridersOnLeave(scopedDrivers, scopedByDriver, day),
+    roster: rosterRows(scopedDrivers, day, todayYm, scopedByDriver, loaded.checkedIn, loaded.zones, !staff.isPartner),
     zones: [...loaded.zones.entries()]
       .map(([id, name]) => ({ id, name: name || id }))
       .sort((left, right) => left.name.localeCompare(right.name)),

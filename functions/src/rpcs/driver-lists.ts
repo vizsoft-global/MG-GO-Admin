@@ -4,6 +4,7 @@ import { getFirestore } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { requireRider, riderError } from "../core/rider";
 import { pickCount, pickDay, pickId, pickText, type Dict } from "./_shared";
+import { loanTenureChoices } from "./loan-tenure";
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const PAYOUT_STATUSES = ["approved", "paid"] as const;
@@ -176,19 +177,7 @@ export const driverListRequestFields = onCall(async (request) => {
 
 export const driverListTenureOptions = onCall(async (request) => {
   await driverListsDeps.requireRider(request);
-  const snap = await driverListsDeps
-    .getFirestore()
-    .collection(COLLECTIONS.loanTenureOptions)
-    .where("is_active", "==", true)
-    .orderBy("sort_order", "asc")
-    .get();
-  return {
-    ok: true,
-    rows: snap.docs.map((doc) => {
-      const raw = (doc.data() ?? {}) as Dict;
-      return { months: numberOf(raw.months), label: textOf(raw.label) };
-    }),
-  };
+  return { ok: true, rows: loanTenureChoices() };
 });
 
 export const driverListComplaintCategories = onCall(async (request) => {

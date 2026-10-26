@@ -8,6 +8,7 @@ import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { TrackingGlassCard } from "@/features/live-tracking/tracking-shell";
+import { DriverWeekRoster } from "@/features/roster/driver-week-roster";
 import {
   fetchDriverAttendanceMonth,
   fetchDriverTodayTrackingSummary,
@@ -47,6 +48,7 @@ export function DriverAttendanceTab({ driverId }: { driverId: string }) {
 
   return (
     <div className="space-y-3">
+      <DriverWeekRoster driverId={driverId} />
       <TrackingGlassCard className="border-slate-200 bg-white p-4 dark:border-slate-700/80 dark:bg-slate-900">
         <p className="mb-3 text-sm font-semibold">{t("attendanceTodayTitle")}</p>
         {summaryLoading ? (

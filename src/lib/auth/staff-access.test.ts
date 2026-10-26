@@ -8,10 +8,12 @@ import {
   managerDowngradeSeedTicks,
   migratedSessionIsSupersetOfRole,
   parsePartnerProjectKey,
+  partnerProjectMatches,
   parseStaffAccessKind,
   permissionGrantedByTicks,
   resolveSessionPermissionSlugs,
   roleSlugsForSave,
+  staffRolePrivilegeChange,
 } from "./staff-access";
 
 const OPERATOR_ROLE = [
@@ -26,6 +28,56 @@ const OPERATOR_ROLE = [
   "settings.view",
   "users.manage",
 ] as const;
+
+describe("staff role privilege change", () => {
+  it("lets a super admin move someone off Super Admin when another remains", () => {
+    assert.equal(
+      staffRolePrivilegeChange({
+        callerIsSuperAdmin: true,
+        previousIsSuperAdmin: true,
+        nextIsSuperAdmin: false,
+        otherSuperAdminCount: 1,
+      }),
+      "ok",
+    );
+  });
+
+  it("refuses to remove the last Super Admin", () => {
+    assert.equal(
+      staffRolePrivilegeChange({
+        callerIsSuperAdmin: true,
+        previousIsSuperAdmin: true,
+        nextIsSuperAdmin: false,
+        otherSuperAdminCount: 0,
+      }),
+      "last_super_admin",
+    );
+  });
+
+  it("refuses a non-super admin granting Super Admin", () => {
+    assert.equal(
+      staffRolePrivilegeChange({
+        callerIsSuperAdmin: false,
+        previousIsSuperAdmin: false,
+        nextIsSuperAdmin: true,
+        otherSuperAdminCount: 1,
+      }),
+      "not_authorized",
+    );
+  });
+
+  it("allows an ordinary role change", () => {
+    assert.equal(
+      staffRolePrivilegeChange({
+        callerIsSuperAdmin: false,
+        previousIsSuperAdmin: false,
+        nextIsSuperAdmin: false,
+        otherSuperAdminCount: 0,
+      }),
+      "ok",
+    );
+  });
+});
 
 describe("staff access ticks", () => {
   it("expands CRUD manage into create/edit/delete and keeps extra verbs", () => {
@@ -204,7 +256,7 @@ describe("resolveSessionPermissionSlugs", () => {
     assert.ok(slugs.has("data.cleanup"));
   });
 
-  it("gives a partner only client_portal.view and drivers.view", () => {
+  it("gives a partner only client_portal.view and operations_dashboard.view", () => {
     const slugs = resolveSessionPermissionSlugs({
       isSuperAdmin: false,
       accessKind: "partner",
@@ -212,7 +264,7 @@ describe("resolveSessionPermissionSlugs", () => {
       roleSlugs: ["payroll.view", "settings.view"],
       catalogSlugs: ["payroll.view", "settings.view", "drivers.view", "client_portal.view"],
     });
-    assert.deepEqual([...slugs].sort(), ["client_portal.view", "drivers.view"].sort());
+    assert.deepEqual([...slugs].sort(), ["client_portal.view", "operations_dashboard.view"].sort());
     assert.equal(slugs.has("payroll.view"), false);
     assert.equal(slugs.has("settings.view"), false);
   });
@@ -223,6 +275,13 @@ describe("resolveSessionPermissionSlugs", () => {
     assert.equal(parsePartnerProjectKey(""), null);
     assert.equal(parsePartnerProjectKey("keeta"), "keeta");
     assert.equal(parsePartnerProjectKey("americana"), "americana");
+    assert.equal(parsePartnerProjectKey("unassigned"), "unassigned");
+    assert.equal(parsePartnerProjectKey(" UNASSIGNED "), "unassigned");
+    assert.equal(partnerProjectMatches("", "unassigned"), true);
+    assert.equal(partnerProjectMatches("Unassigned", "unassigned"), true);
+    assert.equal(partnerProjectMatches("keeta", "unassigned"), false);
+    assert.equal(partnerProjectMatches("Keeta", "keeta"), true);
+    assert.equal(partnerProjectMatches("", "keeta"), false);
   });
 });
 

@@ -10,13 +10,15 @@ import {
   UserRoundCheck,
   type LucideIcon,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useMemo } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query/query-keys";
-import { fetchAdminVisitsList } from "./visits-actions";
+import { fetchAdminVisitsList, fetchVisitDepartments } from "./visits-actions";
+import { departmentLabel } from "./visit-board";
 
 type HubTile = {
   href: string;
@@ -121,6 +123,7 @@ function HubTileLink({
 
 export function VisitsHubShell() {
   const t = useTranslations("pages.visitBookings");
+  const locale = useLocale();
   const { can } = useAuth();
 
   const { data } = useQuery({
@@ -128,6 +131,17 @@ export function VisitsHubShell() {
     queryFn: () => fetchAdminVisitsList({ limit: 1 }),
   });
   const kpi = data?.kpi;
+  const { data: departments } = useQuery({
+    queryKey: queryKeys.visits.departments(),
+    queryFn: fetchVisitDepartments,
+  });
+  const departmentChips = useMemo(
+    () =>
+      (departments?.rows ?? [])
+        .filter((dept) => dept.is_active)
+        .sort((a, b) => a.sort_order - b.sort_order || a.label_en.localeCompare(b.label_en)),
+    [departments],
+  );
   const counts: Record<NonNullable<HubTile["countKey"]>, number> = {
     upcoming: kpi?.upcoming ?? 0,
     today: kpi?.today ?? 0,
@@ -155,6 +169,23 @@ export function VisitsHubShell() {
         <h1 className="text-2xl font-semibold text-white">{t("title")}</h1>
         <p className="text-sm text-zinc-300">{t("hub.subtitle")}</p>
       </div>
+
+      {departmentChips.length > 0 ? (
+        <div className="flex max-w-5xl flex-wrap items-center justify-center gap-2">
+          <p className="w-full text-center text-[10px] font-semibold uppercase tracking-[1px] text-zinc-400">
+            {t("hub.departmentsHeading")}
+          </p>
+          {departmentChips.map((dept) => (
+            <Link
+              key={dept.key}
+              href={`/visit-bookings/all?department=${encodeURIComponent(dept.key)}`}
+              className="inline-flex h-9 items-center rounded-full border border-white/30 bg-white/10 px-3 text-xs font-medium text-white hover:bg-white/20"
+            >
+              {departmentLabel(dept, locale)}
+            </Link>
+          ))}
+        </div>
+      ) : null}
 
       {groups.map((group) => (
         <section key={group.id} className="flex flex-col items-center gap-[18px]">

@@ -37,7 +37,7 @@ import {
   clientValueTooLong,
   normalizeClientValue,
 } from "./driver-client-fields";
-import { hasOpsAssignment, requiresOpsAssignment } from "./driver-assignment";
+import { requiresOpsAssignment } from "./driver-assignment";
 import {
   flattenProfileSnapshot,
   loadIntakeProfileSnapshot,
@@ -81,7 +81,7 @@ import {
   resolveCompanyInput,
   type SourceCompany,
 } from "./source-companies";
-import { buildImportWritePatch, writesCell } from "./import/driver-import-patch";
+import { buildImportWritePatch, importRowMissingAssignment, writesCell } from "./import/driver-import-patch";
 import {
   readImportSnapshot,
   syncImportAssets,
@@ -847,10 +847,14 @@ export async function resolveDriverImportPreview(
     const opsRequired = requiresOpsAssignment(section_keys, sections);
     if (
       lookupStillOpen() &&
-      !existingByEmployeeId &&
-      !existingByClientId &&
-      opsRequired &&
-      !hasOpsAssignment(zone_id, restaurant_ids)
+      importRowMissingAssignment({
+        ops_required: opsRequired,
+        zone_id,
+        restaurant_ids,
+        existingByEmployeeId,
+        existingByClientId,
+        cleared: row.cleared,
+      })
     ) {
       status = "missing_assignment";
     }
@@ -944,7 +948,8 @@ export async function resolveDriverImportPreview(
     else if (
       lookupStillOpen() &&
       existingByEmployeeId &&
-      status !== "duplicate_client_id"
+      status !== "duplicate_client_id" &&
+      status !== "missing_assignment"
     ) {
       status = "duplicate_employee_id";
     }
@@ -1054,16 +1059,7 @@ export async function applyOneImportRow(
   const requestedEmployeeId = normalizeEmployeeId(
     row.employee_id ?? row.resolved_employee_id ?? "",
   );
-  // A partial sheet that updates an existing rider does not have to repeat the
-  // zone / restaurant columns; a brand-new rider still needs an assignment.
-  const carriesAssignment = Boolean(row.present.zone_id || row.present.restaurant_ids);
-  if (
-    carriesAssignment &&
-    row.ops_required !== false &&
-    !hasOpsAssignment(row.zone_id, row.restaurant_ids)
-  ) {
-    return fail("missing_assignment");
-  }
+  if (importRowMissingAssignment(row)) return fail("missing_assignment");
 
   let intakeId: string | null = null;
   let driverCode: string | null = null;
@@ -1388,6 +1384,7 @@ export async function applyOneImportRow(
       passcode: credential?.passcode ?? null,
       before: journalBefore,
       after: journalAfter,
+      replay: "applied",
     },
   };
 }

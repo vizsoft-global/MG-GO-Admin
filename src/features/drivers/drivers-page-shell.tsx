@@ -32,8 +32,13 @@ import { toast } from "sonner";
 import { AppListCard, AppPage } from "@/components/app";
 import {
   AppListControls,
+  FlatListPager,
   GroupedSections,
+  GroupTableHeaderRow,
   groupRows,
+  scopeSelectionState,
+  toggleScopeSelection,
+  useGroupedListView,
   useListViewPrefs,
 } from "@/components/app/app-list-controls";
 import { EmployeeStatusBadge } from "@/features/employees/employee-status-badge";
@@ -323,6 +328,8 @@ function DriversPageContent() {
       t("companyUnassigned"),
     );
   }, [shownDrivers, prefs.groupBy, statusesQuery.data, locale, t]);
+  const selectionResetKey = `${prefs.groupBy}\u0001${debouncedSearch}\u0001${tabFilter}\u0001${levelFilter}\u0001${JSON.stringify(columnFilters)}`;
+  const listView = useGroupedListView(groupedDrivers, prefs.groupBy !== "none", selectionResetKey);
   const firstPage = pageQuery.data?.pages[0];
   const kpiCounts = firstPage?.kpis ?? EMPTY_KPIS;
   const filteredTotal = listFailed ? 0 : firstPage?.filteredTotal ?? 0;
@@ -393,6 +400,17 @@ function DriversPageContent() {
     return () => obs.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, drivers.length]);
 
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  const selectionResetSeen = useRef(selectionResetKey);
+  useEffect(() => {
+    if (selectionResetSeen.current === selectionResetKey) return;
+    selectionResetSeen.current = selectionResetKey;
+    setSelectedIds(new Set());
+  }, [selectionResetKey]);
+
   const activeFilterCount = countActiveFilters(columnFilters);
 
   function accountStatusLabelFor(status: DriverAccountStatus) {
@@ -423,16 +441,12 @@ function DriversPageContent() {
   const showEmptySearch = !isLoading && drivers.length === 0 && (hasNarrowing || tabTotal > 0);
   const showEmptyAll = !isLoading && drivers.length === 0 && !showEmptySearch;
 
-  const allVisibleSelected =
-    shownDrivers.length > 0 && shownDrivers.every((d) => selectedIds.has(d.id));
+  const scopeIds = listView.scopeRows.map((driver) => driver.id);
+  const headerSelection = scopeSelectionState(selectedIds, scopeIds);
 
   const toggleSelectAll = useCallback(() => {
-    setSelectedIds((prev) =>
-      shownDrivers.length > 0 && shownDrivers.every((d) => prev.has(d.id))
-        ? new Set()
-        : new Set(shownDrivers.map((d) => d.id)),
-    );
-  }, [shownDrivers]);
+    setSelectedIds((prev) => toggleScopeSelection(prev, scopeIds));
+  }, [scopeIds]);
 
   const toggleRow = (id: string) => {
     setSelectedIds((prev) => {
@@ -578,7 +592,8 @@ function DriversPageContent() {
         id: "select",
         label: (
           <Checkbox
-            checked={allVisibleSelected}
+            checked={headerSelection === "all"}
+            indeterminate={headerSelection === "some"}
             onCheckedChange={toggleSelectAll}
             aria-label={t("selectAll")}
             className="cursor-pointer"
@@ -617,7 +632,7 @@ function DriversPageContent() {
       (left, right) => (rank.get(left.id) ?? 1_000) - (rank.get(right.id) ?? 1_000),
     );
   }, [
-    allVisibleSelected,
+    headerSelection,
     isColumnVisible,
     orderedVisibleIds,
     t,
@@ -749,11 +764,11 @@ function DriversPageContent() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => setColumnFilters({})}
+                    aria-label={t("clearAllFilters")}
                   >
                     <FilterX className="h-3.5 w-3.5" aria-hidden />
-                    <span className="hidden 2xl:inline">{t("clearAllFilters")}</span>
                     <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-white tabular-nums">
                       {activeFilterCount}
                     </span>
@@ -768,17 +783,12 @@ function DriversPageContent() {
                   onReset={resetColumns}
                   sourceLabel={columnSourceLabel}
                   hiddenCount={hiddenToggleableCount}
+                  iconOnly
                 />
               </>
             }
             trailing={
             <div className="flex shrink-0 items-center gap-1.5">
-              {!isLoading ? (
-                <p className="hidden text-xs tabular-nums text-muted-foreground 2xl:inline">
-                  {t("showingCount", { visible: filteredTotal, total: tabTotal })}
-                </p>
-              ) : null}
-              <div className="hidden h-6 w-px shrink-0 bg-border sm:block" aria-hidden />
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -806,13 +816,12 @@ function DriversPageContent() {
                       type="button"
                       variant="outline"
                       size="icon"
-                      className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
+                      className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
                       onClick={() => setExportOpen(true)}
                       disabled={filteredTotal === 0}
                       aria-label={t("export")}
                     >
                       <Download className="h-4 w-4" />
-                      <span className="ms-1.5 hidden 2xl:inline">{t("export")}</span>
                     </Button>
                   }
                 />
@@ -826,13 +835,12 @@ function DriversPageContent() {
                         type="button"
                         variant="outline"
                         size="icon"
-                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg text-destructive hover:bg-destructive/10 sm:w-auto sm:px-2.5"
+                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg text-destructive hover:bg-destructive/10"
                         onClick={() => setArchiveOpen(true)}
                         disabled={filteredTotal === 0 && selectedIds.size === 0}
                         aria-label={t("bulkArchive")}
                       >
                         <Trash2 className="h-4 w-4" />
-                        <span className="ms-1.5 hidden 2xl:inline">{t("bulkArchive")}</span>
                       </Button>
                     }
                   />
@@ -847,12 +855,11 @@ function DriversPageContent() {
                         type="button"
                         variant="outline"
                         size="icon"
-                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
+                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
                         onClick={() => setBulkOpen(true)}
                         aria-label={t("bulkImport")}
                       >
                         <Upload className="h-4 w-4" />
-                        <span className="ms-1.5 hidden 2xl:inline">{t("bulkImport")}</span>
                       </Button>
                     }
                   />
@@ -862,15 +869,25 @@ function DriversPageContent() {
               <ClearAllModuleButton entity="drivers" compact />
               <ClearFilteredModuleButton entity="drivers" compact />
               {canCreate ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-9 shrink-0 cursor-pointer rounded-lg px-2.5"
-                  onClick={() => setAddOpen(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                  <span className="ms-1.5 hidden sm:inline">{t("addDriver")}</span>
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        size="icon"
+                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
+                        onClick={() => setAddOpen(true)}
+                        aria-label={t("addDriver")}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent>{t("addDriver")}</TooltipContent>
+                </Tooltip>
+              ) : null}
+              {prefs.viewMode !== "cards" ? (
+                <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} inline />
               ) : null}
             </div>
             }
@@ -901,7 +918,7 @@ function DriversPageContent() {
           </div>
         ) : prefs.viewMode === "cards" ? (
           <CardContent className="p-4">
-            <GroupedSections groups={groupedDrivers}>
+            <GroupedSections groups={groupedDrivers} paged resetKey={selectionResetKey}>
               {(rows) => (
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {rows.map((driver) => (
@@ -975,21 +992,21 @@ function DriversPageContent() {
             >
               {!showEmptySearch ? (
                 <>
-                  {groupedDrivers.flatMap((group) => [
-                    prefs.groupBy !== "none" ? (
-                      <AppDataTableRow key={`group-${group.key}`} className="hover:bg-transparent">
-                        <TableCell
-                          colSpan={visibleColumnCount}
-                          className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
-                        >
-                          {group.label}
-                          <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
-                            {group.rows.length}
-                          </span>
-                        </TableCell>
-                      </AppDataTableRow>
+                  {listView.sections.flatMap((section) => [
+                    section.showHeader ? (
+                      <GroupTableHeaderRow
+                        key={`group-${section.key}`}
+                        colSpan={visibleColumnCount}
+                        label={section.label}
+                        total={section.total}
+                        open={section.open}
+                        page={section.page}
+                        showPager={section.showPager}
+                        onToggle={() => listView.toggle(section.key)}
+                        onStep={(dir) => listView.step(section.key, dir)}
+                      />
                     ) : null,
-                    ...group.rows.map((driver) => (
+                    ...section.visibleRows.map((driver) => (
                       <AppDataTableRow
                         key={driver.id}
                         className={cn(

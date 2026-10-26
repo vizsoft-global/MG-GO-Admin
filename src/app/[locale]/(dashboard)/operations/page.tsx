@@ -2,6 +2,7 @@ import { setRequestLocale, getTranslations } from "next-intl/server";
 import {
   Bike,
   Building2,
+  CalendarClock,
   ClipboardCheck,
   ClipboardList,
   FormInput,
@@ -59,6 +60,12 @@ const CARDS: ReadonlyArray<{
     key: "attendance",
     href: "/attendance",
     itemId: "attendance",
+    permission: "attendance.view",
+  },
+  {
+    key: "roster",
+    href: "/operations/roster",
+    icon: CalendarClock,
     permission: "attendance.view",
   },
   {

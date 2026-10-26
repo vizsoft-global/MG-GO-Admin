@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { selectOptionsFrom } from "@/lib/select-items";
 import { useTranslations } from "next-intl";
-import { STAFF_DEPARTMENTS, type StaffDepartment } from "@/lib/auth/app-access";
+import type { StaffDepartment } from "@/lib/auth/app-access";
 import {
   parsePartnerProjectKey,
   PARTNER_PROJECT_KEYS,
@@ -17,6 +17,7 @@ import {
   type StaffAccessKind,
 } from "@/lib/auth/staff-access";
 import type { StaffLastChanged } from "@/features/settings/staff-access-actions";
+import type { AdminRoleRow } from "@/lib/auth/get-role-permissions";
 import { cn } from "@/lib/utils";
 
 function initials(name: string): string {
@@ -32,12 +33,15 @@ export function UserAccessHeader({
   lastChanged,
   locale,
   department,
-  onDepartment,
+  roleId,
+  roles,
+  onRoleId,
   accessKind,
   onAccessKind,
   partnerProjectKey = null,
   onPartnerProject,
   disabled,
+  kindDisabled,
 }: {
   name: string;
   email: string | null;
@@ -45,27 +49,31 @@ export function UserAccessHeader({
   lastChanged: StaffLastChanged;
   locale: string;
   department: StaffDepartment | null;
-  onDepartment: (value: StaffDepartment | null) => void;
+  roleId: string | null;
+  roles: AdminRoleRow[];
+  onRoleId: (roleId: string) => void;
   accessKind: StaffAccessKind;
   onAccessKind: (kind: StaffAccessKind) => void;
   partnerProjectKey?: PartnerProjectKey | null;
   onPartnerProject?: (key: PartnerProjectKey) => void;
   disabled?: boolean;
+  kindDisabled?: boolean;
 }) {
   const t = useTranslations("pages.settings.accessControl");
   const projectLabel: Record<PartnerProjectKey, string> = {
     keeta: "Keeta",
     americana: "Americana",
+    unassigned: "Unassigned",
   };
   const projectItems = selectOptionsFrom(
     PARTNER_PROJECT_KEYS,
     (value) => value,
     (value) => projectLabel[value],
   );
-  const deptItems = selectOptionsFrom(
-    ["none", ...STAFF_DEPARTMENTS],
-    (value) => value,
-    (value) => (value === "none" ? t("departmentUnset") : t(`dept.${value}`)),
+  const roleItems = selectOptionsFrom(
+    roles,
+    (role) => role.id,
+    (role) => role.name,
   );
   const changed =
     lastChanged.at != null
@@ -104,26 +112,27 @@ export function UserAccessHeader({
       </div>
 
       <div className="flex shrink-0 flex-wrap items-start gap-2">
-        <Select
-          items={deptItems}
-          value={department ?? "none"}
-          onValueChange={(value) =>
-            onDepartment(value && value !== "none" ? (value as StaffDepartment) : null)
-          }
-          disabled={disabled}
-        >
-          <SelectTrigger className="h-9 w-[184px] rounded-lg border-[#E4E4E7] bg-white text-xs">
-            <SelectValue placeholder={t("department")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">{t("departmentUnset")}</SelectItem>
-            {STAFF_DEPARTMENTS.map((dept) => (
-              <SelectItem key={dept} value={dept}>
-                {t(`dept.${dept}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {roles.length > 0 ? (
+          <Select
+            items={roleItems}
+            value={roleId ?? undefined}
+            onValueChange={(value) => {
+              if (value) onRoleId(value);
+            }}
+            disabled={disabled}
+          >
+            <SelectTrigger className="h-9 w-[184px] rounded-lg border-[#E4E4E7] bg-white text-xs">
+              <SelectValue placeholder={t("role")} />
+            </SelectTrigger>
+            <SelectContent>
+              {roles.map((role) => (
+                <SelectItem key={role.id} value={role.id}>
+                  {role.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
         <div className="flex flex-col items-end gap-2">
         <div className="flex h-9 items-center gap-px rounded-lg bg-[#F1F3F5] p-[3px]">
           {(
@@ -139,7 +148,7 @@ export function UserAccessHeader({
                 key={seg.id}
                 type="button"
                 aria-pressed={active}
-                disabled={disabled}
+                disabled={disabled || kindDisabled}
                 onClick={() => onAccessKind(seg.id)}
                 className={cn(
                   "inline-flex h-[30px] cursor-pointer items-center rounded-md px-2.5 text-xs transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
@@ -161,7 +170,7 @@ export function UserAccessHeader({
               const key = parsePartnerProjectKey(value);
               if (key) onPartnerProject?.(key);
             }}
-            disabled={disabled}
+            disabled={disabled || kindDisabled}
           >
             <SelectTrigger className="h-9 w-[184px] rounded-lg border-[#E4E4E7] bg-white text-xs">
               <SelectValue placeholder="Keeta" />

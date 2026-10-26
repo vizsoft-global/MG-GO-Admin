@@ -44,6 +44,7 @@ export function AppTableColumnPicker({
   onReorder,
   sourceLabel,
   hiddenCount = 0,
+  iconOnly = false,
   className,
 }: {
   options: TableColumnVisibilityOption[];
@@ -54,6 +55,8 @@ export function AppTableColumnPicker({
   onReorder?: (activeId: string, overId: string) => void;
   sourceLabel?: string;
   hiddenCount?: number;
+  /** Toolbar shows the icon (and hidden-count) only. The menu still names the columns. */
+  iconOnly?: boolean;
   className?: string;
 }) {
   const t = useTranslations("common");
@@ -66,13 +69,22 @@ export function AppTableColumnPicker({
           render={
             <DropdownMenuTrigger
               className={cn(
-                "inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-input bg-background px-2.5 text-xs font-medium hover:bg-accent sm:px-3",
+                "inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-input bg-background text-xs font-medium hover:bg-accent",
+                iconOnly
+                  ? hiddenCount > 0
+                    ? "w-auto px-2"
+                    : "w-9 px-0"
+                  : "px-2.5 sm:px-3",
                 className,
               )}
               aria-label={t("columnsTooltip")}
             >
               <Columns3 className="h-4 w-4" />
-              <span className="hidden 2xl:inline">{t("columns")}</span>
+              {iconOnly ? (
+                <span className="sr-only">{t("columns")}</span>
+              ) : (
+                <span className="hidden 2xl:inline">{t("columns")}</span>
+              )}
               {hiddenCount > 0 ? (
                 <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
                   {hiddenCount}

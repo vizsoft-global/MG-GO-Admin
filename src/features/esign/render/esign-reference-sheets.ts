@@ -153,8 +153,9 @@ const ACCIDENT_CSS = `
 
 const PAYSLIP_CSS = `
 .pay-page { padding: 14mm 12mm 12mm; color: #1D2340; }
-.pay-logo { display: block; height: 12mm; width: auto; max-width: 38mm; object-fit: contain; margin-bottom: 3mm; }
 .pay-topline { height: 1.5mm; background: var(--pay-blue); margin: -14mm -12mm 0; }
+.acc-docs { margin-top: 8mm; }
+.acc-doc { min-height: 9mm; border-bottom: .6pt solid #000; margin-bottom: 2.4mm; font-size: 11pt; line-height: 9mm; }
 .pay-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 6mm; padding: 4.5mm 0 3mm; border-bottom: 1.1mm solid var(--pay-orange); }
 .pay-head > div:first-child { flex: 1; min-width: 0; }
 .pay-title { font-size: 17pt; font-weight: 700; color: var(--pay-blue); line-height: 1.15; }
@@ -316,12 +317,54 @@ ${logoImageHtml(logoUrl, "ref-logo")}
   return pageShell("loan", "loan-page", body, fontCss, LOAN_CSS);
 }
 
+function accidentLogoHtml(logoUrl?: string | null): string {
+  return (
+    logoImageHtml(logoUrl, "acc-logo", "Musallam Group") ||
+    `<img class="acc-logo" src="${MUSALLAM_GROUP_LOGO}" alt="Musallam Group"/>`
+  );
+}
+
+function accidentSignatureTail(rider: string): string {
+  return `<div class="acc-tail">
+  <div class="acc-tail-row">
+    <div class="en"><span>Rider Name:</span><span class="dots">${rider ? escapeHtml(rider) : ""}</span></div>
+    <div class="ar" dir="rtl"><span>الاسم:</span><span class="dots"></span></div>
+  </div>
+  <div class="acc-tail-row">
+    <div class="en"><span>Signature:</span><i data-slot-role="employee"></i></div>
+    <div class="ar" dir="rtl"><span>التوقيع:</span><span class="dots"></span></div>
+  </div>
+</div>`;
+}
+
+function renderAccidentDocumentsRequested(
+  layout: EsignDocumentLayout,
+  fontCss: string | undefined,
+  logoUrl: string | null | undefined,
+  rider: string,
+): string {
+  const named = (layout.requestedDocuments ?? []).map((item) => item.trim()).filter(Boolean);
+  const lines = named.length > 0 ? named : ["", "", "", "", "", ""];
+  const body = `
+${accidentLogoHtml(logoUrl)}
+<div class="acc-title"><span class="ar" dir="rtl">المستندات المطلوبة</span><span class="en">Documents requested</span></div>
+<div class="acc-docs">
+  ${lines.map((item) => `<div class="acc-doc">${escapeHtml(item)}</div>`).join("")}
+</div>
+${accidentSignatureTail(rider)}`;
+  return pageShell("general", "acc-page", body, fontCss, ACCIDENT_CSS);
+}
+
 export function renderAccidentReferenceSheet(
   layout: EsignDocumentLayout,
   fontCss?: string,
   logoUrl?: string | null,
 ): string {
   const rider = layout.riderName?.trim() || rowValue(layout, ["rider_name", "employee_name"]) || "";
+  const kind = layout.accidentRequestKind;
+  if (kind && kind !== "declaration") {
+    return renderAccidentDocumentsRequested(layout, fontCss, logoUrl, rider);
+  }
 
   const bulletsEn = [
     "Police traffic report, if available.",
@@ -338,12 +381,8 @@ export function renderAccidentReferenceSheet(
     "تقرير إثبات العودة إلى العمل من المستشفى.",
   ];
 
-  const accidentLogo =
-    logoImageHtml(logoUrl, "acc-logo", "Musallam Group") ||
-    `<img class="acc-logo" src="${MUSALLAM_GROUP_LOGO}" alt="Musallam Group"/>`;
-
   const body = `
-${accidentLogo}
+${accidentLogoHtml(logoUrl)}
 <div class="acc-title"><span class="ar" dir="rtl">إقرار</span><span class="en">Declaration</span></div>
 <div class="acc-body">
   <div>
@@ -357,16 +396,7 @@ ${accidentLogo}
     <p>وفي حال عدم استكمال المستندات المذكورة أعلاه، سيتم تحميل جميع المصاريف الطبية منذ بداية الحادث عليّ.</p>
   </div>
 </div>
-<div class="acc-tail">
-  <div class="acc-tail-row">
-    <div class="en"><span>Rider Name:</span><span class="dots">${rider ? escapeHtml(rider) : ""}</span></div>
-    <div class="ar" dir="rtl"><span>الاسم:</span><span class="dots"></span></div>
-  </div>
-  <div class="acc-tail-row">
-    <div class="en"><span>Signature:</span><i data-slot-role="employee"></i></div>
-    <div class="ar" dir="rtl"><span>التوقيع:</span><span class="dots"></span></div>
-  </div>
-</div>`;
+${accidentSignatureTail(rider)}`;
 
   return pageShell("general", "acc-page", body, fontCss, ACCIDENT_CSS);
 }
@@ -413,7 +443,7 @@ function payslipLineRow(line: PayslipLine): string {
 export function renderPayslipReferenceSheet(
   layout: EsignDocumentLayout,
   fontCss?: string,
-  logoUrl?: string | null,
+  _logoUrl?: string | null,
 ): string {
   const company = payslipValue(layout, ["company_name"]) || layout.masthead.company;
   const companyAr = payslipValue(layout, ["company_name_ar"]) || company;
@@ -444,7 +474,6 @@ export function renderPayslipReferenceSheet(
     `<td class="lab">${escapeHtml(en)}<span class="ar" dir="rtl">${escapeHtml(arabic)}</span></td>`;
 
   const body = `
-${logoImageHtml(logoUrl, "pay-logo")}
 <div class="pay-topline"></div>
 <header class="pay-head">
   <div>

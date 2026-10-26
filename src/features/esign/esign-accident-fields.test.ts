@@ -7,6 +7,7 @@ import {
   accidentKindLabel,
   isAccidentRequest,
   normalizeAccidentKind,
+  requestedDocumentLines,
   withAccidentFields,
 } from "./esign-accident-fields";
 
@@ -23,6 +24,14 @@ describe("accident request kinds", () => {
       en: "Medical report",
       ar: "تقرير طبي",
     });
+  });
+
+  it("splits requested documents on lines and commas", () => {
+    assert.deepEqual(
+      requestedDocumentLines("Sick leave form\nMedical report, sick leave form"),
+      ["Sick leave form", "Medical report"],
+    );
+    assert.deepEqual(requestedDocumentLines(null), []);
   });
 
   it("adds From/To for sick leave and the accident pair otherwise", () => {

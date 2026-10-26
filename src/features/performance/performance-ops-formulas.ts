@@ -95,7 +95,7 @@ export function opsOrderDayYmd(input: {
   );
 }
 
-export const OPS_CHART_METRICS = ["orders", "dpd", "dpd_eff", "tgt_eff"] as const;
+export const OPS_CHART_METRICS = ["orders", "dpd", "dpd_eff", "tgt_eff", "utr"] as const;
 export type OpsChartMetric = (typeof OPS_CHART_METRICS)[number];
 
 export const OPS_VIEW_BY: Record<
@@ -105,8 +105,8 @@ export const OPS_VIEW_BY: Record<
   overview: ["orders", "dpd"],
   dpd: ["dpd", "dpd_eff", "tgt_eff"],
   riders: [],
-  topbottom: ["orders", "dpd", "dpd_eff", "tgt_eff"],
-  outsource: ["orders", "dpd", "dpd_eff", "tgt_eff"],
+  topbottom: ["orders", "dpd", "dpd_eff", "tgt_eff", "utr"],
+  outsource: ["orders", "dpd", "dpd_eff", "tgt_eff", "utr"],
 };
 
 export const OPS_METRIC_COLOR: Record<OpsChartMetric, string> = {
@@ -114,6 +114,7 @@ export const OPS_METRIC_COLOR: Record<OpsChartMetric, string> = {
   dpd: "#059669",
   dpd_eff: "#7c3aed",
   tgt_eff: "#d97706",
+  utr: "#0f766e",
 };
 
 const MONTH_ABBR = [
@@ -204,9 +205,10 @@ export function partnerFilterMode(
 }
 
 /**
- * SOP: Americana → Store DPD; Keeta → Zone-Vehicle DPD; no Partner filter →
- * average of both. Assumption #2: if a side is missing, use the side that
- * exists; if neither exists, null (never 0).
+ * SOP v1.2: the rider's client picks the benchmark.
+ * Keeta uses zone & vehicle DPD. Every other client uses restaurant DPD.
+ * A missing or zero benchmark is null. The other side is not a fallback.
+ * With no project key, the partner slicer decides the same way.
  */
 export function resolveBenchmark(input: {
   projectKey: string | null;
@@ -214,15 +216,12 @@ export function resolveBenchmark(input: {
   storeDpd: number | null;
   zoneVehicleDpd: number | null;
 }): number | null {
+  const project = (input.projectKey ?? "").trim().toLowerCase();
   const mode = partnerFilterMode(input.partnerKeys);
-  const store = finiteOrNull(input.storeDpd);
-  const zv = finiteOrNull(input.zoneVehicleDpd);
-
-  if (mode === "americana") return store;
-  if (mode === "keeta") return zv;
-
-  if (store != null && zv != null) return (store + zv) / 2;
-  return store ?? zv;
+  const useZoneVehicle = project === "keeta" || (project === "" && mode === "keeta");
+  const value = finiteOrNull(useZoneVehicle ? input.zoneVehicleDpd : input.storeDpd);
+  if (value == null || value <= 0) return null;
+  return value;
 }
 
 export function dpdEfficiencyPct(
@@ -574,6 +573,11 @@ export type OpsTrendPointLike = {
   dpd: number | null;
   dpd_eff: number | null;
   tgt_eff: number | null;
+  working_hours?: number;
+  delivery_minutes?: number;
+  delivery_count?: number;
+  utr?: number | null;
+  avg_delivery_min?: number | null;
 };
 
 export function bucketOpsTrend(
@@ -584,7 +588,14 @@ export function bucketOpsTrend(
   if (granularity === "daily") {
     return [...points].sort((a, b) => a.bucket.localeCompare(b.bucket));
   }
-  const map = new Map<string, { orders: number; working_days: number }>();
+  const blank = () => ({
+    orders: 0,
+    working_days: 0,
+    hours: 0,
+    minutes: 0,
+    timed: 0,
+  });
+  const map = new Map<string, ReturnType<typeof blank>>();
   if (granularity === "weekly") {
     const monthKey =
       window?.to?.slice(0, 7) ??
@@ -592,7 +603,7 @@ export function bucketOpsTrend(
       points[0]?.bucket.slice(0, 7);
     if (!monthKey) return [];
     for (const key of opsWeekStartsForMonth(monthKey)) {
-      map.set(key, { orders: 0, working_days: 0 });
+      map.set(key, blank());
     }
   }
   if (granularity === "monthly" && window?.from && window?.to) {
@@ -601,7 +612,7 @@ export function bucketOpsTrend(
     const endYear = Number(window.to.slice(0, 4));
     const endMonth = Number(window.to.slice(5, 7));
     while (year < endYear || (year === endYear && month <= endMonth)) {
-      map.set(`${year}-${String(month).padStart(2, "0")}-01`, { orders: 0, working_days: 0 });
+      map.set(`${year}-${String(month).padStart(2, "0")}-01`, blank());
       month += 1;
       if (month > 12) {
         month = 1;
@@ -614,9 +625,12 @@ export function bucketOpsTrend(
     const key =
       granularity === "weekly" ? opsWeekBucketStart(p.bucket) : `${p.bucket.slice(0, 7)}-01`;
     if (seeded && !map.has(key)) continue;
-    const cur = map.get(key) ?? { orders: 0, working_days: 0 };
+    const cur = map.get(key) ?? blank();
     cur.orders += p.orders;
     cur.working_days += p.working_days;
+    cur.hours += p.working_hours ?? 0;
+    cur.minutes += p.delivery_minutes ?? 0;
+    cur.timed += p.delivery_count ?? 0;
     map.set(key, cur);
   }
   return [...map.entries()]
@@ -629,6 +643,11 @@ export function bucketOpsTrend(
       dpd: v.working_days > 0 ? v.orders / v.working_days : 0,
       dpd_eff: null,
       tgt_eff: null,
+      working_hours: v.hours,
+      delivery_minutes: v.minutes,
+      delivery_count: v.timed,
+      utr: v.hours > 0 ? v.orders / v.hours : null,
+      avg_delivery_min: v.timed > 0 ? v.minutes / v.timed : null,
     }));
 }
 
@@ -656,6 +675,9 @@ export function companyRowsFromRiders(
     working_days: number;
     dpd_eff: number | null;
     tgt_eff: number | null;
+    working_hours?: number;
+    delivery_minutes?: number;
+    delivery_count?: number;
   }[],
 ): Array<{
   key: string;
@@ -666,6 +688,9 @@ export function companyRowsFromRiders(
   tgt_eff: number | null;
   riders: number;
   active_riders: number;
+  working_hours: number;
+  utr: number | null;
+  avg_delivery_min: number | null;
 }> {
   const map = new Map<
     string,
@@ -676,6 +701,9 @@ export function companyRowsFromRiders(
       active: number;
       dpdEff: number[];
       tgtEff: number[];
+      hours: number;
+      minutes: number;
+      timed: number;
     }
   >();
   for (const r of riders) {
@@ -687,9 +715,15 @@ export function companyRowsFromRiders(
       active: 0,
       dpdEff: [],
       tgtEff: [],
+      hours: 0,
+      minutes: 0,
+      timed: 0,
     };
     cur.orders += r.orders;
     cur.working_days += r.working_days;
+    cur.hours += r.working_hours ?? 0;
+    cur.minutes += r.delivery_minutes ?? 0;
+    cur.timed += r.delivery_count ?? 0;
     cur.riders += 1;
     if (r.working_days > 0) {
       cur.active += 1;
@@ -709,6 +743,9 @@ export function companyRowsFromRiders(
       tgt_eff: meanFinite(v.tgtEff),
       riders: v.riders,
       active_riders: v.active,
+      working_hours: v.hours,
+      utr: v.hours > 0 ? v.orders / v.hours : null,
+      avg_delivery_min: v.timed > 0 ? v.minutes / v.timed : null,
     }));
 }
 
@@ -769,7 +806,7 @@ export function sortOpsRidersByOrdersDesc<T extends { orders: number; name?: str
 }
 
 export function storeChartValue(
-  store: { orders: number; store_dpd: number | null },
+  store: { orders: number; store_dpd: number | null; utr?: number | null },
   metric: OpsChartMetric,
   overallDpd: number | null,
   targetDpd: number,
@@ -785,6 +822,8 @@ export function storeChartValue(
     case "tgt_eff":
       if (store.store_dpd == null || !Number.isFinite(targetDpd) || targetDpd <= 0) return null;
       return (store.store_dpd / targetDpd) * 100;
+    case "utr":
+      return store.utr ?? null;
     default: {
       const _never: never = metric;
       return _never;
@@ -793,7 +832,13 @@ export function storeChartValue(
 }
 
 export function dimMetricValue(
-  row: { orders: number; dpd: number | null; dpd_eff: number | null; tgt_eff: number | null },
+  row: {
+    orders: number;
+    dpd: number | null;
+    dpd_eff: number | null;
+    tgt_eff: number | null;
+    utr?: number | null;
+  },
   metric: OpsChartMetric,
 ): number | null {
   switch (metric) {
@@ -805,6 +850,8 @@ export function dimMetricValue(
       return row.dpd_eff;
     case "tgt_eff":
       return row.tgt_eff;
+    case "utr":
+      return row.utr ?? null;
     default: {
       const _never: never = metric;
       return _never;

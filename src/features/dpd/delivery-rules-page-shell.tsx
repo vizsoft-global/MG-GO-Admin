@@ -14,9 +14,12 @@ import {
 } from "@/components/app";
 import {
   AppListControls,
+  FlatListPager,
   GroupedSections,
+  GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
+  useGroupedListView,
   useListControlLabels,
   useListViewPrefs,
 } from "@/components/app/app-list-controls";
@@ -85,6 +88,7 @@ export function DeliveryRulesPageShell() {
       ),
     [filteredRules, prefs.groupBy],
   );
+  const listView = useGroupedListView(grouped, prefs.groupBy !== "none", `${prefs.groupBy}\u0001${search}`);
   const tableColCount = canManage ? 8 : 7;
 
   const handleDelete = () => {
@@ -169,7 +173,7 @@ export function DeliveryRulesPageShell() {
           </div>
         ) : prefs.viewMode === "cards" ? (
           <div className="p-4">
-            <GroupedSections groups={grouped}>
+            <GroupedSections groups={grouped} paged resetKey={`${prefs.groupBy}\u0001${search}`}>
               {(groupRowsList) => (
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {groupRowsList.map((row) => (
@@ -193,6 +197,8 @@ export function DeliveryRulesPageShell() {
             </GroupedSections>
           </div>
         ) : (
+          <>
+          <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
@@ -211,17 +217,23 @@ export function DeliveryRulesPageShell() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {grouped.flatMap((group) => [
-                ...(prefs.groupBy !== "none"
+              {listView.sections.flatMap((section) => [
+                ...(section.showHeader
                   ? [
-                      <TableRow key={`g-${group.key}`} className="bg-muted/40 hover:bg-muted/40">
-                        <TableCell colSpan={tableColCount} className="text-xs font-semibold">
-                          {group.label} · {group.rows.length}
-                        </TableCell>
-                      </TableRow>,
+                      <GroupTableHeaderRow
+                        key={`g-${section.key}`}
+                        colSpan={tableColCount}
+                        label={section.label}
+                        total={section.total}
+                        open={section.open}
+                        page={section.page}
+                        showPager={section.showPager}
+                        onToggle={() => listView.toggle(section.key)}
+                        onStep={(dir) => listView.step(section.key, dir)}
+                      />,
                     ]
                   : []),
-                ...group.rows.map((row) => (
+                ...section.visibleRows.map((row) => (
                 <TableRow key={row.id} className="hover:bg-muted/40">
                   <TableCell className="font-medium">{row.name}</TableCell>
                   <TableCell>{row.scope_label}</TableCell>
@@ -265,6 +277,7 @@ export function DeliveryRulesPageShell() {
               ])}
             </TableBody>
           </Table>
+          </>
         )}
       </AppListCard>
 

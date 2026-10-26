@@ -164,6 +164,9 @@ export function PerformancePageShell() {
             ["overall_dpd", data.kpis.overall_dpd],
             ["avg_dpd_eff", data.kpis.avg_dpd_eff],
             ["avg_tgt_eff", data.kpis.avg_tgt_eff],
+            ["working_hours", data.kpis.working_hours],
+            ["utr", data.kpis.utr],
+            ["avg_delivery_min", data.kpis.avg_delivery_min],
             ["active", data.kpis.active],
             ["riders", data.kpis.riders],
           ],
@@ -174,7 +177,19 @@ export function PerformancePageShell() {
     downloadCsv(
       `ops-${tab}`,
       toCsv(
-        ["name", "id", "Restaurant", "zone", "dpd", "tgt_eff", "dpd_eff", "orders"],
+        [
+          "name",
+          "id",
+          "Restaurant",
+          "zone",
+          "dpd",
+          "tgt_eff",
+          "dpd_eff",
+          "orders",
+          "working_hours",
+          "utr",
+          "avg_delivery_min",
+        ],
         riders.map((r) => [
           r.name,
           r.display_id,
@@ -184,6 +199,9 @@ export function PerformancePageShell() {
           r.tgt_eff,
           r.dpd_eff,
           r.orders,
+          r.working_hours,
+          r.utr,
+          r.avg_delivery_min,
         ]),
       ),
     );

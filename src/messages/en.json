@@ -77,7 +77,9 @@
       "groupProject": "Project",
       "viewTable": "Table",
       "viewCards": "Cards",
-      "clearSearch": "Clear search"
+      "clearSearch": "Clear search",
+      "pagerPrevious": "Previous",
+      "pagerNext": "Next"
     }
   },
   "nav": {
@@ -262,6 +264,8 @@
       "accident": {
         "requestKind": "Request kind",
         "requestDetails": "Request details",
+        "requestedDocuments": "Documents to request",
+        "requestedDocumentsHint": "One document per line, such as a sick leave form or a medical report",
         "kind": {
           "accident": "Accident",
           "sick_leave": "Sick leave",
@@ -862,14 +866,17 @@
       "subtitle": "Pick a module to get started",
       "colleague": "there",
       "hello": "Hello, {name}",
-      "searchPlaceholder": "Search apps...",
+      "wordmark": "MGGO",
+      "panel": "Delivery Panel",
+      "weatherCity": "Kuwait City",
+      "searchPlaceholder": "Search apps… / ابحث",
       "searchHint": "⌘K",
       "greeting": {
-        "morning": "Good morning",
-        "afternoon": "Good afternoon",
-        "evening": "Good evening"
+        "morning": "Good Morning",
+        "afternoon": "Good Afternoon",
+        "evening": "Good Evening"
       },
-      "footer": "{name} · {subtitle} v{version} ·",
+      "footer": "{name} · {subtitle} v{version}",
       "company": "Al‑Musallam Group Holding Company",
       "slogan": "POWERED BY PASSION"
     },
@@ -1548,15 +1555,15 @@
         "downloadZones": "Zones",
         "downloadPartners": "Partners",
         "lookupLists": "Existing restaurants, zones, and partners",
-        "lookupHint": "Type the restaurant or zone name. The app resolves the ID. A driver needs a zone or at least one restaurant — leave the other cell blank.",
+        "lookupHint": "Type the restaurant or zone name. The app resolves the ID. On an update, a blank zone and restaurant keep the stored assignment.",
         "columnGuideTitle": "Column guide",
-        "columnGuideHint": "Required columns carry *. Blank keeps the stored value on an existing rider; - clears it.",
+        "columnGuideHint": "Required columns carry *. Blank keeps the stored value on an existing rider; - clears it. A Civil ID update can leave Zone and Restaurant blank.",
         "lookupFailed": "Could not export the list.",
         "requiredTitle": "Required",
-        "requiredList": "Full name, MG ID (letters and digits, up to 100 characters), and a zone or at least one restaurant.",
+        "requiredList": "Full name and MG ID. A new rider also needs a zone or at least one restaurant. An update can leave both blank.",
         "optionalList": "The sample lists every ticked column. On an existing rider a blank cell keeps the stored value and - clears it. People match on MG ID only. Phone and civil ID may be blank, and must be unique when filled in. Number of OFFs writes only for an approved or already-linked rider.",
         "mappingRequired": "Map every required field before preview.",
-        "assignmentMappingRequired": "Map a Zone column or a Restaurants column — a driver needs one of the two.",
+        "assignmentMappingRequired": "Zone and Restaurant columns are optional on an update. A new rider still needs one of them.",
         "sourceColumns": "File columns",
         "targetFields": "Map to database fields",
         "unmap": "— Not mapped —",
@@ -1735,6 +1742,17 @@
         "redo": "Redo",
         "undoDone": "Import undone.",
         "redoDone": "Import redone.",
+        "selectReadyHint": "Tick the ready rows to import. Unticked ready rows stay out of this run.",
+        "undoSelected": "Undo selected",
+        "redoSelected": "Redo selected",
+        "editSelected": "Edit",
+        "viewSelected": "View details",
+        "journalTitle": "Imported rows",
+        "journalEmpty": "This import has no rows to undo.",
+        "replayApplied": "Applied",
+        "replayUndone": "Undone",
+        "rowsUndone": "Undid {count} rows.",
+        "rowsRedone": "Redid {count} rows.",
         "duplicateHeader": "Two sheet columns are mapped to the same field. Change the mapping before importing."
       },
       "assignSheet": {
@@ -3304,6 +3322,7 @@
         "loading": "Loading tracking data…",
         "divergenceWarning": "Coordinates differ",
         "coordsMatch": "Coords match",
+        "earlyDrop": "Early drop",
         "trackingCoords": "Tracking RPC coords",
         "pickupCoords": "Pickup record coords",
         "deliveryCoords": "Delivery record coords",
@@ -6130,6 +6149,7 @@
           "downloadAll": "Download all signed",
           "downloadAllPayslips": "Download all signed payslips",
           "sentBanner": "Sent to {count} employees - they've been notified to e-sign.",
+          "searchEmployees": "Search employee",
           "remindAction": "Remind",
           "colSignedOn": "Signed on",
           "remindPreviewBody": "Reminder: your {title} is waiting for your e-signature in the MGGO app.",
@@ -6748,7 +6768,8 @@
         "branches": "Branches",
         "branchesHint": "Visit locations",
         "reports": "Reports",
-        "reportsHint": "Visit volume and outcomes"
+        "reportsHint": "Visit volume and outcomes",
+        "departmentsHeading": "Departments"
       },
       "refresh": "Refresh",
       "viewDetails": "View details",
@@ -6771,7 +6792,13 @@
         "filterAllDepartments": "All departments",
         "filterAllStatus": "All statuses",
         "colVisId": "VIS ID",
-        "colSlot": "Slot"
+        "colSlot": "Slot",
+        "departmentsAll": "All departments",
+        "filterAllSlots": "All slots",
+        "filterVisId": "VIS ID",
+        "filterDriver": "Name or ID",
+        "sortCode": "Sort by VIS ID",
+        "sortDate": "Sort by date"
       },
       "bulk": {
         "selected": "{count} selected",
@@ -6879,6 +6906,11 @@
         "month": "This month",
         "week": "Week",
         "day": "Day",
+        "viewMonth": "Month",
+        "year": "Year",
+        "legendAvailable": "Available",
+        "legendHigh": "High volume",
+        "legendFull": "Full",
         "list": "List",
         "today": "Today",
         "branch": "Branch",
@@ -7540,6 +7572,22 @@
       "colStatus": "Status",
       "colSent": "Sent At",
       "colActions": "Actions",
+      "listTabAll": "All",
+      "listTabSent": "Sent",
+      "listTabDrafts": "Drafts",
+      "listTabScheduled": "Scheduled",
+      "listTabFailed": "Failed",
+      "filterCategory": "Category",
+      "filterFrom": "From",
+      "filterTo": "To",
+      "filterAllCategories": "All categories",
+      "exportList": "Export",
+      "audienceOpen": "Sent to {count}",
+      "audienceDialogTitle": "Sent to {count} employees",
+      "audienceDialogSubtitle": "Employee ID and the message each person received.",
+      "audienceEmpty": "No recipients on this notification yet.",
+      "colSentTitle": "Sent title",
+      "colSentBody": "Sent message",
       "emptyTitle": "No notifications yet",
       "emptyDescription": "Create your first campaign to reach drivers via Firebase push.",
       "recentCampaigns": "Recent campaigns",
@@ -7714,6 +7762,7 @@
       },
       "driverStatuses": {
         "active": "Active",
+        "pending": "Pending",
         "onboarding": "Onboarding",
         "suspended": "Suspended",
         "inactive": "Inactive"
@@ -8120,6 +8169,7 @@
         "deptAdmin": "Admin",
         "deptOperations": "Operations & Fleet",
         "department": "Department",
+        "role": "Role",
         "departmentUnset": "No department",
         "dept": {
           "hr": "HR",
@@ -8235,7 +8285,10 @@
           "saveFailed": "Could not save staff access.",
           "copyFailed": "Could not copy access.",
           "copySourceRequired": "Choose a source first.",
-          "noRole": "This user has no role default to reset to."
+          "noRole": "This user has no role default to reset to.",
+          "invalidRole": "That role is no longer available.",
+          "lastSuperAdmin": "This is the last Super Admin. Assign another Super Admin first.",
+          "notAuthorized": "Only a Super Admin can grant or remove Super Admin."
         }
       },
       "roles": {
@@ -10177,7 +10230,8 @@
           "orders": "Orders",
           "dpd": "DPD",
           "dpd_eff": "DPD Efficiency",
-          "tgt_eff": "Target Efficiency"
+          "tgt_eff": "Target Efficiency",
+          "utr": "UTR"
         },
         "show": {
           "label": "Show",
@@ -10261,6 +10315,9 @@
           "storesBelow": "Stores below target",
           "targetDpd": "Target DPD",
           "workingDays": "Total working days",
+          "workingHours": "Total Working Hours",
+          "utr": "Overall UTR",
+          "avgDelivery": "Avg Delivery Time",
           "ridersInView": "Riders in view"
         },
         "chart": {
@@ -10306,6 +10363,9 @@
           "vehicle": "Vehicle",
           "orders": "Orders",
           "days": "Working Days",
+          "hours": "Working Hours",
+          "utr": "UTR",
+          "avgDelivery": "Avg Delivery (min)",
           "dpd": "DPD",
           "tgtEff": "Target eff.",
           "dpdEff": "DPD eff.",
@@ -11070,6 +11130,11 @@
           },
           "summaryRows": "{count} rows",
           "summaryReady": "{count} ready",
+          "willReceive": "{count} employees will receive this payslip",
+          "filterAll": "All rows",
+          "filterReady": "Will receive",
+          "filterFix": "Needs fixing",
+          "searchEmployees": "Search employee",
           "summaryFix": "{count} need fixing",
           "reviewTitle": "Review {count} rows · {template}",
           "reviewHelper": "Green columns were filled from the system using the Employee ID. The rest came from your sheet.",
@@ -11387,6 +11452,10 @@
             "title": "Attendance",
             "body": "Daily check-ins, shifts and the exceptions behind them."
           },
+          "roster": {
+            "title": "Shift attendance",
+            "body": "Upload the weekly roster, zone access, and attendance alerts."
+          },
           "orderExceptions": {
             "title": "Order exceptions",
             "body": "Rejected or cancelled orders with the rider's proof attached."
@@ -11436,6 +11505,73 @@
             "body": "Kuwait banks used for employee payment details."
           }
         }
+      }
+    },
+    "roster": {
+      "title": "Shift attendance",
+      "subtitle": "One row per rider per day. Shift 1 and shift 2 on the same date become a split shift.",
+      "upload": "Upload schedule",
+      "template": "Download template",
+      "report": "Report",
+      "alerts": "Alerts",
+      "thresholds": "Alert thresholds",
+      "lateGrace": "Late login grace (minutes)",
+      "earlyGrace": "Early logout grace (minutes)",
+      "nearMeters": "Early drop near restaurant (meters)",
+      "minMinutes": "Early drop under (minutes)",
+      "missingProof": "Flag a missing pickup proof",
+      "save": "Save",
+      "saved": "Saved",
+      "staff": "Zone staff",
+      "restaurantImport": "Assign restaurants to zones",
+      "apply": "Apply",
+      "preview": "Preview",
+      "ready": "Ready",
+      "failed": "Failed",
+      "written": "Written",
+      "export": "Export Excel",
+      "from": "From",
+      "to": "To",
+      "zone": "Zone",
+      "restaurant": "Restaurant",
+      "company": "Company",
+      "rider": "Rider",
+      "all": "All",
+      "allRestaurants": "All restaurants",
+      "allStatuses": "All schedule statuses",
+      "status": "Status",
+      "schedule": "Shift attendance",
+      "noRows": "No rows",
+      "cancel": "Cancel",
+      "chooseFile": "Choose a file",
+      "week": "This week",
+      "statuses": {
+        "on_shift": "On shift",
+        "late": "Late",
+        "not_logged_in": "Not logged in",
+        "logged_out_early": "Logged out early",
+        "off": "Off today",
+        "no_show": "No-show",
+        "scheduled": "Scheduled",
+        "early_drop": "Early drop"
+      },
+      "errors": {
+        "empty": "The sheet is empty.",
+        "missing_columns": "Driver Id and Date columns are required.",
+        "unknown_driver": "Unknown driver",
+        "ambiguous_driver": "More than one driver matches",
+        "unknown_restaurant": "Unknown restaurant",
+        "unknown_zone": "Unknown zone",
+        "range_too_large": "Choose 31 days or fewer.",
+        "not_authorized": "Not authorized",
+        "not_configured": "Not configured",
+        "bad_date": "Bad date",
+        "bad_time": "Bad time",
+        "bad_shift_no": "Shift no. must be 1 or 2",
+        "off_and_work": "OFF cannot also have a shift",
+        "duplicate_shift": "Duplicate shift",
+        "missing_shift_1": "Shift 2 needs shift 1",
+        "missing_driver": "Missing driver"
       }
     },
     "orderExceptions": {
@@ -11681,7 +11817,21 @@
       "totalRiders": "Total riders: {count}",
       "zoneAll": "All zones",
       "leaveMatrixNote": "Leave starts by project and month.",
-      "jobMatrixNote": "Job ends by project and month."
+      "jobMatrixNote": "Job ends by project and month.",
+      "seeWho": "See who",
+      "seeWhoNotWorking": "See who is not working",
+      "showingList": "Showing list",
+      "rosterEveryone": "{count} people · everyone assigned",
+      "rosterStatusCount": "{count} people · {status}",
+      "rosterNotWorking": "{count} people · not working",
+      "rosterSearch": "Name or Employee ID",
+      "rosterExport": "Export to Excel",
+      "rosterClose": "Close",
+      "rosterEmpty": "No riders in this list.",
+      "rosterFoot": "Showing {shown} of {total}. Export downloads the full list with the same columns.",
+      "colZone": "Zone",
+      "colJoined": "Joined",
+      "colPhone": "Phone"
     },
     "clientPortal": {
       "title": "Your Riders Today",
@@ -11756,7 +11906,35 @@
       "contactLine": "Questions about a rider? Contact Rider Operations.",
       "legendPast": "Past",
       "legendCurrent": "Current month",
-      "legendFuture": "Upcoming"
+      "legendFuture": "Upcoming",
+      "navDashboard": "Dashboard",
+      "navEmployees": "Employees",
+      "employeesTitle": "Employees",
+      "colMgId": "MG ID",
+      "colClientId": "Client ID",
+      "colFullName": "Full name",
+      "colCivilId": "Civil ID",
+      "colDocuments": "Documents",
+      "viewDocuments": "View",
+      "documentsTitle": "Documents",
+      "colDocument": "Document",
+      "colNumber": "Number",
+      "colExpiry": "Expiry",
+      "colFile": "File",
+      "docView": "View",
+      "docDownload": "Download",
+      "downloadAll": "Download all",
+      "docValid": "Valid",
+      "docExpired": "Expired",
+      "documentsEmpty": "No documents on file.",
+      "employeesEmpty": "No employees in this project.",
+      "employeesLoadFailed": "Employees could not be loaded.",
+      "backToEmployees": "Back to employees",
+      "searchEmployees": "Search name, MG ID, client ID, or civil ID",
+      "projectPreview": "Project",
+      "projectKeeta": "Keeta",
+      "projectAmericana": "Americana",
+      "projectUnassigned": "Unassigned"
     }
   }
 }

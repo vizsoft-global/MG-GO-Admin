@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { NotificationsTabBar } from "@/features/notifications/notifications-tab-bar";
+import { CampaignAudienceButton } from "@/features/notifications/notification-audience-dialog";
 import { useNotificationCampaigns } from "@/features/notifications/use-notifications";
 
 export function NotificationHistoryPageShell() {
@@ -63,7 +64,14 @@ export function NotificationHistoryPageShell() {
                       </Link>
                     </TableCell>
                     <TableCell className="capitalize">{row.status.replace("_", " ")}</TableCell>
-                    <TableCell>{row.recipient_count || row.estimated_audience_count}</TableCell>
+                    <TableCell>
+                      <CampaignAudienceButton
+                        campaignId={row.id}
+                        count={row.recipient_count || row.estimated_audience_count || 0}
+                        title={row.title}
+                        body={row.body}
+                      />
+                    </TableCell>
                     <TableCell>{row.sent_at ?? row.scheduled_for ?? "—"}</TableCell>
                   </TableRow>
                 ))}

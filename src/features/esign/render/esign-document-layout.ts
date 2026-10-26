@@ -8,9 +8,12 @@ import {
 import {
   ACCIDENT_CONSUMED_KEYS,
   REQUEST_KIND_KEY,
+  ACCIDENT_REQUEST_KINDS,
   accidentKindLabel,
   isAccidentRequest,
   normalizeAccidentKind,
+  requestedDocumentLines,
+  type AccidentRequestKind,
 } from "../esign-accident-fields";
 import {
   checksFromPenaltyFields,
@@ -122,6 +125,10 @@ export type EsignDocumentLayout = {
   accident?: boolean;
   /** Rider name printed in the accident tail; the template field wins over the snapshot. */
   riderName?: string;
+  /** Absent on older layouts, which keep printing the declaration. */
+  accidentRequestKind?: AccidentRequestKind | null;
+  /** One requested document per line when the kind is not declaration. */
+  requestedDocuments?: string[];
 };
 
 export type LayoutFieldInput = {
@@ -820,6 +827,8 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
   let payslip: PayslipSheet | undefined;
   let accident = false;
   let riderName = "";
+  let accidentRequestKind: AccidentRequestKind | null = null;
+  let requestedDocuments: string[] = [];
   if (kind === "penalty") {
     const position = firstField(allFields, ["position"]) || values.project || "";
     const penaltyText =
@@ -1204,7 +1213,12 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
     }
   } else if (isAccidentRequest(merged, allFields)) {
     accident = true;
-    const requestKind = normalizeAccidentKind(merged[REQUEST_KIND_KEY]);
+    const rawKind = typeof merged[REQUEST_KIND_KEY] === "string" ? merged[REQUEST_KIND_KEY].trim() : "";
+    accidentRequestKind = ACCIDENT_REQUEST_KINDS.some((entry) => entry.value === rawKind)
+      ? (rawKind as AccidentRequestKind)
+      : null;
+    requestedDocuments = requestedDocumentLines(merged.requested_documents);
+    const requestKind = normalizeAccidentKind(rawKind);
     const kindLabel = accidentKindLabel(requestKind);
     const sickLeave = requestKind === "sick_leave";
     const accidentDate =
@@ -1238,17 +1252,19 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
     });
     const riderNameValue = firstField(allFields, ["rider_name"]) || values.employee_name || "";
     riderName = riderNameValue;
-    const declarationEn = declaration.en.trim();
-    const declarationAr = declaration.ar.trim();
-    sections.push({
-      key: "rider_declaration",
-      title: { en: "Rider Declaration", ar: "إقرار السائق" },
-      rows: [],
-      body:
-        declarationEn || declarationAr
-          ? { en: declarationEn, ar: declarationAr }
-          : undefined,
-    });
+    if (!accidentRequestKind || accidentRequestKind === "declaration") {
+      const declarationEn = declaration.en.trim();
+      const declarationAr = declaration.ar.trim();
+      sections.push({
+        key: "rider_declaration",
+        title: { en: "Rider Declaration", ar: "إقرار السائق" },
+        rows: [],
+        body:
+          declarationEn || declarationAr
+            ? { en: declarationEn, ar: declarationAr }
+            : undefined,
+      });
+    }
     const consumed = new Set<string>([
       ...ACCIDENT_CONSUMED_KEYS,
       ...ACCIDENT_EMPLOYEE_ROW_KEYS,
@@ -1317,7 +1333,13 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
     declaration,
     slots: slotsForKind(kind),
     ...(payslip ? { payslip } : {}),
-    ...(accident ? { accident: true, riderName } : {}),
+    ...(accident
+      ? {
+          accident: true,
+          riderName,
+          ...(accidentRequestKind ? { accidentRequestKind, requestedDocuments } : {}),
+        }
+      : {}),
   };
 }
 

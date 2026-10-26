@@ -22,10 +22,12 @@ import {
 import { downloadCsv, toCsv } from "../performance-ops-table";
 import {
   companyLabel,
-  enrichOpsRider,
   formatDpd,
   formatInt,
+  formatMinutes,
+  formatMinutesCard,
   formatPct,
+  formatUtr,
 } from "../performance-ops-format";
 import type { OpsSnapshot } from "../performance-ops-types";
 import { OpsBarChart, OpsChartCard, OpsLineChart, opsChartTitle } from "./ops-charts";
@@ -41,7 +43,6 @@ export function OpsOutsourceTab({
   granularity: OpsGranularity;
 }) {
   const t = useTranslations("pages.performance.ops");
-  const riders = useMemo(() => data.riders.map(enrichOpsRider), [data.riders]);
   const seriesName = t(`viewBy.${metric}`);
   const series = [{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }];
   const companies = useMemo(
@@ -71,6 +72,8 @@ export function OpsOutsourceTab({
           { label: t("kpi.active"), value: formatInt(data.kpis.active) },
           { label: t("kpi.dpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
           { label: t("kpi.tgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
+          { label: t("kpi.utr"), value: formatUtr(data.kpis.utr) },
+          { label: t("kpi.avgDelivery"), value: formatMinutesCard(data.kpis.avg_delivery_min) },
         ]}
       />
       <OpsChartCard
@@ -147,16 +150,29 @@ export function OpsOutsourceTab({
             className="text-xs text-primary hover:underline"
             onClick={() =>
               downloadCsv(
-                "ops-outsource-riders",
+                "ops-outsource-companies",
                 toCsv(
-                  ["name", "id", "company", "Restaurant", "dpd", "tgt_eff"],
-                  riders.map((r) => [
-                    r.name,
-                    r.display_id,
-                    r.source,
-                    r.store_label,
+                  [
+                    t("col.company"),
+                    t("col.orders"),
+                    t("col.riders"),
+                    t("col.activeRiders"),
+                    t("col.dpd"),
+                    t("col.dpdEff"),
+                    t("col.tgtEff"),
+                    t("col.utr"),
+                    t("col.avgDelivery"),
+                  ],
+                  companies.map((r) => [
+                    labelCompany(r.key),
+                    r.orders,
+                    r.riders,
+                    r.active_riders,
                     r.dpd,
+                    r.dpd_eff,
                     r.tgt_eff,
+                    r.utr,
+                    r.avg_delivery_min,
                   ]),
                 ),
               )
@@ -174,6 +190,8 @@ export function OpsOutsourceTab({
             { id: "dpd", label: t("col.dpd"), className: "text-end" },
             { id: "dpdEff", label: t("col.dpdEff"), className: "text-end" },
             { id: "tgt", label: t("col.tgtEff"), className: "text-end" },
+            { id: "utr", label: t("col.utr"), className: "text-end" },
+            { id: "avg", label: t("col.avgDelivery"), className: "text-end" },
           ]}
         >
           {companies.map((r) => (
@@ -196,6 +214,10 @@ export function OpsOutsourceTab({
               </TableCell>
               <TableCell className="text-end tabular-nums text-sm">
                 {formatPct(r.tgt_eff)}
+              </TableCell>
+              <TableCell className="text-end tabular-nums text-sm">{formatUtr(r.utr)}</TableCell>
+              <TableCell className="text-end tabular-nums text-sm">
+                {formatMinutes(r.avg_delivery_min)}
               </TableCell>
             </AppDataTableRow>
           ))}

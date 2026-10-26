@@ -1,15 +1,24 @@
 export const STAFF_ACCESS_KINDS = ["manager", "user", "partner"] as const;
 
 /** Projects a partner account may be locked to. */
-export const PARTNER_PROJECT_KEYS = ["keeta", "americana"] as const;
+export const PARTNER_PROJECT_KEYS = ["keeta", "americana", "unassigned"] as const;
 export type PartnerProjectKey = (typeof PARTNER_PROJECT_KEYS)[number];
 
 /** The only ticks a partner session may hold. */
-export const PARTNER_PERMISSION_SLUGS = ["client_portal.view", "drivers.view"] as const;
+export const PARTNER_PERMISSION_SLUGS = ["client_portal.view", "operations_dashboard.view"] as const;
 
 export function parsePartnerProjectKey(value: unknown): PartnerProjectKey | null {
-  if (value === "keeta" || value === "americana") return value;
+  if (typeof value !== "string") return null;
+  const key = value.trim().toLowerCase();
+  if (key === "keeta" || key === "americana" || key === "unassigned") return key;
   return null;
+}
+
+/** Unassigned matches a blank project or the literal. Keeta does not match a blank project. */
+export function partnerProjectMatches(stored: unknown, locked: string): boolean {
+  const raw = typeof stored === "string" ? stored.trim().toLowerCase() : "";
+  if (locked === "unassigned") return raw === "" || raw === "unassigned";
+  return raw === locked;
 }
 export type StaffAccessKind = (typeof STAFF_ACCESS_KINDS)[number];
 
@@ -185,6 +194,21 @@ export function resolveSessionPermissionSlugs(input: {
     return grantDataCleanupIfBulkDelete(new Set(input.userTicks ?? []));
   }
   return grantDataCleanupIfBulkDelete(new Set(input.roleSlugs));
+}
+
+export type StaffRolePrivilegeChange = "ok" | "not_authorized" | "last_super_admin";
+
+/** Granting or removing Super Admin needs a super admin, and the last one stays. */
+export function staffRolePrivilegeChange(input: {
+  callerIsSuperAdmin: boolean;
+  previousIsSuperAdmin: boolean;
+  nextIsSuperAdmin: boolean;
+  otherSuperAdminCount: number;
+}): StaffRolePrivilegeChange {
+  if (input.previousIsSuperAdmin === input.nextIsSuperAdmin) return "ok";
+  if (!input.callerIsSuperAdmin) return "not_authorized";
+  if (input.previousIsSuperAdmin && input.otherSuperAdminCount < 1) return "last_super_admin";
+  return "ok";
 }
 
 /** After backfill, every old role slug must still pass the User tick set. */

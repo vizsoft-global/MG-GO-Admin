@@ -21,7 +21,9 @@ import {
   enrichOpsRider,
   formatDpd,
   formatInt,
+  formatMinutes,
   formatPct,
+  formatUtr,
 } from "../performance-ops-format";
 import type { OpsRiderView, OpsSnapshot } from "../performance-ops-types";
 import { OpsHeaderFilter, OpsSortButton } from "./ops-header-filter";
@@ -36,6 +38,9 @@ const NUMERIC_COLS = new Set([
   "veh_zone_dpd",
   "dpd_eff",
   "tgt_eff",
+  "working_hours",
+  "utr",
+  "avg_delivery_min",
 ]);
 
 const COL_WIDTH: Record<string, string> = {
@@ -50,12 +55,15 @@ const COL_WIDTH: Record<string, string> = {
   source_company: "w-[120px] min-w-[120px]",
   orders: "w-[88px] min-w-[88px]",
   working_days: "w-[110px] min-w-[110px]",
+  working_hours: "w-[110px] min-w-[110px]",
   dpd: "w-[80px] min-w-[80px]",
   target_dpd: "w-[96px] min-w-[96px]",
   store_dpd: "w-[120px] min-w-[120px]",
   veh_zone_dpd: "w-[140px] min-w-[140px]",
   dpd_eff: "w-[96px] min-w-[96px]",
   tgt_eff: "w-[110px] min-w-[110px]",
+  utr: "w-[80px] min-w-[80px]",
+  avg_delivery_min: "w-[140px] min-w-[140px]",
   status: "w-[88px] min-w-[88px]",
 };
 
@@ -91,12 +99,15 @@ export function OpsRidersTab({
     { id: "source_company", label: t("col.companySource") },
     { id: "orders", label: t("col.orders"), align: "end" },
     { id: "working_days", label: t("col.days"), align: "end" },
+    { id: "working_hours", label: t("col.hours"), align: "end" },
     { id: "dpd", label: t("col.dpd"), align: "end" },
     { id: "target_dpd", label: t("col.targetDpd"), align: "end" },
     { id: "store_dpd", label: t("col.storeDpd"), align: "end" },
     { id: "veh_zone_dpd", label: t("col.vehZoneDpd"), align: "end" },
     { id: "dpd_eff", label: t("col.dpdEff"), align: "end" },
     { id: "tgt_eff", label: t("col.tgtEff"), align: "end" },
+    { id: "utr", label: t("col.utr"), align: "end" },
+    { id: "avg_delivery_min", label: t("col.avgDelivery"), align: "end" },
     { id: "status", label: t("col.status") },
   ];
 
@@ -113,6 +124,12 @@ export function OpsRidersTab({
       case "tgt_eff":
       case "dpd_eff":
         return formatPct(row[id]);
+      case "working_hours":
+        return formatDpd(row.working_hours);
+      case "utr":
+        return formatUtr(row.utr);
+      case "avg_delivery_min":
+        return formatMinutes(row.avg_delivery_min);
       case "zone":
         return row.zone ?? "—";
       case "source_type":
@@ -163,6 +180,9 @@ export function OpsRidersTab({
           { label: t("kpi.overallDpd"), value: formatDpd(data.kpis.overall_dpd), accent: "primary" },
           { label: t("kpi.dpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
           { label: t("kpi.tgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
+          { label: t("kpi.workingHours"), value: formatDpd(data.kpis.working_hours) },
+          { label: t("kpi.utr"), value: formatUtr(data.kpis.utr) },
+          { label: t("kpi.avgDelivery"), value: formatMinutes(data.kpis.avg_delivery_min) },
         ]}
       />
       <p className="text-xs text-muted-foreground">{t("tableFiltersHint")}</p>
@@ -190,7 +210,7 @@ export function OpsRidersTab({
         <div ref={parentRef} className="h-[min(420px,48dvh)] overflow-auto">
           <div
             className={cn(
-              "sticky top-0 z-20 flex min-w-[1960px] border-b border-border bg-muted px-3 py-1.5",
+              "sticky top-0 z-20 flex min-w-[2320px] border-b border-border bg-muted px-3 py-1.5",
               TABLE_HEAD_CLASS,
             )}
           >
@@ -252,7 +272,7 @@ export function OpsRidersTab({
               return (
                 <div
                   key={row.driver_id}
-                  className="absolute inset-x-0 flex min-w-[1960px] items-center border-b border-border/60 px-3 text-xs"
+                  className="absolute inset-x-0 flex min-w-[2320px] items-center border-b border-border/60 px-3 text-xs"
                   style={{ height: item.size, transform: `translateY(${item.start}px)` }}
                 >
                   {cols.map((c) => (

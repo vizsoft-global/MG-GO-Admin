@@ -87,6 +87,22 @@ export type StatusProjectRow = {
   total: number;
 };
 
+export const ROSTER_STATUSES = ["working", "onLeave", "absent", "sick", "other"] as const;
+
+export type RosterStatus = (typeof ROSTER_STATUSES)[number];
+
+export type RosterFilter = "all" | "notWorking" | RosterStatus;
+
+export type RosterRow = {
+  employeeId: string;
+  name: string;
+  project: string;
+  zone: string;
+  status: RosterStatus;
+  joined: string;
+  phone: string;
+};
+
 export type ZoneOption = { id: string; name: string };
 
 export type PlainRow = Record<string, unknown>;
@@ -105,6 +121,7 @@ export type OperationsDashboard = {
   jobEndMonths: LeaveMonthBar[];
   jobEndCards: Record<JobEndCardKey, number>;
   ridersOnLeave: RiderOnLeaveRow[];
+  roster: RosterRow[];
   exportLeaveYear: PlainRow[];
   exportLeaveMonth: PlainRow[];
   exportJobEnd: PlainRow[];
@@ -218,6 +235,7 @@ export function emptyOperationsDashboard(): OperationsDashboard {
     jobEndMonths: [],
     jobEndCards: { next30: 0, eoy: 0, next6m: 0, noRenewal: 0 },
     ridersOnLeave: [],
+    roster: [],
     exportLeaveYear: [],
     exportLeaveMonth: [],
     exportJobEnd: [],
@@ -243,6 +261,58 @@ const STATUS_ALIASES: Record<string, string> = {
   on_leave: "onLeave",
   onleave: "onLeave",
 };
+
+export function isRosterStatus(value: string): value is RosterStatus {
+  return (ROSTER_STATUSES as readonly string[]).includes(value);
+}
+
+export function rosterMatches(status: RosterStatus, filter: RosterFilter): boolean {
+  switch (filter) {
+    case "all":
+      return true;
+    case "notWorking":
+      return status !== "working";
+    case "working":
+    case "onLeave":
+    case "absent":
+    case "sick":
+    case "other":
+      return status === filter;
+    default: {
+      const neverFilter: never = filter;
+      return neverFilter;
+    }
+  }
+}
+
+export function filterRoster(rows: readonly RosterRow[], filter: RosterFilter, query: string): RosterRow[] {
+  const needle = query.trim().toLowerCase();
+  return rows.filter((row) => {
+    if (!rosterMatches(row.status, filter)) return false;
+    if (!needle) return true;
+    return row.name.toLowerCase().includes(needle) || row.employeeId.toLowerCase().includes(needle);
+  });
+}
+
+function readRoster(raw: unknown): RosterRow[] {
+  const rows: RosterRow[] = [];
+  for (const item of list(raw)) {
+    const row = record(item);
+    if (!row) continue;
+    const statusRaw = STATUS_ALIASES[text(pick(row, ["status"]))] ?? text(pick(row, ["status"]));
+    if (!isRosterStatus(statusRaw)) continue;
+    rows.push({
+      employeeId: text(pick(row, ["employeeId", "employee_id"])),
+      name: text(pick(row, ["name", "full_name"])),
+      project: text(pick(row, ["project", "project_key"])),
+      zone: text(pick(row, ["zone", "zone_name"])),
+      status: statusRaw,
+      joined: text(pick(row, ["joined", "work_start_date", "workStart"])),
+      phone: text(pick(row, ["phone"])),
+    });
+  }
+  return rows;
+}
 
 function readStatusBar(raw: unknown): CountRow[] {
   if (Array.isArray(raw)) {
@@ -508,6 +578,7 @@ export function normalizeOperationsDashboard(raw: unknown): OperationsDashboard 
     jobEndMonths: readMonths(pick(row, ["jobEndMonths", "job_end_months"]) ?? jobEndMonthsRaw),
     jobEndCards: readJobCards(pick(row, ["jobEndCards", "job_end_cards"]) ?? jobEnd?.cards),
     ridersOnLeave: readRidersOnLeave(pick(row, ["ridersOnLeave", "riders_on_leave"])),
+    roster: readRoster(pick(row, ["roster", "riders"])),
     exportLeaveYear: plainRows(pick(row, ["exportLeaveYear", "export_leave_year"]) ?? exported.leaveYear),
     exportLeaveMonth: plainRows(pick(row, ["exportLeaveMonth", "export_leave_month"]) ?? exported.leaveMonth),
     exportJobEnd: plainRows(pick(row, ["exportJobEnd", "export_job_end"]) ?? exported.jobEnd),

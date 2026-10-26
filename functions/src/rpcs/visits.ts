@@ -29,6 +29,7 @@ import {
   visitRowStatus,
   type VisitBookingStatus,
 } from "./visits-shared";
+import { matchesVisitListFilter, tallyVisitDays } from "./visit-list-match";
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_PAGE_LIMIT = 50;
@@ -113,9 +114,41 @@ export const adminListVisits = onCall(async (request) => {
 
   const limit = Math.max(pickCount(data, DEFAULT_PAGE_LIMIT, "limit", "p_limit"), 1);
   const offset = Math.max(pickCount(data, 0, "offset", "p_offset"), 0);
+  const department = pickId(data, "department", "p_department_key") ?? "";
+  const branch = pickId(data, "branch", "p_branch_id") ?? "";
+  const driver = (pickId(data, "driver", "p_driver") ?? "").toLowerCase();
+  const code = (pickId(data, "code", "p_booking_code") ?? "").toLowerCase();
+  const slot = (pickId(data, "slot", "p_slot_start") ?? "").slice(0, 5);
+  const summary = pickId(data, "summary", "p_summary") ?? "";
 
   const today = kuwaitDayString(new Date());
   const window = { from: dateFrom ?? undefined, to: dateTo ?? undefined };
+
+  if (summary === "days") {
+    const snap = await scopedVisitBookings(window)
+      .orderBy(VISIT_BOOKING_FIELDS.scheduledDate, "desc")
+      .limit(VISIT_SCAN_CAP + 1)
+      .get();
+    if (snap.size > VISIT_SCAN_CAP) {
+      throw new HttpsError("out-of-range", "visit_window_too_large");
+    }
+    const days = tallyVisitDays(
+      snap.docs.map((doc) => {
+        const raw = doc.data() ?? {};
+        return {
+          scheduled_date: dayTextOf(raw[VISIT_BOOKING_FIELDS.scheduledDate]) ?? "",
+          status: visitRowStatus(raw),
+          department_key: textOf(raw[VISIT_BOOKING_FIELDS.departmentKey]) ?? "",
+          branch_id: textOf(raw[VISIT_BOOKING_FIELDS.branchId]) ?? "",
+        };
+      }),
+      branch,
+    );
+    return { ok: true, days };
+  }
+
+  const narrow =
+    status !== "" || department !== "" || branch !== "" || driver !== "" || code !== "" || slot !== "";
 
   const [todaySnap, upcomingSnap, noShowSnap, rowsSnap] = await Promise.all([
     scopedVisitBookings({ from: today, to: today }).get(),
@@ -123,18 +156,13 @@ export const adminListVisits = onCall(async (request) => {
     scopedVisitBookings({ from: addDays(today, -NO_SHOW_LOOKBACK_DAYS) })
       .limit(VISIT_SCAN_CAP + 1)
       .get(),
-    status === ""
-      ? scopedVisitBookings(window)
-          .orderBy(VISIT_BOOKING_FIELDS.scheduledDate, "desc")
-          .limit(limit + offset)
-          .get()
-      : scopedVisitBookings(window)
-          .orderBy(VISIT_BOOKING_FIELDS.scheduledDate, "desc")
-          .limit(VISIT_SCAN_CAP + 1)
-          .get(),
+    scopedVisitBookings(window)
+      .orderBy(VISIT_BOOKING_FIELDS.scheduledDate, "desc")
+      .limit(narrow ? VISIT_SCAN_CAP + 1 : limit + offset)
+      .get(),
   ]);
 
-  if (status !== "" && rowsSnap.size > VISIT_SCAN_CAP) {
+  if (narrow && rowsSnap.size > VISIT_SCAN_CAP) {
     throw new HttpsError("out-of-range", "visit_window_too_large");
   }
   if (noShowSnap.size > VISIT_SCAN_CAP) {
@@ -153,13 +181,22 @@ export const adminListVisits = onCall(async (request) => {
     no_shows: countWithStatus(noShowRows, ["no_show"]),
   };
 
-  const matching =
+  const statusMatched =
     status === ""
       ? rowsSnap.docs
       : rowsSnap.docs.filter((doc) => visitRowStatus(doc.data() ?? {}) === status);
-  const ordered = sortVisitRows(await composeVisitRows(matching));
+  const ordered = sortVisitRows(await composeVisitRows(statusMatched));
+  const narrowed = ordered.filter((row) =>
+    matchesVisitListFilter(row, {
+      department,
+      branch,
+      driver,
+      code,
+      slot,
+    }),
+  );
 
-  return { ok: true, kpi, rows: ordered.slice(offset, offset + limit) };
+  return { ok: true, kpi, rows: narrowed.slice(offset, offset + limit) };
 });
 
 /**

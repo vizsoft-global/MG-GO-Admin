@@ -22,6 +22,7 @@ import {
   type Query,
 } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
+import { isLoanTenureMonth } from "./loan-tenure";
 import { bumpOperationsDashboards } from "../router/read-snapshot";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireStaff } from "../core/staff";
@@ -58,7 +59,6 @@ const WEEK_SECONDS = 604800;
 const OVERDUE_MS = 15 * 24 * 60 * 60 * 1000;
 
 const CONFIDENTIAL_VIEWS_COLLECTION = "request_confidential_views";
-const LOAN_TENURE_OPTIONS_COLLECTION = "loan_tenure_options";
 const COMPLAINT_CATEGORIES_COLLECTION = "complaint_categories";
 
 const REQUEST_CODE_COUNTER = "request_code_seq";
@@ -904,7 +904,6 @@ export async function validateRequestInput(input: RequestInput): Promise<string 
     return left < right ? -1 : left > right ? 1 : 0;
   });
 
-  let tenures: Dict[] | null = null;
   let categories: Dict[] | null = null;
 
   for (const field of fields) {
@@ -950,11 +949,7 @@ export async function validateRequestInput(input: RequestInput): Promise<string 
     const optionsCode = textOf(field.options_error_code) ?? `invalid_option:${fieldKey ?? ""}`;
     const optionsSource = textOf(field.options_source);
     if (present && optionsSource === "loan_tenure_options") {
-      tenures ??= (await db.collection(LOAN_TENURE_OPTIONS_COLLECTION).get()).docs.map((d) =>
-        dataOf(d),
-      );
-      const ok = tenures.some((t) => boolOf(t.is_active) && jsonText(t.months) === value);
-      if (!ok) return optionsCode;
+      if (!isLoanTenureMonth(value)) return optionsCode;
     } else if (present && optionsSource === "complaint_categories") {
       categories ??= (await db.collection(COMPLAINT_CATEGORIES_COLLECTION).get()).docs.map((d) =>
         dataOf(d),

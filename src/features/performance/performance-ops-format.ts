@@ -40,6 +40,21 @@ export function formatDpd(value: number | null | undefined): string {
   return value.toFixed(1);
 }
 
+export function formatUtr(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return value.toFixed(2);
+}
+
+export function formatMinutes(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return value.toFixed(1);
+}
+
+export function formatMinutesCard(value: number | null | undefined): string {
+  const text = formatMinutes(value);
+  return text === "—" ? "—" : `${text} min`;
+}
+
 export { formatPct };
 
 export type OpsTooltipMetric = OpsChartMetric | "riders";
@@ -56,6 +71,7 @@ export function formatOpsMetricValue(
   const finite = Number.isFinite(n) ? n : null;
   if (metric === "orders" || metric === "riders") return formatInt(finite);
   if (metric === "dpd") return formatDpd(finite);
+  if (metric === "utr") return formatUtr(finite);
   return formatPct(finite);
 }
 

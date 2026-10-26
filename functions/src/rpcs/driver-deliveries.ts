@@ -15,6 +15,7 @@ import { restaurantAllowed, restaurantReachableForPartner, zoneTypeOf } from "..
 import {
   evaluateDeliveryZone,
   flagLabelsFor,
+  evaluateRosterEarlyDrop,
   isEarlyDrop,
   normalizeOrderIdForProof,
   orderIdsMatch,
@@ -379,6 +380,9 @@ export type DeliveryProximitySettings = {
   proximityMeters: number;
   minIntervalSeconds: number;
   earlyDropMeters: number;
+  earlyDropMinMinutes: number;
+  earlyDropRestaurantMeters: number;
+  earlyDropMissingProof: boolean;
   proofOcrMode: ProofOcrMode;
 };
 
@@ -390,6 +394,9 @@ export async function loadProximitySettings(): Promise<DeliveryProximitySettings
     proximityMeters: numberOrNull(data["driver_app_delivery_proximity_meters"]) ?? 500,
     minIntervalSeconds: numberOrNull(data["driver_location_rpc_min_interval_seconds"]) ?? 15,
     earlyDropMeters: earlyDrop !== null && earlyDrop >= 0 ? earlyDrop : 50,
+    earlyDropMinMinutes: numberOrNull(data["roster_early_drop_min_minutes"]) ?? 4,
+    earlyDropRestaurantMeters: numberOrNull(data["roster_early_drop_restaurant_meters"]) ?? 200,
+    earlyDropMissingProof: data["roster_early_drop_missing_proof"] !== false,
     proofOcrMode: (() => {
       const mode = data["driver_app_proof_ocr_mode"];
       return mode === "warn" || mode === "off" || mode === "block" ? mode : "block";
@@ -682,7 +689,9 @@ export const driverCreatePickup = onCall(async (request) => {
   const row: Dict = {
     driver_id: ctx.uid,
     partner_id: asString(ctx.driver["partner_id"]),
-    zone_id: asString(ctx.driver["zone_id"]),
+    zone_id:
+      asString(candidates.find((candidate) => candidate.id === restaurantId)?.restaurant["zone_id"]) ??
+      asString(ctx.driver["zone_id"]),
     restaurant_id: restaurantId,
     external_order_id: orderId,
     pickup_proof_url: proofKeys[0] ?? null,
@@ -804,9 +813,37 @@ export const driverCompleteDelivery = onCall(async (request) => {
     pickupLat !== null && pickupLng !== null
       ? haversineMeters(pickupLat, pickupLng, lat, lng)
       : null;
-  const earlyDrop = isEarlyDrop(pickupDistanceM, settings.earlyDropMeters);
+  const restaurantId = asString(current["restaurant_id"]);
+  const restaurantSnap = restaurantId
+    ? await getFirestore().collection(COLLECTIONS.restaurants).doc(restaurantId).get()
+    : null;
+  const restaurant = (restaurantSnap?.data() ?? {}) as Dict;
+  const restaurantLat = numberOrNull(restaurant["latitude"]);
+  const restaurantLng = numberOrNull(restaurant["longitude"]);
+  const restaurantDistanceM =
+    restaurantLat !== null && restaurantLng !== null ? haversineMeters(restaurantLat, restaurantLng, lat, lng) : null;
+  const pickupAt = current["pickup_at"];
+  const pickupDate =
+    pickupAt && typeof pickupAt === "object" && "toDate" in pickupAt
+      ? (pickupAt as Timestamp).toDate()
+      : null;
+  const durationMinutes = pickupDate ? (now.getTime() - pickupDate.getTime()) / 60_000 : null;
+  const pickupProofs = current["pickup_proof_urls"];
+  const missingPickupProof = !asString(current["pickup_proof_url"]) && !(Array.isArray(pickupProofs) && pickupProofs.length > 0);
+  const rosterDrop = evaluateRosterEarlyDrop({
+    pickupToDropMeters: pickupDistanceM,
+    restaurantToDropMeters: restaurantDistanceM,
+    durationMinutes,
+    missingPickupProof,
+    customerToDropMeters: null,
+    nearMeters: settings.earlyDropRestaurantMeters,
+    minMinutes: settings.earlyDropMinMinutes,
+    customerFarMeters: 500,
+    flagMissingProof: settings.earlyDropMissingProof,
+  });
+  const earlyDrop = isEarlyDrop(pickupDistanceM, settings.earlyDropMeters) || rosterDrop.early;
 
-  const deliveryZoneId = asString(current["zone_id"]);
+  const deliveryZoneId = asString(current["zone_id"]) ?? asString(restaurant["zone_id"]);
   const zoneData = deliveryZoneId ? await loadDriverZone(deliveryZoneId) : null;
   const zoneEvaluation = evaluateDeliveryZone(
     lat,
@@ -854,6 +891,7 @@ export const driverCompleteDelivery = onCall(async (request) => {
     shift_date: shiftDate,
     updated_at: stamp,
     is_early_drop: earlyDrop,
+    early_drop_reasons: rosterDrop.reasons,
     pickup_delivery_distance_m: pickupDistanceM,
     is_out_of_zone: outOfZone,
     delivery_zone_id: deliveryZoneId,
@@ -866,8 +904,27 @@ export const driverCompleteDelivery = onCall(async (request) => {
     ...deliveryIdentityStamp(ctx.driver, ctx.profile, current["external_order_id"]),
   };
   await snap.ref.set(patch, { merge: true });
+  if (earlyDrop) {
+    await getFirestore()
+      .collection("ops_alerts")
+      .doc(`early_drop_${deliveryId}`)
+      .set(
+        {
+          kind: "early_drop",
+          driver_id: ctx.uid,
+          zone_id: deliveryZoneId,
+          restaurant_id: restaurantId,
+          delivery_id: deliveryId,
+          day: kuwaitDayString(now),
+          reasons: rosterDrop.reasons,
+          created_at: stamp,
+          updated_at: stamp,
+        },
+        { merge: true },
+      );
+  }
   const previousDay = asString(current["shift_date"]);
-  const zoneId = asString(current["zone_id"]) ?? asString(ctx.driver["zone_id"]);
+  const zoneId = deliveryZoneId ?? asString(ctx.driver["zone_id"]);
   if (previousDay && shiftDate && previousDay !== shiftDate) {
     await touchDeliveryStatusRollup({
       deliveryId,

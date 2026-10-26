@@ -53,4 +53,12 @@ describe("aoShownOrders", () => {
     assert.equal(aoShownOrders({ orders: 3 }), 3);
     assert.equal(aoShownOrders(null), 0);
   });
+
+  it("keeps the recorded count when the day is OFF or Absent", () => {
+    const day = { orders: 4, displayOrders: 6 };
+    assert.equal(aoShownOrders(day, "off"), 6);
+    assert.equal(aoShownOrders(day, "absent"), 6);
+    assert.equal(aoShownOrders(day, "sick"), 6);
+    assert.equal(aoShownOrders({ orders: 9 }, "off"), 9);
+  });
 });

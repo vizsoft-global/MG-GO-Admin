@@ -6,6 +6,7 @@ import {
   logAdminRead,
 } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
+import { partnerProjectMatches } from "@/lib/auth/staff-access";
 import { canViewDriverBankDetails, hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import {
   CATALOG_KEY_RE,
@@ -1749,9 +1750,8 @@ function maskPartnerDriverDetail(
   detail: DriverDetailModel,
 ): DriverDetailModel | null {
   if (session.accessKind !== "partner") return detail;
-  const locked = session.partnerProjectKey?.toLowerCase() ?? "";
-  const project = detail.project_key?.toLowerCase() ?? "";
-  if (!locked || project !== locked) return null;
+  const locked = session.partnerProjectKey ?? "";
+  if (!locked || !partnerProjectMatches(detail.project_key, locked)) return null;
   return {
     ...detail,
     bank_details: null,

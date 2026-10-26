@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,8 +26,13 @@ import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
   AppListControls,
+  FlatListPager,
   GroupedSections,
+  GroupTableHeaderRow,
   groupRows,
+  scopeSelectionState,
+  toggleScopeSelection,
+  useGroupedListView,
   useListControlLabels,
   useListViewPrefs,
 } from "@/components/app/app-list-controls";
@@ -266,6 +271,14 @@ export function VehiclesPageShell({
       ),
     [prefs.groupBy, visible],
   );
+  const vehicleResetKey = `${prefs.groupBy}\u0001${JSON.stringify(filterState)}\u0001${JSON.stringify(columnFilters)}`;
+  const listView = useGroupedListView(groupedVehicles, prefs.groupBy !== "none", vehicleResetKey);
+  const vehicleResetSeen = useRef(vehicleResetKey);
+  useEffect(() => {
+    if (vehicleResetSeen.current === vehicleResetKey) return;
+    vehicleResetSeen.current = vehicleResetKey;
+    setSelectedIds(new Set());
+  }, [vehicleResetKey]);
 
   const applyKpi = (key: VehicleKpiKey) => {
     const next = applyVehicleKpi(key, filterState);
@@ -371,8 +384,8 @@ export function VehiclesPageShell({
     { key: "replacement", label: t("kpiReplacement"), value: isLoading ? "—" : String(counts.replacement), icon: Repeat, tone: "warning" },
   ];
 
-  const visibleIds = useMemo(() => visible.map((row) => row.id), [visible]);
-  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const scopeIds = useMemo(() => listView.scopeRows.map((row) => row.id), [listView.scopeRows]);
+  const headerSelection = scopeSelectionState(selectedIds, scopeIds);
   const selectedRows = useMemo(
     () => vehicles.filter((row) => selectedIds.has(row.id)),
     [selectedIds, vehicles],
@@ -388,19 +401,12 @@ export function VehiclesPageShell({
                 className: "w-10",
                 label: (
                   <Checkbox
-                    checked={allVisibleSelected}
-                    onCheckedChange={(checked) => {
-                      setSelectedIds((prev) => {
-                        const next = new Set(prev);
-                        if (checked) {
-                          for (const id of visibleIds) next.add(id);
-                        } else {
-                          for (const id of visibleIds) next.delete(id);
-                        }
-                        return next;
-                      });
+                    checked={headerSelection === "all"}
+                    indeterminate={headerSelection === "some"}
+                    onCheckedChange={() => {
+                      setSelectedIds((prev) => toggleScopeSelection(prev, scopeIds));
                     }}
-                    aria-label={t("bulkSelected", { count: visibleIds.length })}
+                    aria-label={t("bulkSelected", { count: scopeIds.length })}
                   />
                 ),
               },
@@ -424,7 +430,7 @@ export function VehiclesPageShell({
         ),
       })),
       ],
-    [allVisibleSelected, canManage, columnFilters, headerLabels, isVisible, optionLabel, scoped, sort, t, visibleIds],
+    [headerSelection, canManage, columnFilters, headerLabels, isVisible, optionLabel, scoped, sort, t, scopeIds],
   );
 
   const isRefreshing = isFetching && !isLoading;
@@ -632,7 +638,7 @@ export function VehiclesPageShell({
             {canManage && selectedRows.length > 0 ? (
               <VehicleBulkBar rows={selectedRows} onDone={() => setSelectedIds(new Set())} />
             ) : null}
-            <GroupedSections groups={groupedVehicles}>
+            <GroupedSections groups={groupedVehicles} paged resetKey={vehicleResetKey}>
               {(rows) => (
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {rows.map((row) => (
@@ -660,6 +666,7 @@ export function VehiclesPageShell({
             {canManage && selectedRows.length > 0 ? (
               <VehicleBulkBar rows={selectedRows} onDone={() => setSelectedIds(new Set())} />
             ) : null}
+            <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
             <AppDataTable
               columns={tableColumns}
               stickyHeader
@@ -672,21 +679,21 @@ export function VehiclesPageShell({
                 ) : undefined
               }
             >
-              {groupedVehicles.flatMap((group) => [
-                prefs.groupBy !== "none" ? (
-                  <AppDataTableRow key={`group-${group.key}`} className="hover:bg-transparent">
-                    <TableCell
-                      colSpan={tableColumns.length}
-                      className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
-                    >
-                      {group.label}
-                      <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
-                        {group.rows.length}
-                      </span>
-                    </TableCell>
-                  </AppDataTableRow>
+              {listView.sections.flatMap((section) => [
+                section.showHeader ? (
+                  <GroupTableHeaderRow
+                    key={`group-${section.key}`}
+                    colSpan={tableColumns.length}
+                    label={section.label}
+                    total={section.total}
+                    open={section.open}
+                    page={section.page}
+                    showPager={section.showPager}
+                    onToggle={() => listView.toggle(section.key)}
+                    onStep={(dir) => listView.step(section.key, dir)}
+                  />
                 ) : null,
-                ...group.rows.map((row) => (
+                ...section.visibleRows.map((row) => (
                 <VehicleRow
                   key={row.id}
                   row={row}

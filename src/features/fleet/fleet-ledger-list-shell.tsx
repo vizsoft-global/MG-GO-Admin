@@ -7,8 +7,11 @@ import { ExternalLink, Loader2 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
   AppListControls,
+  FlatListPager,
+  GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
+  useGroupedListView,
   useListControlLabels,
   useListViewPrefs,
 } from "@/components/app/app-list-controls";
@@ -120,6 +123,7 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
       ),
     [filtered, prefs.groupBy],
   );
+  const listView = useGroupedListView(grouped, prefs.groupBy !== "none", `${prefs.groupBy}\u0001${search}`);
   const columns =
     kind === "service"
       ? [
@@ -174,19 +178,27 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
         ) : rows.length === 0 ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyHint")} />
         ) : (
+          <>
+          <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
           <AppDataTable
             columns={columns}
             empty={filtered.length === 0 ? <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty> : null}
           >
-            {grouped.flatMap((group) => [
-              prefs.groupBy !== "none" ? (
-                <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
-                  <TableCell colSpan={columns.length} className="bg-muted/40 py-2 text-xs font-semibold">
-                    {group.label}
-                  </TableCell>
-                </AppDataTableRow>
+            {listView.sections.flatMap((section) => [
+              section.showHeader ? (
+                <GroupTableHeaderRow
+                  key={`g-${section.key}`}
+                  colSpan={columns.length}
+                  label={section.label}
+                  total={section.total}
+                  open={section.open}
+                  page={section.page}
+                  showPager={section.showPager}
+                  onToggle={() => listView.toggle(section.key)}
+                  onStep={(dir) => listView.step(section.key, dir)}
+                />
               ) : null,
-              ...group.rows.map((row) =>
+              ...section.visibleRows.map((row) =>
                 kind === "service" ? (
                   <LedgerRow
                     key={row.id}
@@ -238,6 +250,7 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
               ),
             ])}
           </AppDataTable>
+          </>
         )}
       </AppListCard>
     </AppPage>

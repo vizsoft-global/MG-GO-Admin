@@ -36,7 +36,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { prefetchAdminRoute } from "@/lib/query/route-prefetch";
 import { useSidebarMenu } from "@/hooks/use-sidebar-menu";
 import type { SidebarMenuEpochs } from "@/lib/menu/sidebar-menu-query";
-import { moduleChipStyle } from "@/lib/menu/module-colors";
+import { LAUNCHER_BRAND } from "@/lib/menu/module-colors";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -51,6 +51,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { buttonVariants } from "@/components/ui/button";
+import { launcherGlyphSrc } from "@/lib/menu/launcher-glyphs";
 import { APP_NAV_KEY_BY_ID, ICON_MAP } from "@/lib/menu/menu-registry";
 import type { ResolvedMenuNode } from "@/lib/menu/menu-merge";
 import { cn } from "@/lib/utils";
@@ -87,9 +88,38 @@ function writePanelGroupOpen(groupId: string, open: boolean) {
   );
 }
 
-function MenuIcon({ name, className }: { name: string; className?: string }) {
+function MenuIcon({
+  name,
+  id,
+  className,
+}: {
+  name: string;
+  id?: string;
+  className?: string;
+}) {
+  const src = id ? launcherGlyphSrc(id) : undefined;
+  if (src) {
+    return <img src={src} alt="" width={12} height={12} className="size-3 object-contain" />;
+  }
   const Icon = ICON_MAP[name] ?? LayoutDashboard;
-  return <Icon className={className} />;
+  return (
+    <Icon
+      className={cn("size-3 fill-[#27273F] text-[#27273F]", className)}
+      strokeWidth={2.4}
+      aria-hidden
+    />
+  );
+}
+
+function NavIcon({ id, name }: { id?: string; name: string }) {
+  return (
+    <span
+      className="grid size-5 shrink-0 place-items-center rounded-md"
+      style={{ backgroundColor: LAUNCHER_BRAND.tile }}
+    >
+      <MenuIcon id={id} name={name} />
+    </span>
+  );
 }
 
 /** Saved menu_configs still hold the pre-rename English/Arabic module names. */
@@ -204,12 +234,7 @@ function NavItemLink({
         className="h-8 cursor-pointer rounded-md px-2.5 text-sm font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-normal data-active:text-slate-900 data-active:shadow-sm"
         render={
           <Link href={href} prefetch onMouseEnter={() => prefetchAdminRoute(queryClient, href)}>
-            <span
-              className="grid size-6 shrink-0 place-items-center rounded-md"
-              style={moduleChipStyle(node.id)}
-            >
-              <MenuIcon name={node.icon} className="size-5" />
-            </span>
+            <NavIcon id={node.id} name={node.icon} />
             <span>{label}</span>
             {badge ? (
               <span className="ms-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-xs font-normal tabular-nums text-white group-data-[collapsible=icon]:hidden">
@@ -272,7 +297,7 @@ function NavGroup({
           className="h-8 cursor-pointer rounded-md px-2.5 text-sm font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-normal data-active:text-slate-900 data-active:shadow-sm"
           render={
             <Link href={href} prefetch onMouseEnter={() => prefetchAdminRoute(queryClient, href)}>
-              <MenuIcon name={node.icon} className="size-5 shrink-0" />
+              <NavIcon id={node.id} name={node.icon} />
               <span>{groupLabel}</span>
             </Link>
           }
@@ -367,7 +392,7 @@ function PanelGroupChildren({
           className="flex w-full cursor-pointer items-center gap-1 text-start hover:text-foreground"
           aria-expanded={showChildren}
         >
-          <MenuIcon name={groupIcon} className="size-5 shrink-0 text-muted-foreground" />
+          <NavIcon name={groupIcon} />
           <span className="flex-1 text-xs font-normal uppercase tracking-[0.08em] text-muted-foreground">
             {groupLabel}
           </span>

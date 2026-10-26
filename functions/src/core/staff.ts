@@ -47,13 +47,14 @@ export const PARTNER_CALLABLE_ALLOWLIST = [
   "adminEmployeesDashboard",
   "adminListLeavePlans",
   "adminClientPortalDashboard",
+  "adminOperationsDashboard",
 ] as const;
 
 const PARTNER_CALLABLE_ALLOWLIST_SET = new Set(
   PARTNER_CALLABLE_ALLOWLIST.map((name) => name.toLowerCase()),
 );
 
-const PARTNER_SEED_SLUGS = ["client_portal.view", "drivers.view"];
+const PARTNER_SEED_SLUGS = ["client_portal.view", "operations_dashboard.view"];
 
 export function partnerCallableAllowed(functionName: string | undefined): boolean {
   if (!functionName) return false;
@@ -184,8 +185,10 @@ async function resolveStaff(
   };
 }
 
-function partnerProjectOf(value: unknown): "keeta" | "americana" | null {
-  if (value === "keeta" || value === "americana") return value;
+function partnerProjectOf(value: unknown): "keeta" | "americana" | "unassigned" | null {
+  if (typeof value !== "string") return null;
+  const key = value.trim().toLowerCase();
+  if (key === "keeta" || key === "americana" || key === "unassigned") return key;
   return null;
 }
 

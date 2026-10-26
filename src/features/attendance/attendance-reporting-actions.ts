@@ -21,7 +21,7 @@ import { attendanceWindowTooLarge } from "./attendance-query-error";
 import { resolveOrderProofUrl } from "@/lib/storage/order-proof-resolve";
 
 const KUWAIT_TZ = "Asia/Kuwait";
-const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 80;
 
 function kuwaitToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: KUWAIT_TZ }).format(new Date());

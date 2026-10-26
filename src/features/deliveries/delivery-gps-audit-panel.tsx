@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { haversineMeters } from "@/features/locations/location-status";
 import { formatBatteryLevel } from "@/features/live-tracking/tracking-metrics";
+import { evaluateEarlyDrop } from "@/features/roster/early-drop-eval";
 import { pickupDeliveryDistanceMeters } from "./delivery-gps-audit";
 import type { DriverLocationEvent } from "@/features/locations/types";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,9 @@ export function DeliveryGpsAuditPanel({
   deliveredLng,
   cancelLat,
   cancelLng,
+  pickupAt,
+  deliveredAt,
+  missingPickupProof,
   className,
 }: {
   event: DriverLocationEvent | null | undefined;
@@ -43,6 +47,9 @@ export function DeliveryGpsAuditPanel({
   deliveredLng: number | null;
   cancelLat?: number | null;
   cancelLng?: number | null;
+  pickupAt?: string | null;
+  deliveredAt?: string | null;
+  missingPickupProof?: boolean;
   className?: string;
 }) {
   const t = useTranslations("pages.deliveries.gpsAudit");
@@ -70,8 +77,19 @@ export function DeliveryGpsAuditPanel({
 
   const diverged = divergenceM != null && divergenceM > 50;
   const showMockBadge = event?.isMocked === true;
+  const pickupMs = pickupAt ? Date.parse(pickupAt) : Number.NaN;
+  const deliveredMs = deliveredAt ? Date.parse(deliveredAt) : Number.NaN;
+  const durationMinutes =
+    Number.isFinite(pickupMs) && Number.isFinite(deliveredMs) ? (deliveredMs - pickupMs) / 60_000 : null;
+  const earlyDrop = evaluateEarlyDrop({
+    pickupToDropMeters: tripMeters,
+    restaurantToDropMeters: null,
+    durationMinutes,
+    missingPickupProof: missingPickupProof === true,
+    customerToDropMeters: null,
+  });
 
-  if (!hasRecordCoords && !event && !isLoading) return null;
+  if (!hasRecordCoords && !event && !isLoading && !earlyDrop.early) return null;
 
   return (
     <div
@@ -89,6 +107,8 @@ export function DeliveryGpsAuditPanel({
             <Loader2 className="size-3 animate-spin" />
             {t("loading")}
           </span>
+        ) : earlyDrop.early ? (
+          <StatusPill variant="danger">{t("earlyDrop")}</StatusPill>
         ) : showMockBadge ? (
           <StatusPill variant="danger">{t("mockLocation")}</StatusPill>
         ) : event && referenceLat != null && referenceLng != null ? (

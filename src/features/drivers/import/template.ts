@@ -77,14 +77,14 @@ const STANDARD_COLUMNS: Array<
     field: "zone_id",
     header: "Zone",
     allowed:
-      "Zone name, code, or UUID from the Zones sheet. Required if Restaurant is blank — a driver needs a zone or a restaurant.",
+      "Zone name, code, or UUID from the Zones sheet. A new rider needs a zone or a restaurant. On an update, a blank cell keeps the stored zone. `-` clears it.",
     example: "Hawally",
   },
   {
     field: "restaurant_ids",
     header: "Restaurant",
     allowed:
-      "Restaurant name, RST code, or UUID. Separate several with commas. See the Restaurants sheet. Required if Zone is blank — a driver needs a zone or a restaurant.",
+      "Restaurant name, RST code, or UUID. Separate several with commas. See the Restaurants sheet. A new rider needs a zone or a restaurant. On an update, a blank cell keeps the stored restaurants. `-` clears them.",
     example: "KFC FAHAHEEL",
   },
   {
@@ -97,7 +97,7 @@ const STANDARD_COLUMNS: Array<
   {
     field: "civil_id",
     header: "Civil ID",
-    allowed: "12 digits. Must be unique. Leave blank if unknown.",
+    allowed: "12 digits. Must be unique when filled. On an update, this column alone is enough — blank Zone and Restaurant keep the stored assignment.",
     example: "281010100001",
   },
   {

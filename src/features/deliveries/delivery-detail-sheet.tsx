@@ -905,6 +905,9 @@ export function DeliveryDetailSheet({
                     deliveredLng={delivery.delivered_lng}
                     cancelLat={delivery.cancel_lat}
                     cancelLng={delivery.cancel_lng}
+                    pickupAt={delivery.pickup_at}
+                    deliveredAt={delivery.delivered_at}
+                    missingPickupProof={!delivery.pickup_proof_url && !(delivery.pickup_proof_urls?.length)}
                   />
                 </div>
                 <div className="min-h-0 overflow-hidden">

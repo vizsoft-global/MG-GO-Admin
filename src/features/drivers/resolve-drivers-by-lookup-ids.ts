@@ -80,6 +80,25 @@ export async function resolveDriversByLookupIds(
     }
   }
 
+  const unmatched = normalized.filter((id) => !byLookup.has(id));
+  if (unmatched.length > 0) {
+    try {
+      const byClientResult = await db
+        .from("drivers")
+        .select(`${select}, client_id`)
+        .in("client_id", unmatched);
+      if (!byClientResult.error) {
+        for (const d of byClientResult.data ?? []) {
+          const row = rowFromDriver(d);
+          const clientId = typeof d.client_id === "string" ? d.client_id.trim() : "";
+          if (clientId && !byLookup.has(clientId)) byLookup.set(clientId, row);
+        }
+      }
+    } catch {
+      // A missing client_id index must not drop employee_id / driver_code hits.
+    }
+  }
+
   return normalized.map((lookup_id) => {
     const match = byLookup.get(lookup_id);
     if (!match) {

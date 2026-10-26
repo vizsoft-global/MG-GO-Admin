@@ -7,9 +7,11 @@ import { Plus } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
   AppListControls,
+  FlatListPager,
   GroupedSections,
   fieldSearchMatch,
   groupRows,
+  useGroupedListView,
   useListControlLabels,
   useListViewPrefs,
 } from "@/components/app/app-list-controls";
@@ -51,6 +53,7 @@ export function DriverGroupsPageShell() {
     () => groupRows(visible, "none", {}, {}, "—"),
     [visible],
   );
+  const listView = useGroupedListView(grouped, false, search);
 
   return (
     <AppPage>
@@ -90,7 +93,7 @@ export function DriverGroupsPageShell() {
           <AppEmptyState title={t("listSearchEmpty")} description={t("listSearchEmptyHint")} />
         ) : prefs.viewMode === "cards" ? (
           <div className="p-4">
-            <GroupedSections groups={grouped}>
+            <GroupedSections groups={grouped} paged resetKey={search}>
               {(groupRowsList) => (
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {groupRowsList.map((group) => (
@@ -112,6 +115,7 @@ export function DriverGroupsPageShell() {
           </div>
         ) : (
           <div className="overflow-x-auto">
+            <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
             <Table>
               <TableHeader>
                 <TableRow>
@@ -121,8 +125,8 @@ export function DriverGroupsPageShell() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {grouped.flatMap((bucket) =>
-                  bucket.rows.map((group) => (
+                {listView.sections.flatMap((section) =>
+                  section.visibleRows.map((group) => (
                     <TableRow key={group.id}>
                       <TableCell>
                         <Link

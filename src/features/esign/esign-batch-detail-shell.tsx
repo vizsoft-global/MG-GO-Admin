@@ -111,6 +111,7 @@ export function EsignBatchDetailShell({ batchId }: { batchId: string }) {
   const templateFields = templateQuery.data?.template?.fields ?? NO_TEMPLATE_FIELDS;
 
   const [tab, setTab] = useState<EsignRecipientTab>("all");
+  const [employeeQuery, setEmployeeQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -163,9 +164,16 @@ export function EsignBatchDetailShell({ batchId }: { batchId: string }) {
   );
 
   const visible = useMemo(() => {
-    if (tab === "all") return lines;
-    return lines.filter((line) => line.recipient_stage && recipientTab(line.recipient_stage) === tab);
-  }, [lines, tab]);
+    const query = employeeQuery.trim().toLowerCase();
+    return lines.filter((line) => {
+      if (tab !== "all" && (!line.recipient_stage || recipientTab(line.recipient_stage) !== tab)) {
+        return false;
+      }
+      if (!query) return true;
+      const haystack = `${line.employee_id ?? ""} ${line.signer_display_name ?? ""}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [lines, tab, employeeQuery]);
 
   const reminderTargets: EsignRemindTarget[] = useMemo(
     () =>
@@ -433,6 +441,12 @@ export function EsignBatchDetailShell({ batchId }: { batchId: string }) {
               );
             })}
           </div>
+          <Input
+            className="h-9 w-56"
+            value={employeeQuery}
+            placeholder={t("searchEmployees")}
+            onChange={(event) => setEmployeeQuery(event.target.value)}
+          />
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"

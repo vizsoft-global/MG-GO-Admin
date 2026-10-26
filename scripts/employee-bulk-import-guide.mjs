@@ -301,6 +301,7 @@ bullet("You need permission to manage drivers. Accepted files are .xlsx, .xls an
 bullet("Click Download sample template. The file is dpd-driver-import-template.xlsx.");
 bullet("Use the Guide sheet for allowed values. Use Restaurants, Zones, Partners and Companies for codes to copy.");
 bullet("Columns at 46/46 includes every writable field. Full name, MG ID, Zone ID and Restaurant IDs stay in the file even if other columns are unticked.");
+bullet("Zone and Restaurant stay in the sample, but a blank cell on an existing rider keeps the stored assignment. A Civil ID-only file can leave both blank.");
 bullet("Delete the two sample people before you import. Importing them creates those example employees.");
 
 newPage();
@@ -310,10 +311,10 @@ step(2, "Tick the columns this file should change", "Click Columns. Select all f
 step(3, "Download the sample", "Click Download sample template. Open Drivers, Guide, Restaurants, Zones, Partners and Companies. Download all IDs refreshes the lookup lists.");
 step(4, "Fill one row per person", "Keep the header row. Copy codes from the lookup sheets. Do not type a vehicle plate that is not already in the fleet.");
 step(5, "Upload the file", "Drop the file on the dialog or click the drop area. The dialog moves to column mapping.");
-step(6, "Check the mapping", "Each header must point at one field. Map Full name and MG ID. Map Zone or Restaurants for a new person. Preview stays off until the required fields are mapped. Two headers on the same field block the import.");
-step(7, "Read the preview", "The summary is ready, existing MG IDs, and invalid. Status names the problem on a refused row. Only ready rows are written. Fix the sheet and upload again for the rest.");
+step(6, "Check the mapping", "Each header must point at one field. Map Full name and MG ID. Zone and Restaurant are optional for an update. A new person still needs one of them. Two headers on the same field block the import.");
+step(7, "Read the preview", "The summary is ready, existing MG IDs, and invalid. Status names the problem on a refused row. Only ready rows are written. Tick the ready rows to import. Unticked ready rows stay out of this run. Fix the sheet and upload again for the rest.");
 step(8, "Set the two switches", "Update existing by MG ID stays on to update that person. Turn it off to skip people who already exist. Approve immediately mints a passcode only when the Active cell is blank. yes or no in Active overrides the switch.");
-step(9, "Import", "Click Import N rows. The log shows progress. The window can be hidden. Pause, Resume and Cancel are on that screen.");
+step(9, "Import", "Click Import N rows. The log shows progress. The window can be hidden. Pause, Resume and Cancel are on that screen. After the log, tick rows to Undo, Redo, View, or Edit.");
 step(10, "Keep the result", "Download errors for rows that failed while writing. Download credentials if new logins were created, and store the passcodes. Open the employee and confirm the columns this file was meant to change.");
 
 newPage();
@@ -331,7 +332,7 @@ table(
 );
 note(
   "Replace, not add",
-  "A filled Restaurant IDs cell is the full new list. It does not add one restaurant beside the ones already assigned. To keep an existing restaurant, include its code in the cell. A new employee still needs a restaurant or a zone. If both are blank, the row is refused.",
+  "A filled Restaurant IDs cell is the full new list. It does not add one restaurant beside the ones already assigned. To keep an existing restaurant, include its code in the cell. A new employee still needs a restaurant or a zone. An existing rider with both cells blank keeps the stored assignment and is not refused.",
 );
 para("Rows marked Importable = No on the Restaurants sheet cannot be used. A name that matches two restaurants is refused. Use the RST code in that case.");
 
@@ -413,7 +414,7 @@ table(
   [
     ["Name", "Full Name", "The employee name"],
     ["Phone", "Phone", "Kuwait mobile, with or without +965. Unique when filled"],
-    ["Civil ID", "Civil ID", "12 digits. Unique when filled. Blank is allowed"],
+    ["Civil ID", "Civil ID", "12 digits. Unique when filled. A file that only fills Civil ID updates that field. Blank Zone and Restaurant keep the stored assignment."],
     ["Passport", "Passport", "Passport number"],
     ["Nationality", "Nationality", "Catalog label, for example Indian"],
     ["Country", "Country", "Country name or ISO code. Separate from Nationality"],
@@ -476,7 +477,7 @@ table(
 );
 
 h2("Undo");
-para("On the preview step, Undo last import reverses the whole last applied batch, including a login created by approve and the restaurant, zone, partner, document dates and assets that batch wrote. Redo puts that batch back. A new import clears the redo stack. Do this before you run the next file.");
+para("After the job finishes, tick rows to Undo, Redo, View, or Edit. Whole-batch Undo and Redo still reverse the last applied batch, including a login created by approve. A new import clears the redo stack.");
 
 footer();
 

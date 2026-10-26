@@ -19,6 +19,10 @@ export const LAUNCHER_GLYPH: Record<LauncherTileId, string> = {
   notifications: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4z M10 21h4",
   attendance: "M12 21a9 9 0 1 0 0-18a9 9 0 1 0 0 18z M12 7v5l3 2",
   profile: "M4 6h10 M18 6h2 M4 12h4 M12 12h8 M4 18h12 M14 4v4 M8 10v4 M16 16v4",
+  restaurants: "M4 10l8-6 8 6v10H4z M10 20v-6h4v6",
+  roles: "M12 3l7 3v6c0 4-3 7-7 8-4-1-7-4-7-8V6z",
+  "document-expiry": "M6 3h8l4 4v14H6z M14 3v5h5 M9 14h6 M9 17h4",
+  "driver-app": "M8 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M11 18h2",
   assets: "M3 4h18v4H3z M5 8v12h14V8 M10 12h4",
   "operations-hub": "M4 21V5h10v16 M14 9h6v12 M2 21h20 M8 9h2 M8 13h2 M8 17h2",
   vehicles:
@@ -29,10 +33,41 @@ export const LAUNCHER_GLYPH: Record<LauncherTileId, string> = {
 };
 
 /**
+ * Colored BajajCare frame glyphs (node 6979:13151). The file is the art; do not
+ * redraw it. `live-tracking` is the sidebar twin of the v2 door.
+ */
+const LAUNCHER_GLYPH_FILE: Record<string, string> = {
+  "dashboard-ops": "dashboard.svg",
+  "live-tracking": "live-tracking.svg",
+  "live-tracking-v2": "live-tracking.svg",
+  "driver-groups": "driver-groups.svg",
+  drivers: "drivers.svg",
+  deliveries: "deliveries.svg",
+  employeedesk: "employeedesk.svg",
+  "visit-bookings": "visit-bookings.svg",
+  "dpd-verification": "verification.svg",
+  earnings: "earnings.svg",
+  restaurants: "restaurants.svg",
+  notifications: "notifications.svg",
+  attendance: "attendance.svg",
+  roles: "roles.svg",
+  profile: "settings.svg",
+  "document-expiry": "document-expiry.svg",
+  "driver-app": "driver-app.svg",
+  assets: "assets.svg",
+};
+
+/**
  * The artifact glyph for a known tile, or `undefined` so the caller can draw the
  * sidebar's own Lucide icon instead. A row the sidebar gained should not need a
  * second drawing pass to appear on the launcher.
  */
 export function launcherGlyphPath(id: string): string | undefined {
   return (LAUNCHER_GLYPH as Record<string, string>)[id];
+}
+
+/** Public path of the frame SVG, when this menu id has one. */
+export function launcherGlyphSrc(id: string): string | undefined {
+  const file = LAUNCHER_GLYPH_FILE[id];
+  return file ? `/launcher/v5/glyphs/${file}` : undefined;
 }

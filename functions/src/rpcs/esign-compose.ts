@@ -50,9 +50,21 @@ export const esignComposeSignedDocument = onCall(
       throw new HttpsError("permission-denied", "not_authorized");
     }
 
-    const requestId = pickId((request.data ?? {}) as Dict, "requestId", "p_request_id", "request_id");
+    const data = (request.data ?? {}) as Dict;
+    const requestId = pickId(data, "requestId", "p_request_id", "request_id");
     if (!requestId) return { ok: false, error: "request_id_required" };
+    return composeSignedEsignRequest(requestId, {
+      force: data.force === true || data.p_force === true,
+      actorId: staff.uid,
+    });
+  },
+);
 
+/** Stamps the rider signature even while a staff counter-signature is still pending. */
+export async function composeSignedEsignRequest(
+  requestId: string,
+  options: { force?: boolean; actorId?: string | null },
+): Promise<Dict> {
     const db = getFirestore();
     const ref = db.collection(COLLECTIONS.esignRequests).doc(requestId);
     const snap = await ref.get();
@@ -72,17 +84,6 @@ export const esignComposeSignedDocument = onCall(
       .where("request_id", "==", requestId)
       .get();
     const signerRows = signerSnap.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
-    const awaitingStaff = signerRows.some(({ data: signer }) => {
-      const staffId = signer.staff_user_id;
-      return typeof staffId === "string" && staffId.trim() !== "" && signer.status === "pending";
-    });
-    if (awaitingStaff) {
-      await ref.update({
-        signed_document_pending: true,
-        updated_at: Timestamp.now(),
-      });
-      return { ok: false, error: "awaiting_counter_signature" };
-    }
 
     const signedStaff = signerRows.flatMap(({ id, data: signer }) => {
       if (signer.status !== "signed") return [];
@@ -181,11 +182,9 @@ export const esignComposeSignedDocument = onCall(
       return { ok: false, error: "server_misconfigured" };
     }
 
-    const data = (request.data ?? {}) as Dict;
     const layoutNewer = stampMillis(row.stamp_layout_at) > stampMillis(row.signed_document_generated_at);
     const force =
-      data.force === true ||
-      data.p_force === true ||
+      options.force === true ||
       layoutNewer ||
       textOrNull(row.signed_document_source_hash) !== sourceHash;
 
@@ -357,13 +356,15 @@ export const esignComposeSignedDocument = onCall(
       return { ok: false, error: "persist_failed", request_id: requestId };
     }
 
-    await logAdminActivity({
-      actorId: staff.uid,
-      action: "update",
-      entity: "esign_requests",
-      entityId: requestId,
-      detail: { route_name: "esign.compose", storage_key: outputKey, pages: pageCount },
-    });
+    if (options.actorId) {
+      await logAdminActivity({
+        actorId: options.actorId,
+        action: "update",
+        entity: "esign_requests",
+        entityId: requestId,
+        detail: { route_name: "esign.compose", storage_key: outputKey, pages: pageCount },
+      });
+    }
 
     return {
       ok: true,
@@ -379,8 +380,7 @@ export const esignComposeSignedDocument = onCall(
       slots_source: slotsSource,
       staff_stamped: assignments.length,
     };
-  },
-);
+}
 
 function staffMayCompose(staff: StaffContext): boolean {
   if (staff.isSuperAdmin || staff.isManager) return true;

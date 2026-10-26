@@ -425,6 +425,8 @@ export function BulkImportShell({
   const [resolved, setResolved] = useState<EsignResolveRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(0);
+  const [reviewQuery, setReviewQuery] = useState("");
+  const [reviewFilter, setReviewFilter] = useState<"all" | "ready" | "fix">("all");
   const [fixRow, setFixRow] = useState<number | null>(null);
   const [checked, setChecked] = useState<Set<number>>(() => new Set());
   const [primedKey, setPrimedKey] = useState<string | null>(null);
@@ -536,6 +538,22 @@ export function BulkImportShell({
     () => tones.filter((tone) => tone === "ready").length,
     [tones],
   );
+  const filteredIndexes = useMemo(() => {
+    const query = reviewQuery.trim().toLowerCase();
+    const indexes: number[] = [];
+    drafts.forEach((draft, index) => {
+      const tone = tones[index] ?? "pending";
+      if (reviewFilter === "ready" && tone !== "ready") return;
+      if (reviewFilter === "fix" && tone === "ready") return;
+      if (query) {
+        const name = resolved[index]?.snapshot?.employee_name ?? "";
+        const haystack = `${draft.employee_id} ${name}`.toLowerCase();
+        if (!haystack.includes(query)) return;
+      }
+      indexes.push(index);
+    });
+    return indexes;
+  }, [drafts, tones, resolved, reviewQuery, reviewFilter]);
   const selectedReady = useMemo(
     () => tones.filter((tone, index) => tone === "ready" && checked.has(index)).length,
     [tones, checked],
@@ -551,8 +569,9 @@ export function BulkImportShell({
     setChecked(readyIndexSet(resolved, drafts, template?.fields ?? []));
   }
 
-  const pageCount = Math.max(1, Math.ceil(drafts.length / PAGE_SIZE));
-  const pageRows = drafts.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const pageCount = Math.max(1, Math.ceil(filteredIndexes.length / PAGE_SIZE));
+  const safePage = filteredIndexes.length === 0 ? 0 : Math.min(page, pageCount - 1);
+  const pageIndexes = filteredIndexes.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   function downloadExample() {
     if (!template) return;
@@ -1025,11 +1044,40 @@ export function BulkImportShell({
                       ) : null}
                     </h2>
                     <p className="text-xs text-muted-foreground">
-                      {t("reviewHelper")}
+                      {template?.document_kind === "payslip"
+                        ? t("willReceive", { count: readyCount })
+                        : t("reviewHelper")}
                       {sheetValueFields.length > 3
                         ? ` ${t("extraColumns", { count: sheetValueFields.length - 3 })}`
                         : ""}
                     </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Input
+                        className="h-9 w-56"
+                        value={reviewQuery}
+                        placeholder={t("searchEmployees")}
+                        onChange={(event) => {
+                          setReviewQuery(event.target.value);
+                          setPage(0);
+                        }}
+                      />
+                      <Select
+                        value={reviewFilter}
+                        onValueChange={(next) => {
+                          setReviewFilter(next === "ready" || next === "fix" ? next : "all");
+                          setPage(0);
+                        }}
+                      >
+                        <SelectTrigger className="h-9 w-40">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">{t("filterAll")}</SelectItem>
+                          <SelectItem value="ready">{t("filterReady")}</SelectItem>
+                          <SelectItem value="fix">{t("filterFix")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
                 <AppDataTable
@@ -1070,8 +1118,8 @@ export function BulkImportShell({
                     { id: "status", label: t("colStatus") },
                   ]}
                 >
-                  {pageRows.map((draft, offset) => {
-                    const index = page * PAGE_SIZE + offset;
+                  {pageIndexes.map((index) => {
+                    const draft = drafts[index];
                     const resolve = resolved[index];
                     const tone = tones[index] ?? "pending";
                     const snap = resolve?.snapshot;
@@ -1122,7 +1170,7 @@ export function BulkImportShell({
                           return (
                             <TableCell key={field.id} className="text-sm">
                               {missing ? (
-                                <span className="font-medium text-amber-800">{t("notFilled")}</span>
+                                <span className="font-medium text-destructive">{t("notFilled")}</span>
                               ) : (
                                 value || "—"
                               )}
@@ -1149,8 +1197,8 @@ export function BulkImportShell({
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-2">
                 <p className="text-xs text-muted-foreground">
                   {t("showingCount", {
-                    shown: Math.min(drafts.length, (page + 1) * PAGE_SIZE) - page * PAGE_SIZE,
-                    total: drafts.length,
+                    shown: pageIndexes.length,
+                    total: filteredIndexes.length,
                   })}
                 </p>
                 <div className="flex items-center gap-1.5">
@@ -1158,19 +1206,19 @@ export function BulkImportShell({
                     size="sm"
                     variant="outline"
                     className="h-7"
-                    disabled={page === 0}
+                    disabled={safePage === 0}
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                   >
                     {t("prevPage")}
                   </Button>
                   <span className="text-xs tabular-nums text-muted-foreground">
-                    {page + 1} / {pageCount}
+                    {safePage + 1} / {pageCount}
                   </span>
                   <Button
                     size="sm"
                     variant="outline"
                     className="h-7"
-                    disabled={page + 1 >= pageCount}
+                    disabled={safePage + 1 >= pageCount}
                     onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
                   >
                     {t("nextPage")}

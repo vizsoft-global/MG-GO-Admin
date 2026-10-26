@@ -329,7 +329,7 @@ describe("reference sheet sections", () => {
       declarationEn: "I declare the report is true.",
       declarationAr: "أقر بأن التقرير صحيح.",
       fields: [
-        { key: "request_kind", labelEn: "Kind", labelAr: "", value: "accident" },
+        { key: "request_kind", labelEn: "Kind", labelAr: "", value: "declaration" },
         { key: "rider_name", labelEn: "Rider", labelAr: "", value: "Ahmed Ali" },
       ],
     });
@@ -338,6 +338,23 @@ describe("reference sheet sections", () => {
     const tail = layout.sections.find((section) => section.key === "rider_declaration");
     assert.equal(tail?.rows.length, 0);
     assert.equal(tail?.body?.en, "I declare the report is true.");
+    assert.equal(layout.accidentRequestKind, "declaration");
+  });
+
+  it("keeps the declaration off the sheet when another accident kind asks for documents", () => {
+    const layout = buildEsignDocumentLayout({
+      kind: "general",
+      employee: sampleEmployee({ employee_name: "Ahmed Ali" }),
+      declarationEn: "I declare the report is true.",
+      declarationAr: "أقر بأن التقرير صحيح.",
+      fields: [
+        { key: "request_kind", labelEn: "Kind", labelAr: "", value: "sick_leave" },
+        { key: "requested_documents", labelEn: "Documents", labelAr: "", value: "Sick leave form\nMedical report" },
+      ],
+    });
+    assert.equal(layout.accidentRequestKind, "sick_leave");
+    assert.deepEqual(layout.requestedDocuments, ["Sick leave form", "Medical report"]);
+    assert.equal(layout.sections.some((section) => section.key === "rider_declaration"), false);
   });
 
   it("prints a payslip verification section", () => {

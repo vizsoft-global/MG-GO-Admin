@@ -59,18 +59,18 @@ export function AppListControls({
   return (
     <div
       className={cn(
-        singleRow ? "flex flex-nowrap items-center gap-2" : "flex flex-col gap-2 sm:flex-row sm:items-center",
+        singleRow ? "flex min-w-0 flex-nowrap items-center gap-2" : "flex flex-col gap-2 sm:flex-row sm:items-center",
         className,
       )}
     >
       <div
         className={cn(
           "flex items-center gap-2",
-          singleRow ? "shrink-0 flex-nowrap" : "min-w-0 flex-1 flex-wrap",
+          singleRow ? "min-w-0 flex-1 flex-nowrap" : "min-w-0 flex-1 flex-wrap",
         )}
       >
         {showSearch ? (
-          <div className={cn("relative", singleRow ? "w-[200px] shrink-0" : "min-w-0 flex-1 sm:max-w-xs")}>
+          <div className={cn("relative", singleRow ? "min-w-[140px] w-full max-w-[220px]" : "min-w-0 flex-1 sm:max-w-xs")}>
             <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchValue ?? ""}

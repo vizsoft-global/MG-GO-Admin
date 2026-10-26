@@ -6,6 +6,7 @@ import type {
   NOTIFICATION_PRIORITIES,
   NOTIFICATION_TARGET_MODES,
 } from "./constants";
+import type { NotificationListBucket } from "./notification-list-buckets";
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 export type NotificationPriority = (typeof NOTIFICATION_PRIORITIES)[number];
@@ -187,6 +188,7 @@ export type NotificationListFilters = {
   search?: string;
   fromDate?: string;
   toDate?: string;
+  bucket?: NotificationListBucket;
 };
 
 export type NotificationActionError =

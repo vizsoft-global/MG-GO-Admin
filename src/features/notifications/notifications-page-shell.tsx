@@ -1,14 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { Bell, Copy, Loader2, Plus, RefreshCw, Send, ShieldOff } from "lucide-react";
+import { toast } from "sonner";
+import {
+  Bell,
+  CalendarClock,
+  CircleAlert,
+  Copy,
+  Download,
+  FileEdit,
+  List,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Send,
+  ShieldOff,
+} from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
 import {
   AppListControls,
+  FlatListPager,
+  GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
+  useGroupedListView,
   useListControlLabels,
   useListViewPrefs,
 } from "@/components/app/app-list-controls";
@@ -22,15 +40,50 @@ import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
 import { CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/contexts/auth-context";
-import { cloneNotificationCampaign } from "./notifications-actions";
+import { downloadCsv } from "@/features/driver-tracking/csv-export";
+import { NOTIFICATION_CATEGORIES } from "./constants";
+import { CampaignAudienceButton } from "./notification-audience-dialog";
+import { NOTIFICATION_LIST_BUCKETS, type NotificationListBucket } from "./notification-list-buckets";
+import { cloneNotificationCampaign, exportNotificationCampaignsCsv } from "./notifications-actions";
 import { NotificationsTabBar } from "./notifications-tab-bar";
+import type { NotificationListFilters } from "./types";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { useInfiniteNotificationCampaigns, useNotificationDashboard } from "./use-notifications";
 import { formatPct } from "@/lib/format/percent";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
+
+function bucketChip(id: NotificationListBucket): {
+  label: "listTabAll" | "listTabSent" | "listTabDrafts" | "listTabScheduled" | "listTabFailed";
+  icon: typeof List;
+} {
+  switch (id) {
+    case "all":
+      return { label: "listTabAll", icon: List };
+    case "sent":
+      return { label: "listTabSent", icon: Send };
+    case "drafts":
+      return { label: "listTabDrafts", icon: FileEdit };
+    case "scheduled":
+      return { label: "listTabScheduled", icon: CalendarClock };
+    case "failed":
+      return { label: "listTabFailed", icon: CircleAlert };
+    default: {
+      const neverBucket: never = id;
+      return neverBucket;
+    }
+  }
+}
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -50,11 +103,26 @@ export function NotificationsPageShell() {
   const locale = useLocale();
   const auth = useAuth();
   const canManage = auth.can("notifications.manage");
+  const canExport = auth.can("notifications.export");
+  const router = useRouter();
 
   const tCommon = useTranslations("common");
   const labels = useListControlLabels();
   const { prefs, update } = useListViewPrefs("notifications");
   const [search, setSearch] = useState("");
+  const [bucket, setBucket] = useState<NotificationListBucket>("all");
+  const [category, setCategory] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [exporting, startExport] = useTransition();
+  const listFilters = useMemo(() => {
+    const filters: NotificationListFilters = {};
+    if (bucket !== "all") filters.bucket = bucket;
+    if (category !== "all") filters.category = category;
+    if (fromDate) filters.fromDate = fromDate;
+    if (toDate) filters.toDate = toDate;
+    return filters;
+  }, [bucket, category, fromDate, toDate]);
   const { data: kpis, isLoading: kpisLoading, refetch: refetchKpis } = useNotificationDashboard();
   const {
     data: campaignPages,
@@ -63,7 +131,7 @@ export function NotificationsPageShell() {
     fetchNextPage,
     hasNextPage,
     refetch,
-  } = useInfiniteNotificationCampaigns({});
+  } = useInfiniteNotificationCampaigns(listFilters);
 
   const campaigns = useMemo(
     () => campaignPages?.pages.flatMap((page) => page.rows) ?? [],
@@ -74,6 +142,7 @@ export function NotificationsPageShell() {
       campaigns.filter((row) =>
         fieldSearchMatch(row, search, {
           name: (item) => item.title,
+          body: (item) => item.body,
           status: (item) => item.status,
         }),
       ),
@@ -92,6 +161,14 @@ export function NotificationsPageShell() {
       ),
     [filteredCampaigns, prefs.groupBy],
   );
+  const listView = useGroupedListView(
+    groupedCampaigns,
+    prefs.groupBy !== "none",
+    `${prefs.groupBy}\u0001${search}`,
+  );
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
   const totalCount = campaignPages?.pages[0]?.totalCount ?? campaigns.length;
 
   const tableColumns = useMemo(
@@ -168,16 +245,100 @@ export function NotificationsPageShell() {
           </Button>
         }
         toolbar={
-          <AppListControls
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder={tCommon("search")}
-            clearSearchLabel={labels.clearSearch}
-            groupByOptions={[labels.group.none, labels.group.status]}
-            groupBy={prefs.groupBy}
-            onGroupByChange={(value) => update({ groupBy: value })}
-            groupByLabel={labels.groupBy}
-          />
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {NOTIFICATION_LIST_BUCKETS.map((id) => {
+                const chip = bucketChip(id);
+                return (
+                  <ToggleChip
+                    key={id}
+                    size="md"
+                    className="h-9"
+                    selected={bucket === id}
+                    icon={chip.icon}
+                    onClick={() => setBucket(id)}
+                  >
+                    {t(chip.label)}
+                  </ToggleChip>
+                );
+              })}
+              <Select
+                items={[
+                  { value: "all", label: t("filterAllCategories") },
+                  ...NOTIFICATION_CATEGORIES.map((value) => ({
+                    value,
+                    label: value.replaceAll("_", " "),
+                  })),
+                ]}
+                value={category}
+                onValueChange={(value) => setCategory(value || "all")}
+              >
+                <SelectTrigger className="h-9 w-[180px]">
+                  <SelectValue placeholder={t("filterCategory")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("filterAllCategories")}</SelectItem>
+                  {NOTIFICATION_CATEGORIES.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {value.replaceAll("_", " ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <input
+                type="date"
+                aria-label={t("filterFrom")}
+                value={fromDate}
+                onChange={(event) => setFromDate(event.target.value)}
+                className="h-9 rounded-lg border border-input bg-transparent px-2 text-sm"
+              />
+              <input
+                type="date"
+                aria-label={t("filterTo")}
+                value={toDate}
+                onChange={(event) => setToDate(event.target.value)}
+                className="h-9 rounded-lg border border-input bg-transparent px-2 text-sm"
+              />
+              {canExport ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  disabled={exporting}
+                  onClick={() => {
+                    startExport(async () => {
+                      const result = await exportNotificationCampaignsCsv({
+                        ...listFilters,
+                        search,
+                      });
+                      if ("error" in result) {
+                        toast.error(t(`errors.${result.error}`));
+                        return;
+                      }
+                      downloadCsv(`notifications-${bucket}.csv`, result.csv);
+                    });
+                  }}
+                >
+                  {exporting ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Download className="size-4" />
+                  )}
+                  {t("exportList")}
+                </Button>
+              ) : null}
+            </div>
+            <AppListControls
+              searchValue={search}
+              onSearchChange={setSearch}
+              searchPlaceholder={tCommon("search")}
+              clearSearchLabel={labels.clearSearch}
+              groupByOptions={[labels.group.none, labels.group.status]}
+              groupBy={prefs.groupBy}
+              onGroupByChange={(value) => update({ groupBy: value })}
+              groupByLabel={labels.groupBy}
+            />
+          </div>
         }
       >
         <CardContent className="p-0">
@@ -189,17 +350,27 @@ export function NotificationsPageShell() {
             <AppEmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
           ) : (
             <>
+              <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
               <AppDataTable columns={tableColumns}>
-                {groupedCampaigns.flatMap((group) => [
-                  prefs.groupBy !== "none" ? (
-                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
-                      <TableCell colSpan={6} className="bg-muted/40 py-2 text-xs font-semibold">
-                        {group.label}
-                      </TableCell>
-                    </AppDataTableRow>
+                {listView.sections.flatMap((section) => [
+                  section.showHeader ? (
+                    <GroupTableHeaderRow
+                      key={`g-${section.key}`}
+                      colSpan={6}
+                      label={section.label}
+                      total={section.total}
+                      open={section.open}
+                      page={section.page}
+                      showPager={section.showPager}
+                      onToggle={() => listView.toggle(section.key)}
+                      onStep={(dir) => listView.step(section.key, dir)}
+                    />
                   ) : null,
-                  ...group.rows.map((row) => (
-                  <AppDataTableRow key={row.id}>
+                  ...section.visibleRows.map((row) => (
+                  <AppDataTableRow
+                    key={row.id}
+                    onClick={() => router.push(`/${locale}/notifications/${row.id}`)}
+                  >
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Link
@@ -218,14 +389,21 @@ export function NotificationsPageShell() {
                       <p className="text-xs text-muted-foreground line-clamp-1">{row.body}</p>
                     </TableCell>
                     <TableCell className="capitalize">{row.category.replace("_", " ")}</TableCell>
-                    <TableCell>{row.estimated_audience_count || row.recipient_count || 0}</TableCell>
+                    <TableCell onClick={(event) => event.stopPropagation()}>
+                      <CampaignAudienceButton
+                        campaignId={row.id}
+                        count={row.recipient_count || row.estimated_audience_count || 0}
+                        title={row.title}
+                        body={row.body}
+                      />
+                    </TableCell>
                     <TableCell>
                       <StatusPill variant={resolveStatusVariant(row.status)}>
                         {row.status.replace("_", " ")}
                       </StatusPill>
                     </TableCell>
                     <TableCell>{formatDateTime(row.sent_at ?? row.scheduled_for)}</TableCell>
-                    <TableCell>
+                    <TableCell onClick={(event) => event.stopPropagation()}>
                       <div className="flex items-center gap-1">
                         <Button
                           render={<Link href={`/${locale}/notifications/${row.id}`} />}

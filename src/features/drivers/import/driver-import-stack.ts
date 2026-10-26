@@ -34,7 +34,16 @@ export type DriverImportJournal = {
   passcode: string | null;
   before: DriverImportSnapshot | null;
   after: DriverImportSnapshot | null;
+  replay?: "applied" | "undone" | null;
 };
+
+export function effectiveReplay(
+  replay: "applied" | "undone" | null | undefined,
+  batchStatus: string,
+): "applied" | "undone" {
+  if (replay === "applied" || replay === "undone") return replay;
+  return batchStatus === "undone" ? "undone" : "applied";
+}
 
 export function undoTargetId(batches: readonly DriverImportBatchTip[]): string | null {
   const applied = batches.filter((batch) => batch.status === "applied");

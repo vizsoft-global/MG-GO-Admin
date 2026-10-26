@@ -10,24 +10,30 @@ import { MENU_REGISTRY, type MenuRegistryItem } from "@/lib/menu/menu-registry";
 export const LAUNCHER_TILE_IDS = [
   "dashboard-ops",
   "live-tracking-v2",
-  "drivers",
-  "operations-dashboard",
-  "client-portal",
   "driver-groups",
+  "drivers",
   "deliveries",
-  "attendance",
-  "dpd-verification",
   "employeedesk",
   "visit-bookings",
+  "dpd-verification",
+  "earnings",
+  "restaurants",
+  "notifications",
+  "attendance",
+  "roles",
+  "profile",
+  "document-expiry",
+  "driver-app",
+  "assets",
+  "operations-dashboard",
+  "client-portal",
   "vehicles",
   "operations-hub",
   "payroll",
-  "earnings",
-  "notifications",
-  "assets",
-  "profile",
   "assistant",
 ] as const;
+
+export const LAUNCHER_RELEASE = "3.4";
 
 export type LauncherTileId = (typeof LAUNCHER_TILE_IDS)[number];
 
@@ -37,18 +43,19 @@ export type LauncherTileId = (typeof LAUNCHER_TILE_IDS)[number];
  * `mergeLauncherTiles`, so `LAUNCHER_TILE_IDS` (and the Roles app catalogue)
  * still describes every real surface.
  *
- * `dpd-verification`, `assets` and `driver-groups` are here because each is
- * reached through its own hub card; the Home grid is the module picker, not a
- * second sidebar, so those three do not need a door of their own.
+ * Payroll stays behind Payroll Hub. The eight hubs the operator boxed on the
+ * live grid stay off Home too: they keep their sidebar row and route.
  */
 export const LAUNCHER_HIDDEN_TILE_IDS: ReadonlySet<string> = new Set([
-  "dashboard-ops",
   "payroll",
-  "earnings",
-  "dpd-verification",
-  "assets",
+  "dashboard-ops",
   "driver-groups",
+  "dpd-verification",
+  "earnings",
+  "restaurants",
   "attendance",
+  "document-expiry",
+  "assets",
 ]);
 
 /**
@@ -58,13 +65,7 @@ export const LAUNCHER_HIDDEN_TILE_IDS: ReadonlySet<string> = new Set([
  * given for them; they must never be added to `LAUNCHER_TILE_IDS` or they
  * would reappear as launcher tiles.
  */
-export const APP_ACCESS_EXTRA_MODULE_IDS = [
-  "restaurants",
-  "roles",
-  "document-expiry",
-  "driver-app",
-  "performance",
-] as const;
+export const APP_ACCESS_EXTRA_MODULE_IDS = ["performance"] as const;
 
 export type AppAccessModuleId =
   | LauncherTileId

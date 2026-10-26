@@ -23,9 +23,12 @@ import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
   AppListControls,
+  FlatListPager,
   GroupedSections,
+  GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
+  useGroupedListView,
   useListControlLabels,
   useListViewPrefs,
 } from "@/components/app/app-list-controls";
@@ -222,6 +225,11 @@ function AssetsPageContent() {
         "—",
       ),
     [prefs.groupBy, t, visible],
+  );
+  const listView = useGroupedListView(
+    grouped,
+    prefs.groupBy !== "none",
+    `${prefs.groupBy}\u0001${search}\u0001${statusFilter}\u0001${categoryFilter}`,
   );
 
   const invalidateAssets = useCallback(() => {
@@ -497,7 +505,7 @@ function AssetsPageContent() {
           ) : prefs.viewMode === "cards" ? (
             <div className="p-4">
               <p className="mb-3 text-xs text-muted-foreground">{countLabel}</p>
-              <GroupedSections groups={grouped}>
+              <GroupedSections groups={grouped} paged resetKey={`${prefs.groupBy}\u0001${search}\u0001${statusFilter}\u0001${categoryFilter}`}>
                 {(rows) => (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {rows.map((row) => (
@@ -525,6 +533,7 @@ function AssetsPageContent() {
               <p className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
                 {countLabel}
               </p>
+              <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -541,17 +550,23 @@ function AssetsPageContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {grouped.flatMap((group) => [
-                      ...(prefs.groupBy !== "none"
+                    {listView.sections.flatMap((section) => [
+                      ...(section.showHeader
                         ? [
-                            <TableRow key={`g-${group.key}`} className="bg-muted/40 hover:bg-muted/40">
-                              <TableCell colSpan={9} className="text-xs font-semibold">
-                                {group.label} · {group.rows.length}
-                              </TableCell>
-                            </TableRow>,
+                            <GroupTableHeaderRow
+                              key={`g-${section.key}`}
+                              colSpan={9}
+                              label={section.label}
+                              total={section.total}
+                              open={section.open}
+                              page={section.page}
+                              showPager={section.showPager}
+                              onToggle={() => listView.toggle(section.key)}
+                              onStep={(dir) => listView.step(section.key, dir)}
+                            />,
                           ]
                         : []),
-                      ...group.rows.map((row) => (
+                      ...section.visibleRows.map((row) => (
                         <TableRow
                           key={row.id}
                           className="cursor-pointer"

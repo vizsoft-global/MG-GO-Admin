@@ -168,9 +168,10 @@ export function ClearAllModuleButton({
       <Button
         type="button"
         variant="outline"
-        size="sm"
-        className={`h-9 shrink-0 cursor-pointer rounded-lg px-2.5 text-destructive hover:bg-destructive/10 hover:text-destructive ${className ?? ""}`}
+        size={compact ? "icon" : "sm"}
+        className={`h-9 shrink-0 cursor-pointer rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive ${compact ? "w-9" : "px-2.5"} ${className ?? ""}`}
         onClick={() => setOpen(true)}
+        aria-label={t("clearAll.button")}
       >
         <Trash2 className="h-4 w-4" />
         {compact ? null : (
