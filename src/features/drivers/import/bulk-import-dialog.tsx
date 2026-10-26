@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import {
   Building2,
   Download,
+  FileSpreadsheet,
   FilePlus2,
   History,
   Loader2,
@@ -32,6 +33,8 @@ import { duplicateHeaderFields } from "./driver-import-patch";
 import { redoDriverImport, undoDriverImport } from "./driver-import-replay-actions";
 import { parseSpreadsheetFile } from "@/lib/import/spreadsheet";
 import { fetchDriverImportLookups } from "../drivers-import-actions";
+import { fetchDriverImportRoster } from "./driver-import-roster-actions";
+import { importRosterDriversAoa } from "./import-roster-sheet";
 import { listSourceCompanies } from "../source-companies-actions";
 import { getDriverImportJob } from "../drivers-import-job-actions";
 import { useDriverImportJob } from "./driver-import-job-provider";
@@ -119,6 +122,7 @@ export function DriverBulkImportDialog({
   const [duplicateStrategy, setDuplicateStrategy] = useState<"skip" | "update">("update");
   const [approveImmediately, setApproveImmediately] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [exporting, startExport] = useTransition();
   const [dragActive, setDragActive] = useState(false);
   const [panel, setPanel] = useState<"new" | "previous">("new");
   const [viewingJobId, setViewingJobId] = useState<string | null>(null);
@@ -385,6 +389,44 @@ export function DriverBulkImportDialog({
     });
   };
 
+  const downloadRoster = () => {
+    startExport(async () => {
+      try {
+        const [lookups, roster, companies] = await Promise.all([
+          fetchDriverImportLookups(),
+          fetchDriverImportRoster(),
+          listSourceCompanies().catch(() => []),
+        ]);
+        if ("error" in lookups || "error" in roster) {
+          toast.error(t("lookupFailed"));
+          return;
+        }
+        const fields = templateColumns
+          .filter((column) => column.pinned || templateSelected.has(column.field))
+          .map((column) => column.field);
+        const restaurantExample =
+          lookups.restaurants.find((row) => row.importable && row.restaurant_code)
+            ?.restaurant_code ||
+          lookups.restaurants.find((row) => row.importable)?.name ||
+          "";
+        const documented = applyTemplateExamples(
+          resolveTemplateColumns(fields, templateCustomColumns),
+          { restaurant: restaurantExample, zone: lookups.zones[0]?.id || "" },
+        );
+        downloadWorkbookXlsx("dpd-employees-import.xlsx", [
+          { name: "Drivers", aoa: importRosterDriversAoa(documented, roster.rows) },
+          { name: "Guide", aoa: templateGuideAoa(documented) },
+          { name: "Restaurants", aoa: restaurantsLookupAoa(lookups.restaurants) },
+          { name: "Zones", aoa: zonesLookupAoa(lookups.zones) },
+          { name: "Partners", aoa: partnersLookupAoa(lookups.partners) },
+          { name: "Companies", aoa: companiesLookupAoa(companies) },
+        ]);
+      } catch {
+        toast.error(t("lookupFailed"));
+      }
+    });
+  };
+
   const requiredMapped = DRIVER_IMPORT_REQUIRED_FIELDS.every((field) => mapping[field]);
 
   return (
@@ -445,7 +487,7 @@ export function DriverBulkImportDialog({
                   type="button"
                   size="sm"
                   className="h-9 cursor-pointer rounded-lg"
-                  disabled={isPending}
+                  disabled={isPending || exporting}
                   onClick={downloadSample}
                 >
                   {isPending ? (
@@ -480,7 +522,7 @@ export function DriverBulkImportDialog({
                   variant="outline"
                   size="sm"
                   className="h-9 cursor-pointer rounded-lg"
-                  disabled={isPending}
+                  disabled={isPending || exporting}
                   onClick={() => downloadLookups("all")}
                 >
                   {isPending ? (
@@ -489,6 +531,21 @@ export function DriverBulkImportDialog({
                     <Download className="me-2 h-4 w-4" />
                   )}
                   {t("downloadLookups")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-lg"
+                  disabled={isPending || exporting}
+                  onClick={downloadRoster}
+                >
+                  {exporting ? (
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="me-2 h-4 w-4" />
+                  )}
+                  {t("downloadRoster")}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">{t("templateHint")}</p>
