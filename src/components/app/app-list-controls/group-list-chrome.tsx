@@ -53,12 +53,16 @@ export function FlatListPager({
   pager,
   onStep,
   bare = false,
+  inline = false,
 }: {
   pager: { page: number; total: number } | null;
   onStep: (dir: number) => void;
   bare?: boolean;
+  /** Sit in a toolbar row instead of a full-width bar under it. */
+  inline?: boolean;
 }) {
   if (!pager) return null;
+  if (inline) return <ListPager page={pager.page} total={pager.total} onStep={onStep} />;
   return (
     <div className={bare ? "flex justify-end" : "flex justify-end border-b border-border px-4 py-2"}>
       <ListPager page={pager.page} total={pager.total} onStep={onStep} />

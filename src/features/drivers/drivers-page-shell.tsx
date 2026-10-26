@@ -886,6 +886,9 @@ function DriversPageContent() {
                   <TooltipContent>{t("addDriver")}</TooltipContent>
                 </Tooltip>
               ) : null}
+              {prefs.viewMode !== "cards" ? (
+                <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} inline />
+              ) : null}
             </div>
             }
           />
@@ -973,7 +976,6 @@ function DriversPageContent() {
           </CardContent>
         ) : (
           <CardContent className="p-0">
-            <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
             <AppDataTable
               columns={tableColumns}
               headerRowClassName="bg-primary/5 hover:bg-primary/5"
