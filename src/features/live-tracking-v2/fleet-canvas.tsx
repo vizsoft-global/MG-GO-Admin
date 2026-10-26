@@ -1,16 +1,11 @@
 "use client";
 
 /**
- * The full-bleed command canvas.
+ * Shift attendance on the live map.
  *
- * This is the sanctioned divergence from the shared `TrackingGlassCard` side-by-side
- * shell (recorded in `ui-system.mdc` §3 and §12, scoped to V2): the map *is* the page,
- * and the driver rail and insights panel float over it. On a 14" laptop a side-by-side
- * grid leaves the map about 55% of the width, which is the wrong trade for a tracking
- * surface where the map is the primary instrument.
- *
- * Nothing scrolls the page. The canvas is exactly one viewport; the rail and the panel
- * scroll internally.
+ * The page is one full-bleed map. The glass overlay (filters, duty chips, driver rail,
+ * legend, insights) always floats on that map. Fullscreen is the Fullscreen API on
+ * `shellRef`, the same element the overlay already sits in.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -34,6 +29,7 @@ import { SearchSelect } from "@/components/ui/search-select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { readSelectedDriverId, writeSelectedDriverId } from "@/lib/browser/tracking-selection";
+import { fetchRosterLive } from "@/features/roster/roster-actions";
 
 import { FleetMap, type FleetMapHandle, type FleetRouteStop } from "./fleet-map";
 import { FleetRail } from "./fleet-rail";
@@ -46,7 +42,6 @@ import { FleetStatusFilter } from "./fleet-status-filter";
 import { routeGeometryPositions, type FleetRouteGeometry } from "./fleet-route";
 import { type FleetStatus } from "./fleet-status";
 import { toggleFleetAlertsOnly, toggleFleetStatusChip } from "./fleet-types";
-import { fetchRosterLive } from "@/features/roster/roster-actions";
 import { useFleetSnapshot, useFleetStore } from "./use-fleet";
 
 import "./fleet-theme.css";
@@ -58,6 +53,7 @@ export function FleetCanvas() {
   const snapshot = useFleetSnapshot();
   const [rosterRestaurant, setRosterRestaurant] = useState<string | null>(null);
   const [rosterDuty, setRosterDuty] = useState<string | null>(null);
+  const [rosterCompany, setRosterCompany] = useState<string | null>(null);
   const rosterQuery = useQuery({
     queryKey: ["roster", "live"],
     queryFn: () => fetchRosterLive(),
@@ -70,8 +66,12 @@ export function FleetCanvas() {
     store.setRosterScope({ restricted: data.restricted, drivers: data.drivers });
   }, [rosterQuery.data, store]);
   useEffect(() => {
-    store.setRosterFilters({ restaurantId: rosterRestaurant, duty: rosterDuty });
-  }, [rosterRestaurant, rosterDuty, store]);
+    store.setRosterFilters({
+      restaurantId: rosterRestaurant,
+      duty: rosterDuty,
+      company: rosterCompany,
+    });
+  }, [rosterRestaurant, rosterDuty, rosterCompany, store]);
 
   const shellRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<FleetMapHandle | null>(null);
@@ -220,6 +220,11 @@ export function FleetCanvas() {
     }
   }, []);
 
+  useEffect(() => {
+    const id = requestAnimationFrame(() => mapRef.current?.resize());
+    return () => cancelAnimationFrame(id);
+  }, [fullscreen]);
+
   const zoneOptions = useMemo(
     () => [
       { value: "all", label: t("filters.allZones"), keywords: ["all", "zones"] },
@@ -260,7 +265,85 @@ export function FleetCanvas() {
     filters.statuses !== null ||
     filters.zoneId !== null ||
     filters.partnerId !== null ||
-    filters.alertsOnly;
+    filters.alertsOnly ||
+    rosterRestaurant !== null ||
+    rosterDuty !== null ||
+    rosterCompany !== null;
+
+  const clearFilters = useCallback(() => {
+    store.resetFilters();
+    setRosterRestaurant(null);
+    setRosterDuty(null);
+    setRosterCompany(null);
+  }, [store]);
+
+  const live = useMemo(() => {
+    const data = rosterQuery.data;
+    if (
+      !data ||
+      !("drivers" in data) ||
+      !("restaurants" in data) ||
+      !Array.isArray(data.drivers) ||
+      !Array.isArray(data.restaurants)
+    ) {
+      return null;
+    }
+    return data;
+  }, [rosterQuery.data]);
+
+  const restaurantDrivers = useMemo(() => {
+    const drivers = live?.drivers ?? [];
+    return drivers.filter((driver) => {
+      if (rosterRestaurant && driver.restaurantId !== rosterRestaurant) return false;
+      if (rosterCompany && driver.company !== rosterCompany) return false;
+      return true;
+    });
+  }, [live, rosterRestaurant, rosterCompany]);
+
+  const places = useMemo(() => {
+    const pins = [];
+    for (const row of live?.restaurants ?? []) {
+      if (row.lat == null || row.lng == null) continue;
+      if (!Number.isFinite(row.lat) || !Number.isFinite(row.lng)) continue;
+      pins.push({ id: row.id, name: row.name, lat: row.lat, lng: row.lng });
+    }
+    return pins;
+  }, [live]);
+
+  const restaurantOptions = useMemo(
+    () => [
+      { value: "all", label: rosterT("allRestaurants"), keywords: ["all", "restaurants"] },
+      ...(live?.restaurants ?? []).map((row) => ({
+        value: row.id,
+        label: row.name,
+        keywords: [row.name],
+      })),
+    ],
+    [live, rosterT],
+  );
+
+  const companyOptions = useMemo(() => {
+    const names = companyNames(live);
+    return [
+      { value: "all", label: rosterT("allCompanies"), keywords: ["all", "companies"] },
+      ...names.map((name) => ({
+        value: name,
+        label: name,
+        keywords: [name],
+      })),
+    ];
+  }, [live, rosterT]);
+
+  const dutyOptions = useMemo(
+    () => [
+      { value: "all", label: rosterT("allStatuses"), keywords: ["all", "statuses"] },
+      ...SCHEDULE_DUTIES.map((key) => {
+        const label = scheduleDutyLabel(rosterT, key);
+        return { value: key, label, keywords: [label, key] };
+      }),
+    ],
+    [rosterT],
+  );
 
   /*
    * The strip's X is a deselect, not just a "hide the route".
@@ -293,13 +376,14 @@ export function FleetCanvas() {
     <div
       ref={shellRef}
       className={cn(
-        "fleet-canvas relative flex h-[calc(100dvh-1.5rem)] min-h-[520px] w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm",
-        fullscreen && "h-screen min-h-0 rounded-none border-0",
+        "fleet-canvas relative h-[calc(100dvh-1.5rem)] min-h-[520px] w-full overflow-hidden",
+        fullscreen && "h-full w-full",
       )}
     >
       <div className="fleet-map-surface absolute inset-0">
         <FleetMap
           ref={mapRef}
+          places={places}
           routeGeometry={routeGeometry}
           routeStops={routeStops}
           playheadPosition={playhead}
@@ -373,105 +457,125 @@ export function FleetCanvas() {
                 overflowing the card: as a `flex-1` child it always "fits" by definition and
                 would spill its controls over the view cluster instead of wrapping. */}
             {showFilters ? (
-              <div className="flex min-w-[300px] flex-[1_1_420px] items-center gap-2">
-                <span className="h-6 w-px shrink-0 bg-border" aria-hidden />
+              <div className="flex min-w-[300px] flex-[1_1_420px] flex-col gap-2">
+                <div className="grid w-full grid-cols-2 items-center gap-2 xl:grid-cols-4">
+                  <Input
+                    value={filters.search}
+                    onChange={(event) => store.setFilters({ search: event.target.value })}
+                    placeholder={t("filters.search")}
+                    title={t("filters.search")}
+                    className="h-9 min-w-[180px] flex-[1.4_1_220px]"
+                    aria-label={t("filters.search")}
+                  />
 
-                <Input
-                  value={filters.search}
-                  onChange={(event) => store.setFilters({ search: event.target.value })}
-                  placeholder={t("filters.search")}
-                  title={t("filters.search")}
-                  className="h-9 min-w-[180px] flex-[1.4_1_220px]"
-                  aria-label={t("filters.search")}
-                />
+                  <FleetStatusFilter
+                    filters={filters}
+                    onToggleStatus={toggleStatus}
+                    onToggleAlertsOnly={toggleAlertsOnly}
+                    onSetStatuses={(statuses) =>
+                      store.setFilters({ statuses, alertsOnly: false })
+                    }
+                    className="min-w-[88px] flex-[0_1_140px]"
+                  />
 
-                <FleetStatusFilter
-                  filters={filters}
-                  onToggleStatus={toggleStatus}
-                  onToggleAlertsOnly={toggleAlertsOnly}
-                  onSetStatuses={(statuses) =>
-                    store.setFilters({ statuses, alertsOnly: false })
-                  }
-                  className="min-w-[88px] flex-[0_1_140px]"
-                />
+                  <SearchSelect
+                    items={zoneOptions}
+                    value={filters.zoneId ?? "all"}
+                    onChange={(value) =>
+                      store.setFilters({ zoneId: !value || value === "all" ? null : value })
+                    }
+                    className="h-9"
+                    placeholder={t("filters.allZones")}
+                    searchPlaceholder={t("filters.searchZone")}
+                    recentsKey="fleet-v2-zone"
+                    clearable={false}
+                  />
 
-                <SearchSelect
-                  items={zoneOptions}
-                  value={filters.zoneId ?? "all"}
-                  onChange={(value) =>
-                    store.setFilters({ zoneId: !value || value === "all" ? null : value })
-                  }
-                  className="h-9 min-w-[84px] flex-[0_1_132px]"
-                  placeholder={t("filters.allZones")}
-                  searchPlaceholder={t("filters.searchZone")}
-                  recentsKey="fleet-v2-zone"
-                  clearable={false}
-                />
+                  <SearchSelect
+                    items={partnerOptions}
+                    value={filters.partnerId ?? "all"}
+                    onChange={(value) =>
+                      store.setFilters({
+                        partnerId: !value || value === "all" ? null : value,
+                      })
+                    }
+                    className="h-9"
+                    placeholder={t("filters.allPartners")}
+                    searchPlaceholder={t("filters.searchPartner")}
+                    recentsKey="fleet-v2-partner"
+                    clearable={false}
+                  />
 
-                <SearchSelect
-                  items={partnerOptions}
-                  value={filters.partnerId ?? "all"}
-                  onChange={(value) =>
-                    store.setFilters({
-                      partnerId: !value || value === "all" ? null : value,
-                    })
-                  }
-                  className="h-9 min-w-[88px] flex-[0_1_140px]"
-                  placeholder={t("filters.allPartners")}
-                  searchPlaceholder={t("filters.searchPartner")}
-                  recentsKey="fleet-v2-partner"
-                  clearable={false}
-                />
+                  <SearchSelect
+                    items={restaurantOptions}
+                    value={rosterRestaurant ?? "all"}
+                    onChange={(value) => setRosterRestaurant(!value || value === "all" ? null : value)}
+                    className="h-9"
+                    placeholder={rosterT("allRestaurants")}
+                    searchPlaceholder={rosterT("restaurant")}
+                    recentsKey="fleet-v2-roster-restaurant"
+                    clearable={false}
+                  />
 
-                <SearchSelect
-                  items={[
-                    { value: "all", label: rosterT("allRestaurants") },
-                    ...(rosterQuery.data && "restaurants" in rosterQuery.data
-                      ? rosterQuery.data.restaurants.map((row) => ({ value: row.id, label: row.name }))
-                      : []),
-                  ]}
-                  value={rosterRestaurant ?? "all"}
-                  onChange={(value) => setRosterRestaurant(!value || value === "all" ? null : value)}
-                  className="h-9 min-w-[88px] flex-[0_1_140px]"
-                  placeholder={rosterT("allRestaurants")}
-                  searchPlaceholder={rosterT("restaurant")}
-                  recentsKey="fleet-v2-roster-restaurant"
-                  clearable={false}
-                />
+                  <SearchSelect
+                    items={companyOptions}
+                    value={rosterCompany ?? "all"}
+                    onChange={(value) => setRosterCompany(!value || value === "all" ? null : value)}
+                    className="h-9"
+                    placeholder={rosterT("allCompanies")}
+                    searchPlaceholder={rosterT("company")}
+                    recentsKey="fleet-v2-roster-company"
+                    clearable={false}
+                  />
 
-                <SearchSelect
-                  items={[
-                    { value: "all", label: rosterT("allStatuses") },
-                    ...["on_shift", "late", "not_logged_in", "logged_out_early", "off", "no_show", "early_drop"].map(
-                      (status) => ({ value: status, label: rosterT(`statuses.${status}`) }),
-                    ),
-                  ]}
-                  value={rosterDuty ?? "all"}
-                  onChange={(value) => setRosterDuty(!value || value === "all" ? null : value)}
-                  className="h-9 min-w-[88px] flex-[0_1_140px]"
-                  placeholder={rosterT("allStatuses")}
-                  searchPlaceholder={rosterT("status")}
-                  recentsKey="fleet-v2-roster-duty"
-                  clearable={false}
-                />
+                  <SearchSelect
+                    items={dutyOptions}
+                    value={rosterDuty ?? "all"}
+                    onChange={(value) => setRosterDuty(!value || value === "all" ? null : value)}
+                    className="h-9"
+                    placeholder={rosterT("allStatuses")}
+                    searchPlaceholder={rosterT("status")}
+                    recentsKey="fleet-v2-roster-duty"
+                    clearable={false}
+                  />
 
-                {filtersDirty ? (
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="size-9 shrink-0"
-                    aria-label={t("controls.reset")}
-                    title={t("controls.reset")}
-                    onClick={() => {
-                      store.resetFilters();
-                      setRosterRestaurant(null);
-                      setRosterDuty(null);
-                    }}
-                  >
-                    <RotateCcw className="size-3.5" aria-hidden />
-                  </Button>
-                ) : null}
+                  {filtersDirty ? (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="size-9 shrink-0"
+                      aria-label={t("controls.reset")}
+                      title={t("controls.reset")}
+                      onClick={clearFilters}
+                    >
+                      <RotateCcw className="size-3.5" aria-hidden />
+                    </Button>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {DUTY_CHIPS.map((chip) => {
+                    const selected = chip === "all" ? rosterDuty == null : rosterDuty === chip;
+                    return (
+                      <button
+                        key={chip}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setRosterDuty(chip === "all" ? null : chip)}
+                        className={cn(
+                          "inline-flex h-9 items-center gap-1.5 rounded-full px-2.5 text-xs",
+                          selected
+                            ? cn("font-semibold", chipSelectedClass(chip))
+                            : "border border-[#E2DCD8] bg-white text-[#3D3734]",
+                        )}
+                      >
+                        <span className={cn("size-1.5 rounded-full", chipDotClass(chip, selected))} aria-hidden />
+                        {chipLabel(rosterT, chip)}
+                        <span className="tabular-nums">{dutyCount(restaurantDrivers, chip)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
           </div>
@@ -583,7 +687,6 @@ export function FleetCanvas() {
           </div>
         </div>
       </div>
-
       {selectedDriverId ? (
         // Keyed by driver so selecting another one remounts with a fresh scrubber
         // rather than replaying the previous driver's cursor position.
@@ -638,3 +741,123 @@ function CanvasIconButton({
     </Tooltip>
   );
 }
+
+const DUTY_CHIPS = ["all", "on_shift", "late", "not_logged_in", "logged_out_early", "off"] as const;
+
+type DutyChip = (typeof DUTY_CHIPS)[number];
+
+type RosterCopy = ReturnType<typeof useTranslations<"pages.roster">>;
+
+const SCHEDULE_DUTIES = [
+  "early_drop",
+  "on_shift",
+  "late",
+  "not_logged_in",
+  "logged_out_early",
+  "off",
+] as const;
+
+type ScheduleDuty = (typeof SCHEDULE_DUTIES)[number];
+
+function scheduleDutyLabel(t: RosterCopy, key: ScheduleDuty): string {
+  switch (key) {
+    case "early_drop":
+      return t("statuses.early_drop");
+    case "on_shift":
+      return t("statuses.on_shift");
+    case "late":
+      return t("statuses.late");
+    case "not_logged_in":
+      return t("statuses.not_logged_in");
+    case "logged_out_early":
+      return t("statuses.logged_out_early");
+    case "off":
+      return t("statuses.off");
+    default: {
+      const unknown: never = key;
+      return unknown;
+    }
+  }
+}
+
+function companyNames(live: { companies?: unknown } | null): string[] {
+  if (!live || !Array.isArray(live.companies)) return [];
+  const names: string[] = [];
+  for (const name of live.companies) {
+    if (typeof name === "string" && name.length > 0) names.push(name);
+  }
+  return names;
+}
+
+function chipLabel(t: RosterCopy, chip: DutyChip): string {
+  switch (chip) {
+    case "all":
+      return t("all");
+    case "on_shift":
+      return t("statuses.on_shift");
+    case "late":
+      return t("statuses.late");
+    case "not_logged_in":
+      return t("statuses.not_logged_in");
+    case "logged_out_early":
+      return t("statuses.logged_out_early");
+    case "off":
+      return t("statuses.off");
+    default: {
+      const unknown: never = chip;
+      return unknown;
+    }
+  }
+}
+
+function chipSelectedClass(chip: DutyChip): string {
+  switch (chip) {
+    case "all":
+      return "bg-[#1D1B1A] text-white";
+    case "on_shift":
+      return "bg-[#E7F6EE] text-[#146C43]";
+    case "late":
+      return "bg-[#FDF0DC] text-[#8A4B06]";
+    case "not_logged_in":
+      return "bg-[#FDE7E5] text-[#A3221A]";
+    case "logged_out_early":
+      return "bg-[#EEE8FB] text-[#5B34A8]";
+    case "off":
+      return "bg-[#F3F0EE] text-[#3D3734]";
+    default: {
+      const unknown: never = chip;
+      return unknown;
+    }
+  }
+}
+
+function chipDotClass(chip: DutyChip, selected: boolean): string {
+  switch (chip) {
+    case "all":
+      return selected ? "bg-white" : "bg-[#1D1B1A]";
+    case "on_shift":
+      return "bg-[#146C43]";
+    case "late":
+      return "bg-[#8A4B06]";
+    case "not_logged_in":
+      return "bg-[#A3221A]";
+    case "logged_out_early":
+      return "bg-[#5B34A8]";
+    case "off":
+      return "bg-[#3D3734]";
+    default: {
+      const unknown: never = chip;
+      return unknown;
+    }
+  }
+}
+
+function dutyCount(drivers: { status: string }[], chip: DutyChip): number {
+  if (chip === "all") return drivers.length;
+  let count = 0;
+  for (const driver of drivers) {
+    if (driver.status === chip) count += 1;
+  }
+  return count;
+}
+

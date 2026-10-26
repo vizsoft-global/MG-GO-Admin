@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluateEarlyDrop } from "./early-drop-eval";
 import { rosterDutyStatus } from "./roster-adherence";
+import { applyApprovedShift } from "./roster-changes";
+import { rosterHours } from "./roster-hours";
 import { parseRestaurantZoneSheet, parseRosterSheet } from "./roster-sheet";
 
 const HEADER = ["Driver Id", "Driver Name", "Store CC", "Store Name", "Date", "Day", "Shift no.", "Start Time", "End Time", "Ends Next Day", "OFF", "Notes"];
@@ -82,6 +84,68 @@ test("adherence: grace, no-show, early logout, and OFF", () => {
   assert.equal(early.status, "logged_out_early");
   assert.equal(early.minutesLate, 20);
   assert.equal(early.minutesEarly, 30);
+  assert.equal(
+    rosterDutyStatus({
+      off: false,
+      start,
+      end,
+      checkIn: null,
+      checkOut: null,
+      now: new Date(start.getTime() + 16 * 60_000),
+      noLoginGraceMin: 60,
+    }).status,
+    "scheduled",
+  );
+  assert.equal(
+    rosterDutyStatus({
+      off: false,
+      start,
+      end,
+      checkIn: null,
+      checkOut: null,
+      now: new Date(start.getTime() + 61 * 60_000),
+      noLoginGraceMin: 60,
+    }).status,
+    "not_logged_in",
+  );
+});
+
+test("worked hours stay inside the scheduled window", () => {
+  const start = new Date("2026-10-26T07:00:00Z");
+  const end = new Date("2026-10-26T11:00:00Z");
+  const hours = rosterHours({
+    start,
+    end,
+    checkIn: new Date(start.getTime() + 30 * 60_000),
+    checkOut: new Date("2026-10-26T10:00:00Z"),
+    openUntil: null,
+  });
+  assert.equal(hours.scheduled, 240);
+  assert.equal(hours.worked, 150);
+});
+
+test("an approved change replaces the uploaded shift", () => {
+  const next = applyApprovedShift(
+    {
+      session1_start: "10:00:00",
+      session1_end: "16:00:00",
+      restaurant_id: "r1",
+      shift_type: "split",
+      is_off: false,
+    },
+    {
+      off: false,
+      start: "12:00:00",
+      end: "18:00:00",
+      endsNextDay: false,
+      restaurantId: "r2",
+      approvedByName: "Ops",
+    },
+  );
+  assert.equal(next.session1_start, "12:00:00");
+  assert.equal(next.session1_end, "18:00:00");
+  assert.equal(next.restaurant_id, "r2");
+  assert.equal(next.shift_type, "single");
 });
 
 test("early drop is the example delivery: 0 m, 1 minute, no pickup proof", () => {

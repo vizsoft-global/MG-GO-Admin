@@ -5,6 +5,13 @@ import { haversineMeters } from "@/features/locations/location-status";
 import { addDays, kuwaitToday } from "@/features/driver-tracking/kuwait-time";
 import { evaluateEarlyDrop, type EarlyDropThresholds } from "@/features/roster/early-drop-eval";
 import { rosterDutyStatus, type RosterDutyStatus } from "@/features/roster/roster-adherence";
+import { rosterHours } from "@/features/roster/roster-hours";
+import {
+  approvedByDriver,
+  applyApprovedShift,
+  countApprovedChanges,
+  type ApprovedOverlay,
+} from "@/features/roster/roster-changes";
 import { parseRestaurantZoneSheet, parseRosterSheet, type RosterShiftDraft } from "@/features/roster/roster-sheet";
 
 const SHIFTS = COLLECTIONS.driverDailyShifts;
@@ -32,6 +39,9 @@ export type RosterReportRow = {
   status: RosterDutyStatus;
   minutesLate: number;
   minutesEarly: number;
+  scheduledMinutes: number;
+  workedMinutes: number;
+  changeApprovedBy: string | null;
   earlyDrops: Array<{
     deliveryId: string;
     orderId: string;
@@ -82,7 +92,14 @@ function eachDay(from: string, to: string): string[] {
   return days;
 }
 
-async function readThresholds(db: Firestore): Promise<{ late: number; early: number; drop: EarlyDropThresholds }> {
+async function readThresholds(db: Firestore): Promise<{
+  late: number;
+  early: number;
+  noLogin: number;
+  alertOnce: boolean;
+  minCoaches: number;
+  drop: EarlyDropThresholds;
+}> {
   const snap = await db.collection(SETTINGS).doc("1").get();
   const data = snap.data() ?? {};
   const late = num(data.roster_late_grace_minutes) ?? 15;
@@ -90,6 +107,9 @@ async function readThresholds(db: Firestore): Promise<{ late: number; early: num
   return {
     late,
     early,
+    noLogin: num(data.roster_no_login_grace_minutes) ?? 60,
+    alertOnce: data.roster_alert_once_per_day !== false,
+    minCoaches: num(data.roster_alert_min_coaches) === 2 ? 2 : 1,
     drop: {
       nearMeters: num(data.roster_early_drop_restaurant_meters) ?? 200,
       minMinutes: num(data.roster_early_drop_min_minutes) ?? 4,
@@ -104,23 +124,41 @@ export async function readRosterSettings(db: Firestore) {
   return {
     lateGraceMinutes: thresholds.late,
     earlyGraceMinutes: thresholds.early,
+    noLoginGraceMinutes: thresholds.noLogin,
     nearMeters: thresholds.drop.nearMeters,
     minMinutes: thresholds.drop.minMinutes,
+    customerMeters: thresholds.drop.customerFarMeters,
     flagMissingProof: thresholds.drop.flagMissingProof,
+    alertOnce: thresholds.alertOnce,
+    minCoaches: thresholds.minCoaches,
   };
 }
 
 export async function writeRosterSettings(
   db: Firestore,
-  input: { lateGraceMinutes: number; earlyGraceMinutes: number; nearMeters: number; minMinutes: number; flagMissingProof: boolean },
+  input: {
+    lateGraceMinutes: number;
+    earlyGraceMinutes: number;
+    noLoginGraceMinutes: number;
+    nearMeters: number;
+    minMinutes: number;
+    customerMeters: number;
+    flagMissingProof: boolean;
+    alertOnce: boolean;
+    minCoaches: number;
+  },
 ) {
   await db.collection(SETTINGS).doc("1").set(
     {
       roster_late_grace_minutes: input.lateGraceMinutes,
       roster_early_grace_minutes: input.earlyGraceMinutes,
+      roster_no_login_grace_minutes: input.noLoginGraceMinutes,
       roster_early_drop_restaurant_meters: input.nearMeters,
       roster_early_drop_min_minutes: input.minMinutes,
+      roster_early_drop_customer_meters: input.customerMeters,
       roster_early_drop_missing_proof: input.flagMissingProof,
+      roster_alert_once_per_day: input.alertOnce,
+      roster_alert_min_coaches: input.minCoaches === 2 ? 2 : 1,
       updated_at: FieldValue.serverTimestamp(),
     },
     { merge: true },
@@ -184,10 +222,13 @@ export async function previewRosterImport(db: Firestore, aoa: unknown[][]) {
     if (draft.storeName && !restaurant) errors.push("unknown_restaurant");
     return { ...draft, errors: [...new Set(errors)], driverId: driver?.id ?? null, driverLabel: driver?.name || draft.driverName, restaurantId: restaurant?.id ?? null };
   });
+  const readyRows = rows.filter((row) => row.errors.length === 0);
+  const overwritesApproved = await countApprovedChanges(db, readyRows.map((row) => row.date));
   return {
     rows,
-    ready: rows.filter((row) => row.errors.length === 0).length,
+    ready: readyRows.length,
     failed: rows.filter((row) => row.errors.length > 0).length,
+    overwritesApproved,
   };
 }
 
@@ -281,7 +322,52 @@ export async function listZoneStaff(db: Firestore) {
       id: doc.id,
       name: str(doc.data().full_name) || str(doc.data().email) || doc.id,
       zoneIds: accessByUser.get(doc.id) ?? [],
+      accessKind: str(doc.data().access_kind),
     })),
+  };
+}
+
+export async function listRosterPlaces(db: Firestore) {
+  const [restaurants, zones] = await Promise.all([
+    db.collection(COLLECTIONS.restaurants).limit(2000).get(),
+    db.collection(COLLECTIONS.zones).limit(200).get(),
+  ]);
+  const zoneNames = new Map(zones.docs.map((doc) => [doc.id, str(doc.data().name) || doc.id]));
+  return restaurants.docs.map((doc) => {
+    const data = doc.data();
+    const zoneId = str(data.zone_id) || null;
+    return {
+      id: doc.id,
+      name: str(data.name) || doc.id,
+      storeCc: str(data.store_cc) || str(data.external_id),
+      zoneId,
+      zoneName: zoneId ? zoneNames.get(zoneId) ?? "" : "",
+    };
+  });
+}
+
+export async function listRosterDirectory(db: Firestore, scope: RosterScope) {
+  const places = await listRosterPlaces(db);
+  const restaurants = places.filter((place) => inScope(scope, place.zoneId));
+  const zones = new Map<string, string>();
+  for (const place of restaurants) {
+    if (place.zoneId) zones.set(place.zoneId, place.zoneName || place.zoneId);
+  }
+  const { byKey } = await driverIndex(db);
+  const riders = new Map<string, { id: string; name: string; employeeId: string; company: string }>();
+  for (const hit of byKey.values()) riders.set(hit.id, hit);
+  const companies = [...new Set([...riders.values()].map((rider) => rider.company).filter(Boolean))].sort();
+  return {
+    zones: [...zones.entries()].map(([id, name]) => ({ id, name })),
+    restaurants: restaurants.map((place) => ({
+      id: place.id,
+      name: place.name,
+      storeCc: place.storeCc,
+      zoneId: place.zoneId,
+      zoneName: place.zoneName,
+    })),
+    companies,
+    riders: [...riders.values()].map((rider) => ({ id: rider.id, name: rider.name, employeeId: rider.employeeId })),
   };
 }
 
@@ -302,11 +388,19 @@ async function zoneName(db: Firestore, cache: Map<string, string>, zoneId: strin
   return name;
 }
 
-async function restaurantZone(db: Firestore, restaurantId: string | null): Promise<{ zoneId: string | null; name: string }> {
-  if (!restaurantId) return { zoneId: null, name: "" };
+async function restaurantZone(
+  db: Firestore,
+  restaurantId: string | null,
+): Promise<{ zoneId: string | null; name: string; lat: number | null; lng: number | null }> {
+  if (!restaurantId) return { zoneId: null, name: "", lat: null, lng: null };
   const snap = await db.collection(COLLECTIONS.restaurants).doc(restaurantId).get();
   const data = snap.data() ?? {};
-  return { zoneId: str(data.zone_id) || null, name: str(data.name) };
+  return {
+    zoneId: str(data.zone_id) || null,
+    name: str(data.name),
+    lat: num(data.latitude),
+    lng: num(data.longitude),
+  };
 }
 
 function inScope(scope: RosterScope, zoneId: string | null): boolean {
@@ -351,16 +445,25 @@ function shiftWindow(row: Record<string, unknown>, day: string): { start: Date |
   };
 }
 
+function withOverlay(shift: Record<string, unknown> & { id: string }, overlay: ApprovedOverlay | undefined) {
+  return overlay ? applyApprovedShift(shift, overlay) : shift;
+}
+
 export async function sweepRosterDay(db: Firestore, day: string) {
   const thresholds = await readThresholds(db);
   const now = new Date();
-  const [shifts, attendance] = await Promise.all([shiftsForDay(db, day), attendanceForDay(db, day)]);
+  const [shifts, attendance, overlays] = await Promise.all([
+    shiftsForDay(db, day),
+    attendanceForDay(db, day),
+    approvedByDriver(db, day),
+  ]);
   let written = 0;
   let pending = 0;
   let batch = db.batch();
-  for (const shift of shifts) {
-    const driverId = str(shift.driver_id);
-    if (!driverId || shift.source !== "roster") continue;
+  for (const raw of shifts) {
+    const driverId = str(raw.driver_id);
+    if (!driverId || raw.source !== "roster") continue;
+    const shift = withOverlay(raw, overlays.get(driverId));
     const window = shiftWindow(shift, day);
     const log = attendance.get(driverId);
     const duty = rosterDutyStatus({
@@ -372,6 +475,7 @@ export async function sweepRosterDay(db: Firestore, day: string) {
       now,
       lateGraceMin: thresholds.late,
       earlyGraceMin: thresholds.early,
+      noLoginGraceMin: thresholds.noLogin,
     });
     if (duty.status !== "late" && duty.status !== "not_logged_in" && duty.status !== "no_show" && duty.status !== "logged_out_early") {
       continue;
@@ -405,53 +509,162 @@ export async function sweepRosterDay(db: Firestore, day: string) {
   return { written };
 }
 
-export async function listRosterAlerts(db: Firestore, scope: RosterScope, day: string) {
+export async function listRosterAlerts(db: Firestore, scope: RosterScope, day: string, restaurantId?: string | null) {
   const snap = await db.collection(ALERTS).where("day", "==", day).limit(1000).get();
   const rows = [];
+  const driverIds = new Set<string>();
+  const restaurantIds = new Set<string>();
   for (const doc of snap.docs) {
     const data = doc.data();
     const zoneId = str(data.zone_id) || null;
+    const rowRestaurant = str(data.restaurant_id) || null;
     if (!inScope(scope, zoneId)) continue;
+    if (restaurantId && rowRestaurant !== restaurantId) continue;
+    const driverId = str(data.driver_id);
+    if (driverId) driverIds.add(driverId);
+    if (rowRestaurant) restaurantIds.add(rowRestaurant);
     rows.push({
       id: doc.id,
       kind: str(data.kind),
-      driverId: str(data.driver_id),
+      driverId,
+      driverName: "",
+      employeeId: "",
       zoneId,
-      restaurantId: str(data.restaurant_id) || null,
+      restaurantId: rowRestaurant,
+      restaurantName: "",
       deliveryId: str(data.delivery_id) || null,
       day,
+      at: asDate(data.updated_at)?.toISOString() ?? null,
       minutesLate: num(data.minutes_late) ?? 0,
       minutesEarly: num(data.minutes_early) ?? 0,
+      outcome: str(data.outcome),
+      acknowledged: str(data.status) === "acknowledged" || Boolean(data.acknowledged_at),
+      acknowledgedByName: str(data.acknowledged_by_name),
     });
   }
-  return rows;
+  const names = new Map<string, string>();
+  const codes = new Map<string, string>();
+  const places = new Map<string, string>();
+  await Promise.all([
+    ...[...driverIds].slice(0, 200).map(async (id) => {
+      const [profile, driver] = await Promise.all([
+        db.collection(COLLECTIONS.profiles).doc(id).get(),
+        db.collection(COLLECTIONS.drivers).doc(id).get(),
+      ]);
+      names.set(id, str(profile.data()?.full_name) || id);
+      codes.set(id, str(driver.data()?.employee_id) || str(driver.data()?.driver_code));
+    }),
+    ...[...restaurantIds].slice(0, 200).map(async (id) => {
+      const snap = await db.collection(COLLECTIONS.restaurants).doc(id).get();
+      places.set(id, str(snap.data()?.name) || id);
+    }),
+  ]);
+  return rows.map((row) => ({
+    ...row,
+    driverName: names.get(row.driverId) || row.driverId,
+    employeeId: codes.get(row.driverId) || "",
+    restaurantName: row.restaurantId ? places.get(row.restaurantId) || row.restaurantId : "",
+  }));
+}
+
+export async function acknowledgeRosterAlert(db: Firestore, id: string, actorId: string, actorName: string, outcome: string) {
+  const ref = db.collection(ALERTS).doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return { error: "not_found" as const };
+  await ref.set(
+    {
+      status: "acknowledged",
+      outcome,
+      acknowledged_by: actorId,
+      acknowledged_by_name: actorName,
+      acknowledged_at: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+  return { ok: true as const };
+}
+
+export async function loadRosterAlertDetail(db: Firestore, id: string) {
+  const snap = await db.collection(ALERTS).doc(id).get();
+  if (!snap.exists) return { error: "not_found" as const };
+  const data = snap.data() ?? {};
+  const deliveryId = str(data.delivery_id);
+  if (!deliveryId) return { delivery: null, reasons: [] as string[], meters: null as number | null, durationMinutes: null as number | null, missingProof: false };
+  const delivery = await db.collection(COLLECTIONS.deliveries).doc(deliveryId).get();
+  const row = delivery.data() ?? {};
+  const pickupAt = asDate(row.pickup_at);
+  const deliveredAt = asDate(row.delivered_at);
+  const pickupLat = num(row.pickup_lat);
+  const pickupLng = num(row.pickup_lng);
+  const dropLat = num(row.delivered_lat);
+  const dropLng = num(row.delivered_lng);
+  const meters = pickupLat != null && pickupLng != null && dropLat != null && dropLng != null ? haversineMeters(pickupLat, pickupLng, dropLat, dropLng) : null;
+  const durationMinutes = pickupAt && deliveredAt ? (deliveredAt.getTime() - pickupAt.getTime()) / 60_000 : null;
+  const proof = row.pickup_proof_urls;
+  const missingProof = !str(row.pickup_proof_url) && !(Array.isArray(proof) && proof.length > 0);
+  const thresholds = await readThresholds(db);
+  const verdict = evaluateEarlyDrop({
+    pickupToDropMeters: meters,
+    restaurantToDropMeters: null,
+    durationMinutes,
+    missingPickupProof: missingProof,
+    customerToDropMeters: null,
+    thresholds: thresholds.drop,
+  });
+  return {
+    delivery: {
+      id: deliveryId,
+      orderId: str(row.external_order_id),
+      pickupAt: pickupAt?.toISOString() ?? null,
+      deliveredAt: deliveredAt?.toISOString() ?? null,
+    },
+    reasons: verdict.reasons,
+    meters,
+    durationMinutes,
+    missingProof,
+    thresholds: thresholds.drop,
+  };
 }
 
 export async function loadRosterLive(db: Firestore, scope: RosterScope) {
   const day = kuwaitToday();
   const thresholds = await readThresholds(db);
-  const [shifts, attendance, drops] = await Promise.all([
+  const [shifts, attendance, drops, overlays, names] = await Promise.all([
     shiftsForDay(db, day),
     attendanceForDay(db, day),
     db.collection(COLLECTIONS.deliveries).where("delivered_day", "==", day).where("is_early_drop", "==", true).limit(500).get().catch(() => null),
+    approvedByDriver(db, day),
+    driverIndex(db),
   ]);
-  const earlyDrivers = new Set<string>();
+  const earlyByDriver = new Map<string, { id: string; at: string | null; orderId: string | null }>();
   if (drops) {
     for (const doc of drops.docs) {
-      const driverId = str(doc.data().driver_id);
-      if (driverId) earlyDrivers.add(driverId);
+      const data = doc.data();
+      const driverId = str(data.driver_id);
+      if (!driverId || earlyByDriver.has(driverId)) continue;
+      const orderId = str(data.external_order_id) || str(data.order_id) || null;
+      earlyByDriver.set(driverId, {
+        id: doc.id,
+        at: asDate(data.delivered_at)?.toISOString() ?? null,
+        orderId,
+      });
     }
   }
+  const riderById = new Map<string, DriverHit>();
+  for (const hit of names.byKey.values()) riderById.set(hit.id, hit);
   const zoneCache = new Map<string, string>();
   const drivers = [];
-  const restaurants = new Map<string, string>();
-  for (const shift of shifts) {
-    if (shift.source !== "roster") continue;
-    const driverId = str(shift.driver_id);
+  const restaurants = new Map<string, { name: string; lat: number | null; lng: number | null }>();
+  for (const raw of shifts) {
+    if (raw.source !== "roster") continue;
+    const driverId = str(raw.driver_id);
+    const overlay = overlays.get(driverId);
+    const shift = withOverlay(raw, overlay);
     const restaurantId = str(shift.restaurant_id) || null;
     const place = await restaurantZone(db, restaurantId);
     if (!inScope(scope, place.zoneId)) continue;
     const window = shiftWindow(shift, day);
+    const originalWindow = overlay ? shiftWindow(raw, day) : null;
     const log = attendance.get(driverId);
     const duty = rosterDutyStatus({
       off: shift.is_off === true,
@@ -462,10 +675,22 @@ export async function loadRosterLive(db: Firestore, scope: RosterScope) {
       now: new Date(),
       lateGraceMin: thresholds.late,
       earlyGraceMin: thresholds.early,
+      noLoginGraceMin: thresholds.noLogin,
     });
-    if (restaurantId && place.name) restaurants.set(restaurantId, place.name || str(shift.store_name));
+    if (restaurantId) {
+      restaurants.set(restaurantId, {
+        name: place.name || str(shift.store_name) || restaurantId,
+        lat: place.lat,
+        lng: place.lng,
+      });
+    }
+    const rider = riderById.get(driverId);
+    const drop = earlyByDriver.get(driverId);
     drivers.push({
       driverId,
+      name: rider?.name ?? "",
+      employeeId: rider?.employeeId ?? "",
+      company: rider?.company ?? "",
       restaurantId,
       restaurantName: place.name || str(shift.store_name),
       zoneId: place.zoneId,
@@ -474,13 +699,26 @@ export async function loadRosterLive(db: Firestore, scope: RosterScope) {
       start: window.startLabel,
       end: window.endLabel,
       actualIn: log?.checkIn?.toISOString() ?? null,
-      earlyDrop: earlyDrivers.has(driverId),
+      actualOut: log?.checkOut?.toISOString() ?? null,
+      minutesLate: duty.minutesLate,
+      minutesEarly: duty.minutesEarly,
+      lateGraceMin: thresholds.late,
+      earlyDrop: Boolean(drop),
+      earlyDropId: drop?.id ?? null,
+      earlyDropAt: drop?.at ?? null,
+      earlyDropOrderId: drop?.orderId ?? null,
+      originalStart: originalWindow?.startLabel ?? null,
+      originalEnd: originalWindow?.endLabel ?? null,
+      changeApprovedBy: overlay?.approvedByName ?? null,
+      changeNote: overlay?.approvedByName ?? null,
     });
   }
+  const companies = [...new Set(drivers.map((driver) => driver.company).filter(Boolean))].sort();
   return {
     restricted: !scope.all,
     drivers,
-    restaurants: [...restaurants.entries()].map(([id, name]) => ({ id, name })),
+    restaurants: [...restaurants.entries()].map(([id, row]) => ({ id, name: row.name, lat: row.lat, lng: row.lng })),
+    companies,
     manager: scope.all,
   };
 }
@@ -488,22 +726,29 @@ export async function loadRosterLive(db: Firestore, scope: RosterScope) {
 export async function loadDriverRoster(db: Firestore, driverId: string) {
   const today = kuwaitToday();
   const days = eachDay(addDays(today, -1), addDays(today, 6));
-  const snaps = await Promise.all(
-    days.map((day) => db.collection(SHIFTS).where("driver_id", "==", driverId).where("shift_date", "==", day).limit(1).get()),
-  );
+  const [snaps, overlays] = await Promise.all([
+    Promise.all(days.map((day) => db.collection(SHIFTS).where("driver_id", "==", driverId).where("shift_date", "==", day).limit(1).get())),
+    Promise.all(days.map((day) => approvedByDriver(db, day))),
+  ]);
   return days.map((day, index) => {
     const doc = snaps[index]?.docs[0];
-    const data = doc?.data() ?? {};
+    const raw = doc?.data() ?? {};
+    const overlay = overlays[index]?.get(driverId);
+    const data = overlay ? applyApprovedShift(raw, overlay) : raw;
+    const original = shiftWindow(raw, day);
     const window = shiftWindow(data, day);
     return {
       date: day,
       off: data.is_off === true,
-      source: str(data.source) || null,
-      storeName: str(data.store_name),
-      notes: str(data.notes),
+      source: str(raw.source) || null,
+      storeName: str(raw.store_name),
+      notes: str(raw.notes),
       start: window.startLabel,
       end: window.endLabel,
-      split: data.shift_type === "split",
+      split: !overlay && raw.shift_type === "split",
+      originalStart: overlay ? original.startLabel : null,
+      originalEnd: overlay ? original.endLabel : null,
+      changeApprovedBy: overlay?.approvedByName ?? null,
     };
   });
 }
@@ -521,10 +766,11 @@ export async function loadRosterReport(
   const names = new Map<string, DriverHit>();
   const zoneCache = new Map<string, string>();
   for (const day of days) {
-    const [shifts, attendance, deliveries] = await Promise.all([
+    const [shifts, attendance, deliveries, overlays] = await Promise.all([
       shiftsForDay(db, day),
       attendanceForDay(db, day),
       db.collection(COLLECTIONS.deliveries).where("delivered_day", "==", day).limit(2500).get(),
+      approvedByDriver(db, day),
     ]);
     const dropsByDriver = new Map<string, RosterReportRow["earlyDrops"]>();
     for (const doc of deliveries.docs) {
@@ -561,10 +807,12 @@ export async function loadRosterReport(
       });
       dropsByDriver.set(driverId, list);
     }
-    for (const shift of shifts) {
-      if (shift.source !== "roster") continue;
-      const driverId = str(shift.driver_id);
+    for (const raw of shifts) {
+      if (raw.source !== "roster") continue;
+      const driverId = str(raw.driver_id);
       if (filter.driverId && driverId !== filter.driverId) continue;
+      const overlay = overlays.get(driverId);
+      const shift = withOverlay(raw, overlay);
       const restaurantId = str(shift.restaurant_id) || null;
       if (filter.restaurantId && restaurantId !== filter.restaurantId) continue;
       const place = await restaurantZone(db, restaurantId);
@@ -595,6 +843,14 @@ export async function loadRosterReport(
         now: new Date(),
         lateGraceMin: thresholds.late,
         earlyGraceMin: thresholds.early,
+        noLoginGraceMin: thresholds.noLogin,
+      });
+      const hours = rosterHours({
+        start: window.start,
+        end: window.end,
+        checkIn: log?.checkIn ?? null,
+        checkOut: log?.checkOut ?? null,
+        openUntil: day === kuwaitToday() ? new Date() : null,
       });
       rows.push({
         driverId,
@@ -614,6 +870,9 @@ export async function loadRosterReport(
         status: duty.status,
         minutesLate: duty.minutesLate,
         minutesEarly: duty.minutesEarly,
+        scheduledMinutes: shift.is_off === true ? 0 : hours.scheduled,
+        workedMinutes: shift.is_off === true ? 0 : hours.worked,
+        changeApprovedBy: overlay?.approvedByName ?? null,
         earlyDrops: dropsByDriver.get(driverId) ?? [],
       });
     }

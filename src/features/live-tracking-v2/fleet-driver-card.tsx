@@ -24,6 +24,7 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 import { avatarTintFromName } from "@/features/drivers/form/driver-form-primitives";
+import { formatKuwaitTime } from "@/features/driver-tracking/shift-adherence-display";
 
 import {
   activeFleetFlags,
@@ -36,6 +37,155 @@ import {
 import { FLEET_TONE_BADGE, FLEET_TONE_DOT } from "./fleet-tone";
 import type { RosterLine } from "./fleet-types";
 import { useFleetDriver } from "./use-fleet";
+
+type RosterT = ReturnType<typeof useTranslations<"pages.roster">>;
+
+type RosterCaptionFields = {
+  earlyDropOrderId?: string | null;
+  earlyDropAt?: string | null;
+  actualOut?: string | null;
+  minutesLate?: number | null;
+  minutesEarly?: number | null;
+  lateGraceMin?: number | null;
+  originalStart?: string | null;
+  originalEnd?: string | null;
+  changeApprovedBy?: string | null;
+};
+
+type RosterCaptionLine = RosterLine & RosterCaptionFields;
+
+const ROSTER_STATUS_KEYS = [
+  "off",
+  "scheduled",
+  "not_logged_in",
+  "no_show",
+  "on_shift",
+  "late",
+  "logged_out_early",
+] as const;
+
+type RosterStatusKey = (typeof ROSTER_STATUS_KEYS)[number];
+
+function captionLine(line: RosterLine): RosterCaptionLine {
+  return line;
+}
+
+function isRosterStatusKey(status: string): status is RosterStatusKey {
+  switch (status) {
+    case "off":
+    case "scheduled":
+    case "not_logged_in":
+    case "no_show":
+    case "on_shift":
+    case "late":
+    case "logged_out_early":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function rosterStatusLabel(status: RosterStatusKey, rosterT: RosterT): string {
+  switch (status) {
+    case "off":
+      return rosterT("statuses.off");
+    case "scheduled":
+      return rosterT("statuses.scheduled");
+    case "not_logged_in":
+      return rosterT("statuses.not_logged_in");
+    case "no_show":
+      return rosterT("statuses.no_show");
+    case "on_shift":
+      return rosterT("statuses.on_shift");
+    case "late":
+      return rosterT("statuses.late");
+    case "logged_out_early":
+      return rosterT("statuses.logged_out_early");
+    default: {
+      const unreachable: never = status;
+      return unreachable;
+    }
+  }
+}
+
+function scheduledWindow(start: string | null, end: string | null): string | null {
+  if (!start && !end) return null;
+  return `${start ?? ""}–${end ?? ""}`;
+}
+
+function actualWindow(actualIn: string | null, actualOut: string | null | undefined): string | null {
+  const login = actualIn ? formatKuwaitTime(actualIn) : null;
+  const logout = actualOut ? formatKuwaitTime(actualOut) : null;
+  if (login && logout) return `${login}–${logout}`;
+  return login ?? logout;
+}
+
+function rosterGraceLine(line: RosterCaptionLine, rosterT: RosterT): string | null {
+  const late = line.minutesLate;
+  const early = line.minutesEarly;
+  const graceMin = line.lateGraceMin;
+  switch (line.status) {
+    case "on_shift":
+      if (late != null && late > 0 && graceMin != null) {
+        return rosterT("withinGrace", { minutes: graceMin });
+      }
+      return null;
+    case "late":
+      if (late != null && late > 0) return rosterT("lateBy", { minutes: late });
+      return null;
+    case "logged_out_early":
+      if (early != null && early > 0) return rosterT("earlyBy", { minutes: early });
+      return null;
+    default:
+      return null;
+  }
+}
+
+export function rosterEarlyDropSentence(line: RosterLine, rosterT: RosterT): string | null {
+  if (!line.earlyDrop) return null;
+  const caption = captionLine(line);
+  const orderId = caption.earlyDropOrderId?.trim() ?? "";
+  if (orderId.length > 0) {
+    return rosterT("earlyDropLine", {
+      order: orderId,
+      time: formatKuwaitTime(caption.earlyDropAt),
+    });
+  }
+  const at = caption.earlyDropAt;
+  if (at) return `${rosterT("statuses.early_drop")} · ${formatKuwaitTime(at)}`;
+  return rosterT("statuses.early_drop");
+}
+
+function rosterScheduleWas(line: RosterCaptionLine, rosterT: RosterT): string | null {
+  const start = line.originalStart;
+  const name = line.changeApprovedBy;
+  if (!start || !name) return null;
+  return rosterT("scheduleWas", {
+    range: `${start}–${line.originalEnd ?? ""}`,
+    name,
+  });
+}
+
+function RosterShiftLines({ line, rosterT }: { line: RosterLine; rosterT: RosterT }) {
+  const caption = captionLine(line);
+  const status = isRosterStatusKey(caption.status) ? rosterStatusLabel(caption.status, rosterT) : null;
+  const scheduled = scheduledWindow(caption.start, caption.end);
+  const actual = actualWindow(caption.actualIn, caption.actualOut);
+  const grace = rosterGraceLine(caption, rosterT);
+  const earlyDrop = rosterEarlyDropSentence(line, rosterT);
+  const changed = rosterScheduleWas(caption, rosterT);
+  if (!status && !scheduled && !actual && !grace && !earlyDrop && !changed) return null;
+  return (
+    <div className="mt-0.5 min-w-0 space-y-0.5 text-[10px] leading-tight text-muted-foreground">
+      {status ? <p className="truncate">{status}</p> : null}
+      {scheduled ? <p className="truncate">{scheduled}</p> : null}
+      {actual ? <p className="truncate">{actual}</p> : null}
+      {grace ? <p className="truncate">{grace}</p> : null}
+      {earlyDrop ? <p className="truncate font-semibold text-destructive">{earlyDrop}</p> : null}
+      {changed ? <p className="truncate">{changed}</p> : null}
+    </div>
+  );
+}
 
 const MS_PER_MINUTE = 60_000;
 
@@ -165,17 +315,7 @@ export const FleetDriverCard = memo(function FleetDriverCard({
             </span>
             <span className="truncate">{meta.currentZoneName ?? meta.zoneName ?? t("rail.noZone")}</span>
           </div>
-          {rosterLine ? (
-            <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-              {rosterT(`statuses.${rosterLine.status}`)}
-              {" · "}
-              {rosterLine.start ?? "—"}–{rosterLine.end ?? "—"}
-              {rosterLine.actualIn ? ` · ${rosterLine.actualIn.slice(11, 16)}` : ""}
-              {rosterLine.earlyDrop ? (
-                <span className="ms-1 font-semibold text-destructive">{rosterT("statuses.early_drop")}</span>
-              ) : null}
-            </p>
-          ) : null}
+          {rosterLine ? <RosterShiftLines line={rosterLine} rosterT={rosterT} /> : null}
           {/*
             QA #48: On Delivery stays the badge above; this is its second half — progressing or
             parked. `fleetMotion` runs the same `speed or >= 15 m moved` rule the status machine
@@ -193,18 +333,29 @@ export const FleetDriverCard = memo(function FleetDriverCard({
       </div>
 
       {badgeFlags.length > 0 ? (
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {badgeFlags.map((flag) => (
-            <span
-              key={flag}
-              className={cn(
-                "inline-flex items-center rounded border px-1 py-px text-xs font-semibold",
-                FLEET_TONE_BADGE[fleetFlagTone(flag)],
-              )}
-            >
-              {t(`flags.${flag}`)}
-            </span>
-          ))}
+        <div className="mt-1.5">
+          <div className="flex flex-wrap gap-1">
+            {badgeFlags.map((flag) => (
+              <span
+                key={flag}
+                className={cn(
+                  "inline-flex items-center rounded border px-1 py-px text-xs font-semibold",
+                  FLEET_TONE_BADGE[fleetFlagTone(flag)],
+                )}
+              >
+                {t(`flags.${flag}`)}
+              </span>
+            ))}
+          </div>
+          <div className="fleet-progress-track mt-1 h-1 w-full overflow-hidden rounded-full">
+            <div
+              className="h-full rounded-full bg-rose-600 transition-[width] duration-200 ease-out"
+              style={{ width: `${Math.round((badgeFlags.length / 8) * 100)}%` }}
+            />
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {t("kpis.alerts")} · {badgeFlags.length}
+          </p>
         </div>
       ) : null}
 

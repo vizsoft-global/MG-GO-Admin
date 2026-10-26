@@ -12,6 +12,9 @@ import {
   listZoneStaff,
   loadDriverRoster,
   loadRosterLive,
+  acknowledgeRosterAlert,
+  listRosterDirectory,
+  loadRosterAlertDetail,
   loadRosterReport,
   previewRosterImport,
   readRosterSettings,
@@ -19,7 +22,12 @@ import {
   sweepRosterDay,
   writeRosterSettings,
 } from "@/features/roster/roster-data";
+import { createRosterChange, decideRosterChangeDoc, listRosterChanges, type RosterChangeView } from "@/features/roster/roster-changes";
 import { kuwaitToday } from "@/features/driver-tracking/kuwait-time";
+
+function actorName(session: { id: string; email: string | null; profile: { full_name: string | null } }) {
+  return session.profile.full_name?.trim() || session.email || session.id;
+}
 
 async function manageDb() {
   const auth = await requireMutationAuth("attendance.manage");
@@ -88,9 +96,13 @@ export async function loadRosterThresholds() {
 export async function saveRosterThresholds(input: {
   lateGraceMinutes: number;
   earlyGraceMinutes: number;
+  noLoginGraceMinutes: number;
   nearMeters: number;
   minMinutes: number;
+  customerMeters: number;
   flagMissingProof: boolean;
+  alertOnce: boolean;
+  minCoaches: number;
 }) {
   const gate = await manageDb();
   if ("error" in gate) return gate;
@@ -104,12 +116,65 @@ export async function fetchRosterLive() {
   return loadRosterLive(gate.db, gate.scope);
 }
 
-export async function fetchRosterAlerts() {
+export async function fetchRosterAlerts(input?: { day?: string; restaurantId?: string | null }) {
   const gate = await viewDb();
   if ("error" in gate) return gate;
-  const day = kuwaitToday();
-  await sweepRosterDay(gate.db, day);
-  return { day, rows: await listRosterAlerts(gate.db, gate.scope, day) };
+  const day = input?.day || kuwaitToday();
+  if (day === kuwaitToday()) await sweepRosterDay(gate.db, day);
+  return { day, rows: await listRosterAlerts(gate.db, gate.scope, day, input?.restaurantId ?? null) };
+}
+
+export async function fetchRosterDirectory() {
+  const gate = await viewDb();
+  if ("error" in gate) return gate;
+  return listRosterDirectory(gate.db, gate.scope);
+}
+
+export async function fetchRosterAlertDetail(id: string) {
+  const gate = await viewDb();
+  if ("error" in gate) return gate;
+  return loadRosterAlertDetail(gate.db, id);
+}
+
+export async function ackRosterAlert(id: string, outcome: string) {
+  const auth = await requireMutationAuth("attendance.view");
+  if ("error" in auth) return auth;
+  const db = await staffDb();
+  if (!db) return { error: "not_configured" as const };
+  return acknowledgeRosterAlert(db, id, auth.session.id, actorName(auth.session), outcome);
+}
+
+export async function fetchRosterChanges() {
+  const gate = await viewDb();
+  if ("error" in gate) return gate;
+  const rows = await listRosterChanges(gate.db);
+  return {
+    rows: gate.scope.all ? rows : rows.filter((row) => row.zoneId != null && gate.scope.zoneIds.includes(row.zoneId)),
+  };
+}
+
+export async function requestRosterChange(
+  input: Omit<RosterChangeView, "id" | "status" | "decidedByName" | "requestedByName">,
+) {
+  const auth = await requireMutationAuth("attendance.view");
+  if ("error" in auth) return auth;
+  const db = await staffDb();
+  if (!db) return { error: "not_configured" as const };
+  return createRosterChange(db, {
+    ...input,
+    requestedBy: auth.session.id,
+    requestedByName: actorName(auth.session),
+  });
+}
+
+export async function decideRosterChange(id: string, status: "approved" | "rejected") {
+  const auth = await requireMutationAuth("attendance.view");
+  if ("error" in auth) return auth;
+  const allowed = auth.session.isManager || auth.session.isSuperAdmin || auth.session.permissions.has("attendance.manage");
+  if (!allowed) return { error: "not_authorized" as const };
+  const db = await staffDb();
+  if (!db) return { error: "not_configured" as const };
+  return decideRosterChangeDoc(db, id, status, auth.session.id, actorName(auth.session));
 }
 
 export async function fetchDriverRosterWeek(driverId: string) {

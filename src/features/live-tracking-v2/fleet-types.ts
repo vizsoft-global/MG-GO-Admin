@@ -243,6 +243,17 @@ export type RosterLine = {
   actualIn: string | null;
   earlyDrop: boolean;
   restaurantId: string | null;
+  earlyDropOrderId: string | null;
+  earlyDropAt: string | null;
+  actualOut: string | null;
+  restaurantName: string | null;
+  company: string | null;
+  minutesLate: number;
+  minutesEarly: number;
+  lateGraceMin: number;
+  originalStart: string | null;
+  originalEnd: string | null;
+  changeApprovedBy: string | null;
 };
 
 export type FleetSnapshot = {
