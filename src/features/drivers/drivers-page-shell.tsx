@@ -173,6 +173,7 @@ const COLUMN_FILTER_KEY: Record<string, DriversFixedColumn> = {
   phone: "phone",
   restaurants: "restaurants",
   zone: "zone",
+  vehicle: "vehicle",
   section: "section",
   clientId: "platformId",
   clientName: "platformName",
@@ -525,7 +526,9 @@ function DriversPageContent() {
   const optionLabelFor = useCallback(
     (column: string, value: string, label: string | null): string => {
       if (value === "") {
-        return column === "companyName" ? t("companyUnassigned") : t("columnFilter.blank");
+        if (column === "companyName") return t("companyUnassigned");
+        if (column === "vehicle") return t("vehicleNone");
+        return t("columnFilter.blank");
       }
       switch (column) {
         case "riderCategory":
@@ -536,6 +539,8 @@ function DriversPageContent() {
             : accountStatusLabelFor(value as DriverAccountStatus);
         case "attendance":
           return value === "on_duty" ? t("attendanceOnDuty") : t("attendanceOffDuty");
+        case "vehicle":
+          return value === "car" ? t("vehicleCar") : t("vehicleBike");
         case "section":
           return catalogLabel(value, sectionsQuery.data ?? [], locale);
         default: {
@@ -606,7 +611,7 @@ function DriversPageContent() {
       fixed("phone", t("colPhone")),
       fixed("restaurants", t("colRestaurants")),
       fixed("zone", t("colZone")),
-      { id: "vehicle", label: t("colVehicle") },
+      fixed("vehicle", t("colVehicle")),
       fixed("section", t("colSection")),
       { id: "partner", label: t("colProject") },
       fixed("driverId", t("colDriverId")),

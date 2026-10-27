@@ -20,13 +20,15 @@ describe("isFilterActive / sanitizeDriversFilters", () => {
       todayDeliveries: { min: 2, max: null },
       status: { in: [] },
       riderCategory: { in: ["in_house"] },
+      vehicle: { in: ["bike", ""] },
     });
     assert.deepEqual(out, {
       name: { contains: "ali" },
       todayDeliveries: { min: 2, max: null },
       riderCategory: { in: ["in_house"] },
+      vehicle: { in: ["bike", ""] },
     });
-    assert.equal(countActiveFilters(out), 3);
+    assert.equal(countActiveFilters(out), 4);
     assert.equal(isFilterActive({ contains: "  " }), false);
   });
 });
