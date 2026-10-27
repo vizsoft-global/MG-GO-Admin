@@ -229,14 +229,13 @@ export function AppLauncherShell({
         className="group/hub flex w-[90px] flex-col items-center gap-[10px] text-center"
       >
         <span
-          className="relative grid size-16 place-items-center overflow-visible rounded-2xl border-[0.7px] border-black/15"
+          className="relative grid size-16 place-items-center overflow-visible rounded-2xl border-[0.7px] border-black/15 shadow-[0_3px_10px_rgba(0,0,0,0.2)] transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] motion-reduce:transition-none motion-reduce:group-hover/hub:[transform:none] motion-reduce:group-hover/hub:shadow-[0_3px_10px_rgba(0,0,0,0.2)] [@media(hover:hover)_and_(pointer:fine)]:group-hover/hub:[transform:translateY(-1.5px)_scale(1.024)] [@media(hover:hover)_and_(pointer:fine)]:group-hover/hub:shadow-[0_12px_26px_rgba(0,0,0,0.42)]"
           style={{
             backgroundColor: LAUNCHER_BRAND.tile,
             backgroundImage: "linear-gradient(180deg, transparent, rgba(0,0,0,0.15))",
-            boxShadow: "0 3px 10px rgba(0,0,0,0.2)",
           }}
         >
-          <span className="inline-grid origin-center transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none motion-reduce:group-hover/hub:scale-100 [@media(hover:hover)_and_(pointer:fine)]:group-hover/hub:scale-[1.4]">
+          <span className="inline-grid origin-center">
             <LauncherGlyph id={item.id} icon={item.icon} />
           </span>
           {badge ? (
@@ -426,7 +425,7 @@ export function AppLauncherShell({
             alt=""
             width={64}
             height={30}
-            className="mb-1 h-[30px] w-16 -scale-y-100"
+            className="mb-5 block h-[30px] w-16 -scale-y-100 object-contain"
           />
           <footer
             className="flex h-8 w-full items-center justify-center px-4 text-center"
