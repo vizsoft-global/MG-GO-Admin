@@ -15,7 +15,12 @@ import {
   primaryRestaurantId,
   type EfficiencyBenchmark,
 } from "../core/ops-kpi";
-import { payrollHoursFromFields } from "./payroll-read-plan";
+import {
+  fullPopulationDpds,
+  onShiftHoursByDriver,
+  type AttendanceLogInput,
+  type ShiftSessionInput,
+} from "../core/ops-hours";
 
 const PERFORMANCE_TARGET_DPD = "performance_target_dpd";
 const DRIVER_DPD_SHIFT_NOTICES = "driver_dpd_shift_notices";
@@ -833,7 +838,7 @@ async function buildRoll(args: OpsArgs): Promise<{
   const db = getFirestore();
   const wantsDelivered = args.orderStatuses.some((status) => status === "verified" || status === "pending");
   const wantsOpen = args.orderStatuses.includes("in_transit");
-  const [driverSnaps, deliverySnaps, openSnaps, attendanceSnaps, ruleSnaps, scopeSnaps, vehicleDocs, restaurantDocs, zoneDocs, partnerDocs, targetSnaps] =
+  const [driverSnaps, deliverySnaps, openSnaps, attendanceSnaps, ruleSnaps, scopeSnaps, vehicleDocs, restaurantDocs, zoneDocs, partnerDocs, targetSnaps, shiftSnaps, verifiedSnaps] =
     await Promise.all([
       db
         .collection(COLLECTIONS.drivers)
@@ -885,8 +890,35 @@ async function buildRoll(args: OpsArgs): Promise<{
       loadLeanDocs(COLLECTIONS.vehicles, ["vehicle_type_key"]),
       loadLeanDocs(COLLECTIONS.restaurants, ["name", "is_active"]),
       loadLeanDocs(COLLECTIONS.zones, ["name"]),
-      loadLeanDocs(COLLECTIONS.partners, ["slug", "key", "name", "efficiency_benchmark"]),
+      loadLeanDocs(COLLECTIONS.partners, ["slug", "key", "name", "efficiency_benchmark", "logo_url"]),
       db.collection(PERFORMANCE_TARGET_DPD).get(),
+      db
+        .collection(COLLECTIONS.driverDailyShifts)
+        .where("shift_date", ">=", args.from)
+        .where("shift_date", "<=", args.to)
+        .select(
+          "driver_id",
+          "shift_date",
+          "is_off",
+          "shift_type",
+          "session1_start",
+          "session1_end",
+          "session1_end_day_offset",
+          "session2_start",
+          "session2_end",
+          "session2_start_day_offset",
+          "session2_end_day_offset",
+        )
+        .get(),
+      wantsDelivered
+        ? Promise.resolve(null)
+        : db
+            .collection(COLLECTIONS.deliveries)
+            .where(FIELDS.deliveries.deliveredAt, ">=", kuwaitDayStart(args.from))
+            .where(FIELDS.deliveries.deliveredAt, "<", kuwaitDayEnd(args.to))
+            .where("status", "==", "verified")
+            .select("status", "driver_id", "delivered_at", "pickup_at", "restaurant_id", "started_to_restaurant_at")
+            .get(),
     ]);
 
   const deliveryRows: Dict[] = [];
@@ -1072,6 +1104,63 @@ async function buildRoll(args: OpsArgs): Promise<{
     return text(vehicle ?? {}, "vehicle_type_key") ?? text(driver, "vehicle_type_key");
   };
 
+  type VerifiedEntry = {
+    orders: number;
+    days: Set<string>;
+    counts: Map<string, number>;
+    lastRestaurantId: string | null;
+    lastAt: number;
+  };
+  const verifiedPerDriver = new Map<string, VerifiedEntry>();
+  const verifiedDocs = wantsDelivered ? (deliverySnaps?.docs ?? []) : (verifiedSnaps?.docs ?? []);
+  for (const doc of verifiedDocs) {
+    const row = doc.data() as Dict;
+    if (row.status !== "verified") continue;
+    const driverId = parseId(row.driver_id);
+    if (!driverId) continue;
+    const entry = verifiedPerDriver.get(driverId) ?? {
+      orders: 0,
+      days: new Set<string>(),
+      counts: new Map<string, number>(),
+      lastRestaurantId: null,
+      lastAt: 0,
+    };
+    entry.orders += 1;
+    const deliveredAt = asDate(row.delivered_at);
+    const pickupAt = asDate(row.pickup_at);
+    const day = deliveredAt ? kuwaitDayString(deliveredAt) : pickupAt ? kuwaitDayString(pickupAt) : null;
+    if (day) entry.days.add(day);
+    const restaurantId = parseId(row.restaurant_id);
+    const at = (deliveredAt ?? pickupAt)?.getTime() ?? 0;
+    if (restaurantId) {
+      entry.counts.set(restaurantId, (entry.counts.get(restaurantId) ?? 0) + 1);
+      if (at >= entry.lastAt) {
+        entry.lastAt = at;
+        entry.lastRestaurantId = restaurantId;
+      }
+    }
+    verifiedPerDriver.set(driverId, entry);
+  }
+  const benchRiders: Array<{
+    restaurantId: string | null;
+    zoneId: string | null;
+    vehicleKey: string | null;
+    orders: number;
+    workingDays: number;
+  }> = [];
+  for (const [driverId, entry] of verifiedPerDriver) {
+    const driver = driverById.get(driverId);
+    if (!driver) continue;
+    benchRiders.push({
+      restaurantId: primaryRestaurantId(entry.counts, entry.lastRestaurantId) ?? parseId(driver.restaurant_id),
+      zoneId: parseId(driver.zone_id),
+      vehicleKey: resolveVehicleKey(driver),
+      orders: entry.orders,
+      workingDays: entry.days.size,
+    });
+  }
+  const { storeDpd, zoneVehicleDpd } = fullPopulationDpds(benchRiders);
+
   const resolveDriverName = (driverId: string, driver: Dict): string | null => {
     const profileId = text(driver, "profile_id");
     const profile = profileById.get(driverId) ?? (profileId ? profileById.get(profileId) : undefined);
@@ -1170,19 +1259,59 @@ async function buildRoll(args: OpsArgs): Promise<{
     return true;
   };
 
-  const hoursByDriver = new Map<string, number>();
-  const hoursByDay = new Map<string, number>();
+  const logs: AttendanceLogInput[] = [];
   for (const doc of attendanceSnaps.docs) {
     const log = doc.data() as Dict;
     const driverId = parseId(log.driver_id);
     if (!driverId) continue;
+    const stamped = asDate(log.log_date);
+    const day = text(log, "log_date") ?? (stamped ? kuwaitDayString(stamped) : null);
+    if (!day) continue;
+    logs.push({
+      driverId,
+      day,
+      checkIn: asDate(log.check_in_at),
+      checkOut: asDate(log.check_out_at),
+    });
+  }
+  const shifts: ShiftSessionInput[] = [];
+  for (const doc of shiftSnaps.docs) {
+    const row = doc.data() as Dict;
+    const driverId = parseId(row.driver_id);
+    const day = text(row, "shift_date");
+    if (!driverId || !day) continue;
+    shifts.push({
+      id: doc.id,
+      driverId,
+      day,
+      isOff: row.is_off === true,
+      shiftType: text(row, "shift_type") ?? "",
+      session1Start: text(row, "session1_start"),
+      session1End: text(row, "session1_end"),
+      session1EndDayOffset: num(row.session1_end_day_offset) ?? 0,
+      session2Start: text(row, "session2_start"),
+      session2End: text(row, "session2_end"),
+      session2StartDayOffset: num(row.session2_start_day_offset) ?? 0,
+      session2EndDayOffset: num(row.session2_end_day_offset) ?? 0,
+    });
+  }
+  const allHours = onShiftHoursByDriver({ logs, shifts, now: new Date() });
+  const hoursByDriver = new Map<string, number>();
+  const hoursByDay = new Map<string, number>();
+  for (const [driverId, hours] of allHours.hoursByDriver) {
     const driver = driverById.get(driverId);
     if (!driver || !matches(driver)) continue;
-    const hours = payrollHoursFromFields(log);
-    if (!Number.isFinite(hours) || hours <= 0) continue;
-    hoursByDriver.set(driverId, (hoursByDriver.get(driverId) ?? 0) + hours);
-    const day = text(log, "log_date");
-    if (day) hoursByDay.set(day, (hoursByDay.get(day) ?? 0) + hours);
+    if (hours <= 0) continue;
+    hoursByDriver.set(driverId, hours);
+  }
+  for (const [key, hours] of allHours.hoursByDriverDay) {
+    const sep = key.indexOf("\t");
+    const driverId = key.slice(0, sep);
+    const day = key.slice(sep + 1);
+    const driver = driverById.get(driverId);
+    if (!driver || !matches(driver)) continue;
+    if (hours <= 0) continue;
+    hoursByDay.set(day, (hoursByDay.get(day) ?? 0) + hours);
   }
   let workingHours = 0;
   for (const hours of hoursByDriver.values()) workingHours += hours;
@@ -1282,10 +1411,8 @@ async function buildRoll(args: OpsArgs): Promise<{
   }
 
   for (const row of scoped) {
-    const store = storeAgg.get(row.restaurant_id ?? "—");
-    const zv = zoneVehicle.get(`${row.zone_id ?? "—"}|${row.vehicle_key ?? "—"}`);
-    row.store_dpd = store ? positiveRatio(store.orders as number, store.working_days as number) : null;
-    row.veh_zone_dpd = zv ? positiveRatio(zv.orders, zv.days) : null;
+    row.store_dpd = storeDpd.get(row.restaurant_id ?? "—") ?? null;
+    row.veh_zone_dpd = zoneVehicleDpd.get(`${row.zone_id ?? "—"}|${row.vehicle_key ?? "—"}`) ?? null;
     const benchmark = row.benchmark_mode === "zone_vehicle" ? row.veh_zone_dpd : row.store_dpd;
     const ratio = positiveRatio(row.dpd ?? Number.NaN, benchmark ?? Number.NaN);
     row.dpd_eff = ratio === null ? null : ratio * 100;
@@ -1595,6 +1722,7 @@ export const adminPerformanceOpsSnapshot = measureOnCall("adminPerformanceOpsSna
 function optionsFromRoll(roll: {
   zoneById: Map<string, Dict>;
   restaurantById: Map<string, Dict>;
+  partnerById: Map<string, Dict>;
   nationalities: string[];
 }): Dict {
   return {
@@ -1606,6 +1734,14 @@ function optionsFromRoll(roll: {
       .map((restaurant) => ({ id: restaurant.id, name: (restaurant.name as string | null) ?? null }))
       .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""))),
     nationalities: roll.nationalities,
+    partners: Array.from(roll.partnerById.values())
+      .map((partner) => ({
+        id: partner.id,
+        key: text(partner, "key") ?? text(partner, "slug") ?? "",
+        name: text(partner, "name"),
+        logo_url: text(partner, "logo_url"),
+      }))
+      .sort((a, b) => String(a.name ?? a.key ?? "").localeCompare(String(b.name ?? b.key ?? ""))),
   };
 }
 

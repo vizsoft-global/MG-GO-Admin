@@ -77,6 +77,17 @@ describe("admin callable route", () => {
     assert.equal(resolved.timeoutMs, 120_000);
   });
 
+  it("routes the order recon compare to the scan lane", () => {
+    const resolved = route(undefined, "admin_order_recon_compare");
+    assert.equal(resolved.lane, "scan");
+    assert.equal(resolved.functionName, "adminOrderReconCompare");
+    assert.equal(
+      resolved.url,
+      "https://me-central1-musallam-delivery-prod.cloudfunctions.net/adminApiScan",
+    );
+    assert.equal(resolved.timeoutMs, 120_000);
+  });
+
   it("leaves a name without underscores unchanged", () => {
     const resolved = route(undefined, "syncStaffClaims");
     assert.equal(resolved.functionName, "syncStaffClaims");

@@ -97,19 +97,19 @@ export function dayClass(status: DayStatus): string {
     case "sick":
       return "bg-orange-100 text-orange-800";
     case "accident":
-      return "bg-lime-100 text-lime-800";
+      return "bg-[#FFE45C] text-[#3A3000]";
     case "vehicle":
       return "bg-indigo-100 text-indigo-800";
     case "absent":
-      return "bg-red-100 text-red-700";
+      return "bg-[#D13B3B] text-white";
     case "abs_lh":
       return "bg-fuchsia-100 text-fuchsia-800";
     case "abs_lo":
       return "bg-rose-100 text-rose-800 ring-1 ring-inset ring-rose-300";
     case "cancelled":
-      return "bg-slate-200 text-slate-700";
+      return "bg-[#D13B3B] text-white";
     case "leave":
-      return "bg-sky-100 text-sky-800";
+      return "bg-[#F28C28] text-[#2B1600]";
     case "terminated":
       return "bg-neutral-200 text-neutral-700";
     case "phone_issue":
@@ -117,9 +117,9 @@ export function dayClass(status: DayStatus): string {
     case "id_suspended":
       return "bg-violet-100 text-violet-800";
     case "new_hire":
-      return "bg-blue-100 text-blue-800";
+      return "bg-[#DCCDF6] text-[#2E1C57]";
     case "training":
-      return "bg-yellow-100 text-yellow-800";
+      return "bg-[#FFD9B0] text-[#4A2600]";
     case "custom":
       return "bg-purple-100 text-purple-800";
     case "blank":

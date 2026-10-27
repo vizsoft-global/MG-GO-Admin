@@ -69,9 +69,15 @@ export function failureCode(
   // lane, and a legacy 404 says "could not find the function".
   if (message === "unknown_fn") return "service_stale";
   const lower = message.toLowerCase();
-  if (message.includes("admin_order_comparison_snapshot") || lower.includes("could not find the function")) {
+  if (
+    message.includes("admin_order_comparison_snapshot") ||
+    message.includes("admin_order_recon_compare") ||
+    lower.includes("could not find the function")
+  ) {
     return "service_stale";
   }
+  // `callAdminFunction` labels a timed-out / aborted fetch this way.
+  if (message === "unavailable") return "request_failed";
   const code = (error?.code ?? "").trim();
   if (code.startsWith("5")) return "service_unavailable";
   return "compare_failed";

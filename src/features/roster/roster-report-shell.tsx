@@ -2,17 +2,22 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { FileBarChart } from "lucide-react";
-import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
 import { SearchSelect } from "@/components/ui/search-select";
-import { addDays, kuwaitToday } from "@/features/driver-tracking/kuwait-time";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { kuwaitToday } from "@/features/driver-tracking/kuwait-time";
 import { formatKuwaitTime } from "@/features/driver-tracking/shift-adherence-display";
 import { downloadWorkbookXlsx } from "@/features/drivers/import/export-xlsx";
 import { formatPct } from "@/lib/format/percent";
+import { selectOptions } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
-import { fetchRosterDirectory, fetchRosterReport } from "./roster-actions";
+import type { RosterDutyStatus } from "./roster-adherence";
+import { fetchRosterDirectory, fetchRosterReport, loadRosterThresholds } from "./roster-actions";
+import { RosterField } from "./roster-field";
 import { RosterNav } from "./roster-nav";
+import { clock12, formatDayLabel, formatRangeLabel, rangeForPreset, type RosterRangePreset } from "./roster-range";
 import { rosterError } from "./roster-result";
 import { rosterBtn, rosterCanvas, rosterCard, rosterH1, rosterMuted, rosterTd, rosterTh } from "./roster-ui";
 
@@ -22,11 +27,35 @@ function hours(minutes: number) {
 
 type GroupKey = "driverName" | "restaurantName" | "zoneName";
 
+function resultTone(status: RosterDutyStatus): string {
+  switch (status) {
+    case "late":
+      return "bg-[#FDF0DC] text-[#8A4B06]";
+    case "on_shift":
+    case "scheduled":
+      return "bg-[#E7F6EE] text-[#146C43]";
+    case "logged_out_early":
+      return "bg-[#EEE8FB] text-[#5B34A8]";
+    case "no_show":
+    case "not_logged_in":
+      return "bg-[#F3F0EE] text-[#5E5754]";
+    case "off":
+      return "bg-[#F3F0EE] text-[#5E5754]";
+    default: {
+      const _never: never = status;
+      return _never;
+    }
+  }
+}
+
 export function RosterReportShell() {
   const t = useTranslations("pages.roster");
+  const locale = useLocale();
   const today = kuwaitToday();
-  const [from, setFrom] = useState(addDays(today, -6));
-  const [to, setTo] = useState(today);
+  const lastWeek = rangeForPreset("lastWeek", today);
+  const [preset, setPreset] = useState<RosterRangePreset>("lastWeek");
+  const [from, setFrom] = useState(lastWeek.from);
+  const [to, setTo] = useState(lastWeek.to);
   const [zoneId, setZoneId] = useState<string | null>(null);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [company, setCompany] = useState<string | null>(null);
@@ -34,6 +63,7 @@ export function RosterReportShell() {
   const [tab, setTab] = useState<"shifts" | "drops" | "totals">("shifts");
   const [group, setGroup] = useState<GroupKey>("driverName");
   const directory = useQuery({ queryKey: ["roster", "directory"], queryFn: fetchRosterDirectory });
+  const settings = useQuery({ queryKey: ["roster", "settings"], queryFn: loadRosterThresholds });
   const report = useQuery({
     queryKey: ["roster", "report", from, to, zoneId, restaurantId, company, driverId],
     queryFn: () => fetchRosterReport({ from, to, zoneId, restaurantId, company, driverId }),
@@ -44,12 +74,53 @@ export function RosterReportShell() {
   const places = directory.data && "restaurants" in directory.data ? directory.data.restaurants : [];
   const companies = directory.data && "companies" in directory.data ? directory.data.companies : [];
   const riders = directory.data && "riders" in directory.data ? directory.data.riders : [];
+  const thresholds = settings.data && "lateGraceMinutes" in settings.data ? settings.data : null;
   const scheduled = rows.reduce((sum, row) => sum + row.scheduledMinutes, 0);
   const worked = rows.reduce((sum, row) => sum + row.workedMinutes, 0);
   const late = rows.filter((row) => row.status === "late").length;
   const early = rows.filter((row) => row.status === "logged_out_early").length;
   const noShow = rows.filter((row) => row.status === "no_show").length;
   const drops = rows.reduce((sum, row) => sum + row.earlyDrops.length, 0);
+  const riderCount = new Set(rows.map((row) => row.driverId)).size;
+  const restCount = new Set(rows.map((row) => row.restaurantId).filter(Boolean)).size;
+
+  useEffect(() => {
+    if (zoneId) return;
+    if (zones.length === 1) setZoneId(zones[0].id);
+  }, [zones, zoneId]);
+
+  const rangeItems = useMemo(() => {
+    const last = rangeForPreset("lastWeek", today);
+    const current = rangeForPreset("thisWeek", today);
+    return selectOptions([
+      { value: "lastWeek", label: `${t("lastWeek")} · ${formatRangeLabel(last.from, last.to, locale)}` },
+      { value: "thisWeek", label: `${t("thisWeek")} · ${formatRangeLabel(current.from, current.to, locale)}` },
+      { value: "last7", label: t("last7") },
+      { value: "today", label: t("today") },
+      { value: "yesterday", label: t("yesterday") },
+      { value: "custom", label: t("custom") },
+    ]);
+  }, [locale, t, today]);
+
+  function pickPreset(next: string | null) {
+    switch (next) {
+      case "today":
+      case "yesterday":
+      case "last7":
+      case "thisWeek":
+      case "lastWeek":
+      case "custom":
+        setPreset(next);
+        if (next !== "custom") {
+          const range = rangeForPreset(next, today);
+          setFrom(range.from);
+          setTo(range.to);
+        }
+        return;
+      default:
+        return;
+    }
+  }
 
   function totals(key: GroupKey) {
     const map = new Map<string, { count: number; scheduled: number; worked: number; late: number; early: number; noShow: number; drops: number }>();
@@ -69,6 +140,16 @@ export function RosterReportShell() {
   }
 
   const grouped = totals(group);
+  const zoneItems = zones.map((zone) => ({
+    value: zone.id,
+    label: zones.length === 1 ? t("yourZone", { name: zone.name }) : zone.name,
+    keywords: [zone.name],
+  }));
+
+  function resultLabel(status: RosterDutyStatus) {
+    if (status === "on_shift") return t("onTime");
+    return t(`statuses.${status}`);
+  }
 
   return (
     <div className={rosterCanvas}>
@@ -120,28 +201,54 @@ export function RosterReportShell() {
           {t("export")}
         </button>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-[#5E5754]">{t("dateRange")}</span>
-        <Input className="h-9 w-36" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
-        <Input className="h-9 w-36" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
-        <SearchSelect className="h-9 min-w-[140px]" items={[{ value: "all", label: t("allZones") }, ...zones.map((zone) => ({ value: zone.id, label: zone.name, keywords: [zone.name] }))]} value={zoneId ?? "all"} onChange={(value) => setZoneId(!value || value === "all" ? null : value)} placeholder={t("allZones")} searchPlaceholder={t("zone")} recentsKey="roster-report-zone" clearable={false} />
-        <SearchSelect className="h-9 min-w-[160px]" items={[{ value: "all", label: t("allRestaurants") }, ...places.map((place) => ({ value: place.id, label: place.name, keywords: [place.name, place.storeCc] }))]} value={restaurantId ?? "all"} onChange={(value) => setRestaurantId(!value || value === "all" ? null : value)} placeholder={t("allRestaurants")} searchPlaceholder={t("restaurant")} recentsKey="roster-report-place" clearable={false} />
-        <SearchSelect className="h-9 min-w-[140px]" items={[{ value: "all", label: t("allCompanies") }, ...companies.map((name) => ({ value: name, label: name, keywords: [name] }))]} value={company ?? "all"} onChange={(value) => setCompany(!value || value === "all" ? null : value)} placeholder={t("allCompanies")} searchPlaceholder={t("company")} recentsKey="roster-report-company" clearable={false} />
-        <SearchSelect className="h-9 min-w-[180px]" items={[{ value: "all", label: t("all") }, ...riders.map((rider) => ({ value: rider.id, label: `${rider.employeeId} ${rider.name}`, keywords: [rider.name, rider.employeeId] }))]} value={driverId ?? "all"} onChange={(value) => setDriverId(!value || value === "all" ? null : value)} placeholder={t("rider")} searchPlaceholder={t("searchRider")} recentsKey="roster-report-rider" clearable={false} />
+      <div className={cn(rosterCard, "flex flex-nowrap items-end gap-2 overflow-x-auto p-3")}>
+        <RosterField label={t("dateRange")} className="min-w-[220px]">
+          <Select items={rangeItems} value={preset} onValueChange={pickPreset}>
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {rangeItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </RosterField>
+        {preset === "custom" ? (
+          <>
+            <RosterField label={t("from")} className="min-w-[140px] flex-none">
+              <Input className="h-9" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+            </RosterField>
+            <RosterField label={t("to")} className="min-w-[140px] flex-none">
+              <Input className="h-9" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+            </RosterField>
+          </>
+        ) : null}
+        <RosterField label={t("zone")}>
+          <SearchSelect className="h-9 min-w-[140px]" items={[{ value: "all", label: t("allZones") }, ...zoneItems]} value={zoneId ?? "all"} onChange={(value) => setZoneId(!value || value === "all" ? null : value)} placeholder={t("allZones")} searchPlaceholder={t("zone")} recentsKey="roster-report-zone" clearable={false} />
+        </RosterField>
+        <RosterField label={t("restaurant")}>
+          <SearchSelect className="h-9 min-w-[160px]" items={[{ value: "all", label: t("allRestaurants") }, ...places.map((place) => ({ value: place.id, label: place.name, keywords: [place.name, place.storeCc] }))]} value={restaurantId ?? "all"} onChange={(value) => setRestaurantId(!value || value === "all" ? null : value)} placeholder={t("allRestaurants")} searchPlaceholder={t("restaurant")} recentsKey="roster-report-place" clearable={false} />
+        </RosterField>
+        <RosterField label={t("company")}>
+          <SearchSelect className="h-9 min-w-[140px]" items={[{ value: "all", label: t("allCompanies") }, ...companies.map((name) => ({ value: name, label: name, keywords: [name] }))]} value={company ?? "all"} onChange={(value) => setCompany(!value || value === "all" ? null : value)} placeholder={t("allCompanies")} searchPlaceholder={t("company")} recentsKey="roster-report-company" clearable={false} />
+        </RosterField>
+        <RosterField label={t("rider")}>
+          <SearchSelect className="h-9 min-w-[180px]" items={[{ value: "all", label: t("all") }, ...riders.map((rider) => ({ value: rider.id, label: `${rider.name} #${rider.employeeId}`, keywords: [rider.name, rider.employeeId] }))]} value={driverId ?? "all"} onChange={(value) => setDriverId(!value || value === "all" ? null : value)} placeholder={t("nameOrId")} searchPlaceholder={t("nameOrId")} recentsKey="roster-report-rider" clearable={false} />
+        </RosterField>
       </div>
       {failure ? <p className="text-xs text-destructive">{t(`errors.${failure}`)}</p> : null}
       <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {[
-          [t("scheduledHours"), hours(scheduled)],
-          [t("workedHours"), hours(worked)],
-          [t("statuses.late"), late],
-          [t("leftEarly"), early],
-          [t("statuses.no_show"), noShow],
-          [t("statuses.early_drop"), drops],
-        ].map(([label, value]) => (
-          <div key={String(label)} className={cn(rosterCard, "p-3")}>
-            <p className="text-xs text-[#5E5754]">{label}</p>
-            <p className="text-xl font-semibold">{value}</p>
+          { label: t("scheduledHours"), value: hours(scheduled), hint: t("scheduledRiders", { riders: riderCount, restaurants: restCount }) },
+          { label: t("workedHours"), value: hours(worked), hint: t("workedOfScheduled", { pct: scheduled > 0 ? formatPct((worked / scheduled) * 100) : "—" }) },
+          { label: t("statuses.late"), value: late, hint: t("afterGrace", { minutes: thresholds?.lateGraceMinutes ?? 15 }) },
+          { label: t("leftEarly"), value: early, hint: t("beforeGrace", { minutes: thresholds?.earlyGraceMinutes ?? 10 }) },
+          { label: t("statuses.no_show"), value: noShow, hint: t("noLoginWithin", { minutes: thresholds?.noLoginGraceMinutes ?? 60 }) },
+          { label: t("statuses.early_drop"), value: drops, hint: "" },
+        ].map((card) => (
+          <div key={card.label} className={cn(rosterCard, "p-3")}>
+            <p className="text-xs text-[#5E5754]">{card.label}</p>
+            <p className="text-xl font-semibold">{card.value}</p>
+            {card.hint ? <p className="text-[10px] text-[#5E5754]">{card.hint}</p> : null}
           </div>
         ))}
       </div>
@@ -157,7 +264,7 @@ export function RosterReportShell() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-[#E2DCD8]">
-                {[t("date"), t("rider"), t("restaurant"), t("shiftCol"), t("scheduledHours"), t("actualWindow"), t("minLate"), t("minLeft"), t("result"), t("approvedBy")].map((label) => (
+                {[t("date"), t("rider"), t("restaurant"), t("shiftCol"), t("scheduledHours"), t("actualWindow"), t("minLate"), t("minLeft"), t("result")].map((label) => (
                   <th key={label} className={rosterTh}>{label}</th>
                 ))}
               </tr>
@@ -165,16 +272,17 @@ export function RosterReportShell() {
             <tbody>
               {rows.slice(0, 200).map((row) => (
                 <tr key={`${row.driverId}-${row.date}`} className="border-b border-[#E2DCD8]">
-                  <td className={rosterTd}>{row.date}</td>
-                  <td className={rosterTd}>{row.employeeId} {row.driverName}</td>
+                  <td className={rosterTd}>{formatDayLabel(row.date, locale)}</td>
+                  <td className={rosterTd}>{row.driverName} {row.employeeId ? `#${row.employeeId}` : ""}</td>
                   <td className={rosterTd}>{row.restaurantName || "—"}</td>
-                  <td className={rosterTd}>{row.off ? t("offDay") : `${row.scheduledStart ?? "—"}–${row.scheduledEnd ?? "—"}`}</td>
-                  <td className={rosterTd}>{hours(row.scheduledMinutes)}</td>
-                  <td className={rosterTd}>{formatKuwaitTime(row.actualIn)}–{formatKuwaitTime(row.actualOut)}</td>
-                  <td className={rosterTd}>{row.minutesLate}</td>
-                  <td className={rosterTd}>{row.minutesEarly}</td>
-                  <td className={rosterTd}>{t(`statuses.${row.status}`)}</td>
-                  <td className={rosterTd}>{row.changeApprovedBy ?? "—"}</td>
+                  <td className={rosterTd}>{row.off ? t("offDay") : "1 of 1"}</td>
+                  <td className={rosterTd}>{row.off ? "—" : `${clock12(row.scheduledStart)} – ${clock12(row.scheduledEnd)}`}</td>
+                  <td className={rosterTd}>{row.actualIn || row.actualOut ? `${formatKuwaitTime(row.actualIn)} – ${formatKuwaitTime(row.actualOut)}` : t("noLogin")}</td>
+                  <td className={rosterTd}>{row.minutesLate || "—"}</td>
+                  <td className={rosterTd}>{row.minutesEarly || "—"}</td>
+                  <td className={rosterTd}>
+                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", resultTone(row.status))}>{resultLabel(row.status)}</span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -194,7 +302,7 @@ export function RosterReportShell() {
             <tbody>
               {rows.flatMap((row) => row.earlyDrops.map((drop) => (
                 <tr key={drop.deliveryId} className="border-b border-[#E2DCD8]">
-                  <td className={rosterTd}>{row.date}</td>
+                  <td className={rosterTd}>{formatDayLabel(row.date, locale)}</td>
                   <td className={rosterTd}>{drop.orderId || drop.deliveryId}</td>
                   <td className={rosterTd}>{row.driverName}</td>
                   <td className={rosterTd}>{row.restaurantName || "—"}</td>

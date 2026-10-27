@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { dayGridLabel } from "./payroll-formulas";
+import { dayGridLabel, PAYROLL_STATUS_CHIP } from "./payroll-formulas";
 import { EDITOR_ADJUSTMENT_STATUSES, particularForAdjustment } from "./payroll-particulars";
 import type { PayrollAdjustRequest } from "./payroll-grid";
 import type { AdjustmentStatus } from "./payroll-rules-engine";
@@ -22,19 +22,19 @@ const STATUS_HEX: Record<AdjustmentStatus, string> = {
   half: "#22d3ee",
   actual: "#86efac",
   off: "#34d399",
-  absent: "#ef4444",
+  absent: PAYROLL_STATUS_CHIP.absent.hex,
   abs_lh: "#f472b6",
   abs_lo: "#fda4af",
   sick: "#f59e0b",
-  accident: "#a3e635",
+  accident: PAYROLL_STATUS_CHIP.accident.hex,
   vehicle: "#a5b4fc",
-  cancelled: "#94a3b8",
-  leave: "#7dd3fc",
+  cancelled: PAYROLL_STATUS_CHIP.cancelled.hex,
+  leave: PAYROLL_STATUS_CHIP.leave.hex,
   terminated: "#a1a1aa",
   phone_issue: "#5eead4",
   id_suspended: "#c4b5fd",
-  new_hire: "#93c5fd",
-  training: "#fde047",
+  new_hire: PAYROLL_STATUS_CHIP.new_hire.hex,
+  training: PAYROLL_STATUS_CHIP.training.hex,
   custom: "#c084fc",
 };
 

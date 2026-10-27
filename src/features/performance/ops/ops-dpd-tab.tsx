@@ -15,6 +15,7 @@ import {
   formatOpsTrendLabel,
   isChartableDimKey,
   OPS_METRIC_COLOR,
+  utrBucket,
   type OpsChartMetric,
   type OpsGranularity,
 } from "../performance-ops-formulas";
@@ -53,13 +54,15 @@ export function OpsDpdTab({
       number
     >;
     for (const r of riders) {
-      if (r.bucket) out[r.bucket] += 1;
+      const b = metric === "utr" ? utrBucket(r.utr) : r.bucket;
+      if (b) out[b] += 1;
     }
     return out;
-  }, [riders]);
+  }, [riders, metric]);
 
+  const bucketNs = metric === "utr" ? "utrBucket" : "bucket";
   const dist = EFFICIENCY_BUCKETS.map((b) => ({
-    key: t(`bucket.${b}`),
+    key: t(`${bucketNs}.${b}`),
     riders: counts[b],
   }));
 
@@ -69,7 +72,9 @@ export function OpsDpdTab({
   }));
 
   function exportBucket(bucket: (typeof EFFICIENCY_BUCKETS)[number]) {
-    const rows = riders.filter((r) => r.bucket === bucket);
+    const rows = riders.filter(
+      (r) => (metric === "utr" ? utrBucket(r.utr) : r.bucket) === bucket,
+    );
     downloadCsv(
       `ops-bucket-${bucket}`,
       toCsv(
@@ -120,27 +125,30 @@ export function OpsDpdTab({
         <OpsLineChart data={trend} xKey="bucket" series={series} metric={metric} />
       </OpsChartCard>
       <OpsChartCard
-        title={t("chart.distribution")}
+        title={metric === "utr" ? t("chart.utrDistribution") : t("chart.distribution")}
         onExport={() => {
           downloadCsv(
             "ops-distribution-riders",
             toCsv(
               ["bucket", "name", "id", "Restaurant", "zone", "dpd", "tgt_eff"],
               riders
-                .filter((r) => r.bucket)
-                .map((r) => [
-                  r.bucket ? t(`bucket.${r.bucket}`) : "",
-                  r.name,
-                  r.display_id,
-                  r.store_label,
-                  r.zone ?? "—",
-                  r.dpd,
-                  r.tgt_eff,
-                ]),
+                .filter((r) => (metric === "utr" ? utrBucket(r.utr) : r.bucket))
+                .map((r) => {
+                  const b = metric === "utr" ? utrBucket(r.utr) : r.bucket;
+                  return [
+                    b ? t(`${bucketNs}.${b}`) : "",
+                    r.name,
+                    r.display_id,
+                    r.store_label,
+                    r.zone ?? "—",
+                    r.dpd,
+                    r.tgt_eff,
+                  ];
+                }),
             ),
           );
         }}
-        empty={riders.every((r) => !r.bucket)}
+        empty={riders.every((r) => !(metric === "utr" ? utrBucket(r.utr) : r.bucket))}
         emptyTitle={t("emptyChart")}
       >
         <OpsBarChart
@@ -159,7 +167,7 @@ export function OpsDpdTab({
             className="rounded-xl border border-border bg-card p-3 text-start shadow-sm hover:bg-muted/30"
           >
             <p className="text-xs font-semibold uppercase text-muted-foreground">
-              {t(`bucket.${b}`)}
+              {t(`${bucketNs}.${b}`)}
             </p>
             <p className="text-xl font-semibold tabular-nums">{formatInt(counts[b])}</p>
             <p className="text-xs text-primary">{t("exportBucket")}</p>

@@ -154,6 +154,12 @@ export type OpsOptions = {
   zones: Array<{ id: string; name: string }>;
   restaurants: Array<{ id: string; name: string }>;
   nationalities: string[];
+  partners?: Array<{
+    id: string;
+    key: string;
+    name: string | null;
+    logo_url: string | null;
+  }>;
 };
 
 export type OpsSnapshot = {

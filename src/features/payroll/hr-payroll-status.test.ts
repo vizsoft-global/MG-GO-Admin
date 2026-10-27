@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { HR_STATUS_ORDER, hrStatusPaint, isEndOfContract, isHrActive } from "./hr-payroll-status";
+import {
+  HR_STATUS_ORDER,
+  hrStatusKeyFromLabel,
+  hrStatusPaint,
+  isEndOfContract,
+  isHrActive,
+} from "./hr-payroll-status";
 
 describe("hr status", () => {
   it("paints every catalog status and both cancelled branches", () => {
@@ -20,6 +26,9 @@ describe("hr status", () => {
     assert.equal(hrStatusPaint("cancelled", " resigned ").fill, "#D13B3B");
     assert.equal(hrStatusPaint("cancelled", "", true).split, true);
     assert.equal(isEndOfContract(" end of contract "), true);
+    assert.equal(isEndOfContract("end_of_contract"), true);
+    assert.equal(hrStatusKeyFromLabel("New hire"), "new");
+    assert.equal(hrStatusKeyFromLabel("Leave Return"), "leave_return");
   });
 
   it("treats a blank status as active and the four hold statuses as inactive", () => {

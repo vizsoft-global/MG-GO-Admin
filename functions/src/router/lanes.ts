@@ -84,6 +84,12 @@ export const SCAN_FUNCTIONS = [
    * live"; the scan lane's 120s budget is what the read actually needs.
    */
   "adminOrderComparisonSnapshot",
+  /**
+   * Import Compare is the same `loadDeliveriesByDay` scan as the snapshot,
+   * plus the uploaded Excel rows. A 20-day sheet on the light lane's 60s
+   * abort never finished; the scan lane is the one that can.
+   */
+  "adminOrderReconCompare",
   "adminDeliveriesStatusCounts",
   "adminDeliveriesCountsByFilters",
   "adminListDriversPage",

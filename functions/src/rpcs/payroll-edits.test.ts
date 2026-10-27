@@ -53,6 +53,14 @@ describe("payroll rider status roster", () => {
       key: "active_payroll",
       label: "Active Payroll",
     });
+    assert.deepEqual(normalizePayrollStatusChoice({ label: "Leave Return" }), {
+      key: "leave_return",
+      label: "Leave Return",
+    });
+    assert.deepEqual(normalizePayrollStatusChoice({ key: "new", label: "Desk" }), {
+      key: "new",
+      label: "New",
+    });
   });
 
   it("keeps a custom label on the roster and does not duplicate it", () => {

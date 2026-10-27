@@ -46,7 +46,9 @@ const KNOWN_ERRORS = new Set([
   "missing_file",
   "invalid_headers",
   "no_date_columns",
+  "invalid_range",
   "range_too_large",
+  "scan_cap_exceeded",
   "compare_failed",
   "save_failed",
   "not_authorized",
@@ -55,6 +57,8 @@ const KNOWN_ERRORS = new Set([
   "preview_failed",
   "request_failed",
   "not_configured",
+  "service_stale",
+  "service_unavailable",
 ]);
 
 export function OrderReconImportDialog({

@@ -102,8 +102,8 @@ export const OPS_VIEW_BY: Record<
   "overview" | "dpd" | "riders" | "topbottom" | "outsource",
   readonly OpsChartMetric[]
 > = {
-  overview: ["orders", "dpd"],
-  dpd: ["dpd", "dpd_eff", "tgt_eff"],
+  overview: ["orders", "dpd", "utr"],
+  dpd: ["dpd", "dpd_eff", "tgt_eff", "utr"],
   riders: [],
   topbottom: ["orders", "dpd", "dpd_eff", "tgt_eff", "utr"],
   outsource: ["orders", "dpd", "dpd_eff", "tgt_eff", "utr"],
@@ -268,6 +268,15 @@ export function efficiencyBucket(
   if (targetEffPct >= 100) return "above";
   if (targetEffPct >= 80) return "near";
   if (targetEffPct >= 60) return "below";
+  return "well_below";
+}
+
+export function utrBucket(utr: number | null): EfficiencyBucket | null {
+  if (utr == null || !Number.isFinite(utr)) return null;
+  if (utr >= 2) return "well_above";
+  if (utr >= 1.5) return "above";
+  if (utr >= 1) return "near";
+  if (utr >= 0.5) return "below";
   return "well_below";
 }
 

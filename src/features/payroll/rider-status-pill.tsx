@@ -1,19 +1,15 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { hrStatusStyle } from "./hr-payroll-status";
 import { resolveRiderStatus } from "./payroll-rider-columns";
 import type { PayrollRiderRow } from "./payroll-types";
-
-/** A day status without a legend colour still needs to be readable. */
-const FALLBACK_HEX = "#94a3b8";
 
 /**
  * One rider's current status as a colour-coded pill.
  *
- * A hand-set status wins. Otherwise today's cell is folded into the seven
- * Status choices, and a blank cell shows the account status. The label is
- * `resolveRiderStatus().label`, the same string the column filter, the sort
- * and the CSV read.
+ * A hand-set status wins. Otherwise the employee catalog paints, then today's
+ * folded cell, then the account. Fill and text come from `hrStatusPaint`.
  */
 export function RiderStatusPill({
   row,
@@ -26,33 +22,15 @@ export function RiderStatusPill({
   className?: string;
 }) {
   const status = resolveRiderStatus(row, today);
-  if (status.status === "active" || status.status === "inactive") {
-    return (
-      <span
-        className={cn(
-          "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap",
-          status.status === "active"
-            ? "bg-emerald-100 text-emerald-800"
-            : "bg-muted text-muted-foreground",
-          className,
-        )}
-        title={status.label}
-      >
-        {status.label}
-      </span>
-    );
-  }
-  const hex = status.hex ?? FALLBACK_HEX;
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold whitespace-nowrap",
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap",
         className,
       )}
-      style={{ borderColor: `${hex}66`, backgroundColor: `${hex}1f` }}
+      style={hrStatusStyle(status.paint)}
       title={status.date ? `${status.label} · ${status.date}` : status.label}
     >
-      <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: hex }} />
       {status.label}
     </span>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Settings2 } from "lucide-react";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
@@ -16,7 +16,6 @@ import {
   DEFAULT_OPS_PRESET,
   DEFAULT_TOP_BOTTOM_SHOW,
   opsYearOptions,
-  resetOpsPeriod,
   resolveOpsRange,
   resolveOpsTrendWindow,
   resolveViewByMetric,
@@ -25,6 +24,7 @@ import {
   type OpsRangePreset,
   type TopBottomShowSelection,
 } from "./performance-ops-formulas";
+import { resolveOpsClientTheme } from "./ops-client-theme";
 import { downloadCsv, toCsv } from "./performance-ops-table";
 import {
   EMPTY_OPS_SLICERS,
@@ -143,6 +143,15 @@ export function PerformancePageShell() {
     };
   }, [snapshotQuery.data, trendQuery.data, trendDiffers, granularity, trendWindow]);
 
+  const theme = useMemo(
+    () =>
+      resolveOpsClientTheme({
+        projectKeys: slicers.projectKeys,
+        partners: data?.options.partners ?? [],
+      }),
+    [slicers.projectKeys, data?.options.partners],
+  );
+
   const isLoading =
     boundsQuery.isLoading ||
     snapshotQuery.isLoading ||
@@ -224,31 +233,50 @@ export function PerformancePageShell() {
 
   return (
     <AppPage>
-      <AppPageHeader
-        title={t("title")}
-        description={t("ops.subtitle", {
-          status: t(`ops.slicer.orderStatusOpt.${slicers.orderStatus}`),
-        })}
-        actions={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() => void snapshotQuery.refetch()}
-              disabled={snapshotQuery.isFetching}
-            >
-              {snapshotQuery.isFetching ? t("refreshing") : t("refresh")}
-            </button>
-            <Link
-              href="/performance/settings"
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-2.5 text-sm text-primary transition-colors hover:bg-primary/10"
-            >
-              <Settings2 className="size-3.5" />
-              {t("settingsLink")}
-            </Link>
-          </div>
+      <div
+        className="contents"
+        style={
+          {
+            "--ops-header": theme.header,
+            "--ops-accent": theme.accent,
+          } as CSSProperties
         }
-      />
+      >
+      <div className="flex items-center gap-3 rounded-xl bg-[var(--ops-header,#27273F)] px-4 py-3">
+        {theme.logoUrl ? (
+          <img
+            src={theme.logoUrl}
+            alt=""
+            className="h-9 w-auto max-w-[120px] object-contain"
+          />
+        ) : null}
+        <AppPageHeader
+          title={t("title")}
+          description={t("ops.subtitle", {
+            status: t(`ops.slicer.orderStatusOpt.${slicers.orderStatus}`),
+          })}
+          className="min-w-0 flex-1 [&_h1]:!text-white [&_.text-muted-foreground]:!text-white/80"
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="text-xs text-white/90 hover:underline"
+                onClick={() => void snapshotQuery.refetch()}
+                disabled={snapshotQuery.isFetching}
+              >
+                {snapshotQuery.isFetching ? t("refreshing") : t("refresh")}
+              </button>
+              <Link
+                href="/performance/settings"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/30 px-2.5 text-sm text-white transition-colors hover:bg-white/10"
+              >
+                <Settings2 className="size-3.5" />
+                {t("settingsLink")}
+              </Link>
+            </div>
+          }
+        />
+      </div>
 
       <TabBar
         items={[
@@ -265,6 +293,7 @@ export function PerformancePageShell() {
           setMetric(resolveViewByMetric(next, metric));
         }}
         className="mb-2"
+        markerClassName="bg-[var(--ops-accent,#A73C24)]"
       />
 
       <div className={cn("flex flex-col", LAYOUT.stackGap)}>
@@ -299,17 +328,11 @@ export function PerformancePageShell() {
 
         <OpsSlicerBar
           slicers={slicers}
-          options={data?.options ?? { zones: [], restaurants: [], nationalities: [] }}
+          options={data?.options ?? { zones: [], restaurants: [], nationalities: [], partners: [] }}
           hideSourceType={tab === "outsource"}
           onChange={setSlicers}
           onClear={() => {
-            const next = resetOpsPeriod();
             setSlicers(EMPTY_OPS_SLICERS);
-            setPreset(next.preset);
-            setCustomFrom(next.customFrom);
-            setCustomTo(next.customTo);
-            setTrendYear(null);
-            setTopBottomShow(DEFAULT_TOP_BOTTOM_SHOW);
             setFilterResetKey((k) => k + 1);
           }}
           onExport={data ? exportTab : undefined}
@@ -349,6 +372,7 @@ export function PerformancePageShell() {
         ) : (
           <OpsOutsourceTab data={data} metric={viewMetric} granularity={granularity} />
         )}
+      </div>
       </div>
     </AppPage>
   );

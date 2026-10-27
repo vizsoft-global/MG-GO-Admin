@@ -15,6 +15,7 @@ export type EarlyDropThresholds = {
   minMinutes: number;
   customerFarMeters: number;
   flagMissingProof: boolean;
+  minReasons?: number;
 };
 
 export const DEFAULT_EARLY_DROP_THRESHOLDS: EarlyDropThresholds = {
@@ -22,6 +23,7 @@ export const DEFAULT_EARLY_DROP_THRESHOLDS: EarlyDropThresholds = {
   minMinutes: DEFAULT_EARLY_DROP_MIN_MINUTES,
   customerFarMeters: DEFAULT_EARLY_DROP_CUSTOMER_FAR_METERS,
   flagMissingProof: true,
+  minReasons: 1,
 };
 
 export function evaluateEarlyDrop(input: {
@@ -54,5 +56,6 @@ export function evaluateEarlyDrop(input: {
   ) {
     reasons.push("far_customer");
   }
-  return { early: reasons.length > 0, reasons };
+  const needed = Math.max(1, thresholds.minReasons ?? 1);
+  return { early: reasons.length >= needed, reasons };
 }
