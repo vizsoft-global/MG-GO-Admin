@@ -368,7 +368,33 @@ export const CORE_STATUS_LABEL: Record<CoreStatusKey, string> = {
   cancelled: "Cancelled",
 };
 
-export type PayrollStatusEntry = { key: CoreStatusKey | "custom"; label: string };
+const CATALOG_STATUS_KEYS = [
+  "leave_return",
+  "absent_mosal",
+  "absent_moi",
+  "on_hold",
+  "new",
+  "training",
+  "transfer_from_company",
+  "running",
+  "extension",
+] as const;
+
+export type CatalogStatusKey = (typeof CATALOG_STATUS_KEYS)[number];
+
+export const CATALOG_STATUS_LABEL: Record<CatalogStatusKey, string> = {
+  leave_return: "Leave Return",
+  absent_mosal: "Absent from MOSAL",
+  absent_moi: "Absent from MOI",
+  on_hold: "On Hold",
+  new: "New",
+  training: "Training",
+  transfer_from_company: "Transfer from Company",
+  running: "Running",
+  extension: "Extension",
+};
+
+export type PayrollStatusEntry = { key: CoreStatusKey | CatalogStatusKey | "custom"; label: string };
 
 export type PayrollStatusRoster = {
   byDriver: Record<string, PayrollStatusEntry>;
@@ -381,6 +407,25 @@ const STATUS_ROSTER_DOC = "roster";
 
 function isCoreStatusKey(value: string): value is CoreStatusKey {
   return (CORE_STATUS_KEYS as readonly string[]).includes(value);
+}
+
+function isCatalogStatusKey(value: string): value is CatalogStatusKey {
+  return (CATALOG_STATUS_KEYS as readonly string[]).includes(value);
+}
+
+function foldStatusNeedle(value: string): string {
+  return value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+}
+
+function catalogFromLabel(label: string): CatalogStatusKey | null {
+  const needle = foldStatusNeedle(label);
+  if (!needle) return null;
+  if (needle === "new hire") return "new";
+  for (const key of CATALOG_STATUS_KEYS) {
+    if (foldStatusNeedle(key) === needle) return key;
+    if (foldStatusNeedle(CATALOG_STATUS_LABEL[key]) === needle) return key;
+  }
+  return null;
 }
 
 function cleanStatusLabel(raw: string): string {
@@ -402,12 +447,15 @@ export function normalizePayrollStatusChoice(input: {
 }): PayrollStatusEntry {
   const key = (input.key ?? "").trim();
   if (isCoreStatusKey(key)) return { key, label: CORE_STATUS_LABEL[key] };
+  if (isCatalogStatusKey(key)) return { key, label: CATALOG_STATUS_LABEL[key] };
   const label = cleanStatusLabel(input.label ?? "");
   if (statusLabelRejected(label)) throw new Error("invalid_status");
   const core = CORE_STATUS_KEYS.find(
     (item) => CORE_STATUS_LABEL[item].toLowerCase() === label.toLowerCase(),
   );
   if (core) return { key: core, label: CORE_STATUS_LABEL[core] };
+  const catalog = catalogFromLabel(label);
+  if (catalog) return { key: catalog, label: CATALOG_STATUS_LABEL[catalog] };
   return { key: "custom", label };
 }
 

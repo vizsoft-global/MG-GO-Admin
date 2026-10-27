@@ -199,7 +199,7 @@ export function FleetInsightsPanel({
         </Button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
         <section className="shrink-0 border-b border-border/60 px-2 py-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("insights.statusDistribution")}
@@ -288,7 +288,7 @@ export function FleetInsightsPanel({
           </div>
         </section>
 
-        <section className="max-h-[28%] shrink-0 overflow-y-auto overscroll-contain border-b border-border/60 px-2 py-2">
+        <section className="shrink-0 border-b border-border/60 px-2 py-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("insights.zoneDistribution")}
           </p>
@@ -335,7 +335,7 @@ export function FleetInsightsPanel({
               {rosterT("navAlerts")}
             </Button>
           </div>
-          <div className="mt-1.5 max-h-36 overflow-y-auto overscroll-contain">
+          <div className="mt-1.5">
             {alertsQuery.isPending ? (
               <p className="text-xs text-muted-foreground">…</p>
             ) : alertRows.length === 0 ? (
@@ -359,7 +359,7 @@ export function FleetInsightsPanel({
           </div>
         </section>
 
-        <div className="flex min-h-[10rem] flex-1 flex-col overflow-hidden">
+        <div className="flex h-64 shrink-0 flex-col overflow-hidden">
           <FleetEventFeed />
         </div>
       </div>

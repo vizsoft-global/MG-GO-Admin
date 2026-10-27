@@ -7,8 +7,10 @@ import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { updateRolePermissions } from "@/features/settings/roles-actions";
+import { parseEsignStaffDecision, type EsignStaffDecision } from "../../../functions/src/rpcs/esign-staff-decision";
 import { putEsignObject } from "./esign-r2";
 import { isEsignStaffSignerRole } from "./esign-signers";
+import { rewriteEsignSheetSource } from "./esign-stamp-actions";
 import type {
   EsignCounterSignatureState,
   EsignMySignatureRow,
@@ -307,12 +309,18 @@ export async function uploadStaffEsignSignature(
 export async function submitMyEsignSignature(input: {
   request_id: string;
   signature_storage_key: string;
+  decision?: EsignStaffDecision;
+  reason?: string;
 }): Promise<{ ok: boolean; counter_signature_state?: EsignCounterSignatureState; error?: string }> {
   await requireEsignSign();
   const { data, error } = await callAdminFunction("admin_submit_esign_signature", {
+    p_id: input.request_id,
     p_request_id: input.request_id,
     p_signature_storage_key: input.signature_storage_key,
     p_signer_meta: {},
+    ...(input.decision
+      ? { p_decision: input.decision, p_reason: input.reason ?? "" }
+      : {}),
   });
   if (error) return { ok: false, error: error.message };
   const payload = asRecord(data);
@@ -327,10 +335,22 @@ export async function submitMyEsignSignature(input: {
     payload.counter_signature_state ?? "signed",
   ) as EsignCounterSignatureState;
   if (counterSignatureState === "signed") {
+    let rewritten = false;
+    if (parseEsignStaffDecision(payload.review_status)) {
+      try {
+        const rewrittenSheet = await rewriteEsignSheetSource(input.request_id);
+        rewritten = rewrittenSheet.ok === true;
+      } catch {
+        rewritten = false;
+      }
+    }
     // Compose failure stays on signed_document_error; the signature write already succeeded.
     await callAdminFunction(
       "esign_compose_signed_document",
-      { p_request_id: input.request_id },
+      {
+        p_request_id: input.request_id,
+        ...(rewritten ? { p_force: true } : {}),
+      },
       { timeoutMs: 120_000 },
     );
   }

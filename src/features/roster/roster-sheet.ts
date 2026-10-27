@@ -1,5 +1,61 @@
 /** Schedule Upload sheet → one shift per rider per Kuwait day. */
 
+export const ROSTER_SAMPLE_HEADERS = [
+  "Driver Id",
+  "Driver Name",
+  "Store CC",
+  "Store Name",
+  "Date",
+  "Day",
+  "Shift no.",
+  "Start Time",
+  "End Time",
+  "Ends Next Day",
+  "OFF",
+  "Notes",
+] as const;
+
+export const ROSTER_SAMPLE_ROWS: Array<Array<string | number>> = [
+  ["10569", "James", "CC01", "KFC ALSHAAB", "2026-10-26", "Monday", 1, "10:00 AM", "4:00 PM", "No", "", "single day shift"],
+  ["10569", "James", "", "", "2026-10-27", "Tuesday", "", "", "", "", "Yes", "weekly off"],
+  ["10570", "Sara", "CC02", "HARDEES SALMIYA", "2026-10-26", "Monday", 1, "10:00 AM", "4:00 PM", "No", "", ""],
+  ["10570", "Sara", "CC02", "HARDEES SALMIYA", "2026-10-26", "Monday", 2, "8:00 PM", "2:00 AM", "Yes", "", "split overnight"],
+];
+
+export function rosterSampleScheduleAoa(): Array<Array<string | number>> {
+  return [[...ROSTER_SAMPLE_HEADERS], ...ROSTER_SAMPLE_ROWS];
+}
+
+export function rosterSampleWorkbook(): Array<{ name: string; aoa: Array<Array<string | number>> }> {
+  return [
+    { name: "Schedule", aoa: rosterSampleScheduleAoa() },
+    {
+      name: "Guide",
+      aoa: [
+        ["Column", "Required", "Notes"],
+        ["Driver Id", "Yes", "MG ID or Employee ID. Matches a rider already in Employees."],
+        ["Driver Name", "No", "Shown on preview. Does not rename the rider."],
+        ["Store CC", "No", "Restaurant code. Helps when two stores share a name."],
+        ["Store Name", "No", "Restaurant name as in Restaurants. Blank on an OFF day."],
+        ["Date", "Yes", "YYYY-MM-DD or DD/MM/YYYY. One row per rider per day, or two rows for a split."],
+        ["Day", "No", "Ignored. Preview uses the date."],
+        ["Shift no.", "No", "1 or 2. Same rider + date with 1 and 2 becomes a split shift."],
+        ["Start Time", "Work day", "10:00 AM or 10:00. Leave blank on OFF."],
+        ["End Time", "Work day", "4:00 PM or 16:00. Leave blank on OFF."],
+        ["Ends Next Day", "No", "Yes when the shift crosses midnight. Also inferred when end is before start."],
+        ["OFF", "No", "Yes / Y / 1 / true / OFF. No times on that row."],
+        ["Notes", "No", "Kept on the uploaded day."],
+        [],
+        ["Rules"],
+        ["One row per rider per day. Two rows with Shift no. 1 and 2 on the same date are a split shift."],
+        ["A new file replaces that rider’s uploaded days in the file. Days not in the file stay."],
+        ["OFF has no start or end. A work row and an OFF row on the same date fail that day."],
+        ["Example rows: James works Monday and is OFF Tuesday. Sara has a split Monday that ends next day."],
+      ],
+    },
+  ];
+}
+
 export type RosterShiftDraft = {
   driverKey: string;
   driverName: string;
@@ -221,6 +277,27 @@ export function parseRosterSheet(aoa: unknown[][]): { drafts: RosterShiftDraft[]
     draft.errors = [...new Set(draft.errors)];
   }
   return { drafts, headerError: null };
+}
+
+export function restaurantZoneSampleWorkbook(): Array<{ name: string; aoa: Array<Array<string | number>> }> {
+  return [
+    {
+      name: "Restaurants",
+      aoa: [
+        ["Store Name", "Zone"],
+        ["KFC SALMIYA", "Hawalli"],
+        ["HARDEES JABRIYA", "Hawalli"],
+      ],
+    },
+    {
+      name: "Guide",
+      aoa: [
+        ["Column", "Required", "Notes"],
+        ["Store Name", "Yes", "Restaurant name as in Restaurants."],
+        ["Zone", "Yes", "Zone name as in Zones. Moving a store assigns it to that zone."],
+      ],
+    },
+  ];
 }
 
 /** Area Coaches / restaurant sheet: Store Name + Zone. */

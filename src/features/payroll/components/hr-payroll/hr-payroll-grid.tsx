@@ -4,7 +4,7 @@ import { useState, type JSX } from "react";
 import { HR_FOOTER_KEYS, HR_GROUP_FILL, hrGroupSpans, stickyOffsets } from "../../hr-payroll-columns";
 import type { HrColumn, HrColumnKind } from "../../hr-payroll-columns";
 import { distinctHrValues, HR_AWAITING, hrColumnFilterMode, hrFooterTotals } from "../../hr-payroll-formulas";
-import { HR_STATUS_ORDER, hrStatusPaint } from "../../hr-payroll-status";
+import { HR_STATUS_ORDER, hrStatusPaint, hrStatusStyle } from "../../hr-payroll-status";
 import type { HrEditState, HrGroupBy, HrPayrollGroup, HrPayrollRow } from "../../hr-payroll-types";
 import { COLUMN_EDIT, money3, optionLabel } from "./hr-payroll-ui";
 import { PayrollIdentityCell, hrIdentityField } from "../../payroll-identity-cell";
@@ -302,7 +302,7 @@ function renderHrCell(
   if (column.key === "status") {
     const paint = hrStatusPaint(row.statusKey, row.jobEndDescription);
     return (
-      <span className="hrpay-chip" style={{ background: paint.fill, color: paint.text }}>
+      <span className="hrpay-chip" style={hrStatusStyle(paint)}>
         {row.cells.status}
       </span>
     );

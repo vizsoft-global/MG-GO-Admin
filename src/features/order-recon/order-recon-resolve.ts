@@ -84,13 +84,76 @@ export function resolveReconRows(
 
 export function excelPayloadForRpc(rows: ReconResolvedRow[]) {
   return rows
-    .filter((r) => r.status === "ready" && r.driver_id && r.restaurant_id)
+    .filter(
+      (r): r is ReconResolvedRow & { driver_id: string; restaurant_id: string } =>
+        r.status === "ready" && Boolean(r.driver_id) && Boolean(r.restaurant_id),
+    )
     .map((r) => ({
       driver_id: r.driver_id,
       restaurant_id: r.restaurant_id,
       work_date: r.work_date,
       excel_orders: r.excel_orders,
     }));
+}
+
+export type ReconCommitPayload = {
+  fileName: string;
+  from: string;
+  to: string;
+  excel: ReturnType<typeof excelPayloadForRpc>;
+  unresolved: {
+    employee_id: string;
+    employee_name: string;
+    store_name: string;
+    work_date: string;
+    excel_orders: number;
+    driver_id: string | null;
+    restaurant_id: string | null;
+  }[];
+  drivers: { id: string; employee_id: string; employee_name: string }[];
+};
+
+/**
+ * Compare POSTs this, not the painted preview. A 20-day sheet's full
+ * `resolved[]` is several MB uncompressed; Vercel drops that body as HTML
+ * and the dialog toasts `request_failed`. Ready cells keep only the four
+ * columns the callable reads, and rider names go once per driver.
+ */
+export function reconCommitPayload(preview: {
+  fileName: string;
+  from: string;
+  to: string;
+  resolved: ReconResolvedRow[];
+}): ReconCommitPayload {
+  const drivers = new Map<string, { id: string; employee_id: string; employee_name: string }>();
+  const unresolved: ReconCommitPayload["unresolved"] = [];
+  for (const row of preview.resolved) {
+    if (row.driver_id && !drivers.has(row.driver_id)) {
+      drivers.set(row.driver_id, {
+        id: row.driver_id,
+        employee_id: row.employee_id,
+        employee_name: row.employee_name,
+      });
+    }
+    if (row.status !== "unresolved") continue;
+    unresolved.push({
+      employee_id: row.employee_id,
+      employee_name: row.employee_name,
+      store_name: row.store_name,
+      work_date: row.work_date,
+      excel_orders: row.excel_orders,
+      driver_id: row.driver_id,
+      restaurant_id: row.restaurant_id,
+    });
+  }
+  return {
+    fileName: preview.fileName,
+    from: preview.from,
+    to: preview.to,
+    excel: excelPayloadForRpc(preview.resolved),
+    unresolved,
+    drivers: [...drivers.values()],
+  };
 }
 
 /**

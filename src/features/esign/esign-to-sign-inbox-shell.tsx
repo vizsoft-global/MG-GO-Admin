@@ -2,10 +2,11 @@
 
 import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, PenLine } from "lucide-react";
+import { CircleCheck, CircleX, Loader2, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import { AppDataTable, AppDataTableRow, TableCell } from "@/components/app/app-data-table";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -100,6 +101,7 @@ export function EsignToSignInboxShell() {
   const [active, setActive] = useState<EsignMySignatureRow | null>(null);
   const [png, setPng] = useState("");
   const [reason, setReason] = useState("");
+  const [decision, setDecision] = useState<"approved" | "rejected" | null>(null);
 
   const rows = (data?.rows ?? []).filter((row) => row.signer_status === "pending");
 
@@ -108,12 +110,22 @@ export function EsignToSignInboxShell() {
     if (error === "already_declined") return t("alreadyDeclined");
     if (error === "not_assigned") return t("notAssigned");
     if (error === "not_ready") return t("notReady");
+    if (error === "reason_required") return t("reasonRequired");
     return fallback;
   }
 
   async function sign() {
     if (!active || !png) return;
-    const result = await submit.mutateAsync({ request_id: active.request_id, pngBase64: png });
+    if (decision === "rejected" && !reason.trim()) {
+      toast.error(t("reasonRequired"));
+      return;
+    }
+    const result = await submit.mutateAsync({
+      request_id: active.request_id,
+      pngBase64: png,
+      decision: decision ?? undefined,
+      reason: decision === "rejected" ? reason : undefined,
+    });
     if (!result.ok) {
       toast.error(failureMessage(result.error, t("signFailed")));
       return;
@@ -121,6 +133,7 @@ export function EsignToSignInboxShell() {
     toast.success(t("signed"));
     setActive(null);
     setPng("");
+    setDecision(null);
   }
 
   async function reject() {
@@ -191,6 +204,7 @@ export function EsignToSignInboxShell() {
                       setActive(row);
                       setPng("");
                       setReason("");
+                      setDecision(null);
                     }}
                   >
                     <PenLine className="me-1.5 h-3.5 w-3.5" />
@@ -214,17 +228,48 @@ export function EsignToSignInboxShell() {
               title={active?.title ?? ""}
               src={
                 active
-                  ? esignDocumentHref(active.request_id, "document", "inline")
+                  ? esignDocumentHref(active.request_id, "signed", "inline")
                   : undefined
               }
               className="h-[280px] w-full rounded-lg border border-border bg-card"
             />
             <div className="space-y-1">
+              <Label>{t("decision")}</Label>
+              <div className="flex flex-wrap gap-2">
+                <ToggleChip
+                  size="sm"
+                  className="h-9"
+                  icon={CircleCheck}
+                  selected={decision === "approved"}
+                  onClick={() =>
+                    setDecision((current) => (current === "approved" ? null : "approved"))
+                  }
+                >
+                  {t("approved")}
+                </ToggleChip>
+                <ToggleChip
+                  size="sm"
+                  className="h-9"
+                  icon={CircleX}
+                  selected={decision === "rejected"}
+                  onClick={() =>
+                    setDecision((current) => (current === "rejected" ? null : "rejected"))
+                  }
+                >
+                  {t("rejected")}
+                </ToggleChip>
+              </div>
+              <p className="text-[10px] text-muted-foreground">{t("decisionHint")}</p>
+            </div>
+            <div className="space-y-1">
               <Label>{t("draw")}</Label>
               <SignaturePad onChange={setPng} clearLabel={t("clear")} />
             </div>
             <div className="space-y-1">
-              <Label>{t("declineReason")}</Label>
+              <Label>
+                {decision === "rejected" ? t("rejectReason") : t("declineReason")}
+                {decision === "rejected" ? <span className="text-destructive"> *</span> : null}
+              </Label>
               <Input
                 className="h-9"
                 value={reason}

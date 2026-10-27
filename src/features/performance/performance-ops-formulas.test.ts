@@ -17,6 +17,7 @@ import {
   DEFAULT_OPS_ORDER_STATUS,
   companyRowsFromRiders,
   DEFAULT_OPS_PRESET,
+  OPS_VIEW_BY,
   formatOpsBucketLabel,
   formatOpsCustomPill,
   formatOpsTrendLabel,
@@ -45,6 +46,7 @@ import {
   storeDisplayName,
   storesVisibleForPartners,
   targetEfficiencyPct,
+  utrBucket,
   toggleOpsMultiSelect,
   topBottomN,
   parseTopBottomCustomN,
@@ -56,6 +58,7 @@ import {
   TOP_BOTTOM_SHOW_PRESETS,
   DEFAULT_TOP_BOTTOM_SHOW,
 } from "./performance-ops-formulas";
+import { EMPTY_OPS_SLICERS } from "./performance-ops-types";
 
 describe("riderDpd / overallDpd", () => {
   it("is orders / working days and null when no working days", () => {
@@ -196,6 +199,15 @@ describe("efficiency", () => {
     assert.equal(efficiencyBucket(60), "below");
     assert.equal(efficiencyBucket(59.9), "well_below");
     assert.equal(efficiencyBucket(null), null);
+  });
+
+  it("utrBucket bands", () => {
+    assert.equal(utrBucket(2), "well_above");
+    assert.equal(utrBucket(1.5), "above");
+    assert.equal(utrBucket(1), "near");
+    assert.equal(utrBucket(0.5), "below");
+    assert.equal(utrBucket(0.49), "well_below");
+    assert.equal(utrBucket(null), null);
   });
 });
 
@@ -521,6 +533,8 @@ describe("chart labels + dim keys + multi-select + rider sort", () => {
     assert.equal(resolveViewByMetric("dpd", "orders"), "dpd");
     assert.equal(resolveViewByMetric("overview", "dpd"), "dpd");
     assert.equal(resolveViewByMetric("riders", "orders"), "orders");
+    assert.ok(OPS_VIEW_BY.overview.includes("utr"));
+    assert.ok(OPS_VIEW_BY.dpd.includes("utr"));
   });
 });
 
@@ -707,8 +721,21 @@ describe("trend window + 4-week buckets", () => {
     assert.deepEqual(opsYearOptions(null, "2026-09-23"), [2026]);
   });
 
-  it("Clear resets the period to This Month", () => {
+  it("Clear resets eight slicers not period", () => {
+    assert.deepEqual(EMPTY_OPS_SLICERS, {
+      orderStatus: DEFAULT_OPS_ORDER_STATUS,
+      projectKeys: [],
+      zoneIds: [],
+      vehicleKeys: [],
+      nationalities: [],
+      sourceTypes: [],
+      sourceCompanies: [],
+      restaurantIds: [],
+    });
     assert.equal(DEFAULT_OPS_PRESET, "thisMonth");
+  });
+
+  it("period pills still reset to This Month", () => {
     assert.deepEqual(resetOpsPeriod(), {
       preset: "thisMonth",
       customFrom: null,
@@ -753,6 +780,17 @@ describe("trend window + 4-week buckets", () => {
     ]);
     assert.equal(rows[0]?.utr, 62 / 40);
     assert.equal(rows[0]?.avg_delivery_min, 140 / 4);
+  });
+
+  it("UTR is null when hours are 0 or missing", () => {
+    const zero = companyRowsFromRiders([
+      { source_company: "mg", orders: 10, working_days: 1, dpd_eff: null, tgt_eff: null, working_hours: 0 },
+    ]);
+    assert.equal(zero[0]?.utr, null);
+    const missing = companyRowsFromRiders([
+      { source_company: "mg", orders: 10, working_days: 1, dpd_eff: null, tgt_eff: null },
+    ]);
+    assert.equal(missing[0]?.utr, null);
   });
 
   it("attachTrendEff mirrors the RPC tgt_eff formula", () => {

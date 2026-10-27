@@ -118,7 +118,9 @@ export function isSheetInput(field: EsignTemplateFieldRow): boolean {
 
 /**
  * What the live preview prints: the rider's snapshot, then anything the
- * operator has typed, then the template's own sample for the rows still blank.
+ * operator has typed. The template sample fills a blank row only before a
+ * rider is chosen — a selected rider with no bank, pay-through or period
+ * must print empty, not the sample.
  */
 export function previewFieldValues(
   fields: EsignTemplateFieldRow[],
@@ -126,10 +128,11 @@ export function previewFieldValues(
   snapshot: EsignEmployeeSnapshot | null,
 ): Record<string, string> {
   const next: Record<string, string> = snapshot ? snapshotValues(snapshot) : {};
+  const useSample = snapshot == null;
   for (const field of fields) {
     const typed = values[field.field_key]?.trim();
     if (typed) next[field.field_key] = typed;
-    else if (field.preview_value?.trim()) {
+    else if (useSample && field.preview_value?.trim()) {
       next[field.field_key] = field.preview_value;
     }
   }

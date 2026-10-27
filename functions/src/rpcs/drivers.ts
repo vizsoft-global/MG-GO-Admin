@@ -61,6 +61,7 @@ const LIST_FILTER_KEYS = new Set([
   "riderCategory",
   "companyName",
   "zone",
+  "vehicle",
   "restaurants",
   "status",
   "attendance",
@@ -81,6 +82,7 @@ const SORT_KEYS = new Set([
   "phone",
   "restaurants",
   "zone",
+  "vehicle",
   "platformId",
   "platformName",
   "todayDeliveries",
@@ -140,6 +142,17 @@ function kuwaitDayStart(now: Date): Date {
   return new Date(Date.UTC(year, month - 1, day) - KUWAIT_OFFSET_MS);
 }
 
+/**
+ * What the Vehicle column shows: no assignment is blank, a car stays a car,
+ * and anything else (including a plate with no stored type) is a bike.
+ */
+function vehicleListValue(row: Dict): string {
+  const type = asStr(row["vehicle_type_key"]);
+  const label = asStr(row["vehicle_label"]);
+  if (!type && !label) return "";
+  return type === "car" ? "car" : "bike";
+}
+
 /** `admin_drivers_column_value`. */
 function columnValue(row: Dict, key: string): unknown {
   switch (key) {
@@ -161,6 +174,8 @@ function columnValue(row: Dict, key: string): unknown {
       return asStrList(row["restaurant_ids"]);
     case "zone":
       return row["zone_id"] ?? "";
+    case "vehicle":
+      return vehicleListValue(row);
     case "platformId":
       return row["client_id"] ?? null;
     case "platformName":
@@ -1058,6 +1073,10 @@ export const adminDriversFilterValues = measureOnCall("adminDriversFilterValues"
     }
     if (column === "zone") {
       push(String(row["zone_id"] ?? ""), asStr(row["zone_name"]));
+      continue;
+    }
+    if (column === "vehicle") {
+      push(vehicleListValue(row), null);
       continue;
     }
     if (column === "platformName") {

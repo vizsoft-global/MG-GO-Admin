@@ -301,6 +301,8 @@ async function assembleFromTables(
       source_company: textOf(row.source_company),
       client_id: textOf(row.client_id),
       status: textOf(row.status),
+      employee_status_key: textOf(row.employee_status_key),
+      job_end_description: textOf(row.job_end_description),
       vehicle_id: textOf(row.vehicle_id),
       restaurant_ids: single ? [single, ...many.filter((id) => id !== single)] : many,
     };
@@ -418,6 +420,8 @@ async function assembleFromTables(
       sourceType: d.rider_category,
       sourceCompany: d.source_company,
       status: d.status,
+      employeeStatusKey: d.employee_status_key,
+      jobEndDescription: d.job_end_description,
       vehicleKey: d.vehicle_id ? vehicles.get(d.vehicle_id) ?? null : null,
       restaurantId,
       restaurantName: restaurantId ? restaurants.get(restaurantId) ?? null : null,

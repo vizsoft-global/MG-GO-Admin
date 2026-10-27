@@ -1,5 +1,6 @@
 import type { ComparisonSnapshot } from "./order-comparison-model";
 import type { ReconPreview } from "./order-recon-actions";
+import { reconCommitPayload } from "./order-recon-resolve";
 import type { OrderReconRun } from "./order-recon-types";
 
 async function readJson(res: Response): Promise<Record<string, unknown>> {
@@ -56,7 +57,7 @@ export async function fetchOrderReconPreview(
 export async function fetchOrderReconCommit(
   preview: ReconPreview,
 ): Promise<{ run: OrderReconRun } | { error: string }> {
-  const parsed = await postJson("/api/order-recon/commit", preview);
+  const parsed = await postJson("/api/order-recon/commit", reconCommitPayload(preview));
   if (typeof parsed.error === "string" && parsed.error) {
     return { error: parsed.error };
   }

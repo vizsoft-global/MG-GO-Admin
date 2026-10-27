@@ -173,8 +173,8 @@ const COLUMN_FILTER_KEY: Record<string, DriversFixedColumn> = {
   phone: "phone",
   restaurants: "restaurants",
   zone: "zone",
+  vehicle: "vehicle",
   section: "section",
-  employeeStatus: "employeeStatus",
   clientId: "platformId",
   clientName: "platformName",
   todayDeliveries: "todayDeliveries",
@@ -472,7 +472,6 @@ function DriversPageContent() {
       { id: "vehicle", label: t("colVehicle") },
       { id: "section", label: t("colSection") },
       { id: "partner", label: t("colProject") },
-      { id: "employeeStatus", label: t("colEmployeeStatus") },
       { id: "driverId", label: t("colDriverId"), defaultVisible: false as const },
       { id: "clientName", label: t("colClientName"), defaultVisible: false as const },
       { id: "todayDeliveries", label: t("colTodayDeliveries") },
@@ -527,7 +526,9 @@ function DriversPageContent() {
   const optionLabelFor = useCallback(
     (column: string, value: string, label: string | null): string => {
       if (value === "") {
-        return column === "companyName" ? t("companyUnassigned") : t("columnFilter.blank");
+        if (column === "companyName") return t("companyUnassigned");
+        if (column === "vehicle") return t("vehicleNone");
+        return t("columnFilter.blank");
       }
       switch (column) {
         case "riderCategory":
@@ -538,10 +539,10 @@ function DriversPageContent() {
             : accountStatusLabelFor(value as DriverAccountStatus);
         case "attendance":
           return value === "on_duty" ? t("attendanceOnDuty") : t("attendanceOffDuty");
+        case "vehicle":
+          return value === "car" ? t("vehicleCar") : t("vehicleBike");
         case "section":
           return catalogLabel(value, sectionsQuery.data ?? [], locale);
-        case "employeeStatus":
-          return catalogLabel(value, statusesQuery.data ?? [], locale);
         default: {
           if (column.startsWith("cf:")) {
             const def = activeCustomDefs.find((d) => customFilterColumn(d.key) === column);
@@ -556,7 +557,7 @@ function DriversPageContent() {
     },
     // accountStatusLabelFor only reads `t`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t, tCommon, activeCustomDefs, locale, sectionsQuery.data, statusesQuery.data],
+    [t, tCommon, activeCustomDefs, locale, sectionsQuery.data],
   );
 
   const filterContext = useMemo(
@@ -610,10 +611,9 @@ function DriversPageContent() {
       fixed("phone", t("colPhone")),
       fixed("restaurants", t("colRestaurants")),
       fixed("zone", t("colZone")),
-      { id: "vehicle", label: t("colVehicle") },
+      fixed("vehicle", t("colVehicle")),
       fixed("section", t("colSection")),
       { id: "partner", label: t("colProject") },
-      fixed("employeeStatus", t("colEmployeeStatus")),
       fixed("driverId", t("colDriverId")),
       fixed("clientName", t("colClientName")),
       fixed("todayDeliveries", t("colTodayDeliveries")),
@@ -1125,17 +1125,6 @@ function DriversPageContent() {
                           className="text-sm text-muted-foreground"
                         >
                           {driver.partner_name || "—"}
-                        </VisibleTableCell>
-                        <VisibleTableCell columnId="employeeStatus" isVisible={isColumnVisible}>
-                          {driver.employee_status_key ? (
-                            <EmployeeStatusBadge
-                              statusKey={driver.employee_status_key}
-                              rows={statusesQuery.data ?? []}
-                              locale={locale}
-                            />
-                          ) : (
-                            "—"
-                          )}
                         </VisibleTableCell>
                         <VisibleTableCell
                           columnId="driverId"

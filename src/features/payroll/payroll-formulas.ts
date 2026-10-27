@@ -1,6 +1,7 @@
 import { fieldSearchMatch } from "@/components/app/app-list-controls/search-match";
 import { storesVisibleForPartners } from "@/features/performance/performance-ops-formulas";
 import { formatPct } from "@/lib/format/percent";
+import { hrStatusPaint } from "./hr-payroll-status";
 
 export const MONTH_ABBR = [
   "Jan",
@@ -113,24 +114,25 @@ export const PAYROLL_STATUS_FILTERS = [
 ] as const;
 export type PayrollStatusFilter = (typeof PAYROLL_STATUS_FILTERS)[number];
 
-/** Chip dot colours, one per SOP day type. Selected state is the emerald
- *  ToggleChip stack, so these are only the legend's identity swatch. */
+/** Chip dot colours, one per SOP day type. Names that also exist on the HR
+ *  employee catalog reuse `hrStatusPaint` so the legend and Status column
+ *  cannot disagree. */
 export const PAYROLL_STATUS_CHIP: Record<PayrollStatusFilter, { hex: string }> = {
   work: { hex: "#9aa4ad" },
   reduced3: { hex: "#fbbf24" },
   half: { hex: "#22d3ee" },
   sick: { hex: "#f59e0b" },
   off: { hex: "#34d399" },
-  accident: { hex: "#a3e635" },
-  absent: { hex: "#ef4444" },
-  cancelled: { hex: "#94a3b8" },
-  leave: { hex: "#60a5fa" },
+  accident: { hex: hrStatusPaint("accident").fill },
+  absent: { hex: hrStatusPaint("absent_mosal").fill },
+  cancelled: { hex: hrStatusPaint("cancelled").fill },
+  leave: { hex: hrStatusPaint("leave").fill },
   terminated: { hex: "#b91c1c" },
   phone_issue: { hex: "#f97316" },
   id_suspended: { hex: "#7c3aed" },
   vehicle: { hex: "#a5b4fc" },
-  new_hire: { hex: "#10b981" },
-  training: { hex: "#eab308" },
+  new_hire: { hex: hrStatusPaint("new").fill },
+  training: { hex: hrStatusPaint("training").fill },
 };
 
 export function riderHasDayStatus(

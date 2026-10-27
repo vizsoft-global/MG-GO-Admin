@@ -17,6 +17,7 @@ export const DRIVERS_FILTER_KINDS = {
   phone: "text",
   restaurants: "list",
   zone: "list",
+  vehicle: "list",
   platformId: "text",
   platformName: "list",
   todayDeliveries: "range",

@@ -76,6 +76,8 @@ export type RawPayrollDriver = {
   restaurantName: string | null;
   /** The restaurant's external merchant id, printed as the Client/Restaurant ID. */
   restaurantClientId?: string | null;
+  employeeStatusKey?: string | null;
+  jobEndDescription?: string | null;
 };
 
 export type RawPayrollCheckIn = {
@@ -235,6 +237,8 @@ export type RawRpcRider = {
   nationality: string;
   nationalityCode: string | null;
   status: string;
+  employeeStatusKey?: string | null;
+  jobEndDescription?: string | null;
   vehicleKey: string | null;
   sourceType: string | null;
   sourceCompany: string | null;
@@ -784,6 +788,8 @@ function riderRow(input: {
     nationality: r.nationality ? countryLabel(r.nationality) : "—",
     nationalityCode: r.nationality,
     status: r.status === "active" ? "Active" : "Inactive",
+    employeeStatusKey: r.employeeStatusKey ?? null,
+    jobEndDescription: r.jobEndDescription ?? null,
     vehicleKey: r.vehicleKey,
     sourceType: r.sourceType,
     sourceCompany: r.sourceCompany,
@@ -1095,6 +1101,8 @@ export function snapshotFromRpc(
         sourceType: row.sourceType,
         sourceCompany: row.sourceCompany,
         status: row.status === "Active" ? "active" : "inactive",
+        employeeStatusKey: row.employeeStatusKey ?? null,
+        jobEndDescription: row.jobEndDescription ?? null,
         vehicleKey: row.vehicleKey,
         restaurantId: row.restaurantId,
         restaurantClientId: row.restaurantClientId ?? null,

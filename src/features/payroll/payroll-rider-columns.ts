@@ -7,7 +7,14 @@ import { aoShownOrders } from "./payroll-orders-display";
 import { cellParticular } from "./payroll-particulars";
 import { ADJUSTMENT_STATUS_TO_DAY, type AdjustmentStatus } from "./payroll-rules-engine";
 import {
-  CORE_PAYROLL_STATUS_HEX,
+  HR_STATUS_LABEL,
+  hrStatusKeyFromLabel,
+  hrStatusPaint,
+  isHrStatusKey,
+  type HrStatusKey,
+  type HrStatusPaint,
+} from "./hr-payroll-status";
+import {
   CORE_PAYROLL_STATUS_LABEL,
   CUSTOM_STATUS_HEX,
   isCorePayrollStatus,
@@ -181,22 +188,19 @@ export function restaurantDisplayId(row: PayrollRiderRow): string {
 /**
  * What the Rider Status column says for one row.
  *
- * The column answers "what is this rider doing today", so a day status wins
- * whenever the selected month actually contains today. A past month has no
- * today cell, and a rider whose today cell is still blank has nothing to
- * report, so both fall back to the account status the riders list shows.
- * `label` is the one string the pill, the column filter, the sort and the CSV
- * all read, so an export can never disagree with the grid.
+ * Precedence: a hand-set override, then the employee catalog, then today's
+ * folded day cell, then the account. `label` is the one string the pill, the
+ * column filter, the sort and the CSV all read.
  */
 export type RiderStatusValue = {
-  /** A core Status choice, a custom label, or the riders-list Inactive account. */
-  status: CorePayrollStatusKey | "inactive" | "custom";
+  status: CorePayrollStatusKey | HrStatusKey | "inactive" | "custom";
   label: string;
-  /** Null for Active and Inactive, which use the account pill. */
+  /** Null when the fill is transparent (Running / Extension / Active). */
   hex: string | null;
+  paint: HrStatusPaint;
   /** Kuwait date the day status came from, when one did. */
   date: string | null;
-  kind: "day" | "account" | "manual";
+  kind: "day" | "account" | "manual" | "catalog";
 };
 
 /** Pill vocabulary: the legend's words, shortened to fit one cell. */
@@ -259,37 +263,103 @@ export function riderStatusHex(status: DayStatus): string | null {
   return RIDER_STATUS_HEX[status];
 }
 
+function paintHex(paint: HrStatusPaint): string | null {
+  return paint.fill === "transparent" ? null : paint.fill;
+}
+
+const TERMINATED_PAINT: HrStatusPaint = {
+  fill: "#b91c1c",
+  text: "#ffffff",
+  split: false,
+  bordered: false,
+};
+const ACTIVE_PAYROLL_PAINT: HrStatusPaint = {
+  fill: "#1e7e34",
+  text: "#ffffff",
+  split: false,
+  bordered: false,
+};
+const CUSTOM_PAINT: HrStatusPaint = {
+  fill: CUSTOM_STATUS_HEX,
+  text: "#ffffff",
+  split: false,
+  bordered: false,
+};
+
+/** Solid fill for a Status-column identity, matching HR Payroll chips. */
+export function riderStatusPaint(status: string, jobEndDescription = ""): HrStatusPaint {
+  switch (status) {
+    case "active":
+    case "inactive":
+      return hrStatusPaint("running");
+    case "absent":
+      return hrStatusPaint("absent_mosal");
+    case "leave":
+    case "accident":
+    case "cancelled":
+      return hrStatusPaint(status, jobEndDescription);
+    case "terminated":
+      return TERMINATED_PAINT;
+    case "active_payroll":
+      return ACTIVE_PAYROLL_PAINT;
+    case "leave_return":
+    case "absent_mosal":
+    case "absent_moi":
+    case "on_hold":
+    case "new":
+    case "training":
+    case "transfer_from_company":
+    case "running":
+    case "extension":
+      return hrStatusPaint(status, jobEndDescription);
+    case "custom":
+      return CUSTOM_PAINT;
+    default:
+      return isHrStatusKey(status) ? hrStatusPaint(status, jobEndDescription) : CUSTOM_PAINT;
+  }
+}
+
+function statusValue(
+  status: RiderStatusValue["status"],
+  label: string,
+  jobEnd: string,
+  kind: RiderStatusValue["kind"],
+  date: string | null,
+): RiderStatusValue {
+  const paint = riderStatusPaint(status, jobEnd);
+  return { status, label, hex: paintHex(paint), paint, date, kind };
+}
+
+function catalogKeyOf(raw: string): HrStatusKey | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (isHrStatusKey(trimmed)) return trimmed;
+  return hrStatusKeyFromLabel(trimmed);
+}
+
 function manualStatus(row: PayrollRiderRow): RiderStatusValue | null {
   const override = row.statusOverride;
-  const raw = override?.label?.trim();
-  if (!override || !raw) return null;
+  if (!override) return null;
+  const jobEnd = row.jobEndDescription ?? "";
   if (isCorePayrollStatus(override.key)) {
-    return {
-      status: override.key,
-      label: CORE_PAYROLL_STATUS_LABEL[override.key],
-      hex: CORE_PAYROLL_STATUS_HEX[override.key],
-      date: null,
-      kind: "manual",
-    };
+    return statusValue(override.key, CORE_PAYROLL_STATUS_LABEL[override.key], jobEnd, "manual", null);
   }
+  const catalog = catalogKeyOf(override.key) ?? catalogKeyOf(override.label ?? "");
+  if (catalog) {
+    return statusValue(catalog, HR_STATUS_LABEL[catalog], jobEnd, "manual", null);
+  }
+  const raw = override.label?.trim();
+  if (!raw) return null;
   const choice = payrollStatusChoiceFromLabel(raw);
   if (!choice) return null;
   if (isCorePayrollStatus(choice.key)) {
-    return {
-      status: choice.key,
-      label: choice.label,
-      hex: CORE_PAYROLL_STATUS_HEX[choice.key],
-      date: null,
-      kind: "manual",
-    };
+    return statusValue(choice.key, choice.label, jobEnd, "manual", null);
   }
-  return {
-    status: "custom",
-    label: choice.label,
-    hex: CUSTOM_STATUS_HEX,
-    date: null,
-    kind: "manual",
-  };
+  const fromChoice = catalogKeyOf(choice.key);
+  if (fromChoice) {
+    return statusValue(fromChoice, HR_STATUS_LABEL[fromChoice], jobEnd, "manual", null);
+  }
+  return statusValue("custom", choice.label, jobEnd, "manual", null);
 }
 
 export function resolveRiderStatus(
@@ -298,29 +368,28 @@ export function resolveRiderStatus(
 ): RiderStatusValue {
   const manual = manualStatus(row);
   if (manual) return manual;
+  const jobEnd = row.jobEndDescription ?? "";
+  const catalog = catalogKeyOf(row.employeeStatusKey ?? "");
+  if (catalog) {
+    return statusValue(catalog, HR_STATUS_LABEL[catalog], jobEnd, "catalog", null);
+  }
   const today = todayDate ?? kuwaitToday();
   const index = row.dayInfo.findIndex((info) => info.date === today);
   const dayStatus = index >= 0 ? row.days[index] : undefined;
   if (dayStatus && dayStatus !== "blank") {
     const key = payrollGridStatusFromDay(dayStatus);
     if (key) {
-      return {
-        status: key,
-        label: CORE_PAYROLL_STATUS_LABEL[key],
-        hex: CORE_PAYROLL_STATUS_HEX[key],
-        date: today,
-        kind: "day",
-      };
+      return statusValue(key, CORE_PAYROLL_STATUS_LABEL[key], jobEnd, "day", today);
     }
   }
   const active = row.status === "Active";
-  return {
-    status: active ? "active" : "inactive",
-    label: active ? "Active" : "Inactive",
-    hex: null,
-    date: null,
-    kind: "account",
-  };
+  return statusValue(
+    active ? "active" : "inactive",
+    active ? "Active" : "Inactive",
+    jobEnd,
+    "account",
+    null,
+  );
 }
 
 export function riderColumnValue(

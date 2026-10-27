@@ -51,7 +51,7 @@ export type RosterReportRow = {
   }>;
 };
 
-type DriverHit = { id: string; name: string; company: string; employeeId: string };
+type DriverHit = { id: string; name: string; company: string; employeeId: string; zoneId: string | null };
 
 function str(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -98,23 +98,27 @@ async function readThresholds(db: Firestore): Promise<{
   noLogin: number;
   alertOnce: boolean;
   minCoaches: number;
+  gpsSkipMeters: number;
   drop: EarlyDropThresholds;
 }> {
   const snap = await db.collection(SETTINGS).doc("1").get();
   const data = snap.data() ?? {};
   const late = num(data.roster_late_grace_minutes) ?? 15;
   const early = num(data.roster_early_grace_minutes) ?? 10;
+  const minCoaches = num(data.roster_alert_min_coaches) === 2 ? 2 : 1;
   return {
     late,
     early,
     noLogin: num(data.roster_no_login_grace_minutes) ?? 60,
     alertOnce: data.roster_alert_once_per_day !== false,
-    minCoaches: num(data.roster_alert_min_coaches) === 2 ? 2 : 1,
+    minCoaches,
+    gpsSkipMeters: num(data.roster_gps_skip_meters) ?? 50,
     drop: {
       nearMeters: num(data.roster_early_drop_restaurant_meters) ?? 200,
       minMinutes: num(data.roster_early_drop_min_minutes) ?? 4,
       customerFarMeters: num(data.roster_early_drop_customer_meters) ?? 500,
       flagMissingProof: data.roster_early_drop_missing_proof !== false,
+      minReasons: minCoaches,
     },
   };
 }
@@ -131,6 +135,7 @@ export async function readRosterSettings(db: Firestore) {
     flagMissingProof: thresholds.drop.flagMissingProof,
     alertOnce: thresholds.alertOnce,
     minCoaches: thresholds.minCoaches,
+    gpsSkipMeters: thresholds.gpsSkipMeters,
   };
 }
 
@@ -146,6 +151,7 @@ export async function writeRosterSettings(
     flagMissingProof: boolean;
     alertOnce: boolean;
     minCoaches: number;
+    gpsSkipMeters: number;
   },
 ) {
   await db.collection(SETTINGS).doc("1").set(
@@ -159,6 +165,7 @@ export async function writeRosterSettings(
       roster_early_drop_missing_proof: input.flagMissingProof,
       roster_alert_once_per_day: input.alertOnce,
       roster_alert_min_coaches: input.minCoaches === 2 ? 2 : 1,
+      roster_gps_skip_meters: input.gpsSkipMeters,
       updated_at: FieldValue.serverTimestamp(),
     },
     { merge: true },
@@ -181,6 +188,7 @@ async function driverIndex(db: Firestore): Promise<{ byKey: Map<string, DriverHi
         name: str(data.full_name) || str(data.name),
         company: str(data.source_company) || str(data.company_name),
         employeeId: str(data.employee_id) || str(data.driver_code),
+        zoneId: str(data.zone_id) || null,
       };
       for (const key of [str(data.employee_id), str(data.driver_code), str(data.client_id)]) {
         if (!key) continue;
@@ -347,18 +355,17 @@ export async function listRosterPlaces(db: Firestore) {
 }
 
 export async function listRosterDirectory(db: Firestore, scope: RosterScope) {
-  const places = await listRosterPlaces(db);
+  const [places, zoneSnap] = await Promise.all([listRosterPlaces(db), db.collection(COLLECTIONS.zones).limit(200).get()]);
   const restaurants = places.filter((place) => inScope(scope, place.zoneId));
-  const zones = new Map<string, string>();
-  for (const place of restaurants) {
-    if (place.zoneId) zones.set(place.zoneId, place.zoneName || place.zoneId);
-  }
+  const zones = zoneSnap.docs
+    .map((doc) => ({ id: doc.id, name: str(doc.data().name) || doc.id }))
+    .filter((zone) => scope.all || scope.zoneIds.includes(zone.id));
   const { byKey } = await driverIndex(db);
-  const riders = new Map<string, { id: string; name: string; employeeId: string; company: string }>();
+  const riders = new Map<string, DriverHit>();
   for (const hit of byKey.values()) riders.set(hit.id, hit);
   const companies = [...new Set([...riders.values()].map((rider) => rider.company).filter(Boolean))].sort();
   return {
-    zones: [...zones.entries()].map(([id, name]) => ({ id, name })),
+    zones,
     restaurants: restaurants.map((place) => ({
       id: place.id,
       name: place.name,
@@ -367,8 +374,20 @@ export async function listRosterDirectory(db: Firestore, scope: RosterScope) {
       zoneName: place.zoneName,
     })),
     companies,
-    riders: [...riders.values()].map((rider) => ({ id: rider.id, name: rider.name, employeeId: rider.employeeId })),
+    riders: [...riders.values()].map((rider) => ({
+      id: rider.id,
+      name: rider.name,
+      employeeId: rider.employeeId,
+      zoneId: rider.zoneId,
+    })),
   };
+}
+
+export async function assignRestaurantZone(db: Firestore, restaurantId: string, zoneId: string | null) {
+  await db.collection(COLLECTIONS.restaurants).doc(restaurantId).set(
+    { zone_id: zoneId, updated_at: FieldValue.serverTimestamp() },
+    { merge: true },
+  );
 }
 
 export async function callerZoneScope(db: Firestore, userId: string, unrestricted: boolean): Promise<RosterScope> {
@@ -828,6 +847,7 @@ export async function loadRosterReport(
           name: str(profile.data()?.full_name) || str(data.full_name),
           company: str(data.source_company) || str(data.company_name),
           employeeId: str(data.employee_id) || str(data.driver_code),
+          zoneId: str(data.zone_id) || null,
         };
         names.set(driverId, driver);
       }

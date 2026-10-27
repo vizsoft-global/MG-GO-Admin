@@ -39,30 +39,24 @@ export const LAUNCHER_RELEASE = "3.4";
 export type LauncherTileId = (typeof LAUNCHER_TILE_IDS)[number];
 
 /**
- * The Home Launcher grid, in the BajajCare frame order (node 6979:13150):
- * six columns, three rows, eighteen doors. This list is the design; it is a
- * data list, not a set of hand-placed blocks, and `mergeLauncherTiles` renders
- * exactly these ids in this order.
+ * Home Launcher doors, in the same order as the sidebar.
+ * The five hubs stay, plus the other root rows: Live tracking, Employees,
+ * Deliveries, Notifications, Roles & Permissions, Settings, and System.
+ * Dashboard itself is not a tile. Nested hub cards stay off this grid.
  */
 export const LAUNCHER_HOME_TILE_IDS = [
-  "dashboard-ops",
-  "live-tracking-v2",
-  "driver-groups",
+  "live-tracking",
   "drivers",
+  "vehicles",
   "deliveries",
+  "payroll-hub",
+  "operations-hub",
+  "notifications",
+  "roles",
   "employeedesk",
   "visit-bookings",
-  "dpd-verification",
-  "earnings",
-  "restaurants",
-  "notifications",
-  "attendance",
-  "roles",
-  "profile",
-  "document-expiry",
-  "driver-app",
-  "app-releases",
-  "assets",
+  "group-settings",
+  "group-system",
 ] as const;
 
 /**
@@ -71,8 +65,8 @@ export const LAUNCHER_HOME_TILE_IDS = [
  * they just do not get a tile. Derived so it cannot drift from
  * `LAUNCHER_HOME_TILE_IDS`.
  *
- * Payroll stays behind Payroll Hub. Operations Hub, Rider Operations, the
- * client portal, Fleet Hub and the Staff Assistant keep their own doors.
+ * These are the sidebar root rows. Every other catalogue id stays off the
+ * grid and keeps its route, sidebar row, and permission.
  */
 const HOME_TILE_SET = new Set<string>(LAUNCHER_HOME_TILE_IDS);
 
@@ -181,15 +175,13 @@ export function launcherTilesFromMenu(
 }
 
 /**
- * Exactly the Home grid, in design order.
+ * The sidebar root rows, in `LAUNCHER_HOME_TILE_IDS` order.
  *
  * The sidebar rows and the curated registry list are both sources, because a
  * nested hub child may be the only row that points at a door the sidebar paints
- * as a group. Both passes drop `LAUNCHER_HIDDEN_TILE_IDS` and both are de-duped
- * by id **and** href, then the result is ordered by
- * `LAUNCHER_HOME_TILE_IDS` — so the six-by-three grid is the same for every
- * operator no matter which source each tile came from, and a tile the session
- * cannot open simply leaves its cell empty.
+ * as a group. Both passes drop every id outside `LAUNCHER_HOME_TILE_IDS` and
+ * both are de-duped by id and href. A hub the session cannot open leaves its
+ * cell empty.
  */
 export function mergeLauncherTiles(
   derived: readonly LauncherTile[],

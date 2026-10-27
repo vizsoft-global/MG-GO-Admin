@@ -7,10 +7,11 @@ import type { DocumentSnapshot } from "firebase-admin/firestore";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { failureCode } from "./order-comparison-errors";
 import {
   collapseReconIssues,
-  excelPayloadForRpc,
   resolveReconRows,
+  type ReconCommitPayload,
   type ReconIssueRow,
   type ReconResolvedRow,
 } from "./order-recon-resolve";
@@ -207,7 +208,7 @@ type CompareRow = {
 };
 
 export async function commitOrderRecon(
-  preview: ReconPreview,
+  preview: ReconCommitPayload,
 ): Promise<{ run: OrderReconRun } | { error: string }> {
   try {
   const mutationAuth = await requireMutationAuth();
@@ -216,21 +217,28 @@ export async function commitOrderRecon(
   if ("error" in auth) return auth;
 
   const db = await reconDb();
-  const payload = excelPayloadForRpc(preview.resolved);
+  if (
+    !Array.isArray(preview.excel) ||
+    !Array.isArray(preview.unresolved) ||
+    !Array.isArray(preview.drivers)
+  ) {
+    return { error: "compare_failed" };
+  }
   const { data, error } = await callAdminFunction("admin_order_recon_compare", rpcArgs({
     p_from: preview.from,
     p_to: preview.to,
-    p_excel: payload,
+    p_excel: preview.excel,
   }));
-  if (error) return { error: "compare_failed" };
+  if (error) return { error: failureCode(error) };
 
   const compared = (Array.isArray(data) ? data : []) as CompareRow[];
   const restaurantSnap = await db.collection(COLLECTIONS.restaurants).get();
   const restaurantNames = new Map(restaurantSnap.docs.map((doc) => [doc.id, String(doc.data().name ?? "")]));
   const driverMeta = new Map(
-    preview.resolved
-      .filter((r) => r.driver_id)
-      .map((r) => [r.driver_id!, { employee_id: r.employee_id, employee_name: r.employee_name }]),
+    preview.drivers.map((row) => [
+      row.id,
+      { employee_id: row.employee_id, employee_name: row.employee_name },
+    ]),
   );
   const missingDriverIds = [
     ...new Set(
@@ -267,21 +275,19 @@ export async function commitOrderRecon(
     }
   }
 
-  const unresolvedRows: OrderReconTableRow[] = preview.resolved
-    .filter((r) => r.status === "unresolved")
-    .map((r, i) => ({
-      id: `u-${i}`,
-      employee_id: r.employee_id,
-      employee_name: r.employee_name,
-      restaurant_name: r.store_name,
-      work_date: r.work_date,
-      excel_orders: r.excel_orders,
-      app_orders: 0,
-      difference: 0 - r.excel_orders,
-      status: "unresolved" as const,
-      driver_id: r.driver_id,
-      restaurant_id: r.restaurant_id,
-    }));
+  const unresolvedRows: OrderReconTableRow[] = preview.unresolved.map((r, i) => ({
+    id: `u-${i}`,
+    employee_id: r.employee_id,
+    employee_name: r.employee_name,
+    restaurant_name: r.store_name,
+    work_date: r.work_date,
+    excel_orders: r.excel_orders,
+    app_orders: 0,
+    difference: 0 - r.excel_orders,
+    status: "unresolved" as const,
+    driver_id: r.driver_id,
+    restaurant_id: r.restaurant_id,
+  }));
 
   const appOnlyCount = compared.filter((row) => {
     const excel = Number(row.excel_orders) || 0;

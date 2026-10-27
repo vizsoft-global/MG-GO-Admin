@@ -7,6 +7,7 @@ import { staffDb } from "@/lib/firebase/staff-db";
 import {
   applyRestaurantZones,
   applyRosterImport,
+  assignRestaurantZone,
   callerZoneScope,
   listRosterAlerts,
   listZoneStaff,
@@ -24,6 +25,7 @@ import {
 } from "@/features/roster/roster-data";
 import { createRosterChange, decideRosterChangeDoc, listRosterChanges, type RosterChangeView } from "@/features/roster/roster-changes";
 import { kuwaitToday } from "@/features/driver-tracking/kuwait-time";
+import { daysInRange } from "@/features/roster/roster-range";
 
 function actorName(session: { id: string; email: string | null; profile: { full_name: string | null } }) {
   return session.profile.full_name?.trim() || session.email || session.id;
@@ -70,6 +72,15 @@ export async function importRestaurantZoneSheet(aoa: unknown[][]) {
   return applyRestaurantZones(db, aoa);
 }
 
+export async function saveRestaurantZone(restaurantId: string, zoneId: string | null) {
+  const auth = await requireMutationAuth("zones.manage");
+  if ("error" in auth) return auth;
+  const db = await staffDb();
+  if (!db) return { error: "not_configured" as const };
+  await assignRestaurantZone(db, restaurantId, zoneId);
+  return { ok: true as const };
+}
+
 export async function loadZoneStaff() {
   const auth = await requireMutationAuth("zones.manage");
   if ("error" in auth) return auth;
@@ -103,6 +114,7 @@ export async function saveRosterThresholds(input: {
   flagMissingProof: boolean;
   alertOnce: boolean;
   minCoaches: number;
+  gpsSkipMeters: number;
 }) {
   const gate = await manageDb();
   if ("error" in gate) return gate;
@@ -122,6 +134,17 @@ export async function fetchRosterAlerts(input?: { day?: string; restaurantId?: s
   const day = input?.day || kuwaitToday();
   if (day === kuwaitToday()) await sweepRosterDay(gate.db, day);
   return { day, rows: await listRosterAlerts(gate.db, gate.scope, day, input?.restaurantId ?? null) };
+}
+
+export async function fetchRosterAlertsRange(input: { from: string; to: string; restaurantId?: string | null }) {
+  const gate = await viewDb();
+  if ("error" in gate) return gate;
+  const days = daysInRange(input.from, input.to, 31);
+  if (days.length === 0) return { from: input.from, to: input.to, rows: [] as Awaited<ReturnType<typeof listRosterAlerts>> };
+  const today = kuwaitToday();
+  if (days.includes(today)) await sweepRosterDay(gate.db, today);
+  const pages = await Promise.all(days.map((day) => listRosterAlerts(gate.db, gate.scope, day, input.restaurantId ?? null)));
+  return { from: days[0], to: days[days.length - 1], rows: pages.flat() };
 }
 
 export async function fetchRosterDirectory() {

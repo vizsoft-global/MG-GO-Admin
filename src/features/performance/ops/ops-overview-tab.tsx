@@ -73,6 +73,7 @@ export function OpsOverviewTab({
       accent: "success" as const,
     },
     { label: t("kpi.utr"), value: formatUtr(k.utr), accent: "primary" as const },
+    { label: t("kpi.workingHours"), value: formatDpd(k.working_hours) },
     { label: t("kpi.avgDelivery"), value: formatMinutesCard(k.avg_delivery_min) },
     {
       label: t("kpi.riders"),

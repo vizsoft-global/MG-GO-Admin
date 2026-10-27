@@ -88,20 +88,25 @@ function withEmployeeSlot(kind: unknown, persisted: unknown, piece: StampPiece):
 }
 
 /**
+ * Sheets measured before this version used a layout the compose must ignore.
+ * Hardcoded so a parallel edit of the layout module cannot move the cutoff.
+ */
+const ESIGN_SLOT_MEASURE_SINCE = 7;
+
+/**
  * The measured boxes this compose may trust.
  *
- * Null means "ignore them": a sheet built before the current render version was
- * measured against a layout this build no longer draws, so the kind's printed
- * geometry is the honest fallback — which is also what fills a role the old
- * array never had (the loan sheet's missing HR line).
+ * Null means "ignore them": a sheet measured before slot version 7 was drawn
+ * against a layout this build no longer uses, so the kind's printed geometry
+ * is the honest fallback.
  */
 function sheetSlotsForCompose(
   version: unknown,
   persisted: unknown,
-): unknown {
+): SignSlot[] | null {
   const renderVersion = typeof version === "number" ? version : null;
-  if (renderVersion === null || renderVersion < ESIGN_SHEET_RENDER_VERSION) return null;
-  return persisted;
+  if (renderVersion === null || renderVersion < ESIGN_SLOT_MEASURE_SINCE) return null;
+  return parseSignatureSlots(persisted);
 }
 
 export async function saveEsignStampLayout(
@@ -460,6 +465,68 @@ function templateFields(
     .map((row) => row.field);
 }
 
+type StaffFirestore = NonNullable<Awaited<ReturnType<typeof staffDb>>>;
+
+async function rebuildEsignSheetFile(
+  db: StaffFirestore,
+  row: Record<string, unknown>,
+  storageKey: string,
+): Promise<
+  | { ok: true; html: string; measuredSlots: SignSlot[] }
+  | { ok: false; error: string }
+> {
+  const templateId = textOrNull(row.template_id);
+  if (!templateId) return { ok: false, error: "template_missing" };
+  const templateSnap = await db.collection(COLLECTIONS.esignTemplates).doc(templateId).get();
+  if (!templateSnap.exists) return { ok: false, error: "template_missing" };
+  const template = templateSnap.data() ?? {};
+  const fieldsSnap = await db
+    .collection(COLLECTIONS.esignTemplateFields)
+    .where("template_id", "==", templateId)
+    .get();
+  const snapshot =
+    snapshotFromStored(row.employee_snapshot) ??
+    blankSnapshot(textOrNull(row.signer_display_name) ?? "", textOrNull(row.employee_id) ?? "");
+  const html = filledEsignSheetHtml({
+    template: {
+      document_kind: row.document_kind ?? template.document_kind,
+      header_en: String(template.header_en ?? ""),
+      header_ar: String(template.header_ar ?? ""),
+      body_en: String(template.body_en ?? ""),
+      body_ar: String(template.body_ar ?? ""),
+      declaration_en: String(template.declaration_en ?? ""),
+      declaration_ar: String(template.declaration_ar ?? ""),
+      fields: templateFields(
+        fieldsSnap.docs.map((doc) => ({
+          data: () => doc.data() as Record<string, unknown>,
+        })),
+      ),
+    },
+    snapshot,
+    fieldValues: fieldValuesOf(row.field_values),
+    description: textOrNull(row.description) ?? "",
+    requestCode: textOrNull(row.request_code) ?? "",
+  });
+  if (!html.includes('data-slot-role="employee"')) {
+    return { ok: false, error: "template_missing" };
+  }
+
+  let browser: Awaited<ReturnType<typeof launchEsignBrowser>> | null = null;
+  let measuredSlots: SignSlot[] = [];
+  try {
+    browser = await launchEsignBrowser();
+    const pdf = await renderStoredSheetPdf(html, browser);
+    measuredSlots = await measureEsignSlots(html, browser);
+    const stored = await putEsignObject(storageKey, pdf, "application/pdf");
+    if (!stored.ok) return { ok: false, error: stored.error };
+  } catch {
+    return { ok: false, error: "render_failed" };
+  } finally {
+    await browser?.close();
+  }
+  return { ok: true, html, measuredSlots };
+}
+
 function sheetNeedsRefresh(html: string, version: number): boolean {
   if (html.includes("esign-sheet-edited")) return false;
   if (version !== ESIGN_SHEET_RENDER_VERSION) return true;
@@ -614,66 +681,16 @@ export async function regenerateEsignSheet(
     return { ok: false, error: "not_editable" };
   }
 
-  const templateId = textOrNull(row.template_id);
-  if (!templateId) return { ok: false, error: "template_missing" };
-  const templateSnap = await db.collection(COLLECTIONS.esignTemplates).doc(templateId).get();
-  if (!templateSnap.exists) return { ok: false, error: "template_missing" };
-  const template = templateSnap.data() ?? {};
-  const fieldsSnap = await db
-    .collection(COLLECTIONS.esignTemplateFields)
-    .where("template_id", "==", templateId)
-    .get();
-  const snapshot =
-    snapshotFromStored(row.employee_snapshot) ??
-    blankSnapshot(
-      textOrNull(row.signer_display_name) ?? "",
-      textOrNull(row.employee_id) ?? "",
-    );
-  const html = filledEsignSheetHtml({
-    template: {
-      document_kind: row.document_kind ?? template.document_kind,
-      header_en: String(template.header_en ?? ""),
-      header_ar: String(template.header_ar ?? ""),
-      body_en: String(template.body_en ?? ""),
-      body_ar: String(template.body_ar ?? ""),
-      declaration_en: String(template.declaration_en ?? ""),
-      declaration_ar: String(template.declaration_ar ?? ""),
-      fields: templateFields(
-        fieldsSnap.docs.map((doc) => ({
-          data: () => doc.data() as Record<string, unknown>,
-        })),
-      ),
-    },
-    snapshot,
-    fieldValues: fieldValuesOf(row.field_values),
-    description: textOrNull(row.description) ?? "",
-    requestCode: textOrNull(row.request_code) ?? "",
-  });
-  if (!html.includes('data-slot-role="employee"')) {
-    return { ok: false, error: "template_missing" };
-  }
-
   const storageKey = `regenerated/${id}/document.pdf`;
-  let browser: Awaited<ReturnType<typeof launchEsignBrowser>> | null = null;
-  let measuredSlots: SignSlot[] = [];
-  try {
-    browser = await launchEsignBrowser();
-    const pdf = await renderStoredSheetPdf(html, browser);
-    measuredSlots = await measureEsignSlots(html, browser);
-    const stored = await putEsignObject(storageKey, pdf, "application/pdf");
-    if (!stored.ok) return { ok: false, error: stored.error };
-  } catch {
-    return { ok: false, error: "render_failed" };
-  } finally {
-    await browser?.close();
-  }
+  const built = await rebuildEsignSheetFile(db, row, storageKey);
+  if (!built.ok) return built;
 
   const now = Timestamp.now();
   await ref.update({
-    sheet_html: html,
+    sheet_html: built.html,
     sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
     document_storage_key: storageKey,
-    ...(measuredSlots.length > 0 ? { signature_slots: measuredSlots } : {}),
+    ...(built.measuredSlots.length > 0 ? { signature_slots: built.measuredSlots } : {}),
     updated_at: now,
   });
   await logAdminMutation({
@@ -681,7 +698,48 @@ export async function regenerateEsignSheet(
     entityType: "esign_requests",
     entityId: id,
     routeName: "esign.regenerate-sheet",
-    after: { html_chars: html.length, document_storage_key: storageKey },
+    after: { html_chars: built.html.length, document_storage_key: storageKey },
+  });
+  return { ok: true };
+}
+
+/**
+ * Rebuilds a signed sheet so a management decision painted into field_values
+ * reaches the PDF the compose stamps. A failed rewrite leaves the signature
+ * committed; the caller composes the previous sheet.
+ */
+export async function rewriteEsignSheetSource(
+  requestId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const id = requestId.trim();
+  if (!id) return { ok: false, error: "not_found" };
+  const gate = await requireMutationAuth();
+  if ("error" in gate) return { ok: false, error: gate.error };
+  const session = gate.session;
+  const mayRewrite =
+    mayPlace(session) ||
+    hasPermissionInSet(session.permissions, "esign.sign", session.isSuperAdmin);
+  if (!mayRewrite) return { ok: false, error: "not_authorized" };
+
+  const db = await staffDb();
+  if (!db) return { ok: false, error: "not_configured" };
+  const ref = db.collection(COLLECTIONS.esignRequests).doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, error: "not_found" };
+  const row = snap.data() ?? {};
+  if (String(row.status ?? "") !== "signed") return { ok: false, error: "not_signed" };
+
+  const storageKey = `regenerated/${id}/${crypto.randomUUID()}.pdf`;
+  const built = await rebuildEsignSheetFile(db, row, storageKey);
+  if (!built.ok) return built;
+
+  const now = Timestamp.now();
+  await ref.update({
+    sheet_html: built.html,
+    sheet_render_version: ESIGN_SHEET_RENDER_VERSION,
+    document_storage_key: storageKey,
+    ...(built.measuredSlots.length > 0 ? { signature_slots: built.measuredSlots } : {}),
+    updated_at: now,
   });
   return { ok: true };
 }

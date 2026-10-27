@@ -15,6 +15,24 @@ export const HR_STATUS_ORDER = [
 
 export type HrStatusKey = (typeof HR_STATUS_ORDER)[number];
 
+const HR_STATUS_SET = new Set<string>(HR_STATUS_ORDER);
+
+/** English labels the HR sheet and the ops Status column both print. */
+export const HR_STATUS_LABEL: Record<HrStatusKey, string> = {
+  leave: "Leave",
+  leave_return: "Leave Return",
+  accident: "Accident",
+  absent_mosal: "Absent from MOSAL",
+  absent_moi: "Absent from MOI",
+  on_hold: "On Hold",
+  new: "New",
+  training: "Training",
+  transfer_from_company: "Transfer from Company",
+  cancelled: "Cancelled",
+  running: "Running",
+  extension: "Extension",
+};
+
 const INACTIVE = new Set(["cancelled", "on_hold", "absent_mosal", "absent_moi"]);
 
 export type HrStatusPaint = {
@@ -45,16 +63,63 @@ export function isHrActive(statusKey: string): boolean {
   return !INACTIVE.has(statusKey);
 }
 
+function foldStatusNeedle(value: string): string {
+  return value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+}
+
+export function isHrStatusKey(value: string): value is HrStatusKey {
+  return HR_STATUS_SET.has(value);
+}
+
+/** Match a catalog key, its English label, or "New hire" → `new`. */
+export function hrStatusKeyFromLabel(label: string): HrStatusKey | null {
+  const needle = foldStatusNeedle(label);
+  if (!needle) return null;
+  if (needle === "new hire") return "new";
+  for (const key of HR_STATUS_ORDER) {
+    if (foldStatusNeedle(key) === needle) return key;
+    if (foldStatusNeedle(HR_STATUS_LABEL[key]) === needle) return key;
+  }
+  return null;
+}
+
 export function isEndOfContract(description: string): boolean {
-  return description.trim().toLowerCase() === "end of contract";
+  return foldStatusNeedle(description) === "end of contract";
+}
+
+export function hrStatusStyle(paint: HrStatusPaint): {
+  background: string;
+  color: string;
+  border?: string;
+} {
+  if (paint.bordered) {
+    return { background: paint.fill, color: paint.text, border: "1px solid #292A3F" };
+  }
+  return { background: paint.fill, color: paint.text };
 }
 
 export function hrStatusPaint(statusKey: string, jobEndDescription = "", tile = false): HrStatusPaint {
-  if (statusKey === "cancelled") {
-    if (tile) return CANCEL_SPLIT;
-    return isEndOfContract(jobEndDescription) ? CANCEL_GREEN : CANCEL_RED;
+  if (!isHrStatusKey(statusKey)) return OPEN;
+  switch (statusKey) {
+    case "cancelled":
+      if (tile) return CANCEL_SPLIT;
+      return isEndOfContract(jobEndDescription) ? CANCEL_GREEN : CANCEL_RED;
+    case "running":
+    case "extension":
+      return OPEN;
+    case "leave":
+    case "leave_return":
+    case "accident":
+    case "absent_mosal":
+    case "absent_moi":
+    case "on_hold":
+    case "new":
+    case "training":
+    case "transfer_from_company":
+      return PAINT[statusKey];
+    default: {
+      const never: never = statusKey;
+      return never;
+    }
   }
-  if (statusKey === "running" || statusKey === "extension") return OPEN;
-  if (statusKey in PAINT) return PAINT[statusKey as keyof typeof PAINT];
-  return OPEN;
 }

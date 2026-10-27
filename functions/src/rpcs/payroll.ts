@@ -887,6 +887,8 @@ async function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: Staff
             asString(raw["nationality"]) ?? asString(raw["nationality_code"]),
           ),
         status: asString(raw["status"]) === "active" ? "Active" : "Inactive",
+        employeeStatusKey: asString(raw["employee_status_key"]),
+        jobEndDescription: asString(raw["job_end_description"]),
         vehicleKey:
           asString(raw["vehicle_key"]) ??
           asString(raw["vehicle_type_key"]) ??

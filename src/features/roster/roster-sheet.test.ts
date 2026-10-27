@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateEarlyDrop } from "./early-drop-eval";
+import { DEFAULT_EARLY_DROP_THRESHOLDS, evaluateEarlyDrop } from "./early-drop-eval";
 import { rosterDutyStatus } from "./roster-adherence";
 import { applyApprovedShift } from "./roster-changes";
 import { rosterHours } from "./roster-hours";
-import { parseRestaurantZoneSheet, parseRosterSheet } from "./roster-sheet";
+import {
+  parseRestaurantZoneSheet,
+  parseRosterSheet,
+  rosterSampleScheduleAoa,
+  rosterSampleWorkbook,
+  ROSTER_SAMPLE_HEADERS,
+} from "./roster-sheet";
 
-const HEADER = ["Driver Id", "Driver Name", "Store CC", "Store Name", "Date", "Day", "Shift no.", "Start Time", "End Time", "Ends Next Day", "OFF", "Notes"];
+const HEADER = [...ROSTER_SAMPLE_HEADERS];
 
 test("split rows merge and overnight offset follows Ends Next Day", () => {
   const parsed = parseRosterSheet([
@@ -45,6 +51,32 @@ test("OFF has no sessions and a work row on the same day is refused", () => {
 test("missing driver and date columns fail the sheet", () => {
   assert.equal(parseRosterSheet([]).headerError, "empty");
   assert.equal(parseRosterSheet([["Notes"]]).headerError, "missing_columns");
+});
+
+test("the weekly sample sheet parses as one work day, one OFF, and one split overnight", () => {
+  const aoa = rosterSampleScheduleAoa();
+  const parsed = parseRosterSheet(aoa);
+  assert.equal(parsed.headerError, null);
+  assert.equal(parsed.drafts.length, 3);
+  const jamesWork = parsed.drafts.find((row) => row.driverKey === "10569" && row.date === "2026-10-26");
+  const jamesOff = parsed.drafts.find((row) => row.driverKey === "10569" && row.date === "2026-10-27");
+  const sara = parsed.drafts.find((row) => row.driverKey === "10570");
+  assert.ok(jamesWork);
+  assert.equal(jamesWork.shiftType, "single");
+  assert.equal(jamesWork.session1Start, "10:00:00");
+  assert.deepEqual(jamesWork.errors, []);
+  assert.ok(jamesOff);
+  assert.equal(jamesOff.off, true);
+  assert.equal(jamesOff.session1Start, null);
+  assert.deepEqual(jamesOff.errors, []);
+  assert.ok(sara);
+  assert.equal(sara.shiftType, "split");
+  assert.equal(sara.session2End, "02:00:00");
+  assert.equal(sara.session2EndDayOffset, 1);
+  assert.deepEqual(sara.errors, []);
+  const book = rosterSampleWorkbook();
+  assert.equal(book[0]?.name, "Schedule");
+  assert.equal(book[1]?.name, "Guide");
 });
 
 test("restaurant sheet needs Store and Zone", () => {
@@ -168,4 +200,25 @@ test("early drop is the example delivery: 0 m, 1 minute, no pickup proof", () =>
     customerToDropMeters: null,
   });
   assert.equal(clean.early, false);
+});
+
+test("early drop needs two reasons when minReasons is 2", () => {
+  const one = evaluateEarlyDrop({
+    pickupToDropMeters: 0,
+    restaurantToDropMeters: null,
+    durationMinutes: 20,
+    missingPickupProof: false,
+    customerToDropMeters: null,
+    thresholds: { ...DEFAULT_EARLY_DROP_THRESHOLDS, minReasons: 2 },
+  });
+  assert.equal(one.early, false);
+  const two = evaluateEarlyDrop({
+    pickupToDropMeters: 0,
+    restaurantToDropMeters: null,
+    durationMinutes: 1,
+    missingPickupProof: false,
+    customerToDropMeters: null,
+    thresholds: { ...DEFAULT_EARLY_DROP_THRESHOLDS, minReasons: 2 },
+  });
+  assert.equal(two.early, true);
 });

@@ -12,6 +12,7 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { sanitizeMenuIconColor, sanitizeMenuIconUrl } from "@/lib/menu/menu-icon";
 
 function formatMenuConfigError(error: unknown): string {
   if (!error || typeof error !== "object") return String(error);
@@ -26,10 +27,29 @@ export interface MenuNode {
   type: MenuNodeType;
   label: string;
   icon: string;
+  /** Same-origin `/api/menu-icons/{uuid}.{ext}` upload. */
+  iconUrl?: string;
+  /** `#RRGGBB` chip or glyph tint. */
+  iconColor?: string;
   hidden?: boolean;
   displayMode?: "inline" | "panel";
   href?: string;
   children?: MenuNode[];
+}
+
+function sanitizeMenuNode(node: MenuNode): MenuNode {
+  const iconUrl = sanitizeMenuIconUrl(node.iconUrl);
+  const iconColor = sanitizeMenuIconColor(node.iconColor);
+  const next: MenuNode = {
+    ...node,
+    icon: node.icon || "Folder",
+    children: node.children?.map(sanitizeMenuNode),
+  };
+  if (iconUrl) next.iconUrl = iconUrl;
+  else delete next.iconUrl;
+  if (iconColor) next.iconColor = iconColor;
+  else delete next.iconColor;
+  return next;
 }
 
 function configOf(value: unknown): MenuNode[] {
@@ -89,7 +109,7 @@ export async function saveMenuConfig(role: string, config: MenuNode[]): Promise<
     role,
     scope: "global",
     site_id: null,
-    config,
+    config: config.map(sanitizeMenuNode),
     updated_at: new Date(),
     updated_by: session.id,
   };

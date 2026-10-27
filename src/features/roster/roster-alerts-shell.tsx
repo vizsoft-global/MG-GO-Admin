@@ -4,28 +4,25 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { Input } from "@/components/ui/input";
 import { SearchSelect } from "@/components/ui/search-select";
 import { formatKuwaitDateTime, formatKuwaitTime } from "@/features/driver-tracking/shift-adherence-display";
-import { addDays, kuwaitToday } from "@/features/driver-tracking/kuwait-time";
+import { kuwaitToday } from "@/features/driver-tracking/kuwait-time";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
-import { ackRosterAlert, fetchRosterAlertDetail, fetchRosterAlerts, fetchRosterDirectory } from "./roster-actions";
+import { ackRosterAlert, fetchRosterAlertDetail, fetchRosterAlertsRange, fetchRosterDirectory } from "./roster-actions";
 import { RosterNav } from "./roster-nav";
+import { rangeForPreset, type RosterRangePreset } from "./roster-range";
 import { rosterError } from "./roster-result";
-import { rosterBtn, rosterBtnSoft, rosterCanvas, rosterCard, rosterH1, rosterMuted, rosterTd, rosterTh } from "./roster-ui";
+import { rosterBtn, rosterBtnSoft, rosterCanvas, rosterCard, rosterChipOff, rosterChipOn, rosterH1, rosterMuted, rosterTd, rosterTh } from "./roster-ui";
 
 const ATTENDANCE = new Set(["late", "not_logged_in", "no_show", "logged_out_early"]);
 const OUTCOMES = ["outcomeWarned", "outcomeEscalated", "outcomeValid", "outcomeFalse"] as const;
 const RULES = ["near_restaurant", "short_duration", "far_customer", "missing_proof"] as const;
+const PRESETS = ["today", "yesterday", "last7", "custom"] as const;
 
-type Preset = "today" | "yesterday" | "last7";
+type AlertPreset = (typeof PRESETS)[number];
 type OutcomeKey = (typeof OUTCOMES)[number];
-
-function daysFor(preset: Preset, today: string) {
-  if (preset === "today") return [today];
-  if (preset === "yesterday") return [addDays(today, -1)];
-  return Array.from({ length: 7 }, (_, index) => addDays(today, -index));
-}
 
 function kindTone(kind: string) {
   if (kind === "early_drop") return "bg-[#B42318] text-white";
@@ -39,17 +36,20 @@ export function RosterAlertsShell() {
   const t = useTranslations("pages.roster");
   const client = useQueryClient();
   const today = kuwaitToday();
-  const [preset, setPreset] = useState<Preset>("today");
+  const [preset, setPreset] = useState<AlertPreset>("today");
+  const [customFrom, setCustomFrom] = useState(today);
+  const [customTo, setCustomTo] = useState(today);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [tab, setTab] = useState<"all" | "attendance" | "early">("all");
   const [selected, setSelected] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<OutcomeKey | "">("");
+  const range = rangeForPreset(preset as RosterRangePreset, today, customFrom, customTo);
   const alerts = useQuery({
-    queryKey: ["roster", "alerts", preset, today, restaurantId],
+    queryKey: ["roster", "alerts", range.from, range.to, restaurantId],
     queryFn: async () => {
-      const pages = await Promise.all(daysFor(preset, today).map((day) => fetchRosterAlerts({ day, restaurantId })));
-      const failure = pages.map((page) => rosterError(page)).find((code) => code);
-      const rows = pages.flatMap((page) => ("rows" in page && Array.isArray(page.rows) ? page.rows : []));
+      const page = await fetchRosterAlertsRange({ from: range.from, to: range.to, restaurantId });
+      const failure = rosterError(page);
+      const rows = "rows" in page && Array.isArray(page.rows) ? page.rows : [];
       return { rows, failure: failure ?? null };
     },
   });
@@ -99,19 +99,25 @@ export function RosterAlertsShell() {
           <p className={rosterMuted}>{t("alertsLead")}</p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {(["today", "yesterday", "last7"] as const).map((key) => (
+      <div className={cn(rosterCard, "flex flex-nowrap items-center gap-2 overflow-x-auto p-2")}>
+        {PRESETS.map((key) => (
           <button
             key={key}
             type="button"
-            className={cn("h-9 rounded-[10px] px-3 text-sm font-semibold", preset === key ? "bg-[#1D1B1A] text-white" : "bg-white text-[#3D3734]")}
+            className={preset === key ? rosterChipOn : rosterChipOff}
             onClick={() => setPreset(key)}
           >
             {t(key)}
           </button>
         ))}
+        {preset === "custom" ? (
+          <>
+            <Input className="h-9 w-36 shrink-0" type="date" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} />
+            <Input className="h-9 w-36 shrink-0" type="date" value={customTo} onChange={(event) => setCustomTo(event.target.value)} />
+          </>
+        ) : null}
         <SearchSelect
-          className="h-9 min-w-[180px]"
+          className="ms-auto h-9 min-w-[180px] flex-1"
           items={[{ value: "all", label: t("allRestaurants") }, ...places.map((place) => ({ value: place.id, label: place.name, keywords: [place.name, place.storeCc] }))]}
           value={restaurantId ?? "all"}
           onChange={(value) => setRestaurantId(!value || value === "all" ? null : value)}

@@ -89,6 +89,19 @@ async function riderOwnsEsignObject(
       }
     }
   }
+  for (const candidate of candidates) {
+    const snap = await db
+      .collection(COLLECTIONS.esignRequestAttachments)
+      .where("storage_key", "==", candidate)
+      .limit(1)
+      .get();
+    const attachment = snap.docs[0];
+    if (!attachment) continue;
+    const requestId = attachment.get("request_id");
+    if (typeof requestId !== "string" || requestId.length === 0) continue;
+    const requestSnap = await db.collection(COLLECTIONS.esignRequests).doc(requestId).get();
+    if (requestSnap.get("driver_id") === driverId) return true;
+  }
   return false;
 }
 

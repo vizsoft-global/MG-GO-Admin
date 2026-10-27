@@ -99,6 +99,10 @@ export type PayrollRiderRow = {
   status: "Active" | "Inactive";
   /** A hand-set Status column value. Absent means today's cell (or the account) decides. */
   statusOverride?: { key: string; label: string } | null;
+  /** Employee catalog key (`drivers.employee_status_key`). */
+  employeeStatusKey?: string | null;
+  /** `drivers.job_end_description` — Cancelled paints dark green only for End of Contract. */
+  jobEndDescription?: string | null;
   vehicleKey: string | null;
   sourceType: string | null;
   sourceCompany: string | null;

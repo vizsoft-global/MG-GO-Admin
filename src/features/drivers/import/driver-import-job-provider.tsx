@@ -20,8 +20,10 @@ import {
   processDriverImportChunk,
   setDriverImportJobStatus,
   startDriverImportJob,
+  appendDriverImportRows,
 } from "../drivers-import-job-actions";
 import { isActiveImportJob } from "./import-job";
+import { IMPORT_PAYLOAD_SLICE_BYTES, sliceImportRows } from "./import-job-rows";
 import type { DriverImportJobSummary } from "./import-job-types";
 import type { DriverImportPreviewRow } from "../types";
 import { ImportJobBanner } from "./import-job-banner";
@@ -85,7 +87,7 @@ export function DriverImportJobProvider({ children }: { children: ReactNode }) {
 
   const jobs = jobsQuery.data ?? [];
   const runningJob = useMemo(
-    () => jobs.find((job) => job.status === "running") ?? null,
+    () => jobs.find((job) => job.status === "running" && job.sealed) ?? null,
     [jobs],
   );
   const activeJob = useMemo(
@@ -142,18 +144,42 @@ export function DriverImportJobProvider({ children }: { children: ReactNode }) {
 
   const start = useCallback(
     async (payload: StartPayload) => {
-      const result = await startDriverImportJob(payload);
-      if ("error" in result) {
-        toast.error(
-          result.error === "import_already_running"
-            ? t("alreadyRunning")
-            : t("importFailed"),
-        );
-        return null;
+      const parts = sliceImportRows(payload.rows, IMPORT_PAYLOAD_SLICE_BYTES);
+      const slices = parts.length > 0 ? parts : [[]];
+      let offset = 0;
+      let job: DriverImportJobSummary | null = null;
+      for (let i = 0; i < slices.length; i += 1) {
+        const slice = slices[i] ?? [];
+        const seal = i === slices.length - 1;
+        if (i === 0) {
+          const result = await startDriverImportJob({ ...payload, rows: slice, seal });
+          if ("error" in result) {
+            toast.error(
+              result.error === "import_already_running"
+                ? t("alreadyRunning")
+                : t("importFailed"),
+            );
+            return null;
+          }
+          job = result.job;
+        } else if (job) {
+          const result = await appendDriverImportRows({
+            jobId: job.id,
+            rows: slice,
+            offset,
+            seal,
+          });
+          if ("error" in result) {
+            toast.error(t("importFailed"));
+            return null;
+          }
+        }
+        offset += slice.length;
       }
-      await refreshJobs(result.job.id);
-      void runLoop(result.job.id);
-      return result.job;
+      if (!job) return null;
+      await refreshJobs(job.id);
+      void runLoop(job.id);
+      return job;
     },
     [refreshJobs, runLoop, t],
   );

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { collapseReconIssues, resolveReconRows } from "./order-recon-resolve";
+import {
+  collapseReconIssues,
+  reconCommitPayload,
+  resolveReconRows,
+} from "./order-recon-resolve";
 
 describe("resolveReconRows", () => {
   it("matches store names case-insensitively and flags a name warning", () => {
@@ -119,5 +123,64 @@ describe("collapseReconIssues", () => {
       ]),
       [],
     );
+  });
+});
+
+describe("reconCommitPayload", () => {
+  it("keeps four columns per ready cell and one identity row per rider", () => {
+    const payload = reconCommitPayload({
+      fileName: "order_reco_trial.xlsx",
+      from: "2026-10-01",
+      to: "2026-10-03",
+      resolved: [
+        {
+          employee_id: "10001",
+          employee_name: "Ada Test",
+          store_name: "Crystal Tower",
+          work_date: "2026-10-01",
+          excel_orders: 2,
+          driver_id: "d1",
+          restaurant_id: "r1",
+          status: "ready",
+          name_warning: false,
+          unresolved_reason: null,
+        },
+        {
+          employee_id: "10001",
+          employee_name: "Ada Test",
+          store_name: "Crystal Tower",
+          work_date: "2026-10-02",
+          excel_orders: 3,
+          driver_id: "d1",
+          restaurant_id: "r1",
+          status: "ready",
+          name_warning: false,
+          unresolved_reason: null,
+        },
+        {
+          employee_id: "99999",
+          employee_name: "Ghost",
+          store_name: "Nowhere",
+          work_date: "2026-10-01",
+          excel_orders: 1,
+          driver_id: null,
+          restaurant_id: null,
+          status: "unresolved",
+          name_warning: false,
+          unresolved_reason: "unknown_id",
+        },
+      ],
+    });
+    assert.deepEqual(payload.excel, [
+      { driver_id: "d1", restaurant_id: "r1", work_date: "2026-10-01", excel_orders: 2 },
+      { driver_id: "d1", restaurant_id: "r1", work_date: "2026-10-02", excel_orders: 3 },
+    ]);
+    assert.deepEqual(payload.drivers, [
+      { id: "d1", employee_id: "10001", employee_name: "Ada Test" },
+    ]);
+    assert.equal(payload.unresolved.length, 1);
+    assert.equal(payload.unresolved[0]?.employee_id, "99999");
+    assert.equal("resolved" in payload, false);
+    assert.equal("issues" in payload, false);
   });
 });

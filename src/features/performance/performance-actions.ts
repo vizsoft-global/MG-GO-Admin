@@ -1778,6 +1778,17 @@ function parseOpsSnapshot(raw: unknown): OpsSnapshot {
     nationalities: Array.isArray(optionsRaw.nationalities)
       ? optionsRaw.nationalities.map((n) => String(n))
       : [],
+    partners: Array.isArray(optionsRaw.partners)
+      ? optionsRaw.partners.map((p) => {
+          const row = (p ?? {}) as Record<string, unknown>;
+          return {
+            id: String(row.id ?? ""),
+            key: String(row.key ?? ""),
+            name: row.name == null ? null : String(row.name),
+            logo_url: row.logo_url == null ? null : String(row.logo_url),
+          };
+        })
+      : [],
   };
 
   return {

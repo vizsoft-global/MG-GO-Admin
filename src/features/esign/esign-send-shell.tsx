@@ -37,7 +37,7 @@ import { addEsignSigner } from "./esign-signer-actions";
 import { EsignSignersEditor, type EsignDraftStaffSigner } from "./esign-signers-editor";
 import { previewStaffLabel } from "./esign-signers";
 import { classifyEsignResolveError, mappedEsignErrorKey } from "./esign-resolve-error";
-import { mergeFieldValuesForSend } from "./esign-snapshot-merge";
+import { applyEmployeeSnapshotChange } from "./esign-snapshot-merge";
 import {
   defaultPenaltyActionOptions,
   isPenaltyActionFieldKey,
@@ -258,6 +258,8 @@ export function EsignSendShell({
    * protect. Same reason the template default effect below defers to it.
    */
   const draftAppliedRef = useRef(false);
+  const lastSnapshotValuesRef = useRef<Record<string, string> | null>(null);
+  const snapshotFetchGenRef = useRef(0);
 
   const isPayslip = template?.document_kind === "payslip";
   const isLoan = template?.document_kind === "loan" || template?.category_key === "loan";
@@ -409,22 +411,29 @@ export function EsignSendShell({
   }, [template]);
 
   useEffect(() => {
+    const gen = ++snapshotFetchGenRef.current;
+    const fields = template?.fields ?? [];
     if (!driverId) {
       setSnapshot(null);
+      setValues((prev) => applyEmployeeSnapshotChange(lastSnapshotValuesRef.current, null, prev, fields));
+      lastSnapshotValuesRef.current = null;
       return;
     }
     void fetchEsignSnapshot(driverId).then((result) => {
+      if (gen !== snapshotFetchGenRef.current) return;
       if (!result.snapshot) {
         setSnapshot(null);
+        setValues((prev) => applyEmployeeSnapshotChange(lastSnapshotValuesRef.current, null, prev, fields));
+        lastSnapshotValuesRef.current = null;
         const code = classifyEsignResolveError(result.error ?? "unknown_id");
         const mapped = mappedEsignErrorKey(code === "failed" ? "unknown_id" : code);
         if (mapped) toast.error(t(`errors.${mapped}`));
         return;
       }
+      const nextSnap = snapshotValues(result.snapshot);
       setSnapshot(result.snapshot);
-      setValues((prev) =>
-        mergeFieldValuesForSend(snapshotValues(result.snapshot!), prev, template?.fields ?? []),
-      );
+      setValues((prev) => applyEmployeeSnapshotChange(lastSnapshotValuesRef.current, nextSnap, prev, fields));
+      lastSnapshotValuesRef.current = nextSnap;
     });
   }, [driverId, t, template?.fields]);
 

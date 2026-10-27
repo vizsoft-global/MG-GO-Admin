@@ -324,12 +324,19 @@ export function useMyEsignSignatures(readyOnly = true) {
 export function useSubmitMyEsignSignature() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { request_id: string; pngBase64: string }) => {
+    mutationFn: async (input: {
+      request_id: string;
+      pngBase64: string;
+      decision?: "approved" | "rejected";
+      reason?: string;
+    }) => {
       const uploaded = await uploadStaffEsignSignature(input.pngBase64);
       if (!uploaded.ok) return uploaded;
       return submitMyEsignSignature({
         request_id: input.request_id,
         signature_storage_key: uploaded.key,
+        decision: input.decision,
+        reason: input.reason,
       });
     },
     onSuccess: async () => {

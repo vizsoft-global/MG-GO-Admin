@@ -1,4 +1,5 @@
 import { PAYROLL_STATUS_CHIP, type DayStatus } from "./payroll-formulas";
+import { HR_STATUS_LABEL, HR_STATUS_ORDER, hrStatusKeyFromLabel } from "./hr-payroll-status";
 
 /** The Status column's only built-in choices, in filter order. */
 export const CORE_PAYROLL_STATUS_KEYS = [
@@ -23,7 +24,7 @@ export const CORE_PAYROLL_STATUS_LABEL: Record<CorePayrollStatusKey, string> = {
   cancelled: "Cancelled",
 };
 
-/** Null means the account-style emerald pill. Active Payroll stays a distinct green. */
+/** Null means OPEN (no fill). Active Payroll stays a distinct green. */
 export const CORE_PAYROLL_STATUS_HEX: Record<CorePayrollStatusKey, string | null> = {
   active: null,
   absent: PAYROLL_STATUS_CHIP.absent.hex,
@@ -84,13 +85,21 @@ export function payrollGridStatusFromDay(status: DayStatus): CorePayrollStatusKe
   }
 }
 
-/** The checklist: the seven cores, then saved and in-use custom labels. */
+/** The checklist: the seven cores, then HR catalog labels, then saved customs. */
 export function statusFilterLabels(
   customs: readonly string[],
   inUse: readonly string[] = [],
 ): string[] {
   const cores = CORE_PAYROLL_STATUS_KEYS.map((key) => CORE_PAYROLL_STATUS_LABEL[key]);
   const seen = new Set(cores.map((label) => label.toLowerCase()));
+  const catalog: string[] = [];
+  for (const key of HR_STATUS_ORDER) {
+    const label = HR_STATUS_LABEL[key];
+    const fold = label.toLowerCase();
+    if (seen.has(fold)) continue;
+    seen.add(fold);
+    catalog.push(label);
+  }
   const extras: string[] = [];
   for (const raw of [...customs, ...inUse]) {
     const label = raw.trim().replace(/\s+/g, " ");
@@ -100,10 +109,10 @@ export function statusFilterLabels(
     extras.push(label);
   }
   extras.sort((a, b) => a.localeCompare(b));
-  return [...cores, ...extras];
+  return [...cores, ...catalog, ...extras];
 }
 
-/** A typed or clicked label. A core word stores the core key, whatever the caller typed. */
+/** A typed or clicked label. A core or catalog word stores that key. */
 export function payrollStatusChoiceFromLabel(label: string): { key: string; label: string } | null {
   const trimmed = label.trim().replace(/\s+/g, " ");
   if (!trimmed || trimmed.length > MAX_STATUS_LABEL || /[\u0000-\u001f\u007f]/.test(trimmed)) return null;
@@ -111,5 +120,7 @@ export function payrollStatusChoiceFromLabel(label: string): { key: string; labe
     (key) => CORE_PAYROLL_STATUS_LABEL[key].toLowerCase() === trimmed.toLowerCase(),
   );
   if (core) return { key: core, label: CORE_PAYROLL_STATUS_LABEL[core] };
+  const hr = hrStatusKeyFromLabel(trimmed);
+  if (hr) return { key: hr, label: HR_STATUS_LABEL[hr] };
   return { key: "custom", label: trimmed };
 }

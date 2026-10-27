@@ -33,11 +33,19 @@ describe("comparison failure codes", () => {
       failureCode({ message: "Could not find the function adminApiScan" }),
       "service_stale",
     );
+    assert.equal(
+      failureCode({ message: "admin_order_recon_compare is not on this lane" }),
+      "service_stale",
+    );
   });
 
   it("maps an HTTP 5xx to service_unavailable", () => {
     assert.equal(failureCode({ code: "500", message: "internal" }), "service_unavailable");
     assert.equal(failureCode({ code: "503", message: "" }), "service_unavailable");
+  });
+
+  it("maps a timed-out callable fetch to request_failed", () => {
+    assert.equal(failureCode({ message: "unavailable" }), "request_failed");
   });
 
   it("falls back to compare_failed for anything it cannot name", () => {

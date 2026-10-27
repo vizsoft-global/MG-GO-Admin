@@ -25,7 +25,7 @@ import {
   type StaffSlotSource,
 } from "./esign-compose-logic";
 import {
-  ESIGN_SHEET_RENDER_VERSION,
+  ESIGN_SLOT_MEASURE_SINCE,
   resolveEmployeeStampSlot,
   type SignSlot,
 } from "./esign-signature-slots";
@@ -100,13 +100,12 @@ export async function composeSignedEsignRequest(
         },
       ];
     });
-    // A `signature_slots` array measured on an older printed sheet describes
-    // boxes this compose no longer draws, so it is ignored in favour of the
-    // kind's printed geometry. That is also what re-measures every pre-fix row
-    // once, and is why the sheet version is part of the source hash.
+    // Slots measured at ESIGN_SLOT_MEASURE_SINCE (7) or later still describe
+    // the printed boxes. A null or older sheet_render_version is ignored.
+    // Bumping ESIGN_SHEET_RENDER_VERSION must not mark those rows stale.
     const renderVersion =
       typeof row.sheet_render_version === "number" ? row.sheet_render_version : null;
-    const slotsStale = renderVersion === null || renderVersion < ESIGN_SHEET_RENDER_VERSION;
+    const slotsStale = renderVersion === null || renderVersion < ESIGN_SLOT_MEASURE_SINCE;
     const persistedSlots = slotsStale ? null : row.signature_slots;
 
     let assignments: Array<
@@ -289,6 +288,7 @@ export async function composeSignedEsignRequest(
           resolveEmployeeStampSlot({
             persisted: row.signature_slots,
             kind: row.document_kind,
+            sheetRenderVersion: renderVersion,
           }),
         captions,
         placement,

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { firstMissingRequiredKey, mergeFieldValuesForSend } from "./esign-snapshot-merge";
+import {
+  applyEmployeeSnapshotChange,
+  firstMissingRequiredKey,
+  mergeFieldValuesForSend,
+} from "./esign-snapshot-merge";
 import { classifyEsignResolveError } from "./esign-resolve-error";
 import { classifyEsignUploadError } from "./esign-upload-error";
 
@@ -53,6 +57,34 @@ describe("snapshot auto-fill", () => {
     assert.equal(merged.employee_name, "Ali");
     assert.equal(merged.position ?? "", "");
     assert.equal(firstMissingRequiredKey(merged, [{ field_key: "position", is_required: false }]), null);
+  });
+
+  it("replaces the previous rider's leftover name when the next snapshot is empty", () => {
+    const merged = applyEmployeeSnapshotChange(
+      {
+        employee_name: "Ali",
+        pay_through: "Salary",
+        bank_number: "****1234",
+      },
+      { employee_name: "Sara", pay_through: "", bank_number: "" },
+      { employee_name: "Ali", pay_through: "Salary", bank_number: "****1234", amount: "10" },
+      fields,
+    );
+    assert.equal(merged.employee_name, "Sara");
+    assert.equal(merged.pay_through, "");
+    assert.equal(merged.bank_number, "");
+    assert.equal(merged.amount, "10");
+  });
+
+  it("keeps an operator override when the rider changes", () => {
+    const merged = applyEmployeeSnapshotChange(
+      { employee_name: "Ali", position: "Rider" },
+      { employee_name: "Sara", position: "Captain" },
+      { employee_name: "Override", position: "Rider" },
+      fields,
+    );
+    assert.equal(merged.employee_name, "Override");
+    assert.equal(merged.position, "Captain");
   });
 
   it("does not look like unknown_fn or a bucket miss", () => {

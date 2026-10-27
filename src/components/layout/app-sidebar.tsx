@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { buttonVariants } from "@/components/ui/button";
 import { launcherGlyphSrc } from "@/lib/menu/launcher-glyphs";
+import { sanitizeMenuIconColor, sanitizeMenuIconUrl } from "@/lib/menu/menu-icon";
 import { APP_NAV_KEY_BY_ID, ICON_MAP } from "@/lib/menu/menu-registry";
 import type { ResolvedMenuNode } from "@/lib/menu/menu-merge";
 import { cn } from "@/lib/utils";
@@ -91,12 +92,18 @@ function writePanelGroupOpen(groupId: string, open: boolean) {
 function MenuIcon({
   name,
   id,
+  iconUrl,
   className,
 }: {
   name: string;
   id?: string;
+  iconUrl?: string;
   className?: string;
 }) {
+  const custom = sanitizeMenuIconUrl(iconUrl);
+  if (custom) {
+    return <img src={custom} alt="" width={12} height={12} className="size-3 object-contain" />;
+  }
   const src = id ? launcherGlyphSrc(id) : undefined;
   if (src) {
     return <img src={src} alt="" width={12} height={12} className="size-3 object-contain" />;
@@ -111,13 +118,24 @@ function MenuIcon({
   );
 }
 
-function NavIcon({ id, name }: { id?: string; name: string }) {
+function NavIcon({
+  id,
+  name,
+  iconUrl,
+  iconColor,
+}: {
+  id?: string;
+  name: string;
+  iconUrl?: string;
+  iconColor?: string;
+}) {
+  const tint = sanitizeMenuIconColor(iconColor);
   return (
     <span
       className="grid size-5 shrink-0 place-items-center rounded-md"
-      style={{ backgroundColor: LAUNCHER_BRAND.tile }}
+      style={{ backgroundColor: tint || LAUNCHER_BRAND.tile }}
     >
-      <MenuIcon id={id} name={name} />
+      <MenuIcon id={id} name={name} iconUrl={iconUrl} />
     </span>
   );
 }
@@ -234,7 +252,7 @@ function NavItemLink({
         className="h-8 cursor-pointer rounded-md px-2.5 text-sm font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-normal data-active:text-slate-900 data-active:shadow-sm"
         render={
           <Link href={href} prefetch onMouseEnter={() => prefetchAdminRoute(queryClient, href)}>
-            <NavIcon id={node.id} name={node.icon} />
+            <NavIcon id={node.id} name={node.icon} iconUrl={node.iconUrl} iconColor={node.iconColor} />
             <span>{label}</span>
             {badge ? (
               <span className="ms-auto inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-orange-500 px-1 text-xs font-normal tabular-nums text-white group-data-[collapsible=icon]:hidden">
@@ -297,7 +315,7 @@ function NavGroup({
           className="h-8 cursor-pointer rounded-md px-2.5 text-sm font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-normal data-active:text-slate-900 data-active:shadow-sm"
           render={
             <Link href={href} prefetch onMouseEnter={() => prefetchAdminRoute(queryClient, href)}>
-              <NavIcon id={node.id} name={node.icon} />
+              <NavIcon id={node.id} name={node.icon} iconUrl={node.iconUrl} iconColor={node.iconColor} />
               <span>{groupLabel}</span>
             </Link>
           }
@@ -326,6 +344,8 @@ function NavGroup({
         groupId={node.id}
         groupLabel={groupLabel}
         groupIcon={node.icon}
+        groupIconUrl={node.iconUrl}
+        groupIconColor={node.iconColor}
         forceOpen={hasActiveChild}
         children={children}
         tItemLabel={tItemLabel}
@@ -349,6 +369,8 @@ function PanelGroupChildren({
   groupId,
   groupLabel,
   groupIcon,
+  groupIconUrl,
+  groupIconColor,
   forceOpen,
   children,
   tItemLabel,
@@ -356,6 +378,8 @@ function PanelGroupChildren({
   groupId: string;
   groupLabel: string;
   groupIcon: string;
+  groupIconUrl?: string;
+  groupIconColor?: string;
   forceOpen: boolean;
   children: ResolvedMenuNode[];
   tItemLabel: (n: ResolvedMenuNode) => string;
@@ -392,7 +416,7 @@ function PanelGroupChildren({
           className="flex w-full cursor-pointer items-center gap-1 text-start hover:text-foreground"
           aria-expanded={showChildren}
         >
-          <NavIcon name={groupIcon} />
+          <NavIcon name={groupIcon} iconUrl={groupIconUrl} iconColor={groupIconColor} />
           <span className="flex-1 text-xs font-normal uppercase tracking-[0.08em] text-muted-foreground">
             {groupLabel}
           </span>
