@@ -1,11 +1,14 @@
 import {
   buildEsignDocumentLayout,
+  ESIGN_SLOT_MEASURE_SINCE,
   type BuildLayoutInput,
   type EsignDocumentLayout,
   type LayoutSource,
 } from "./esign-document-layout";
 import { type EsignEmployeeSnapshot } from "./esign-placeholders";
 import { renderClientSheetHtml } from "./esign-client-sheet";
+
+export { ESIGN_SLOT_MEASURE_SINCE };
 
 export const SIGNATURE_BAND_PT = 140;
 
@@ -15,11 +18,12 @@ export const SIGNATURE_BAND_PT = 140;
  * old design forever. `esign_requests.sheet_render_version` records the value
  * used to build the stored HTML; a miss re-renders an unsigned row once.
  *
- * 7 — the signature-slot measurement was re-taken so a persisted
- * `signature_slots` array can no longer be trusted for a sheet built before it.
- * `functions/src/rpcs/esign-signature-slots.ts` mirrors this number.
+ * 8 — new sheets stamp this version. Persisted employee and staff slots stay
+ * trusted from `ESIGN_SLOT_MEASURE_SINCE` (7); a version-7 measurement is not
+ * stale when this number moves.
+ * `functions/src/rpcs/esign-signature-slots.ts` must mirror this number.
  */
-export const ESIGN_SHEET_RENDER_VERSION = 7;
+export const ESIGN_SHEET_RENDER_VERSION = 8;
 
 /** Inline MG mark when Settings has no logo, or `/logo.png` is missing from public/. */
 export const ESIGN_DEFAULT_LOGO_SRC =

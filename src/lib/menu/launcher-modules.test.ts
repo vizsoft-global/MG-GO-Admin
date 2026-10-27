@@ -102,7 +102,7 @@ describe("launcher modules", () => {
     assert.ok(derived.every((tile) => tile.href.startsWith("/")));
   });
 
-  it("merges both sources into exactly the eighteen Figma doors", () => {
+  it("merges both sources into the sidebar hubs only", () => {
     const derived = launcherTilesFromMenu(buildInitialTree(() => true, true));
     const merged = mergeLauncherTiles(derived, launcherRegistryItems());
     const ids = merged.map((tile) => tile.id);
@@ -111,43 +111,33 @@ describe("launcher modules", () => {
     assert.deepEqual(ids, [...LAUNCHER_HOME_TILE_IDS]);
     assert.equal(new Set(ids).size, ids.length);
     assert.equal(new Set(hrefs).size, hrefs.length);
-    assert.equal(hrefs.filter((href) => href === "/settings").length, 1);
+    assert.equal(hrefs.includes("/settings"), true);
+    assert.equal(hrefs.includes("/drivers"), true);
+    assert.equal(hrefs.includes("/live-tracking"), true);
+    assert.equal(hrefs.includes("/notifications"), true);
+    assert.equal(hrefs.includes("/settings/roles"), true);
   });
 
-  it("renders the frame order and keeps the hubs behind their own doors", () => {
+  it("renders the sidebar root rows and drops nested doors", () => {
     const derived = launcherTilesFromMenu(buildInitialTree(() => true, true));
     const merged = mergeLauncherTiles(derived, launcherRegistryItems());
     const ids = merged.map((tile) => tile.id);
 
-    assert.equal(ids.length, 18);
-    assert.deepEqual(ids.slice(0, 6), [
-      "dashboard-ops",
-      "live-tracking-v2",
-      "driver-groups",
-      "drivers",
-      "deliveries",
-      "employeedesk",
-    ]);
-    assert.deepEqual(ids.slice(12), [
-      "roles",
-      "profile",
-      "document-expiry",
-      "driver-app",
-      "app-releases",
-      "assets",
-    ]);
+    assert.deepEqual(ids, [...LAUNCHER_HOME_TILE_IDS]);
 
     for (const hidden of LAUNCHER_HIDDEN_TILE_IDS) {
       assert.ok(!ids.includes(hidden), hidden);
     }
     for (const id of [
+      "dashboard-ops",
       "operations-dashboard",
       "client-portal",
-      "vehicles",
-      "operations-hub",
       "payroll",
       "assistant",
+      "assets",
+      "live-tracking-v2",
     ]) {
+      assert.ok(!ids.includes(id), id);
       assert.ok(LAUNCHER_HIDDEN_TILE_IDS.has(id), id);
     }
 

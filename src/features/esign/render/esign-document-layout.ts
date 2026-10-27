@@ -35,6 +35,14 @@ export const A4_HEIGHT_PT = 841.89;
 export const MISSING_EMPLOYEE_SLOT = "missing_employee_signature_slot";
 export const INVALID_SIGNATURE_SLOT = "invalid_signature_slot";
 
+/**
+ * Persisted `signature_slots` measured at this `sheet_render_version` or later
+ * still match the printed boxes. Newer `ESIGN_SHEET_RENDER_VERSION` values must
+ * not discard those measurements. `functions/src/rpcs/esign-signature-slots.ts`
+ * mirrors this number.
+ */
+export const ESIGN_SLOT_MEASURE_SINCE = 7;
+
 export type SignSlotRole =
   | "employee"
   | "hr"
@@ -591,21 +599,27 @@ export function serializeSignatureSlots(slots: SignSlot[]): SignSlot[] {
   return slots.map((row) => ({ ...row }));
 }
 
-/**
- * Employee stamp box. Persisted slots win when usable; otherwise recompute
- * from `document_kind`. Never invents last-page bottom-right.
- */
 export function requireEmployeeSlot(slots: SignSlot[] | null | undefined): SignSlot {
   const found = slots?.find((row) => row.role === "employee" && isUsableSlot(row));
   if (!found) throw new Error(MISSING_EMPLOYEE_SLOT);
   return found;
 }
 
+/**
+ * Employee stamp box. A usable persisted slot wins when the sheet version is
+ * omitted or at least `ESIGN_SLOT_MEASURE_SINCE`. A null or older version
+ * ignores persisted boxes and uses the kind fallback. Never invents
+ * last-page bottom-right.
+ */
 export function resolveEmployeeStampSlot(input: {
   persisted?: unknown;
   kind?: unknown;
+  sheetRenderVersion?: number | null;
 }): SignSlot {
-  const persisted = parseSignatureSlots(input.persisted);
+  const version = input.sheetRenderVersion;
+  const trustPersisted =
+    version === undefined || (version !== null && version >= ESIGN_SLOT_MEASURE_SINCE);
+  const persisted = trustPersisted ? parseSignatureSlots(input.persisted) : null;
   const fromPersisted = persisted?.find((row) => row.role === "employee" && isUsableSlot(row));
   if (fromPersisted) return fromPersisted;
   return requireEmployeeSlot(slotsForKind(normalizeDocumentKind(input.kind)));

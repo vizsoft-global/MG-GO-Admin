@@ -10,13 +10,16 @@ export const MISSING_EMPLOYEE_SLOT = "missing_employee_signature_slot";
 export const INVALID_SIGNATURE_SLOT = "invalid_signature_slot";
 
 /**
- * Printed-sheet version that `signature_slots` belong to.
+ * Printed-sheet version stamped on newly rendered HTML.
  *
- * Mirrors `src/features/esign/render/esign-document-html.ts`. A row stamped with
- * an older value was measured against a sheet this compose no longer draws, so
- * its boxes are ignored in favour of the kind's printed ones.
+ * Mirrors `src/features/esign/render/esign-document-html.ts`. Slot trust is
+ * gated on `ESIGN_SLOT_MEASURE_SINCE`, not this number: bumping the render
+ * version must not discard slots measured at 7.
  */
-export const ESIGN_SHEET_RENDER_VERSION = 7;
+export const ESIGN_SHEET_RENDER_VERSION = 8;
+
+/** Persisted `signature_slots` at this sheet version or later stay usable. */
+export const ESIGN_SLOT_MEASURE_SINCE = 7;
 
 /** A staff box shorter than this cannot hold ink and a caption line. */
 export const MIN_SLOT_HEIGHT = 8;
@@ -130,8 +133,12 @@ export function parseSignatureSlots(raw: unknown): SignSlot[] | null {
 export function resolveEmployeeStampSlot(input: {
   persisted?: unknown;
   kind?: unknown;
+  sheetRenderVersion?: number | null;
 }): SignSlot {
-  const persisted = parseSignatureSlots(input.persisted);
+  const version = input.sheetRenderVersion;
+  const trustPersisted =
+    version === undefined || (version !== null && version >= ESIGN_SLOT_MEASURE_SINCE);
+  const persisted = trustPersisted ? parseSignatureSlots(input.persisted) : null;
   const fromPersisted = persisted?.find((row) => row.role === "employee" && isUsableSlot(row));
   if (fromPersisted) return fromPersisted;
   const fromKind = slotsForKind(normalizeDocumentKind(input.kind)).find(

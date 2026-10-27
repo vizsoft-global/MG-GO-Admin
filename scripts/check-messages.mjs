@@ -16,6 +16,8 @@
  *    resolved here and guessing would produce false positives.
  *  - `t(\`...\`)` with an interpolation is skipped: the key is only knowable at
  *    runtime.
+ *  - `t.rich` / `t.markup` literals are checked the same way as `t()`, so a missing
+ *    ICU string cannot paint the key path on a range subtitle.
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -77,7 +79,7 @@ for (const file of collectSourceFiles(SRC)) {
 
   const relativeFile = relative(ROOT, file).replace(/\\/g, "/");
 
-  for (const match of source.matchAll(/\bt\s*\(\s*(["'`])([^"'`$]+)\1/g)) {
+  for (const match of source.matchAll(/\bt(?:\.(?:rich|markup))?\s*\(\s*(["'`])([^"'`$]+)\1/g)) {
     const key = match[2];
     if (!key) continue;
     const line = source.slice(0, match.index).split("\n").length;

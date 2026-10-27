@@ -15,6 +15,7 @@ import {
   LOAN_GEOM,
   LOAN_SLOTS,
   maskBankNumber,
+  ESIGN_SLOT_MEASURE_SINCE,
   MISSING_EMPLOYEE_SLOT,
   parseSignatureSlots,
   PAYSLIP_SLOTS,
@@ -184,6 +185,39 @@ describe("resolveEmployeeStampSlot", () => {
     });
     assert.equal(slot.role, "employee");
     assert.deepEqual(slot, slotsForKind("general")[0]);
+  });
+
+  it("ignores persisted slots when the sheet version is below ESIGN_SLOT_MEASURE_SINCE", () => {
+    const persisted = [{ id: "e", role: "employee", page: 1, xPt: 60, yPt: 300, wPt: 200, hPt: 24 }];
+    const before = resolveEmployeeStampSlot({
+      persisted,
+      kind: "payslip",
+      sheetRenderVersion: ESIGN_SLOT_MEASURE_SINCE - 1,
+    });
+    assert.deepEqual(before, PAYSLIP_SLOTS[0]);
+    assert.equal(before.yPt, 69);
+    const missing = resolveEmployeeStampSlot({
+      persisted,
+      kind: "payslip",
+      sheetRenderVersion: null,
+    });
+    assert.deepEqual(missing, PAYSLIP_SLOTS[0]);
+  });
+
+  it("uses a persisted employee slot when the sheet version is at least ESIGN_SLOT_MEASURE_SINCE", () => {
+    const persisted = [{ id: "e", role: "employee", page: 1, xPt: 60, yPt: 300, wPt: 200, hPt: 24 }];
+    for (const sheetRenderVersion of [ESIGN_SLOT_MEASURE_SINCE, ESIGN_SLOT_MEASURE_SINCE + 1]) {
+      const slot = resolveEmployeeStampSlot({ persisted, kind: "payslip", sheetRenderVersion });
+      assert.equal(slot.xPt, 60);
+      assert.equal(slot.yPt, 300);
+    }
+  });
+
+  it("uses a persisted employee slot when the sheet version is omitted", () => {
+    const persisted = [{ id: "e", role: "employee", page: 1, xPt: 60, yPt: 300, wPt: 200, hPt: 24 }];
+    const slot = resolveEmployeeStampSlot({ persisted, kind: "payslip" });
+    assert.equal(slot.xPt, 60);
+    assert.equal(slot.yPt, 300);
   });
 
   it("throws a named error when the resolved list has no usable employee", () => {

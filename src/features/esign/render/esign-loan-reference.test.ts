@@ -6,6 +6,7 @@ import {
   buildEsignDocumentHtml,
   sampleEmployee,
 } from "./esign-document-html";
+import { filledEsignDocumentInput } from "./esign-filled-sheet";
 
 const EMPLOYEE = sampleEmployee();
 
@@ -17,6 +18,26 @@ function loanHtml(): string {
     headerAr: "طلب سلفة",
     employee: EMPLOYEE,
   });
+}
+
+function loanDecisionHtml(managementDecision: string): string {
+  return buildEsignDocumentHtml(
+    filledEsignDocumentInput({
+      template: {
+        document_kind: "loan",
+        header_en: "Loan Request",
+        header_ar: "طلب سلفة",
+        body_en: "",
+        body_ar: "",
+        declaration_en: "",
+        declaration_ar: "",
+        fields: [],
+      },
+      snapshot: EMPLOYEE,
+      fieldValues: { management_decision: managementDecision },
+      description: "",
+    }),
+  );
 }
 
 describe("L2 loan reference sheet", () => {
@@ -63,6 +84,27 @@ describe("L2 loan reference sheet", () => {
       "Management Decision",
     ].map((title) => html.indexOf(title));
     assert.ok(order.every((value, index) => value >= 0 && (index === 0 || value > order[index - 1])));
+  });
+
+  it("leaves both management checkboxes off until a decision is stored", () => {
+    const html = loanHtml();
+    assert.match(html, /ref-check"><\/span>Approved/);
+    assert.match(html, /ref-check"><\/span>Rejected/);
+    assert.doesNotMatch(html, /ref-check on/);
+  });
+
+  it("checks Approved when management_decision is Approved", () => {
+    const html = loanDecisionHtml("Approved");
+    assert.match(html, /ref-check on"><\/span>Approved/);
+    assert.match(html, /ref-check"><\/span>Rejected/);
+    assert.doesNotMatch(html, /ref-check on"><\/span>Rejected/);
+  });
+
+  it("checks Rejected when management_decision is Rejected", () => {
+    const html = loanDecisionHtml("Rejected");
+    assert.match(html, /ref-check on"><\/span>Rejected/);
+    assert.match(html, /ref-check"><\/span>Approved/);
+    assert.doesNotMatch(html, /ref-check on"><\/span>Approved/);
   });
 
   it("keeps the Next and functions fallbacks at two slots", () => {

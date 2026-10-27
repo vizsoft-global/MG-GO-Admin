@@ -115,9 +115,9 @@ function TimelineStep({
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
+    <div className="min-w-0 space-y-0.5 text-start">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-end text-xs font-medium">{value}</dd>
+      <dd className="break-words text-xs font-medium">{value}</dd>
     </div>
   );
 }
@@ -462,7 +462,7 @@ export function EsignDetailPageShell({ requestId }: { requestId: string }) {
             ) : null}
             <ol className="space-y-2">
               <TimelineStep label={t("timelineSent")} at={request.sent_at} />
-              <TimelineStep label={t("timelineViewed")} at={request.viewed_at} pendingLabel={t("timelinePending")} />
+              <TimelineStep label={t("timelineViewed")} at={request.viewed_at} pendingLabel={t("timelineNotViewed")} />
               {request.declined_at ? (
                 <TimelineStep
                   label={t("timelineDeclined")}

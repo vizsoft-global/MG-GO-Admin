@@ -19,6 +19,14 @@ import {
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { requireStaff } from "../core/staff";
 import { SIGN_DEEP_LINK_PREFIX, SIGN_ROUTE_PREFIX } from "./esign-requests";
+import {
+  managementDecisionLabel,
+  parseEsignStaffDecision,
+  signerNotifyCopy,
+  signerNotifyKind,
+  type EsignSignerNotifyKind,
+  type EsignStaffDecision,
+} from "./esign-staff-decision";
 import { notifyDriverTransactional } from "./visits-shared";
 import {
   IN_FILTER_LIMIT,
@@ -512,24 +520,19 @@ async function notifySignerOutcome(input: {
   requestId: string;
   requestCode: string | null;
   documentTitle: string | null;
-  approved: boolean;
+  kind: EsignSignerNotifyKind;
   declineReason?: string | null;
   actorUid: string;
 }): Promise<void> {
   if (!input.driverId) return;
   const code = input.requestCode ?? input.requestId;
   const documentName = input.documentTitle ?? code;
-  const reason = input.declineReason?.trim() ?? "";
-  const body = input.approved
-    ? `${documentName} was approved by management.`
-    : reason !== ""
-      ? `${documentName} was rejected by management: ${reason}`
-      : `${documentName} was rejected by management.`;
+  const copy = signerNotifyCopy(input.kind, documentName, input.declineReason);
   try {
     await notifyDriverTransactional({
       driverId: input.driverId,
-      title: `${input.approved ? "Document approved" : "Document rejected"} - ${code}`,
-      body,
+      title: copy.title,
+      body: copy.body,
       deepLink: `${SIGN_DEEP_LINK_PREFIX}${input.requestId}`,
       category: "operations",
       priority: "high",
@@ -548,9 +551,16 @@ async function notifySignerOutcome(input: {
 export const adminSubmitEsignSignature = onCall(async (request) => {
   const staff = await requireStaff(request);
   const data = (request.data ?? {}) as Dict;
-  const requestId = pickId(data, "requestId", "p_request_id");
+  const requestId = pickId(data, "id", "requestId", "request_id", "p_request_id", "p_id");
   const storageKey = pickText(data, "signatureStorageKey", "p_signature_storage_key");
   const signerMeta = pickObject(data, "signerMeta", "p_signer_meta");
+  const decision: EsignStaffDecision | null = parseEsignStaffDecision(
+    pickText(data, "decision", "p_decision"),
+  );
+  const reason = pickText(data, "reason", "p_reason") ?? "";
+  if (decision === "rejected" && reason.trim() === "") {
+    throw new HttpsError("failed-precondition", "reason_required");
+  }
 
   if (!storageKey) return { ok: false, error: "signature_required" };
   if (!requestId) return { ok: false, error: "not_assigned" };
@@ -569,6 +579,7 @@ export const adminSubmitEsignSignature = onCall(async (request) => {
     if (!requestSnap.exists) return { ok: false as const, error: "not_ready" };
     const requestRow = dataOf(requestSnap);
     if (requestRow.status !== "signed") return { ok: false as const, error: "not_ready" };
+    const storedReview = textOf(requestRow.review_status);
 
     const current = dataOf(target);
     const now = Timestamp.now();
@@ -579,6 +590,23 @@ export const adminSubmitEsignSignature = onCall(async (request) => {
       signer_meta: signerMeta ?? current.signer_meta ?? {},
       updated_at: now,
     });
+    if (decision) {
+      const currentValues = requestRow.field_values;
+      const fieldValues: Dict =
+        currentValues && typeof currentValues === "object" && !Array.isArray(currentValues)
+          ? { ...(currentValues as Dict) }
+          : {};
+      fieldValues.management_decision = managementDecisionLabel(decision);
+      const note = reason.trim();
+      tx.update(requestRef, {
+        field_values: fieldValues,
+        review_status: decision,
+        review_decision: decision,
+        review_note: note.length > 0 ? note : null,
+        reviewed_at: now,
+        reviewed_by: staff.uid,
+      });
+    }
 
     const after = signerSnap.docs.map((doc) =>
       doc.id === target.id ? { ...dataOf(doc), status: "signed" } : dataOf(doc),
@@ -591,6 +619,9 @@ export const adminSubmitEsignSignature = onCall(async (request) => {
       driverId: textOf(requestRow.driver_id),
       requestCode: textOf(requestRow.request_code),
       documentTitle: textOf(requestRow.title),
+      thisDecision: decision,
+      storedReview,
+      reviewStatus: decision ?? storedReview,
     };
   });
 
@@ -610,23 +641,30 @@ export const adminSubmitEsignSignature = onCall(async (request) => {
   });
 
   if (result.state === "signed") {
+    const kind = signerNotifyKind(result.thisDecision, result.storedReview);
     await notifySignerOutcome({
       driverId: result.driverId,
       requestId,
       requestCode: result.requestCode,
       documentTitle: result.documentTitle,
-      approved: true,
+      kind,
+      declineReason: kind === "rejected" ? reason : undefined,
       actorUid: staff.uid,
     });
   }
 
-  return { ok: true, counter_signature_state: result.state };
+  return {
+    ok: true,
+    counter_signature_state: result.state,
+    this_decision: result.thisDecision,
+    review_status: result.reviewStatus,
+  };
 });
 
 export const adminDeclineEsignSignature = onCall(async (request) => {
   const staff = await requireStaff(request);
   const data = (request.data ?? {}) as Dict;
-  const requestId = pickId(data, "requestId", "p_request_id");
+  const requestId = pickId(data, "id", "requestId", "request_id", "p_request_id", "p_id");
   const reason = pickText(data, "reason", "p_reason");
   if (!requestId) return { ok: false, error: "not_assigned" };
 
@@ -692,7 +730,7 @@ export const adminDeclineEsignSignature = onCall(async (request) => {
     requestId,
     requestCode: result.requestCode,
     documentTitle: result.documentTitle,
-    approved: false,
+    kind: "rejected",
     declineReason: reason,
     actorUid: staff.uid,
   });

@@ -4,6 +4,7 @@ import {
   MENU_REGISTRY,
   type MenuRegistryItem,
 } from "@/lib/menu/menu-registry";
+import { sanitizeMenuIconColor, sanitizeMenuIconUrl } from "@/lib/menu/menu-icon";
 import type { MenuNode } from "@/services/menu-config-service";
 import type { Permission } from "@/lib/auth/permissions";
 
@@ -12,6 +13,8 @@ export interface ResolvedMenuNode {
   type: "item" | "group";
   label: string;
   icon: string;
+  iconUrl?: string;
+  iconColor?: string;
   href?: string;
   displayMode?: "inline" | "panel";
   permission?: Permission;
@@ -24,6 +27,19 @@ function registryMap(): Map<string, MenuRegistryItem> {
   const m = new Map<string, MenuRegistryItem>();
   for (const r of MENU_REGISTRY) m.set(r.id, r);
   return m;
+}
+
+function iconFields(node: { iconUrl?: string; iconColor?: string } | undefined): {
+  iconUrl?: string;
+  iconColor?: string;
+} {
+  if (!node) return {};
+  const iconUrl = sanitizeMenuIconUrl(node.iconUrl);
+  const iconColor = sanitizeMenuIconColor(node.iconColor);
+  return {
+    ...(iconUrl ? { iconUrl } : {}),
+    ...(iconColor ? { iconColor } : {}),
+  };
 }
 
 function collectIdsFromTree(nodes: MenuNode[], set: Set<string>) {
@@ -172,17 +188,24 @@ function relocateFleetItems(tree: MenuNode[]): MenuNode[] {
     MENU_REGISTRY.filter((item) => item.defaultGroup === "Fleet").map((item) => item.id),
   );
   let hubIcon = "Truck";
+  let hubArt: { iconUrl?: string; iconColor?: string } = {};
 
   const strip = (nodes: MenuNode[]): MenuNode[] =>
     nodes.flatMap((node) => {
       if (node.type === "item") {
-        if (node.id === FLEET_HUB_ID) hubIcon = node.icon || hubIcon;
+        if (node.id === FLEET_HUB_ID) {
+          hubIcon = node.icon || hubIcon;
+          hubArt = iconFields(node);
+        }
         if (fleetIds.has(node.id)) return [];
         return [node];
       }
       if (node.id === FLEET_GROUP_ID) {
         for (const child of node.children ?? []) {
-          if (child.type === "item" && child.id === FLEET_HUB_ID) hubIcon = child.icon || hubIcon;
+          if (child.type === "item" && child.id === FLEET_HUB_ID) {
+            hubIcon = child.icon || hubIcon;
+            hubArt = iconFields(child);
+          }
         }
         return [];
       }
@@ -198,6 +221,7 @@ function relocateFleetItems(tree: MenuNode[]): MenuNode[] {
     type: "item",
     label: registry?.defaultLabel ?? "Fleet Hub",
     icon: hubIcon || registry?.defaultIcon || "Car",
+    ...hubArt,
     hidden: false,
   };
 
@@ -690,6 +714,7 @@ function flattenHubGroup(
             type: "item" as const,
             label: child?.label ?? registry?.defaultLabel ?? hubItemId,
             icon: child?.icon ?? registry?.defaultIcon ?? "Folder",
+            ...iconFields(child),
             hidden: false,
           },
         ];
@@ -876,6 +901,7 @@ export function resolveForSidebar(
           type: "item",
           label: n.label,
           icon: n.icon,
+          ...iconFields(n),
           href: r.href,
           permission: r.permission,
           superAdminOnly: r.superAdminOnly,
@@ -889,6 +915,7 @@ export function resolveForSidebar(
           type: "group",
           label: n.label,
           icon: n.icon,
+          ...iconFields(n),
           displayMode: n.displayMode,
           href: n.href,
           children,

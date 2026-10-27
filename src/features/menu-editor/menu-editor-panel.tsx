@@ -86,6 +86,8 @@ type FlatRow = {
   itemId: string;
   label: string;
   icon: string;
+  iconUrl?: string;
+  iconColor?: string;
   hidden: boolean;
   groupId: string;
 };
@@ -116,6 +118,8 @@ function flattenTree(tree: MenuNode[]): {
             itemId: child.id,
             label: child.label,
             icon: child.icon,
+            iconUrl: child.iconUrl,
+            iconColor: child.iconColor,
             hidden: !!child.hidden,
             groupId: n.id,
           });
@@ -127,6 +131,8 @@ function flattenTree(tree: MenuNode[]): {
         itemId: n.id,
         label: n.label,
         icon: n.icon,
+        iconUrl: n.iconUrl,
+        iconColor: n.iconColor,
         hidden: !!n.hidden,
         groupId: NONE_GROUP,
       });
@@ -135,6 +141,25 @@ function flattenTree(tree: MenuNode[]): {
   return { rows, groups, order };
 }
 
+function itemFromRow(r: FlatRow): MenuNode {
+  const node: MenuNode = {
+    id: r.itemId,
+    type: "item",
+    label: r.label,
+    icon: r.icon,
+    hidden: r.hidden,
+  };
+  if (r.iconUrl) node.iconUrl = r.iconUrl;
+  if (r.iconColor) node.iconColor = r.iconColor;
+  return node;
+}
+
+function groupWithIcon(group: MenuNode, children: MenuNode[]): MenuNode {
+  const node: MenuNode = { ...group, children };
+  if (!node.iconUrl) delete node.iconUrl;
+  if (!node.iconColor) delete node.iconColor;
+  return node;
+}
 function rebuildTree(
   rows: FlatRow[],
   groups: MenuNode[],
@@ -156,39 +181,21 @@ function rebuildTree(
     if (entry.kind === "item") {
       const r = rowByItem.get(entry.id);
       if (r && r.groupId === NONE_GROUP) {
-        result.push({
-          id: r.itemId,
-          type: "item",
-          label: r.label,
-          icon: r.icon,
-          hidden: r.hidden,
-        });
+        result.push(itemFromRow(r));
         seenItems.add(r.itemId);
       }
     } else {
       const g = groupById.get(entry.id);
       if (!g) continue;
-      const children = (rowsByGroup.get(g.id) || []).map((r) => ({
-        id: r.itemId,
-        type: "item" as const,
-        label: r.label,
-        icon: r.icon,
-        hidden: r.hidden,
-      }));
+      const children = (rowsByGroup.get(g.id) || []).map((r) => itemFromRow(r));
       if (children.length > 0 || g.id.startsWith("group-custom-")) {
-        result.push({ ...g, children });
+        result.push(groupWithIcon(g, children));
       }
     }
   }
   for (const r of rows) {
     if (r.groupId === NONE_GROUP && !seenItems.has(r.itemId)) {
-      result.push({
-        id: r.itemId,
-        type: "item",
-        label: r.label,
-        icon: r.icon,
-        hidden: r.hidden,
-      });
+      result.push(itemFromRow(r));
     }
   }
   return result;
@@ -277,7 +284,13 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
           return o;
         });
       }
-      return rs.map((r) => (r.itemId === itemId ? { ...r, ...patch } : r));
+      return rs.map((r) => {
+        if (r.itemId !== itemId) return r;
+        const next = { ...r, ...patch };
+        if ("iconUrl" in patch && !patch.iconUrl) delete next.iconUrl;
+        if ("iconColor" in patch && !patch.iconColor) delete next.iconColor;
+        return next;
+      });
     });
     setDirty(true);
   };
@@ -361,6 +374,8 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
     updateRow(itemId, {
       label: reg.defaultLabel,
       icon: reg.defaultIcon,
+      iconUrl: undefined,
+      iconColor: undefined,
       hidden: false,
     });
   };
@@ -538,8 +553,8 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
         {orderNum}
       </span>
       <IconPicker
-        value={r.icon}
-        onChange={(icon) => updateRow(r.itemId, { icon })}
+        value={{ icon: r.icon, iconUrl: r.iconUrl, iconColor: r.iconColor }}
+        onChange={(next) => updateRow(r.itemId, next)}
         compact
       />
       <Input
@@ -736,11 +751,19 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
                               {orderNum}
                             </span>
                             <IconPicker
-                              value={g.icon || "Folder"}
+                              value={{ icon: g.icon || "Folder", iconUrl: g.iconUrl, iconColor: g.iconColor }}
                               compact
-                              onChange={(icon) => {
+                              onChange={(next) => {
                                 setGroups((gs) =>
-                                  gs.map((x) => (x.id === g.id ? { ...x, icon } : x)),
+                                  gs.map((x) => {
+                                    if (x.id !== g.id) return x;
+                                    const painted: MenuNode = { ...x, icon: next.icon };
+                                    if (next.iconUrl) painted.iconUrl = next.iconUrl;
+                                    else delete painted.iconUrl;
+                                    if (next.iconColor) painted.iconColor = next.iconColor;
+                                    else delete painted.iconColor;
+                                    return painted;
+                                  }),
                                 );
                                 setDirty(true);
                               }}

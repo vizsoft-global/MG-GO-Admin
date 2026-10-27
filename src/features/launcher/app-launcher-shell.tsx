@@ -22,6 +22,7 @@ import {
   filterLauncherTiles,
   greetingBucket,
   kuwaitHour,
+  LAUNCHER_HOME_TILE_IDS,
   LAUNCHER_LABEL_OVERRIDE,
   LAUNCHER_RELEASE,
   launcherTilesFromMenu,
@@ -45,6 +46,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const EMPTY_WEATHER: LauncherWeather = { tempC: null, code: null, isDay: true };
+
+/** Same names the sidebar treats as stale, so a saved menu label can win. */
+const SUPERSEDED_NAV_LABELS = new Set([
+  "Drivers",
+  "Request & Complaint",
+  "Requests & Complaints",
+  "EmployeeDesk",
+  "السائقون",
+  "مكتب الموظفين",
+  "مكتب الموظف",
+]);
 
 function formatAdminRole(slug: string): string {
   if (!slug) return "";
@@ -155,8 +167,11 @@ export function AppLauncherShell({
     const map = new Map<string, string>();
     const translate = (key: string): string | null => (tNav.has(key) ? tNav(key) : null);
     for (const item of tiles) {
+      const sidebarHub = (LAUNCHER_HOME_TILE_IDS as readonly string[]).includes(item.id);
       const override =
-        locale === "ar" ? undefined : LAUNCHER_LABEL_OVERRIDE[item.id as LauncherTileId];
+        locale === "ar" || sidebarHub
+          ? undefined
+          : LAUNCHER_LABEL_OVERRIDE[item.id as LauncherTileId];
       const navKey = APP_NAV_KEY_BY_ID[item.id];
       if (override) {
         map.set(item.id, override);
@@ -165,7 +180,14 @@ export function AppLauncherShell({
       const fromNav = navKey
         ? translate(item.id.startsWith("group-") ? `appNavGroups.${navKey}` : `nav.${navKey}`)
         : null;
-      map.set(item.id, fromNav ?? item.label);
+      const saved = item.label?.trim();
+      const useSaved =
+        sidebarHub &&
+        saved &&
+        saved !== fromNav &&
+        saved !== navKey &&
+        !SUPERSEDED_NAV_LABELS.has(saved);
+      map.set(item.id, (useSaved ? saved : fromNav) ?? saved ?? item.id);
     }
     return map;
   }, [tiles, tNav, locale]);

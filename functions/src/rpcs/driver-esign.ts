@@ -118,6 +118,7 @@ async function loadAttachments(requestId: string) {
         size: numberOrNull(row.size) ?? 0,
         source: textOrNull(row.source),
         created_at: isoTimestamp(row.created_at),
+        storage_key: key,
         url,
       };
     }),
@@ -354,7 +355,7 @@ export const driverGetEsignRequest = onCall(async (request) => {
 export const driverAddEsignAttachment = onCall(async (request) => {
   const ctx = await requireRider(request);
   const data = asData(request);
-  const requestId = pickId(data, "id", "request_id", "p_request_id");
+  const requestId = pickId(data, "id", "request_id", "p_request_id", "p_id");
   const storageKey = pickText(data, "storageKey", "storage_key", "p_storage_key");
   if (!requestId || !storageKey) return fail("invalid_request");
   if (!isOwnRiderAttachmentKey(ctx.uid, storageKey)) return fail("not_authorized");
@@ -403,6 +404,7 @@ export const driverAddEsignAttachment = onCall(async (request) => {
       size,
       source: "driver",
       created_at: created.toDate().toISOString(),
+      storage_key: storageKey,
       url,
     },
   };

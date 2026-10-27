@@ -139,6 +139,18 @@ export function filledEsignDocumentInput(input: FilledSheetInput): EsignDocument
       source: "entry",
     });
   }
+  const managementDecision = fieldValues.management_decision?.trim() ?? "";
+  if (managementDecision && !fields.some((field) => field.key === "management_decision")) {
+    fields.push({
+      key: "management_decision",
+      label: "Management decision",
+      labelEn: "Management decision",
+      labelAr: "قرار الإدارة",
+      value: managementDecision,
+      section: "document",
+      source: "entry",
+    });
+  }
   return {
     language: "en",
     kind: template.document_kind,
