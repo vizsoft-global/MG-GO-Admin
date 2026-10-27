@@ -7,6 +7,7 @@ import {
   filterLauncherTiles,
   greetingBucket,
   LAUNCHER_HIDDEN_TILE_IDS,
+  LAUNCHER_HOME_TILE_IDS,
   LAUNCHER_LABEL_OVERRIDE,
   LAUNCHER_TILE_IDS,
   launcherRegistryItems,
@@ -23,7 +24,7 @@ describe("launcher modules", () => {
     assert.equal(items.find((item) => item.id === "vehicles")?.defaultLabel, "Fleet Hub");
     assert.equal(items.find((item) => item.id === "visit-bookings")?.defaultLabel, "Visit Slots");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.vehicles, undefined);
-    assert.equal(LAUNCHER_LABEL_OVERRIDE["visit-bookings"], "Visit Slots");
+    assert.equal(LAUNCHER_LABEL_OVERRIDE["visit-bookings"], "Visit Bookings");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.assets, "Assets");
     assert.equal(LAUNCHER_LABEL_OVERRIDE.payroll, "Payroll");
     assert.equal(items.find((item) => item.id === "visit-bookings")?.href, "/visit-bookings");
@@ -101,49 +102,54 @@ describe("launcher modules", () => {
     assert.ok(derived.every((tile) => tile.href.startsWith("/")));
   });
 
-  it("keeps launcher-only doors when merging with the curated list", () => {
+  it("merges both sources into exactly the eighteen Figma doors", () => {
     const derived = launcherTilesFromMenu(buildInitialTree(() => true, true));
     const merged = mergeLauncherTiles(derived, launcherRegistryItems());
     const ids = merged.map((tile) => tile.id);
     const hrefs = merged.map((tile) => tile.href);
 
-    assert.ok(ids.includes("vehicles"));
-    assert.ok(ids.includes("payroll-hub"));
-    assert.ok(ids.includes("assistant"), "Staff Assistant is a launcher-only door");
+    assert.deepEqual(ids, [...LAUNCHER_HOME_TILE_IDS]);
     assert.equal(new Set(ids).size, ids.length);
     assert.equal(new Set(hrefs).size, hrefs.length);
     assert.equal(hrefs.filter((href) => href === "/settings").length, 1);
   });
 
-  it("drops the boxed hubs from Home and still hides Payroll behind Payroll Hub", () => {
+  it("renders the frame order and keeps the hubs behind their own doors", () => {
     const derived = launcherTilesFromMenu(buildInitialTree(() => true, true));
     const merged = mergeLauncherTiles(derived, launcherRegistryItems());
     const ids = merged.map((tile) => tile.id);
 
+    assert.equal(ids.length, 18);
+    assert.deepEqual(ids.slice(0, 6), [
+      "dashboard-ops",
+      "live-tracking-v2",
+      "driver-groups",
+      "drivers",
+      "deliveries",
+      "employeedesk",
+    ]);
+    assert.deepEqual(ids.slice(12), [
+      "roles",
+      "profile",
+      "document-expiry",
+      "driver-app",
+      "app-releases",
+      "assets",
+    ]);
+
     for (const hidden of LAUNCHER_HIDDEN_TILE_IDS) {
       assert.ok(!ids.includes(hidden), hidden);
     }
-    assert.ok(ids.includes("payroll-hub"));
-
     for (const id of [
-      "dashboard-ops",
-      "driver-groups",
-      "dpd-verification",
-      "earnings",
-      "restaurants",
-      "attendance",
-      "document-expiry",
-      "assets",
+      "operations-dashboard",
+      "client-portal",
+      "vehicles",
+      "operations-hub",
+      "payroll",
+      "assistant",
     ]) {
       assert.ok(LAUNCHER_HIDDEN_TILE_IDS.has(id), id);
-      assert.ok(!ids.includes(id), id);
     }
-
-    assert.ok(ids.includes("visit-bookings"), "Visit Slots stays a Home tile");
-    assert.ok(ids.includes("operations-dashboard"));
-    assert.ok(ids.includes("client-portal"));
-    assert.ok(ids.includes("assistant"));
-    assert.ok(!LAUNCHER_HIDDEN_TILE_IDS.has("visit-bookings"));
 
     const visible = visibleLauncherTiles(new Set(), true).map((tile) => tile.id);
     for (const hidden of LAUNCHER_HIDDEN_TILE_IDS) {

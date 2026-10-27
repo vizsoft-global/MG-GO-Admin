@@ -976,6 +976,16 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     permission: "documents.view",
   },
   {
+    id: "app-releases",
+    defaultLabel: "App Releases",
+    defaultIcon: "UploadCloud",
+    href: "/app-releases",
+    defaultGroup: "System",
+    defaultOrder: 0.4,
+    permission: "settings.manage",
+    hidden: true,
+  },
+  {
     id: "zones",
     defaultLabel: "Zones",
     defaultIcon: "MapPin",
