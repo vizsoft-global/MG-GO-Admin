@@ -153,6 +153,7 @@ export const queryKeys = {
     importBatches: () => ["verifications", "import-batches"] as const,
     export: () => ["verifications", "export"] as const,
     lookup: () => ["verifications", "lookup"] as const,
+    pendingCount: () => ["verifications", "pending-count"] as const,
   },
   zones: {
     all: () => ["zones"] as const,

@@ -23,6 +23,7 @@ export const LAUNCHER_GLYPH: Record<LauncherTileId, string> = {
   roles: "M12 3l7 3v6c0 4-3 7-7 8-4-1-7-4-7-8V6z",
   "document-expiry": "M6 3h8l4 4v14H6z M14 3v5h5 M9 14h6 M9 17h4",
   "driver-app": "M8 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M11 18h2",
+  "app-releases": "M12 3v12 M8 11l4 4 4-4 M4 19h16",
   assets: "M3 4h18v4H3z M5 8v12h14V8 M10 12h4",
   "operations-hub": "M4 21V5h10v16 M14 9h6v12 M2 21h20 M8 9h2 M8 13h2 M8 17h2",
   vehicles:
@@ -54,6 +55,7 @@ const LAUNCHER_GLYPH_FILE: Record<string, string> = {
   profile: "settings.svg",
   "document-expiry": "document-expiry.svg",
   "driver-app": "driver-app.svg",
+  "app-releases": "app-releases.svg",
   assets: "assets.svg",
 };
 
