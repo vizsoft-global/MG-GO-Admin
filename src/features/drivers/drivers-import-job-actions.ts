@@ -1,8 +1,11 @@
 "use server";
 
+import { FieldPath, type Firestore } from "firebase-admin/firestore";
 import { staffClient, type StaffClient } from "./driver-uniqueness";
 import { listCustomFieldDefinitions } from "@/features/custom-fields/custom-fields-actions";
 import { logAdminMutation } from "@/lib/audit/log-admin-activity";
+import { COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
 import type { Json } from "@/types/database";
 import {
   applyOneImportRow,
@@ -10,6 +13,7 @@ import {
 } from "./drivers-import-actions";
 import { importChunkSize } from "./import/import-progress";
 import type { DriverImportLogEvent } from "./import/import-progress";
+import { pendingRowDocId, storedImportRow } from "./import/import-job-rows";
 import {
   IMPORT_JOB_STALE_MS,
   nextImportJobStatus,
@@ -24,6 +28,83 @@ import type { DriverImportCredential, DriverImportPreviewRow } from "./types";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 
 const MAX_EVENTS = 2000;
+const PENDING_BATCH = 400;
+const JOB_SUMMARY_COLUMNS =
+  "id, file_name, status, row_count, ready_count, remaining_count, applied_count, skipped_count, approved_count, failed_count, uploaded_at, heartbeat_at, duplicate_strategy, approve_immediately, sealed";
+
+function pendingRef(fs: Firestore, jobId: string) {
+  const parent = fs.collection(COLLECTIONS.driverImportBatches).doc(jobId);
+  return { parent, col: parent.collection("pending") };
+}
+
+async function writePendingRows(
+  jobId: string,
+  rows: readonly DriverImportPreviewRow[],
+  offset: number,
+): Promise<string | null> {
+  const fs = await staffDb();
+  if (!fs) return "save_failed";
+  const { col } = pendingRef(fs, jobId);
+  for (let i = 0; i < rows.length; i += PENDING_BATCH) {
+    const batch = fs.batch();
+    const slice = rows.slice(i, i + PENDING_BATCH);
+    slice.forEach((row, j) => {
+      batch.set(col.doc(pendingRowDocId(offset + i + j)), { row: storedImportRow(row) });
+    });
+    try {
+      await batch.commit();
+    } catch {
+      return "save_failed";
+    }
+  }
+  return null;
+}
+
+async function deletePendingRows(jobId: string): Promise<void> {
+  const fs = await staffDb();
+  if (!fs) return;
+  const { col } = pendingRef(fs, jobId);
+  for (;;) {
+    const snap = await col.limit(PENDING_BATCH).get();
+    if (snap.empty) return;
+    const batch = fs.batch();
+    for (const doc of snap.docs) batch.delete(doc.ref);
+    await batch.commit();
+  }
+}
+
+async function claimPendingRows(
+  jobId: string,
+  size: number,
+): Promise<{ rows: DriverImportPreviewRow[] } | { error: string } | { stopped: true }> {
+  const fs = await staffDb();
+  if (!fs) return { error: "save_failed" };
+  const { parent, col } = pendingRef(fs, jobId);
+  try {
+    return await fs.runTransaction(async (tx) => {
+      const snap = await tx.get(parent);
+      if (!snap.exists) return { stopped: true };
+      const data = snap.data() ?? {};
+      if (data.status !== "running") return { stopped: true };
+      const pending = await tx.get(col.orderBy(FieldPath.documentId()).limit(size));
+      if (pending.empty) return { rows: [] };
+      const rows: DriverImportPreviewRow[] = [];
+      for (const doc of pending.docs) {
+        const row = doc.get("row");
+        if (row && typeof row === "object") rows.push(row as DriverImportPreviewRow);
+        tx.delete(doc.ref);
+      }
+      const remaining = Math.max(0, Number(data.remaining_count ?? 0) - pending.size);
+      tx.update(parent, {
+        remaining_count: remaining,
+        heartbeat_at: new Date().toISOString(),
+      });
+      return { rows };
+    });
+  } catch {
+    return { error: "save_failed" };
+  }
+}
 
 function asStatus(value: string): ImportJobStatus {
   return value as ImportJobStatus;
@@ -44,6 +125,7 @@ function mapSummary(row: {
   heartbeat_at: string | null;
   duplicate_strategy: string;
   approve_immediately: boolean;
+  sealed?: boolean;
 }): DriverImportJobSummary {
   return {
     id: row.id,
@@ -60,6 +142,7 @@ function mapSummary(row: {
     heartbeatAt: row.heartbeat_at,
     duplicateStrategy: row.duplicate_strategy === "skip" ? "skip" : "update",
     approveImmediately: row.approve_immediately,
+    sealed: row.sealed !== false,
   };
 }
 
@@ -86,7 +169,7 @@ export async function listDriverImportJobs(): Promise<
   const { data, error } = await db
     .from("driver_import_batches")
     .select(
-      "id, file_name, status, row_count, ready_count, remaining_count, applied_count, skipped_count, approved_count, failed_count, uploaded_at, heartbeat_at, duplicate_strategy, approve_immediately",
+      JOB_SUMMARY_COLUMNS,
     )
     .order("uploaded_at", { ascending: false })
     .limit(30);
@@ -104,9 +187,7 @@ export async function getDriverImportJob(
   await pauseStaleJobs(db);
   const { data, error } = await db
     .from("driver_import_batches")
-    .select(
-      "id, file_name, status, row_count, ready_count, remaining_count, applied_count, skipped_count, approved_count, failed_count, uploaded_at, heartbeat_at, duplicate_strategy, approve_immediately, events, credentials, failures, remaining_rows",
-    )
+    .select(`${JOB_SUMMARY_COLUMNS}, events, credentials, failures, remaining_rows`)
     .eq("id", jobId)
     .maybeSingle();
   if (error || !data) return { error: "save_failed" };
@@ -122,12 +203,21 @@ export async function getDriverImportJob(
   };
 }
 
+async function discardImportJob(jobId: string): Promise<void> {
+  await deletePendingRows(jobId);
+  const fs = await staffDb();
+  if (!fs) return;
+  await fs.collection(COLLECTIONS.driverImportBatches).doc(jobId).delete();
+}
+
 export async function startDriverImportJob(payload: {
   fileName: string;
   mapping: Record<string, string>;
   rows: DriverImportPreviewRow[];
   duplicateStrategy: "skip" | "update";
   approveImmediately: boolean;
+  /** False when another slice of the same sheet still has to be stored. */
+  seal?: boolean;
 }): Promise<{ job: DriverImportJobSummary } | { error: string }> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
@@ -146,15 +236,19 @@ export async function startDriverImportJob(payload: {
   if (blocking) return { error: "import_already_running" };
 
   const ready = payload.rows;
+  const seal = payload.seal !== false;
   const now = new Date().toISOString();
   const { data, error } = await db
     .from("driver_import_batches")
     .insert({
+      id: crypto.randomUUID(),
       file_name: payload.fileName,
       mapping: payload.mapping as unknown as Json,
       row_count: ready.length,
       ready_count: ready.length,
-      remaining_rows: ready as unknown as Json,
+      remaining_rows: [] as unknown as Json,
+      pending_store: "sub",
+      sealed: seal,
       remaining_count: ready.length,
       applied_count: 0,
       skipped_count: 0,
@@ -178,12 +272,71 @@ export async function startDriverImportJob(payload: {
       heartbeat_at: now,
     })
     .select(
-      "id, file_name, status, row_count, ready_count, remaining_count, applied_count, skipped_count, approved_count, failed_count, uploaded_at, heartbeat_at, duplicate_strategy, approve_immediately",
+      JOB_SUMMARY_COLUMNS,
     )
     .single();
 
   if (error || !data) return { error: "save_failed" };
+  const writeError = await writePendingRows(data.id, ready, 0);
+  if (writeError) {
+    await discardImportJob(data.id);
+    return { error: "save_failed" };
+  }
   return { job: mapSummary(data) };
+}
+
+export async function appendDriverImportRows(payload: {
+  jobId: string;
+  rows: DriverImportPreviewRow[];
+  offset: number;
+  seal: boolean;
+}): Promise<{ ok: true } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+  const auth = await requireDriversManager("create");
+  if (auth.error) return { error: auth.error };
+  if (!payload.jobId) return { error: "missing_fields" };
+
+  const db = await staffClient();
+  const { data: batch, error } = await db
+    .from("driver_import_batches")
+    .select("id, status, sealed, pending_store, row_count, ready_count, remaining_count")
+    .eq("id", payload.jobId)
+    .maybeSingle();
+  if (error || !batch) return { error: "save_failed" };
+  const stored = batch as typeof batch & {
+    status?: string;
+    sealed?: boolean;
+    pending_store?: string;
+    row_count?: number;
+    ready_count?: number;
+    remaining_count?: number;
+  };
+  if (stored.status !== "running" || stored.pending_store !== "sub" || stored.sealed === true) {
+    return { error: "save_failed" };
+  }
+  const writeError = await writePendingRows(payload.jobId, payload.rows, payload.offset);
+  if (writeError) {
+    await deletePendingRows(payload.jobId);
+    await db
+      .from("driver_import_batches")
+      .update({ status: "failed", remaining_count: 0, remaining_rows: [], sealed: true })
+      .eq("id", payload.jobId);
+    return { error: "save_failed" };
+  }
+  const add = payload.rows.length;
+  const { error: updError } = await db
+    .from("driver_import_batches")
+    .update({
+      row_count: Number(stored.row_count ?? 0) + add,
+      ready_count: Number(stored.ready_count ?? 0) + add,
+      remaining_count: Number(stored.remaining_count ?? 0) + add,
+      sealed: payload.seal,
+      heartbeat_at: new Date().toISOString(),
+    })
+    .eq("id", payload.jobId);
+  if (updError) return { error: "save_failed" };
+  return { ok: true };
 }
 
 export async function processDriverImportChunk(
@@ -207,7 +360,7 @@ export async function processDriverImportChunk(
   const { data: batch, error: loadError } = await db
     .from("driver_import_batches")
     .select(
-      "id, status, remaining_count, ready_count, approve_immediately, duplicate_strategy, applied_count, skipped_count, approved_count, failed_count, events, credentials, failures, file_name",
+      "id, status, remaining_count, ready_count, approve_immediately, duplicate_strategy, applied_count, skipped_count, approved_count, failed_count, events, credentials, failures, file_name, pending_store, sealed",
     )
     .eq("id", jobId)
     .maybeSingle();
@@ -224,6 +377,13 @@ export async function processDriverImportChunk(
     };
   }
 
+  const stored = batch as typeof batch & { pending_store?: string | null; sealed?: boolean | null };
+  if (stored.pending_store === "sub" && stored.sealed !== true) {
+    const latest = await getDriverImportJob(jobId);
+    if ("error" in latest) return latest;
+    return { job: latest.job, events: [], done: false, stopped: true };
+  }
+
   const size = importChunkSize(
     Array.from({ length: Math.max(1, batch.remaining_count) }, () => ({
       active: null,
@@ -231,24 +391,39 @@ export async function processDriverImportChunk(
     batch.approve_immediately,
   );
 
-  const { data: claimed, error: claimError } = await db.rpc(
-    "claim_driver_import_chunk",
-    { p_id: jobId, p_size: size },
-  );
-  if (claimError) return { error: claimError.message };
-
-  if (claimed === null) {
-    const latest = await getDriverImportJob(jobId);
-    if ("error" in latest) return latest;
-    return {
-      job: latest.job,
-      events: [],
-      done: latest.job.status === "applied" || latest.job.status === "failed",
-      stopped: true,
-    };
+  let rows: DriverImportPreviewRow[];
+  if (stored.pending_store === "sub") {
+    const claimed = await claimPendingRows(jobId, size);
+    if ("error" in claimed) return { error: claimed.error };
+    if ("stopped" in claimed) {
+      const latest = await getDriverImportJob(jobId);
+      if ("error" in latest) return latest;
+      return {
+        job: latest.job,
+        events: [],
+        done: latest.job.status === "applied" || latest.job.status === "failed",
+        stopped: true,
+      };
+    }
+    rows = claimed.rows;
+  } else {
+    const { data: claimed, error: claimError } = await db.rpc(
+      "claim_driver_import_chunk",
+      { p_id: jobId, p_size: size },
+    );
+    if (claimError) return { error: claimError.message };
+    if (claimed === null) {
+      const latest = await getDriverImportJob(jobId);
+      if ("error" in latest) return latest;
+      return {
+        job: latest.job,
+        events: [],
+        done: latest.job.status === "applied" || latest.job.status === "failed",
+        stopped: true,
+      };
+    }
+    rows = (claimed as DriverImportPreviewRow[] | null) ?? [];
   }
-
-  const rows = (claimed as DriverImportPreviewRow[] | null) ?? [];
   if (rows.length === 0) {
     const applied = batch.applied_count;
     const nextStatus = applied > 0 ? "applied" : "failed";
@@ -383,7 +558,7 @@ export async function setDriverImportJobStatus(
   const { data: batch, error } = await db
     .from("driver_import_batches")
     .select(
-      "id, file_name, status, row_count, ready_count, remaining_count, applied_count, skipped_count, approved_count, failed_count, uploaded_at, heartbeat_at, duplicate_strategy, approve_immediately",
+      JOB_SUMMARY_COLUMNS,
     )
     .eq("id", jobId)
     .maybeSingle();
@@ -391,6 +566,8 @@ export async function setDriverImportJobStatus(
 
   const next = nextImportJobStatus(asStatus(batch.status), action);
   if (!next) return { error: "import_job_locked" };
+
+  if (action === "cancel") await deletePendingRows(jobId);
 
   if (action === "resume") {
     const { data: blocking } = await db
@@ -414,7 +591,7 @@ export async function setDriverImportJobStatus(
     })
     .eq("id", jobId)
     .select(
-      "id, file_name, status, row_count, ready_count, remaining_count, applied_count, skipped_count, approved_count, failed_count, uploaded_at, heartbeat_at, duplicate_strategy, approve_immediately",
+      JOB_SUMMARY_COLUMNS,
     )
     .single();
   if (updError || !updated) return { error: "save_failed" };

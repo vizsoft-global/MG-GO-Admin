@@ -17,6 +17,8 @@ export type DriverImportJobSummary = {
   heartbeatAt: string | null;
   duplicateStrategy: "skip" | "update";
   approveImmediately: boolean;
+  /** False while later slices of the same sheet are still being stored. */
+  sealed: boolean;
 };
 
 export type DriverImportJobDetail = DriverImportJobSummary & {
