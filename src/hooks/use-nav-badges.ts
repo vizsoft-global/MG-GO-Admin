@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
 import { fetchRequestTypeCounts } from "@/features/requests/requests-actions";
+import { fetchPendingVerificationCount } from "@/features/verifications/verifications-actions";
 import { queryKeys } from "@/lib/query/query-keys";
 
 /**
@@ -25,7 +26,26 @@ export function useNavBadges(): Record<string, number> {
     0,
   );
 
-  return pending > 0
-    ? { requests: pending, employeedesk: pending }
-    : {};
+  const canViewVerifications = can("verifications.view");
+
+  const { data: pendingVerifications } = useQuery({
+    queryKey: queryKeys.verifications.pendingCount(),
+    queryFn: () => fetchPendingVerificationCount(),
+    enabled: canViewVerifications,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+
+  const badges: Record<string, number> = {};
+
+  if (pending > 0) {
+    badges.requests = pending;
+    badges.employeedesk = pending;
+  }
+
+  if ((pendingVerifications ?? 0) > 0) {
+    badges["dpd-verification"] = pendingVerifications ?? 0;
+  }
+
+  return badges;
 }

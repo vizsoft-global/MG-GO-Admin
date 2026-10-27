@@ -121,13 +121,18 @@ function WeatherGlyph({ weather }: { weather: LauncherWeather }) {
   return <SkyGlyph kind={kind} />;
 }
 
-export function AppLauncherShell() {
+export function AppLauncherShell({
+  badgeOverrides,
+}: {
+  badgeOverrides?: Record<string, number>;
+} = {}) {
   const t = useTranslations("pages.launcher");
   const tNav = useTranslations();
   const tCommon = useTranslations("common");
   const locale = useLocale();
   const { fullName, email, permissions, isSuperAdmin, adminRoleSlug } = useAuth();
-  const badges = useNavBadges();
+  const liveBadges = useNavBadges();
+  const badges = badgeOverrides ? { ...liveBadges, ...badgeOverrides } : liveBadges;
   const { tree } = useSidebarMenu();
   const [query, setQuery] = useState("");
   const [now, setNow] = useState<Date | null>(null);
@@ -252,7 +257,7 @@ export function AppLauncherShell() {
 
   return (
     <div
-      className={`${launcherFontClassName} relative flex h-full min-h-0 flex-col overflow-hidden`}
+      className={`${launcherFontClassName} fixed inset-0 flex flex-col overflow-hidden`}
       style={{
         backgroundColor: LAUNCHER_BRAND.canvas,
         color: LAUNCHER_BRAND.text,
@@ -294,7 +299,8 @@ export function AppLauncherShell() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("searchPlaceholder")}
-            className="h-8 w-full flex-1 border-0 bg-transparent p-0 text-[13px] text-white shadow-none placeholder:text-white/50 focus-visible:border-0 focus-visible:ring-0"
+            className="h-8 w-full flex-1 border-0 bg-transparent! p-0 text-[13px] text-white shadow-none placeholder:text-white/50 focus-visible:border-0 focus-visible:ring-0 dark:bg-transparent!"
+            style={{ backgroundColor: LAUNCHER_BRAND.search, border: 0, boxShadow: "none" }}
           />
           <kbd
             className="hidden shrink-0 rounded px-1.5 py-px text-[11px] text-white sm:inline"
@@ -356,7 +362,13 @@ export function AppLauncherShell() {
       <main className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-4 py-6">
         <div className="flex w-full max-w-[754px] items-center justify-between gap-[15px]">
           <div className="flex items-center gap-2.5 ps-1">
-            <img src="/launcher/v5/mark.svg" alt="" width={38} height={44} />
+            <img
+              src="/launcher/v5/mark.svg?v=3"
+              alt=""
+              width={38}
+              height={44}
+              className="shrink-0 -scale-y-100"
+            />
             <div className="min-w-0">
               <p className="m-0 text-[13px]" style={{ color: LAUNCHER_BRAND.subText }}>
                 {t(`greeting.${greeting}`)},
@@ -408,30 +420,36 @@ export function AppLauncherShell() {
         </nav>
       </main>
 
-      <div className="relative z-10 flex shrink-0 flex-col items-center">
-        <img src="/launcher/v5/footer-mark.svg" alt="" width={64} height={30} className="mb-1" />
-      <footer
-        className="flex h-8 w-full items-center justify-center px-4 text-center"
-        style={{
-          backgroundColor: LAUNCHER_BRAND.footerBar,
-          boxShadow: "0 -5px 50px rgba(0,0,0,0.25)",
-        }}
-      >
-        <p className="m-0 text-[10px]" style={{ color: LAUNCHER_BRAND.footer }}>
-          {t("footer", {
-            name: t("wordmark"),
-            subtitle: t("panel"),
-            version: LAUNCHER_RELEASE,
-          })}{" "}
-          <span className="font-semibold text-white">{t("company")}</span>
-        </p>
-      </footer>
-      </div>
+        <div className="relative z-10 mt-auto flex w-full shrink-0 flex-col items-center">
+          <img
+            src="/launcher/v5/footer-mark.svg?v=3"
+            alt=""
+            width={64}
+            height={30}
+            className="mb-1 h-[30px] w-16 -scale-y-100"
+          />
+          <footer
+            className="flex h-8 w-full items-center justify-center px-4 text-center"
+            style={{
+              backgroundColor: LAUNCHER_BRAND.footerBar,
+              boxShadow: "0 -5px 50px rgba(0,0,0,0.25)",
+            }}
+          >
+            <p className="m-0 text-[10px]" style={{ color: LAUNCHER_BRAND.footer }}>
+              {t("footer", {
+                name: t("wordmark"),
+                subtitle: t("panel"),
+                version: LAUNCHER_RELEASE,
+              })}{" "}
+              <span className="font-semibold text-white">{t("company")}</span>
+            </p>
+          </footer>
+        </div>
       <img
-        src="/launcher/v5/watermark.svg"
+        src="/launcher/v5/watermark.svg?v=3"
         alt=""
         aria-hidden
-        className="pointer-events-none absolute end-0 bottom-10 z-0 w-[264px] opacity-30"
+        className="pointer-events-none absolute end-0 bottom-10 z-0 w-[264px] -scale-y-100 opacity-30"
       />
     </div>
   );

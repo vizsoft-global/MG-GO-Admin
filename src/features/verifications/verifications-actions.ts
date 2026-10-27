@@ -27,6 +27,8 @@ import type {
 
 const PAGE_SIZE = 50;
 
+const VERIFICATION_NEEDS_ACTION_STATUSES = ["pending", "deficit", "conflict", "surplus"];
+
 type PgLikeError = {
   code?: string | null;
   message?: string | null;
@@ -261,7 +263,7 @@ function verificationFromDoc(id: string, row: Record<string, unknown>): Verifica
 function matchesVerificationFilters(row: VerificationDoc, filters: VerificationListFilters): boolean {
   if (filters.status && filters.status !== "all" && row.status !== filters.status) return false;
   if ((!filters.status || filters.status === "all") && filters.tab && filters.tab !== "all") {
-    if (filters.tab === "needs_action" && !["pending", "deficit", "conflict", "surplus"].includes(row.status)) {
+    if (filters.tab === "needs_action" && !VERIFICATION_NEEDS_ACTION_STATUSES.includes(row.status)) {
       return false;
     }
     if (filters.tab === "matched" && row.status !== "matched") return false;
@@ -357,6 +359,31 @@ export async function fetchVerificationListStats(
     surplus,
     needs_action: pending + deficit + conflict + surplus,
   };
+}
+
+export async function fetchPendingVerificationCount(): Promise<number> {
+  try {
+    const session = await getSessionUser();
+    if (
+      !session ||
+      !hasPermissionInSet(
+        session.permissions,
+        "verifications.view",
+        session.isSuperAdmin,
+      )
+    ) {
+      return 0;
+    }
+    const db = await verifyDb();
+    const snap = await db
+      .collection(COLLECTIONS.deliveryVerifications)
+      .where("status", "in", VERIFICATION_NEEDS_ACTION_STATUSES)
+      .count()
+      .get();
+    return snap.data().count;
+  } catch {
+    return 0;
+  }
 }
 
 function mapVerificationRow(row: Record<string, unknown>): VerificationListRow {

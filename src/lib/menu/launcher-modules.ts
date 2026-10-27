@@ -24,6 +24,7 @@ export const LAUNCHER_TILE_IDS = [
   "profile",
   "document-expiry",
   "driver-app",
+  "app-releases",
   "assets",
   "operations-dashboard",
   "client-portal",
@@ -38,25 +39,46 @@ export const LAUNCHER_RELEASE = "3.4";
 export type LauncherTileId = (typeof LAUNCHER_TILE_IDS)[number];
 
 /**
- * Launcher-only hide list. These surfaces keep their route, sidebar row and
- * permission — they just do not get a Home tile. Filtering happens in
- * `mergeLauncherTiles`, so `LAUNCHER_TILE_IDS` (and the Roles app catalogue)
- * still describes every real surface.
- *
- * Payroll stays behind Payroll Hub. The eight hubs the operator boxed on the
- * live grid stay off Home too: they keep their sidebar row and route.
+ * The Home Launcher grid, in the BajajCare frame order (node 6979:13150):
+ * six columns, three rows, eighteen doors. This list is the design; it is a
+ * data list, not a set of hand-placed blocks, and `mergeLauncherTiles` renders
+ * exactly these ids in this order.
  */
-export const LAUNCHER_HIDDEN_TILE_IDS: ReadonlySet<string> = new Set([
-  "payroll",
+export const LAUNCHER_HOME_TILE_IDS = [
   "dashboard-ops",
+  "live-tracking-v2",
   "driver-groups",
+  "drivers",
+  "deliveries",
+  "employeedesk",
+  "visit-bookings",
   "dpd-verification",
   "earnings",
   "restaurants",
+  "notifications",
   "attendance",
+  "roles",
+  "profile",
   "document-expiry",
+  "driver-app",
+  "app-releases",
   "assets",
-]);
+] as const;
+
+/**
+ * Launcher-only hide list — everything the catalogue knows that the Home grid
+ * does not draw. These surfaces keep their route, sidebar row and permission;
+ * they just do not get a tile. Derived so it cannot drift from
+ * `LAUNCHER_HOME_TILE_IDS`.
+ *
+ * Payroll stays behind Payroll Hub. Operations Hub, Rider Operations, the
+ * client portal, Fleet Hub and the Staff Assistant keep their own doors.
+ */
+const HOME_TILE_SET = new Set<string>(LAUNCHER_HOME_TILE_IDS);
+
+export const LAUNCHER_HIDDEN_TILE_IDS: ReadonlySet<string> = new Set(
+  LAUNCHER_TILE_IDS.filter((id) => !HOME_TILE_SET.has(id)),
+);
 
 /**
  * Apps that no longer carry a Home tile (they live inside Operations or
@@ -74,13 +96,23 @@ export type AppAccessModuleId =
 export const LAUNCHER_LABEL_OVERRIDE: Partial<Record<AppAccessModuleId, string>> = {
   "dashboard-ops": "Dashboard",
   "live-tracking-v2": "Live tracking",
-  "visit-bookings": "Visit Slots",
+  "driver-groups": "Driver groups",
+  drivers: "Drivers",
+  deliveries: "Deliveries",
+  employeedesk: "Request & Complaint",
+  "visit-bookings": "Visit Bookings",
   "dpd-verification": "Verification",
   earnings: "Earnings",
+  restaurants: "Restaurants",
+  notifications: "Notifications",
+  attendance: "Attendance",
+  roles: "Roles & Permissions",
   profile: "Settings",
+  "document-expiry": "Document expiry",
+  "driver-app": "Driver App",
+  "app-releases": "App Releases",
   assets: "Assets",
   payroll: "Payroll",
-  roles: "Roles & Permissions",
 };
 
 const TILE_SET = new Set<string>(LAUNCHER_TILE_IDS);
@@ -149,42 +181,47 @@ export function launcherTilesFromMenu(
 }
 
 /**
- * The sidebar's rows first, then any launcher-only door the sidebar does not
- * paint (nested hub children, and the `hidden: true` registry rows). Both
- * passes drop `LAUNCHER_HIDDEN_TILE_IDS`, so a hidden id can never come back
- * through the curated list.
+ * Exactly the Home grid, in design order.
  *
- * Dedupe is by id **and** href: an inline group and its first child both point
- * at the same page, and a dashboard with two Settings tiles is worse than one.
+ * The sidebar rows and the curated registry list are both sources, because a
+ * nested hub child may be the only row that points at a door the sidebar paints
+ * as a group. Both passes drop `LAUNCHER_HIDDEN_TILE_IDS` and both are de-duped
+ * by id **and** href, then the result is ordered by
+ * `LAUNCHER_HOME_TILE_IDS` — so the six-by-three grid is the same for every
+ * operator no matter which source each tile came from, and a tile the session
+ * cannot open simply leaves its cell empty.
  */
 export function mergeLauncherTiles(
   derived: readonly LauncherTile[],
   curated: readonly MenuRegistryItem[],
 ): LauncherTile[] {
-  const out: LauncherTile[] = [];
-  const ids = new Set<string>();
+  const byId = new Map<string, LauncherTile>();
   const hrefs = new Set<string>();
 
   for (const tile of derived) {
     if (LAUNCHER_HIDDEN_TILE_IDS.has(tile.id)) continue;
-    if (ids.has(tile.id) || hrefs.has(tile.href)) continue;
-    ids.add(tile.id);
+    if (!HOME_TILE_SET.has(tile.id)) continue;
+    if (byId.has(tile.id) || hrefs.has(tile.href)) continue;
     hrefs.add(tile.href);
-    out.push(tile);
+    byId.set(tile.id, tile);
   }
   for (const item of curated) {
     if (LAUNCHER_HIDDEN_TILE_IDS.has(item.id)) continue;
-    if (ids.has(item.id) || hrefs.has(item.href)) continue;
-    ids.add(item.id);
+    if (!HOME_TILE_SET.has(item.id)) continue;
+    if (byId.has(item.id) || hrefs.has(item.href)) continue;
     hrefs.add(item.href);
-    out.push({
+    byId.set(item.id, {
       id: item.id,
       href: item.href,
       label: item.defaultLabel,
       icon: item.defaultIcon,
     });
   }
-  return out;
+
+  return LAUNCHER_HOME_TILE_IDS.flatMap((id) => {
+    const tile = byId.get(id);
+    return tile ? [tile] : [];
+  });
 }
 
 export function launcherRegistryItems(): MenuRegistryItem[] {
