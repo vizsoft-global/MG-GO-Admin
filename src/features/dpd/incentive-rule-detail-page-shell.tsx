@@ -172,6 +172,7 @@ export function IncentiveRuleDetailPageShell({
           {rule.target_mode !== "tiered" || rule.tiers.length === 0 ? (
             <p className="text-sm text-muted-foreground">{tPage("tiersEmpty")}</p>
           ) : (
+            <>
             <TableToolbar
               prefs={tierPrefs}
               entity={t("fields.tieredTargets")}
@@ -207,6 +208,7 @@ export function IncentiveRuleDetailPageShell({
                 ))}
               </TableBody>
             </Table>
+            </>
           )}
         </CardContent>
       </Card>

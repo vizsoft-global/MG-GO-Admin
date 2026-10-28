@@ -1081,15 +1081,6 @@ export function BulkImportShell({
                         : ""}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <Input
-                        className="h-9 w-56"
-                        value={reviewQuery}
-                        placeholder={t("searchEmployees")}
-                        onChange={(event) => {
-                          setReviewQuery(event.target.value);
-                          setPage(0);
-                        }}
-                      />
                       <Select
                         value={reviewFilter}
                         onValueChange={(next) => {
@@ -1109,6 +1100,45 @@ export function BulkImportShell({
                     </div>
                   </div>
                 </div>
+                <TableToolbar
+                  prefs={reviewPrefs}
+                  entity={t("reviewTitle", { count: drafts.length, template: template?.name_en ?? title })}
+                  columns={reviewColumns}
+                  rowKind="dynamic"
+                  filteredCount={filteredIndexes.length}
+                  totalCount={drafts.length}
+                />
+                <AppDataTable
+                  columns={shownReviewColumns.map((column) =>
+                    column.id === "pick"
+                      ? {
+                          id: column.id,
+                          label: (
+                            <Checkbox
+                              checked={
+                                readyCount > 0 &&
+                                tones.every((tone, index) => tone !== "ready" || checked.has(index))
+                              }
+                              aria-label={t("selectRow")}
+                              onCheckedChange={(value) => {
+                                setChecked(() => {
+                                  if (!value) return new Set();
+                                  return readyIndexSet(resolved, drafts, template?.fields ?? []);
+                                });
+                              }}
+                            />
+                          ),
+                        }
+                      : {
+                          id: column.id,
+                          label: column.label,
+                          className:
+                            column.id === "name" || column.id === "position"
+                              ? "bg-emerald-50/70"
+                              : undefined,
+                        },
+                  )}
+                />
                 <AppDataTable
                   columns={[
                     {
