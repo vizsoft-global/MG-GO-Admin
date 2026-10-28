@@ -8083,6 +8083,9 @@
         "operational": "تشغيلي",
         "nonOperational": "غير تشغيلي",
         "operationalHint": "خصص هذا لموظفي المكتب الرئيسي. الموظف في قسم غير تشغيلي لا يحتاج إلى منطقة أو مطعم، لذلك تتجاوز الموافقة وتسجيل الحضور هذا الشرط.",
+        "logo": "الشعار",
+        "logoHint": "PNG أو JPG أو WebP أو SVG. يُطبع على مستندات القوى العاملة للسائقين على هذه الكفالة.",
+        "removeLogo": "إزالة الشعار",
         "statusesTitle": "حالات الموظف",
         "statusesSubtitle": "قيم حالة الموارد البشرية على الموظفين والتقارير.",
         "sectionsTitle": "أقسام الموظف",
@@ -8097,7 +8100,10 @@
           "invalid_key": "المفتاح أحرف صغيرة وأرقام وشرطة سفلية.",
           "missing_fields": "التسمية الإنجليزية مطلوبة.",
           "system_status_locked": "لا يمكن إعادة تسمية حالات النظام.",
-          "save_failed": "تعذر حفظ الكتالوج."
+          "save_failed": "تعذر حفظ الكتالوج.",
+          "logo_file_too_large": "يجب أن يكون الشعار 2 م.ب أو أقل.",
+          "logo_invalid_type": "استخدم شعار PNG أو JPG أو WebP أو SVG.",
+          "logo_upload_failed": "تعذر رفع الشعار."
         },
         "sponsorshipsTitle": "الكفالات",
         "sponsorshipsSubtitle": "الجهة الكافلة لإقامة السائق."
@@ -11930,7 +11936,8 @@
         "duplicate_shift": "وردية مكررة",
         "missing_shift_1": "الوردية 2 تحتاج الوردية 1",
         "missing_driver": "السائق مفقود",
-        "not_found": "غير موجود"
+        "not_found": "غير موجود",
+        "request_failed": "لم تكتمل قائمة التنبيهات. حاول مجدداً."
       },
       "changeStatus": {
         "waiting": "بانتظار",

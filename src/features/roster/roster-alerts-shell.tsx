@@ -46,12 +46,8 @@ export function RosterAlertsShell() {
   const range = rangeForPreset(preset as RosterRangePreset, today, customFrom, customTo);
   const alerts = useQuery({
     queryKey: ["roster", "alerts", range.from, range.to, restaurantId],
-    queryFn: async () => {
-      const page = await fetchRosterAlertsRange({ from: range.from, to: range.to, restaurantId });
-      const failure = rosterError(page);
-      const rows = "rows" in page && Array.isArray(page.rows) ? page.rows : [];
-      return { rows, failure: failure ?? null };
-    },
+    queryFn: () => fetchRosterAlertsRange({ from: range.from, to: range.to, restaurantId }),
+    staleTime: 30_000,
   });
   const directory = useQuery({ queryKey: ["roster", "directory"], queryFn: fetchRosterDirectory });
   const detail = useQuery({
@@ -59,7 +55,8 @@ export function RosterAlertsShell() {
     queryFn: () => fetchRosterAlertDetail(selected ?? ""),
     enabled: Boolean(selected),
   });
-  const rows = alerts.data?.rows ?? [];
+  const failure = rosterError(alerts.data);
+  const rows = alerts.data && "rows" in alerts.data && Array.isArray(alerts.data.rows) ? alerts.data.rows : [];
   const places = directory.data && "restaurants" in directory.data ? directory.data.restaurants : [];
   const shown = rows.filter((row) => {
     if (tab === "attendance") return ATTENDANCE.has(row.kind);
@@ -127,7 +124,8 @@ export function RosterAlertsShell() {
           clearable={false}
         />
       </div>
-      {alerts.data?.failure ? <p className="text-xs text-destructive">{t(`errors.${alerts.data.failure}`)}</p> : null}
+      {alerts.isError ? <p className="text-xs text-destructive">{t("errors.request_failed")}</p> : null}
+      {failure ? <p className="text-xs text-destructive">{t(`errors.${failure}` as "errors.not_found")}</p> : null}
       <div className="grid gap-2 sm:grid-cols-4">
         {[
           [t("lateLogins"), lateCount, "bg-[#D97706]"],

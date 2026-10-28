@@ -785,6 +785,9 @@ export const adminUpsertEmployeeCatalog = onCall(async (request) => {
       ...(kind === "employee_sections" && typeof data.isOperational === "boolean"
         ? { is_operational: data.isOperational }
         : {}),
+      ...(kind === "sponsorships" && (data.logoUrl === null || typeof data.logoUrl === "string")
+        ? { logo_url: data.logoUrl }
+        : {}),
       updated_at: FieldValue.serverTimestamp(),
     },
     { merge: true },

@@ -23,6 +23,10 @@ export type EmployeeCatalogRow = {
    * so every existing row keeps today's behaviour.
    */
   is_operational?: boolean;
+  /** Sponsorship rows only. R2 key `sponsorships/{key}/logo.{ext}`. */
+  logo_url?: string | null;
+  /** Presigned URL for the editor. Not stored. */
+  logo_display_url?: string | null;
 };
 
 export const DEFAULT_EMPLOYEE_STATUSES: readonly EmployeeCatalogRow[] = [
@@ -236,5 +240,6 @@ export function parseCatalogRow(raw: Record<string, unknown>): EmployeeCatalogRo
     // Left absent when the field is absent, so a merged seed can fill it and an
     // older row keeps reading as operational.
     ...(typeof raw.is_operational === "boolean" ? { is_operational: raw.is_operational } : {}),
+    logo_url: typeof raw.logo_url === "string" && raw.logo_url.trim() ? raw.logo_url.trim() : null,
   };
 }

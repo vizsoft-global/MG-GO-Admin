@@ -8083,6 +8083,9 @@
         "operational": "Operational",
         "nonOperational": "Non-operational",
         "operationalHint": "Reserve this for MG Head Office staff. A rider in a non-operational section needs no zone or restaurant, so approval and clock-in both skip that requirement.",
+        "logo": "Logo",
+        "logoHint": "PNG, JPG, WebP, or SVG. Printed on workforce documents for riders on this sponsorship.",
+        "removeLogo": "Remove logo",
         "statusesTitle": "Employee statuses",
         "statusesSubtitle": "HR status values used on Employees and reports.",
         "sectionsTitle": "Employee sections",
@@ -8097,7 +8100,10 @@
           "invalid_key": "Key must be lowercase letters, numbers, and underscores.",
           "missing_fields": "English label is required.",
           "system_status_locked": "System statuses cannot be renamed.",
-          "save_failed": "Could not save the catalog."
+          "save_failed": "Could not save the catalog.",
+          "logo_file_too_large": "Logo must be 2 MB or smaller.",
+          "logo_invalid_type": "Use a PNG, JPG, WebP, or SVG logo.",
+          "logo_upload_failed": "The logo could not be uploaded."
         },
         "sponsorshipsTitle": "Sponsorships",
         "sponsorshipsSubtitle": "Who sponsors the rider's residency."
@@ -11930,7 +11936,8 @@
         "duplicate_shift": "Duplicate shift",
         "missing_shift_1": "Shift 2 needs shift 1",
         "missing_driver": "Missing driver",
-        "not_found": "Not found"
+        "not_found": "Not found",
+        "request_failed": "The alert list did not finish. Try again."
       },
       "changeStatus": {
         "waiting": "Waiting",

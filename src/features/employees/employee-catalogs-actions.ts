@@ -8,6 +8,12 @@ import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import {
+  deleteSponsorshipLogoFiles,
+  resolveSponsorshipLogoUrl,
+  uploadSponsorshipLogoFile,
+  type SponsorshipLogoError,
+} from "./sponsorship-logo";
+import {
   CATALOG_KEY_RE,
   mergeCatalogRows,
   parseCatalogRow,
@@ -30,7 +36,10 @@ export type EmployeeCatalogError =
   | "invalid_key"
   | "missing_fields"
   | "system_status_locked"
-  | "save_failed";
+  | "save_failed"
+  | "logo_file_too_large"
+  | "logo_invalid_type"
+  | "logo_upload_failed";
 
 async function requireManage(kind?: EmployeeCatalogKind) {
   const session = await getSessionUser();
@@ -40,6 +49,7 @@ async function requireManage(kind?: EmployeeCatalogKind) {
     kind === "sponsorships" &&
     hasPermissionInSet(session.permissions, "payroll.manage", session.isSuperAdmin);
   if (!drivers && !payroll) throw new Error("not_authorized");
+  return session;
 }
 
 async function requireView() {
@@ -55,7 +65,14 @@ export async function listEmployeeCatalog(kind: EmployeeCatalogKind): Promise<Em
   const stored = snap.docs
     .map((doc) => parseCatalogRow({ key: doc.id, ...doc.data() }))
     .filter((row): row is EmployeeCatalogRow => row !== null);
-  return mergeCatalogRows(stored, seedsForKind(kind));
+  const merged = mergeCatalogRows(stored, seedsForKind(kind));
+  if (kind !== "sponsorships") return merged;
+  return Promise.all(
+    merged.map(async (row) => ({
+      ...row,
+      logo_display_url: await resolveSponsorshipLogoUrl(row.logo_url),
+    })),
+  );
 }
 
 export async function upsertEmployeeCatalog(input: {
@@ -68,9 +85,13 @@ export async function upsertEmployeeCatalog(input: {
   color?: string | null;
   /** `employee_sections` only: false removes the zone/restaurant requirement. */
   isOperational?: boolean;
+  /** `sponsorships` only. */
+  logoFile?: File | null;
+  removeLogo?: boolean;
 }): Promise<{ ok: true } | { error: EmployeeCatalogError }> {
+  let actorId = "staff";
   try {
-    await requireManage(input.kind);
+    actorId = (await requireManage(input.kind)).id;
   } catch {
     return { error: "not_authorized" };
   }
@@ -111,5 +132,38 @@ export async function upsertEmployeeCatalog(input: {
   revalidatePath("/settings/sponsorships");
   revalidatePath("/payroll");
   revalidatePath("/payroll-hub");
+
+  if (input.kind === "sponsorships") {
+    const logoError = await writeSponsorshipLogo(key, input, actorId);
+    if (logoError) return { error: logoError };
+  }
   return { ok: true };
+}
+
+const LOGO_ERROR: Record<SponsorshipLogoError, EmployeeCatalogError> = {
+  file_too_large: "logo_file_too_large",
+  invalid_type: "logo_invalid_type",
+  upload_failed: "logo_upload_failed",
+};
+
+async function writeSponsorshipLogo(
+  key: string,
+  input: { logoFile?: File | null; removeLogo?: boolean },
+  uploadedBy: string,
+): Promise<EmployeeCatalogError | null> {
+  const db = await staffDb();
+  if (!db) return "not_configured";
+  let logoUrl: string | null | undefined;
+  if (input.removeLogo) {
+    await deleteSponsorshipLogoFiles(key);
+    logoUrl = null;
+  } else if (input.logoFile instanceof File && input.logoFile.size > 0) {
+    await deleteSponsorshipLogoFiles(key);
+    const upload = await uploadSponsorshipLogoFile(key, input.logoFile, uploadedBy);
+    if (upload.error) return LOGO_ERROR[upload.error];
+    logoUrl = upload.logoUrl ?? null;
+  }
+  if (logoUrl === undefined) return null;
+  await db.collection(COLLECTIONS.sponsorships).doc(key).set({ logo_url: logoUrl }, { merge: true });
+  return null;
 }

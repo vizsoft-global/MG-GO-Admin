@@ -1,5 +1,5 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { BarChart3, FileSpreadsheet, Scale, ScrollText, Wallet } from "lucide-react";
+import { BarChart3, FileSpreadsheet, Scale, Wallet } from "lucide-react";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,12 +50,6 @@ const HR_CARDS: ReadonlyArray<{
     href: "/payroll/hr",
     icon: FileSpreadsheet,
     permission: "payroll.hr_payroll",
-  },
-  {
-    key: "sponsorships",
-    href: "/settings/sponsorships",
-    icon: ScrollText,
-    permission: "payroll.manage",
   },
 ];
 

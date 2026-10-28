@@ -7,8 +7,9 @@ import { resolveSourceCompanyLogoUrl } from "@/features/drivers/source-company-l
  * One resolver per send / batch call.
  *
  * A workforce document belongs to the rider's employer, not to the panel, so the
- * header prints the source company's own logo and falls back to the MG branding
- * logo only when that company has none. The company rows and their presigned
+ * header prints the rider's sponsorship logo when that sponsor has one, then the
+ * source company's own logo, and falls back to the MG branding logo only when
+ * neither has a mark. The catalog rows and their presigned
  * URLs are read once per call — a 100-row batch must not presign the same object
  * a hundred times — and the driver's company is cached per driver id.
  */
@@ -30,6 +31,7 @@ async function brandLogoUrl(): Promise<string | null> {
 export async function createEsignSheetLogoResolver(): Promise<EsignSheetLogoResolver> {
   const brand = await brandLogoUrl();
   let companies: Map<string, CompanyLogo> | null = null;
+  let sponsors: Map<string, string | null> | null = null;
   let systemKey: string | null = null;
   const displayUrls = new Map<string, Promise<string | null>>();
   const byDriver = new Map<string, Promise<string | null>>();
@@ -54,6 +56,25 @@ export async function createEsignSheetLogoResolver(): Promise<EsignSheetLogoReso
     return map;
   }
 
+  async function loadSponsors(): Promise<Map<string, string | null>> {
+    if (sponsors) return sponsors;
+    const map = new Map<string, string | null>();
+    sponsors = map;
+    try {
+      const db = await staffDb();
+      if (!db) return map;
+      const snap = await db.collection(COLLECTIONS.sponsorships).get();
+      for (const doc of snap.docs) {
+        const data = doc.data();
+        const key = String(data.key ?? doc.id);
+        map.set(key, (data.logo_url as string | null) ?? null);
+      }
+    } catch {
+      /* an unreadable catalogue must not block a send */
+    }
+    return map;
+  }
+
   function displayUrl(key: string, logo: string | null): Promise<string | null> {
     if (!logo) return Promise.resolve(null);
     const cached = displayUrls.get(key);
@@ -70,6 +91,12 @@ export async function createEsignSheetLogoResolver(): Promise<EsignSheetLogoReso
       const snap = await db.collection(COLLECTIONS.drivers).doc(driverId).get();
       if (!snap.exists) return brand;
       const data = snap.data() ?? {};
+      const sponsorKey = data.sponsorship_key != null ? String(data.sponsorship_key) : "";
+      if (sponsorKey) {
+        const sponsorLogo = (await loadSponsors()).get(sponsorKey) ?? null;
+        const printed = await displayUrl(`sponsor:${sponsorKey}`, sponsorLogo);
+        if (printed) return printed;
+      }
       const map = await loadCompanies();
       const own = data.source_company != null ? String(data.source_company) : "";
       const key = own || ((data.rider_category ?? "in_house") === "in_house" ? systemKey : null);

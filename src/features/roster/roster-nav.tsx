@@ -4,10 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Bell, CalendarClock, FileBarChart, MapPinned, SlidersHorizontal, Upload, type LucideIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
-import { useAuth } from "@/contexts/auth-context";
 import { kuwaitToday } from "@/features/driver-tracking/kuwait-time";
 import { cn } from "@/lib/utils";
-import { fetchRosterAlerts, fetchRosterChanges, fetchRosterDirectory } from "./roster-actions";
+import { fetchRosterAlertsRange, fetchRosterChanges } from "./roster-actions";
 
 const LINKS: Array<{ href: string; key: "navLive" | "navAlerts" | "navReport" | "navSetup" | "navUpload" | "navChanges"; icon: LucideIcon; badge?: "alerts" | "changes" }> = [
   { href: "/live-tracking-v2", key: "navLive", icon: MapPinned },
@@ -21,11 +20,10 @@ const LINKS: Array<{ href: string; key: "navLive" | "navAlerts" | "navReport" | 
 export function RosterNav() {
   const t = useTranslations("pages.roster");
   const path = usePathname();
-  const { fullName, email, isManager, isSuperAdmin } = useAuth();
   const today = kuwaitToday();
   const alerts = useQuery({
-    queryKey: ["roster", "alerts", today, null],
-    queryFn: () => fetchRosterAlerts({ day: today }),
+    queryKey: ["roster", "alerts", today, today, null],
+    queryFn: () => fetchRosterAlertsRange({ from: today, to: today }),
     staleTime: 30_000,
   });
   const changes = useQuery({
@@ -33,16 +31,8 @@ export function RosterNav() {
     queryFn: fetchRosterChanges,
     staleTime: 30_000,
   });
-  const directory = useQuery({
-    queryKey: ["roster", "directory"],
-    queryFn: fetchRosterDirectory,
-    staleTime: 60_000,
-  });
   const openAlerts = alerts.data && "rows" in alerts.data ? alerts.data.rows.filter((row) => !row.acknowledged).length : 0;
   const waiting = changes.data && "rows" in changes.data ? changes.data.rows.filter((row) => row.status === "waiting").length : 0;
-  const zones = directory.data && "zones" in directory.data ? directory.data.zones : [];
-  const role = isManager || isSuperAdmin ? t("signedManager") : zones.length > 0 ? `${t("signedCoach")} · ${zones.map((zone) => zone.name).join(", ")}` : t("signedCoach");
-  const who = [fullName?.trim() || email, role].filter(Boolean).join(" · ");
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-[#E2DCD8] bg-white px-2.5 py-1.5">
@@ -74,7 +64,6 @@ export function RosterNav() {
           );
         })}
       </div>
-      {who ? <p className="px-2 text-xs text-[#5E5754]">{t("signedIn", { who })}</p> : null}
     </div>
   );
 }

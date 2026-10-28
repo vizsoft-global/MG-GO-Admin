@@ -242,6 +242,10 @@ Change-log format:
 
 ## Change log
 
+- `[admin only] 2026-10-28` — **Shift attendance Alerts reads the stored rows.** The badge counted today’s `ops_alerts` (capped at 1000). The page waited on `sweepRosterDay` first, so that request timed out and the KPIs and table stayed at 0. Today, Yesterday, and a range now list the stored alerts. The 15-minute cron and the weekly upload still write them. Not deployed.
+
+- `[admin only] 2026-10-28` — **Sponsorships can carry a logo, and the Payroll Hub card is gone.** Each sponsorship stores `logo_url` (`sponsorships/{key}/logo.{ext}`). Workforce sheets print that mark before the company logo. Payroll Hub → HR Payroll no longer lists Sponsorships. The editor stays on `/settings/sponsorships`. Not deployed.
+
 - `[admin only] 2026-10-28` — **Employee Company lists every company, and Sponsorship is a catalog.** Private Information and Add/Edit Employee list every active `source_companies` row; a stored inactive company stays. Saving keeps that key instead of snapping an in-house rider back to MG. Sponsorship reads `sponsorships` the same way Nationality does. The editor is on Operations Hub, Payroll Hub → HR Payroll, and the Payroll header. `payroll.manage` can open and save it. `source-companies.test.ts` listedCompanies 1/1. Not deployed.
 
 - `[admin only] 2026-10-28` — **HR Payroll shows the compact status legend and Combined-style column funnels.** `/payroll/hr` Payroll puts the dotted New–Transfer strip above the three KPIs (same 12 catalog keys, screenshot order; Cancelled is `#1E6B3A`). Every sheet header has Combined’s `ListFilter`; list/text match the printed cell (Client ID stays text so `CLI-270` / `C-2` hit), range uses the money/`#` numbers. Status tiles stay. The native third filter row is gone. `test:payroll` 230/230. `test:i18n` 10,958 × 2. Root `tsc --noEmit` exit 0. No Cloud Functions deploy. Not deployed. Signed-in localhost `/en/payroll/hr`: legend sits above the KPIs (12 keys), tiles stay, every header including `#` has a funnel; New + name contains `AADH` left 1 row.

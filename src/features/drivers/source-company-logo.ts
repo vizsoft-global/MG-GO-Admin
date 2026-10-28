@@ -3,6 +3,7 @@ import {
   allSourceCompanyLogoKeys,
   buildSourceCompanyLogoKey,
   isSourceCompanyLogoKey,
+  isSponsorshipLogoKey,
 } from "@/lib/storage/r2-keys";
 import { deleteObjects, getPresignedGetUrl, putObject } from "@/lib/storage/r2-client";
 
@@ -76,7 +77,7 @@ export async function resolveSourceCompanyLogoUrl(
   if (!logoUrl) return null;
   const trimmed = logoUrl.trim();
   if (!trimmed) return null;
-  if (!isSourceCompanyLogoKey(trimmed)) return trimmed;
+  if (!isSourceCompanyLogoKey(trimmed) && !isSponsorshipLogoKey(trimmed)) return trimmed;
   try {
     return await getPresignedGetUrl(trimmed);
   } catch {
