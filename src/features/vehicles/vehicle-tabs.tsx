@@ -462,9 +462,9 @@ function ServiceTab({ vehicleId, canManage }: { vehicleId: string; canManage: bo
           cells: {
             when: row.serviced_at.slice(0, 10),
             kind: row.kind || <EmptyCell />,
-            odometer: row.odometer == null || row.odometer === "" ? <EmptyCell /> : String(row.odometer),
+            odometer: row.odometer == null ? <EmptyCell /> : String(row.odometer),
             vendor: row.vendor || <EmptyCell />,
-            cost: row.cost_kwd == null || row.cost_kwd === "" ? <EmptyCell /> : String(row.cost_kwd),
+            cost: row.cost_kwd == null ? <EmptyCell /> : String(row.cost_kwd),
             notes: row.notes || <EmptyCell />,
           },
         }))}
