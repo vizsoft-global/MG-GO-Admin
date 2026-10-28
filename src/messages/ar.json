@@ -9709,7 +9709,15 @@
         "dateOutOfRange": "يمكن تعديل الطلبات لهذا الشهر والشهرين السابقين حتى اليوم فقط",
         "invalidOrders": "أدخل عدداً صحيحاً من 0 إلى 9999",
         "invalidClientId": "معرّف العميل طويل جداً",
-        "driverNotFound": "هذا السائق لم يعد موجوداً"
+        "driverNotFound": "هذا السائق لم يعد موجوداً",
+        "unknownClient": "هذا العميل غير نشط",
+        "unknownZone": "هذه المنطقة لم تعد موجودة",
+        "clientPlaceholder": "العميل",
+        "zonePlaceholder": "المنطقة",
+        "clientSearch": "ابحث عن العملاء",
+        "zoneSearch": "ابحث عن المناطق",
+        "catalogEmpty": "لا توجد نتائج",
+        "catalogLoading": "جارٍ التحميل…"
       },
       "statusEdit": {
         "title": "تعيين الحالة",

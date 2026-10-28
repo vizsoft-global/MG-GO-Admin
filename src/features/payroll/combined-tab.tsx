@@ -81,6 +81,7 @@ export function CombinedPayrollTab({
             exportLabel={t("downloadTable")}
             headingConfig={headingConfig}
             headingManage={canManage}
+            identityEdit={canManage}
             onExport={(visible) => {
               if (canExport) {
                 exportCombinedPayrollCsv(month.key, month.dates, visible, {

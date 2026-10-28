@@ -9709,7 +9709,15 @@
         "dateOutOfRange": "Orders can only be edited for this month and the previous two, up to today",
         "invalidOrders": "Enter a whole number from 0 to 9999",
         "invalidClientId": "Client ID is too long",
-        "driverNotFound": "That rider no longer exists"
+        "driverNotFound": "That rider no longer exists",
+        "unknownClient": "That client is not active",
+        "unknownZone": "That zone no longer exists",
+        "clientPlaceholder": "Client",
+        "zonePlaceholder": "Zone",
+        "clientSearch": "Search clients",
+        "zoneSearch": "Search zones",
+        "catalogEmpty": "Nothing matches",
+        "catalogLoading": "Loading…"
       },
       "statusEdit": {
         "title": "Set status",

@@ -33,6 +33,7 @@ import {
   PayrollSummaryStrip,
   PayrollZoneCategoryChips,
 } from "./payroll-chrome";
+import { PayrollAssignCatalogProvider } from "./payroll-assign-catalog";
 import { PayrollAdjustProvider } from "./payroll-adjust-context";
 import { PayrollStatusContextProvider } from "./payroll-status-context";
 import { statusFilterLabels } from "./payroll-status-options";
@@ -288,6 +289,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
     <PayrollStatusContextProvider
       value={{ canEdit: tab === "attendance-orders" && canManage, labels: statusLabels, savingId, save: saveStatus }}
     >
+    <PayrollAssignCatalogProvider clients={data?.clients ?? []} enabled={canManage}>
     <AppPage className="space-y-2">
       <PayrollAdjustProvider>
       <AppPageHeader
@@ -457,6 +459,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
       ) : null}
       </PayrollAdjustProvider>
     </AppPage>
+    </PayrollAssignCatalogProvider>
     </PayrollStatusContextProvider>
   );
 }
