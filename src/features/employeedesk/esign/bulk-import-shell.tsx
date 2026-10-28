@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import {
   ArrowLeft,
@@ -186,11 +186,6 @@ function readyIndexSet(
     if (reviewTone(row, drafts[index], keys) === "ready") next.add(index);
   });
   return next;
-}
-
-function snapshotText(value: string | null | undefined): string {
-  const trimmed = value?.trim() ?? "";
-  return trimmed || "—";
 }
 
 function reviewRowClass(tone: ReviewTone): string | undefined {
@@ -1131,60 +1126,59 @@ export function BulkImportShell({
                         }
                       : {
                           id: column.id,
-                          label: column.label,
+                          label:
+                            column.id === "name" || column.id === "position" ? (
+                              <SystemHead
+                                label={column.label}
+                                hint={t("fromSystem")}
+                              />
+                            ) : (
+                              column.label
+                            ),
                           className:
                             column.id === "name" || column.id === "position"
                               ? "bg-emerald-50/70"
                               : undefined,
                         },
                   )}
-                />
-                <AppDataTable
-                  columns={[
-                    {
-                      id: "pick",
-                      label: (
-                        <Checkbox
-                          checked={
-                            readyCount > 0 &&
-                            tones.every((tone, index) => tone !== "ready" || checked.has(index))
-                          }
-                          aria-label={t("selectRow")}
-                          onCheckedChange={(value) => {
-                            setChecked(() => {
-                              if (!value) return new Set();
-                              return readyIndexSet(resolved, drafts, template?.fields ?? []);
-                            });
-                          }}
-                        />
-                      ),
-                    },
-                    { id: "emp", label: t("colEmployeeId") },
-                    {
-                      id: "name",
-                      label: <SystemHead label={t("colEmployee")} hint={t("fromSystem")} />,
-                      className: "bg-emerald-50/70",
-                    },
-                    {
-                      id: "position",
-                      label: <SystemHead label={t("colPosition")} hint={t("fromSystem")} />,
-                      className: "bg-emerald-50/70",
-                    },
-                    ...sheetValueFields.slice(0, 3).map((field) => ({
-                      id: field.id,
-                      label: templateFieldLabel(field, labelLocale),
-                    })),
-                    { id: "status", label: t("colStatus") },
-                  ]}
                 >
-                  {pageIndexes.map((index) => {
-                    const draft = drafts[index];
-                    const resolve = resolved[index];
-                    const tone = tones[index] ?? "pending";
-                    const snap = resolve?.snapshot;
-                    return (
-                      <AppDataTableRow key={draft.row_index} className={reviewRowClass(tone)}>
-                        <TableCell>
+                  {groupRows(
+                    pageIndexes.map((index) => ({
+                      index,
+                      status: tones[index] ?? "pending",
+                    })),
+                    reviewPrefs.groupBy,
+                    {
+                      status: (row) =>
+                        row.status === "pending"
+                          ? "—"
+                          : t(`statusChip.${reviewStatusKey(row.status)}`),
+                    },
+                    {},
+                    "—",
+                  ).flatMap((group) => [
+                    ...(reviewPrefs.groupBy !== "none"
+                      ? [
+                          <AppDataTableRow key={`g-${group.key}`}>
+                            <TableCell
+                              colSpan={shownReviewColumns.length}
+                              className="text-xs font-semibold"
+                            >
+                              {group.label} · {group.rows.length}
+                            </TableCell>
+                          </AppDataTableRow>,
+                        ]
+                      : []),
+                    ...group.rows.map((entry) => {
+                      const index = entry.index;
+                      const draft = drafts[index];
+                      const resolve = resolved[index];
+                      const tone = tones[index] ?? "pending";
+                      const snap = resolve?.snapshot;
+                      const name = snap?.employee_name?.trim() ?? "";
+                      const position = snap?.position?.trim() ?? "";
+                      const cells: Record<string, ReactNode> = {
+                        pick: (
                           <Checkbox
                             checked={tone === "ready" && checked.has(index)}
                             disabled={tone !== "ready"}
@@ -1198,57 +1192,61 @@ export function BulkImportShell({
                               });
                             }}
                           />
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {draft.employee_id || "—"}
-                        </TableCell>
-                        <TableCell
-                          className={cn(
-                            "text-sm",
-                            tone === "ready" || tone === "pending" ? "bg-emerald-50" : undefined,
-                          )}
-                        >
-                          {tone === "check_id" ? (
+                        ),
+                        emp: draft.employee_id ? (
+                          <span className="font-mono text-xs">{draft.employee_id}</span>
+                        ) : (
+                          <EmptyCell />
+                        ),
+                        name:
+                          tone === "check_id" ? (
                             <span className="font-medium text-rose-700">{t("notFound")}</span>
+                          ) : name ? (
+                            <TableNameCell name={name} />
                           ) : (
-                            snapshotText(snap?.employee_name)
-                          )}
-                        </TableCell>
-                        <TableCell
-                          className={cn(
-                            "text-sm",
-                            tone === "ready" || tone === "pending" ? "bg-emerald-50" : undefined,
-                          )}
-                        >
-                          {snapshotText(snap?.position)}
-                        </TableCell>
-                        {sheetValueFields.slice(0, 3).map((field) => {
-                          const value = draft.field_values[field.field_key]?.trim() ?? "";
-                          const missing =
-                            tone === "add_value" && field.is_required && value.length === 0;
-                          return (
-                            <TableCell key={field.id} className="text-sm">
-                              {missing ? (
-                                <span className="font-medium text-destructive">{t("notFilled")}</span>
-                              ) : (
-                                value || "—"
-                              )}
-                            </TableCell>
-                          );
-                        })}
-                        <TableCell>
-                          {tone === "pending" ? (
-                            <span className="text-xs text-muted-foreground">—</span>
+                            <EmptyCell />
+                          ),
+                        position: position || <EmptyCell />,
+                        status:
+                          tone === "pending" ? (
+                            <EmptyCell />
                           ) : (
                             <ReviewStatusChip
                               tone={tone}
                               label={t(`statusChip.${reviewStatusKey(tone)}`)}
                             />
-                          )}
-                        </TableCell>
-                      </AppDataTableRow>
-                    );
-                  })}
+                          ),
+                      };
+                      for (const field of sheetValueFields.slice(0, 3)) {
+                        const value = draft.field_values[field.field_key]?.trim() ?? "";
+                        const missing =
+                          tone === "add_value" && field.is_required && value.length === 0;
+                        cells[field.id] = missing ? (
+                          <span className="font-medium text-destructive">{t("notFilled")}</span>
+                        ) : (
+                          value || <EmptyCell />
+                        );
+                      }
+                      return (
+                        <AppDataTableRow key={draft.row_index} className={reviewRowClass(tone)}>
+                          {shownReviewColumns.map((column) => (
+                            <TableCell
+                              key={column.id}
+                              className={cn(
+                                column.id === "emp" && "font-mono text-xs",
+                                (column.id === "name" || column.id === "position") && "text-sm",
+                                (column.id === "name" || column.id === "position") &&
+                                  (tone === "ready" || tone === "pending") &&
+                                  "bg-emerald-50",
+                              )}
+                            >
+                              {cells[column.id]}
+                            </TableCell>
+                          ))}
+                        </AppDataTableRow>
+                      );
+                    }),
+                  ])}
                 </AppDataTable>
               </>
             )}

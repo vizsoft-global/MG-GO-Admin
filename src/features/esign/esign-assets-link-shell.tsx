@@ -1,14 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { ExternalLink, Loader2, Package, Search } from "lucide-react";
+import { ExternalLink, Loader2, Package } from "lucide-react";
+import { groupRows } from "@/components/app/app-list-controls";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -55,6 +63,22 @@ export function EsignAssetsLinkShell() {
     ]);
   }, [rows, t]);
 
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: t("colName"), locked: true },
+      { id: "category", label: tAssets("colCategory"), categorical: true },
+      { id: "stock", label: t("colStock") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "penalty", label: tAssets("colPenalty") },
+    ],
+    [t, tAssets],
+  );
+  const prefs = useTablePrefs("esign.assets", columns);
+  useEffect(() => {
+    setSearch(prefs.appliedQuery);
+  }, [prefs.appliedQuery]);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+
   const visibleRows = useMemo(() => {
     if (!rows) return null;
     const q = search.trim().toLowerCase();
@@ -94,16 +118,16 @@ export function EsignAssetsLinkShell() {
         </AppListCard>
       ) : (
         <AppListCard className="p-0">
+          <TableToolbar
+            prefs={prefs}
+            entity={t("title")}
+            columns={columns}
+            rowKind="dynamic"
+            entityList
+            filteredCount={visibleRows?.length ?? 0}
+            totalCount={rows?.length ?? 0}
+          />
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="h-9 w-64 ps-8"
-                placeholder={t("searchPlaceholder")}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
             <Select value={category} onValueChange={(v) => v && setCategory(v)} items={categoryOptions}>
               <SelectTrigger className="h-9 w-[180px]">
                 <SelectValue />
@@ -120,80 +144,131 @@ export function EsignAssetsLinkShell() {
               {visibleRows ? t("assetCount", { count: visibleRows.length }) : ""}
             </span>
           </div>
+          {visibleRows && visibleRows.length > 0 && prefs.view === "grid" ? (
+            <TableGridCards
+              rows={visibleRows.map((row) => ({
+                id: row.code || row.id,
+                name: row.name,
+                fields: [
+                  { label: tAssets("colCategory"), value: row.category || "—" },
+                  {
+                    label: t("colStock"),
+                    value:
+                      row.available_qty <= 0
+                        ? t("outOfStock")
+                        : row.is_low_stock
+                          ? t("lowStock", { count: row.available_qty })
+                          : t("inStock", { count: row.available_qty }),
+                  },
+                  { label: t("colStatus"), value: row.is_active ? t("activeOn") : t("activeOff") },
+                  {
+                    label: tAssets("colPenalty"),
+                    value: row.penalty_kwd != null ? `${row.penalty_kwd.toFixed(3)} KWD` : "—",
+                  },
+                ],
+              }))}
+            />
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{tAssets("colCategory")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colStock")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{tAssets("colPenalty")}</TableHead>
+                {shown.map((column) => (
+                  <TableHead key={column.id} className={TABLE_HEAD_CLASS}>
+                    {column.label}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {visibleRows === null ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={shown.length} className="py-8 text-center text-muted-foreground">
                     <Loader2 className="mx-auto h-4 w-4 animate-spin" />
                   </TableCell>
                 </TableRow>
               ) : visibleRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={shown.length} className="py-8 text-center text-sm text-muted-foreground">
                     {t("empty")}
                   </TableCell>
                 </TableRow>
               ) : (
-                visibleRows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2.5">
-                        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
-                          <Package className="h-4 w-4" />
-                        </span>
-                        <div>
-                          <p className="text-sm font-medium">{row.name}</p>
-                          <p className="text-xs text-muted-foreground">{row.code}</p>
+                groupRows(
+                  visibleRows,
+                  prefs.groupBy,
+                  {
+                    category: (row) => row.category ?? "",
+                    status: (row) => (row.is_active ? t("activeOn") : t("activeOff")),
+                  },
+                  {},
+                  "—",
+                ).flatMap((group) => [
+                  ...(prefs.groupBy !== "none"
+                    ? [
+                        <TableRow key={`g-${group.key}`}>
+                          <TableCell colSpan={shown.length} className="text-xs font-semibold">
+                            {group.label} · {group.rows.length}
+                          </TableCell>
+                        </TableRow>,
+                      ]
+                    : []),
+                  ...group.rows.map((row) => {
+                    const cells: Record<string, ReactNode> = {
+                      name: (
+                        <div className="flex items-center gap-2.5">
+                          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                            <Package className="h-4 w-4" />
+                          </span>
+                          <div>
+                            <TableNameCell name={row.name} />
+                            <p className="text-xs text-muted-foreground">{row.code}</p>
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {row.category ? (
+                      ),
+                      category: row.category ? (
                         <Badge variant="secondary" className="font-normal">
                           {row.category}
                         </Badge>
                       ) : (
-                        <span className="text-sm text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="tabular-nums text-sm">
-                      {row.available_qty <= 0 ? (
-                        <span className="text-destructive">{t("outOfStock")}</span>
-                      ) : row.is_low_stock ? (
-                        <span className="text-destructive">
-                          {t("lowStock", { count: row.available_qty })}
-                        </span>
-                      ) : (
-                        t("inStock", { count: row.available_qty })
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <StatusPill variant={row.is_active ? "success" : "neutral"}>
-                        {row.is_active ? t("activeOn") : t("activeOff")}
-                      </StatusPill>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap tabular-nums text-sm">
-                      {row.penalty_kwd != null ? (
-                        `${row.penalty_kwd.toFixed(3)} KWD`
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
+                        <EmptyCell />
+                      ),
+                      stock:
+                        row.available_qty <= 0 ? (
+                          <span className="text-destructive">{t("outOfStock")}</span>
+                        ) : row.is_low_stock ? (
+                          <span className="text-destructive">
+                            {t("lowStock", { count: row.available_qty })}
+                          </span>
+                        ) : (
+                          t("inStock", { count: row.available_qty })
+                        ),
+                      status: (
+                        <StatusPill variant={row.is_active ? "success" : "neutral"}>
+                          {row.is_active ? t("activeOn") : t("activeOff")}
+                        </StatusPill>
+                      ),
+                      penalty:
+                        row.penalty_kwd != null ? (
+                          `${row.penalty_kwd.toFixed(3)} KWD`
+                        ) : (
+                          <EmptyCell />
+                        ),
+                    };
+                    return (
+                      <TableRow key={row.id}>
+                        {shown.map((column) => (
+                          <TableCell key={column.id} className="text-sm">
+                            {cells[column.id]}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  }),
+                ])
               )}
             </TableBody>
           </Table>
+          )}
         </AppListCard>
       )}
     </AppPage>

@@ -147,7 +147,10 @@ export function DepartmentsSettingsPanel() {
   }, []);
 
   useEffect(() => {
-    void loadDepartments();
+    const timer = window.setTimeout(() => {
+      void loadDepartments();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadDepartments]);
 
   const loadMembers = useCallback(async (departmentId: string) => {
@@ -162,8 +165,12 @@ export function DepartmentsSettingsPanel() {
   }, []);
 
   useEffect(() => {
-    if (activeDeptId) void loadMembers(activeDeptId);
-    else setMembers([]);
+    if (!activeDeptId) return;
+    const departmentId = activeDeptId;
+    const timer = window.setTimeout(() => {
+      void loadMembers(departmentId);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [activeDeptId, loadMembers]);
 
   const roleOptions = useMemo(
@@ -214,7 +221,10 @@ export function DepartmentsSettingsPanel() {
         return;
       }
       toast.success(t("deleted"));
-      if (activeDeptId === deleteDept.id) setActiveDeptId(null);
+      if (activeDeptId === deleteDept.id) {
+        setActiveDeptId(null);
+        setMembers([]);
+      }
       await loadDepartments();
     });
   }
