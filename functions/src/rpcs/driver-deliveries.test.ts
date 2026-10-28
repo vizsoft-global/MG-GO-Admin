@@ -10,6 +10,7 @@ import {
   parseProofKeys,
   resolvePickupRestaurantId,
   restaurantDeliveryAllowed,
+  zoneDescribesWorkArea,
 } from "./driver-deliveries";
 
 const PIN = { latitude: 29.375, longitude: 47.978 };
@@ -223,6 +224,45 @@ describe("restaurant geofence", () => {
         inRange: false,
       }),
       "delivery_out_of_range",
+    );
+  });
+});
+
+describe("zone describes the work area", () => {
+  it("drops a zone that holds none of the rider's stores", () => {
+    // KFC ALREQA sits ~682 m outside the Mahboula polygon. Sending that zone
+    // made every installed build report "outside your delivery area" at the
+    // counter, so it is withheld and the store range decides instead.
+    assert.equal(
+      zoneDescribesWorkArea({
+        zone: { geometry: SQUARE.geometry, zone_type: "polygon" },
+        stores: [{ lat: 29.30, lng: 47.90 }],
+      }),
+      false,
+    );
+  });
+
+  it("keeps a zone that holds one of the stores, and one with no store pins", () => {
+    assert.equal(
+      zoneDescribesWorkArea({
+        zone: { geometry: SQUARE.geometry, zone_type: "polygon" },
+        stores: [
+          { lat: 29.30, lng: 47.90 },
+          { lat: 29.375, lng: 47.978 },
+        ],
+      }),
+      true,
+    );
+    assert.equal(
+      zoneDescribesWorkArea({
+        zone: { geometry: SQUARE.geometry, zone_type: "polygon" },
+        stores: [{ lat: null, lng: null }],
+      }),
+      true,
+    );
+    assert.equal(
+      zoneDescribesWorkArea({ zone: null, stores: [{ lat: 29.375, lng: 47.978 }] }),
+      false,
     );
   });
 });
