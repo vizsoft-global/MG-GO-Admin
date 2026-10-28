@@ -17,7 +17,13 @@ import { bumpScanSnapshots, PAYROLL_SNAPSHOTS } from "../router/read-snapshot";
 const EMPLOYEE_ID_RE = /^[A-Za-z0-9]{1,100}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-export type PayrollIdentityField = "employeeId" | "fullName" | "clientId" | "restaurantName";
+export type PayrollIdentityField =
+  | "employeeId"
+  | "fullName"
+  | "clientId"
+  | "restaurantName"
+  | "projectKey"
+  | "zoneId";
 
 export function applyPayrollManualOrders(
   manual: number | null,
@@ -69,6 +75,8 @@ function parseIdentityField(value: unknown): PayrollIdentityField {
     case "fullName":
     case "clientId":
     case "restaurantName":
+    case "projectKey":
+    case "zoneId":
       return value;
     default:
       throw new HttpsError("invalid-argument", "invalid_field");
@@ -195,6 +203,22 @@ async function replaceRestaurantEdges(
   await batch.commit();
 }
 
+async function resolveActiveClientKey(
+  db: ReturnType<typeof getFirestore>,
+  raw: string,
+): Promise<string | null> {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 24) return null;
+  const candidates = trimmed === trimmed.toLowerCase() ? [trimmed] : [trimmed, trimmed.toLowerCase()];
+  for (const key of candidates) {
+    if (!/^[A-Za-z0-9_]{1,24}$/.test(key)) continue;
+    const snap = await db.collection(COLLECTIONS.payrollClients).doc(key).get();
+    if (!snap.exists || snap.get("is_active") === false) continue;
+    return snap.id;
+  }
+  return null;
+}
+
 export const adminSavePayrollIdentity = onCall(async (request) => {
   const staff = await requireStaffFresh(request, "payroll.manage");
   const data = argsOf(request.data);
@@ -264,6 +288,44 @@ export const adminSavePayrollIdentity = onCall(async (request) => {
       });
       return { ok: true };
     }
+    case "projectKey": {
+      if (clearedRestaurant(value)) {
+        delete next["project_key"];
+        patch["project_key"] = FieldValue.delete();
+        break;
+      }
+      const current = typeof driver["project_key"] === "string" ? driver["project_key"].trim() : "";
+      const asked = value.trim();
+      let key = await resolveActiveClientKey(db, asked);
+      if (!key && current && (asked === current || asked.toLowerCase() === current.toLowerCase())) {
+        key = current;
+      }
+      if (!key) throw new HttpsError("not-found", "unknown_client");
+      next["project_key"] = key;
+      patch["project_key"] = key;
+      break;
+    }
+    case "zoneId": {
+      if (clearedRestaurant(value)) {
+        delete next["zone_id"];
+        delete next["zone_name"];
+        patch["zone_id"] = FieldValue.delete();
+        patch["zone_name"] = FieldValue.delete();
+        patch["zone_name_lower"] = FieldValue.delete();
+        break;
+      }
+      const zoneId = value.trim();
+      if (!zoneId || zoneId.length > 128) throw new HttpsError("not-found", "unknown_zone");
+      const zone = await db.collection(COLLECTIONS.zones).doc(zoneId).get();
+      const archived = zone.get("archived_at");
+      if (!zone.exists || archived) throw new HttpsError("not-found", "unknown_zone");
+      const zoneName = typeof zone.get("name") === "string" ? zone.get("name").trim() : "";
+      next["zone_id"] = zone.id;
+      next["zone_name"] = zoneName;
+      patch["zone_id"] = zone.id;
+      patch["zone_name"] = zoneName;
+      break;
+    }
     default: {
       const unknown: never = field;
       throw new HttpsError("invalid-argument", `invalid_field:${String(unknown)}`);
@@ -282,6 +344,12 @@ export const adminSavePayrollIdentity = onCall(async (request) => {
     if (field === "clientId") {
       intakePatch["client_id"] = patch["client_id"];
       if (patch["client_id_lower"]) intakePatch["client_id_lower"] = patch["client_id_lower"];
+    }
+    if (field === "projectKey") intakePatch["project_key"] = patch["project_key"];
+    if (field === "zoneId") {
+      intakePatch["zone_id"] = patch["zone_id"];
+      intakePatch["zone_name"] = patch["zone_name"];
+      if (patch["zone_name_lower"]) intakePatch["zone_name_lower"] = patch["zone_name_lower"];
     }
     await db.collection(COLLECTIONS.driverIntakes).doc(intakeId).set(intakePatch, { merge: true });
   }

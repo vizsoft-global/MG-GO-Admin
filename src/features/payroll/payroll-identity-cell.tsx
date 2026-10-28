@@ -2,10 +2,13 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { SearchSelect } from "@/components/ui/search-select";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
+import { usePayrollAssignCatalog } from "./payroll-assign-catalog";
+import type { PayrollAssignField } from "./payroll-assign";
 import {
   savePayrollIdentity,
   savePayrollOrders,
@@ -25,6 +28,8 @@ function cellError(message: string, t: (key: string) => string): string {
   if (message.includes("date_out_of_range")) return t("dateOutOfRange");
   if (message.includes("invalid_orders")) return t("invalidOrders");
   if (message.includes("invalid_client_id")) return t("invalidClientId");
+  if (message.includes("unknown_client")) return t("unknownClient");
+  if (message.includes("unknown_zone")) return t("unknownZone");
   if (message.includes("driver_not_found")) return t("driverNotFound");
   return t("saveFailed");
 }
@@ -54,6 +59,10 @@ export function payrollIdentityValue(row: PayrollRiderRow, field: PayrollIdentit
       return row.restaurant === "—" ? "" : row.restaurant;
     case "clientId":
       return row.restaurantClientId?.trim() ?? "";
+    case "projectKey":
+      return row.projectKey ?? "";
+    case "zoneId":
+      return row.zoneId ?? "";
     default: {
       const unknown: never = field;
       return unknown;
@@ -241,5 +250,75 @@ export function PayrollOrderCell(props: {
         props.overridden && "border-t-orange-500",
       )}
     />
+  );
+}
+
+export function PayrollAssignCell({
+  row,
+  field,
+  canEdit,
+}: {
+  row: PayrollRiderRow;
+  field: PayrollAssignField;
+  canEdit: boolean;
+}) {
+  const t = useTranslations("pages.payroll.cellEdit");
+  const catalog = usePayrollAssignCatalog();
+  const queryClient = useQueryClient();
+  const stored = field === "projectKey" ? (row.projectKey ?? "") : (row.zoneId ?? "");
+  const [draft, setDraft] = useState<string | undefined>(undefined);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    setDraft(undefined);
+  }, [stored]);
+  const shown = draft ?? stored;
+  const printed = field === "projectKey" ? row.partner : row.zone;
+  const fallback = printed && printed !== "—" ? printed : "";
+  const base = field === "projectKey" ? catalog.clients : catalog.zones;
+  const items = useMemo(() => {
+    if (!shown || base.some((item) => item.value === shown)) return base;
+    if (!fallback) return base;
+    return [{ value: shown, label: fallback, keywords: [fallback] }, ...base];
+  }, [base, shown, fallback]);
+
+  if (!canEdit) {
+    return printed && printed !== "—" ? printed : "—";
+  }
+
+  async function commit(next: string | null) {
+    const value = next ?? "";
+    if (value === stored) return;
+    setDraft(value);
+    setSaving(true);
+    try {
+      await savePayrollIdentity(row.driverId, field, value);
+      toast.success(t("saved"));
+      await queryClient.invalidateQueries({ queryKey: queryKeys.payroll.all() });
+    } catch (error) {
+      setDraft(undefined);
+      toast.error(cellError(error instanceof Error ? error.message : "", t));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
+    <SearchSelect
+      items={items}
+      value={shown || null}
+      onChange={(next) => void commit(next)}
+      placeholder={field === "projectKey" ? t("clientPlaceholder") : t("zonePlaceholder")}
+      searchPlaceholder={field === "projectKey" ? t("clientSearch") : t("zoneSearch")}
+      emptyText={field === "zoneId" && catalog.zonesLoading ? t("catalogLoading") : t("catalogEmpty")}
+      recentsKey={field === "projectKey" ? "payroll.client" : "payroll.zone"}
+      clearable
+      disabled={saving}
+      className="h-7 min-w-[8.5rem] max-w-[14rem] rounded-md px-2 text-xs shadow-none"
+    />
+    </div>
   );
 }

@@ -249,7 +249,7 @@ export function RosterPageShell() {
         </div>
         <div className="mt-3 grid gap-4 lg:grid-cols-2">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5E5754]">{t("attendanceHead")}</p>
+            <p className="text-[11px] font-semibold text-[#5E5754]">{t("attendanceHead")}</p>
             <div className="mt-2 grid gap-2 sm:grid-cols-3">
               <RosterUnitField label={t("lateAfter")} value={late} unit={t("unitMin")} onChange={(value) => patchAlert("late", value)} />
               <RosterUnitField label={t("earlyBefore")} value={early} unit={t("unitMin")} onChange={(value) => patchAlert("early", value)} />
@@ -258,7 +258,7 @@ export function RosterPageShell() {
             <p className="mt-2 text-[10px] text-[#5E5754]">{t("kuwaitTimeNote")}</p>
           </div>
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5E5754]">{t("earlyHead")}</p>
+            <p className="text-[11px] font-semibold text-[#5E5754]">{t("earlyHead")}</p>
             <div className="mt-2 grid gap-2 sm:grid-cols-3">
               <RosterUnitField
                 label={t("deliveredNear")}

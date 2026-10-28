@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  IMPORT_HEARTBEAT_MS,
   IMPORT_JOB_STALE_MS,
   canCancelImportJob,
   canPauseImportJob,
@@ -8,6 +9,8 @@ import {
   importJobProgress,
   isImportJobStale,
   nextImportJobStatus,
+  shouldAutoContinueImport,
+  shouldBeatImportJob,
 } from "./import-job";
 
 describe("nextImportJobStatus", () => {
@@ -47,6 +50,26 @@ describe("isImportJobStale", () => {
       true,
     );
     assert.equal(isImportJobStale("paused", "2026-08-31T11:00:00.000Z", now), false);
+  });
+});
+
+describe("long import chunk", () => {
+  it("beats often enough that a chunk longer than the stale window stays running", () => {
+    let lastBeat = 0;
+    const chunkMs = IMPORT_JOB_STALE_MS * 3;
+    assert.ok(chunkMs > IMPORT_JOB_STALE_MS);
+    assert.ok(IMPORT_HEARTBEAT_MS < IMPORT_JOB_STALE_MS);
+    for (let now = 0; now <= chunkMs; now += 1_000) {
+      if (now === 0 || shouldBeatImportJob(lastBeat, now)) lastBeat = now;
+      assert.ok(now - lastBeat <= IMPORT_JOB_STALE_MS);
+    }
+  });
+
+  it("continues a stale pause and leaves a Pause click stopped", () => {
+    assert.equal(shouldAutoContinueImport("paused", false, 40), true);
+    assert.equal(shouldAutoContinueImport("paused", true, 40), false);
+    assert.equal(shouldAutoContinueImport("paused", false, 0), false);
+    assert.equal(shouldAutoContinueImport("running", false, 40), false);
   });
 });
 

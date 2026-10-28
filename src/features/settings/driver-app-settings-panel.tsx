@@ -923,7 +923,7 @@ export function DriverAppSettingsPanel({
                     <div className="mt-2 overflow-hidden rounded-lg border border-border">
                       <table className="w-full text-xs tabular-nums">
                         <thead>
-                          <tr className="border-b border-border bg-muted/30 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          <tr className="border-b border-border bg-muted/30 text-xs font-semibold text-muted-foreground">
                             <th className="px-2 py-1 text-start">{t("buildsColBuild")}</th>
                             <th className="px-2 py-1 text-end">{t("buildsColInstalls")}</th>
                             <th className="px-2 py-1 text-end">{t("buildsColRecent")}</th>

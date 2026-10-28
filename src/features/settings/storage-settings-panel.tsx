@@ -236,7 +236,7 @@ export function StorageSettingsPanel() {
         <div className="rounded-xl border border-border/60 bg-card p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <HardDrive className="h-4 w-4" />
-            <span className="text-xs font-medium uppercase tracking-wide">
+            <span className="text-xs font-medium">
               {t("stats.totalObjects")}
             </span>
           </div>
@@ -247,7 +247,7 @@ export function StorageSettingsPanel() {
         <div className="rounded-xl border border-border/60 bg-card p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <HardDrive className="h-4 w-4" />
-            <span className="text-xs font-medium uppercase tracking-wide">
+            <span className="text-xs font-medium">
               {t("stats.totalSize")}
             </span>
           </div>
@@ -258,7 +258,7 @@ export function StorageSettingsPanel() {
         <div className="rounded-xl border border-border/60 bg-card p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Activity className="h-4 w-4" />
-            <span className="text-xs font-medium uppercase tracking-wide">
+            <span className="text-xs font-medium">
               {t("stats.classA")}
             </span>
           </div>
@@ -272,7 +272,7 @@ export function StorageSettingsPanel() {
         <div className="rounded-xl border border-border/60 bg-card p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Activity className="h-4 w-4" />
-            <span className="text-xs font-medium uppercase tracking-wide">
+            <span className="text-xs font-medium">
               {t("stats.classB")}
             </span>
           </div>

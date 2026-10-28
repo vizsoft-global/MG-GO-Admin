@@ -185,7 +185,7 @@ function PasscodeCard({
 
   return (
     <div className="rounded-[14px] border border-border bg-card px-6 py-5">
-      <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">{t("title")}</p>
+      <p className="text-xs font-bold tracking-[0.06em] text-[#A73C24]">{t("title")}</p>
       <div className="mt-3 space-y-3">
         {!isActive ? (
           <p className="text-sm text-muted-foreground">{t("inactiveHint")}</p>
@@ -587,7 +587,7 @@ function DriverDetailContent({ id }: { id: string }) {
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {driver.linked_profile_id && !isArchived && canManage ? (
         <div className="rounded-[14px] border border-border bg-card px-6 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+          <p className="text-xs font-bold tracking-[0.06em] text-[#A73C24]">
             {tBlock("title")}
           </p>
           <div className="mt-3">
@@ -604,7 +604,7 @@ function DriverDetailContent({ id }: { id: string }) {
       ) : null}
       {driver.linked_profile_id && !isArchived && canManage ? (
         <div className="rounded-[14px] border border-border bg-card px-6 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+          <p className="text-xs font-bold tracking-[0.06em] text-[#A73C24]">
             {tFreeze("title")}
           </p>
           <div className="mt-3">
@@ -622,7 +622,7 @@ function DriverDetailContent({ id }: { id: string }) {
       ) : null}
       {driver.linked_profile_id && !isArchived && canManage ? (
         <div className="rounded-[14px] border border-border bg-card px-6 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+          <p className="text-xs font-bold tracking-[0.06em] text-[#A73C24]">
             {t("loginVerificationExemptTitle")}
           </p>
           <div className="mt-3">
@@ -637,7 +637,7 @@ function DriverDetailContent({ id }: { id: string }) {
       ) : null}
       {driver.linked_profile_id && !isArchived && canManage ? (
         <div className="rounded-[14px] border border-border bg-card px-6 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+          <p className="text-xs font-bold tracking-[0.06em] text-[#A73C24]">
             {t("screenshotsAllowedTitle")}
           </p>
           <div className="mt-3">
@@ -652,7 +652,7 @@ function DriverDetailContent({ id }: { id: string }) {
       ) : null}
       {!isArchived && canManage ? (
         <div className="rounded-[14px] border border-border bg-card px-6 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+          <p className="text-xs font-bold tracking-[0.06em] text-[#A73C24]">
             {t("accountStatus.title")}
           </p>
           <div className="mt-3">
@@ -1105,7 +1105,7 @@ function DriverDetailContent({ id }: { id: string }) {
                 key={field.label}
                 className="flex flex-col gap-[3px] rounded-[10px] border border-border px-3.5 py-3"
               >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+                <p className="text-[11px] font-semibold tracking-[0.07em] text-muted-foreground">
                   {field.label}
                 </p>
                 <p className="truncate text-base font-semibold text-foreground">{field.value}</p>

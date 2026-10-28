@@ -970,7 +970,20 @@ export const adminClientPortalDashboard = onCall(async (request) => {
   const requestedDay = pickText(data, "day");
   if (requestedDay && !isRealYmd(requestedDay)) throw new HttpsError("invalid-argument", "invalid_day");
   const day = requestedDay ?? today;
-  const projectKey = scopedProjectKey(staff, pickText(data, "projectKey", "project_key")) ?? "keeta";
+  const requestedKey = pickText(data, "projectKey", "project_key");
+  let projectKey: string;
+  if (staff.isPartner) {
+    if (!staff.partnerProjectKey) throw new HttpsError("permission-denied", "not_authorized");
+    projectKey = staff.partnerProjectKey;
+  } else if (staff.isSuperAdmin) {
+    const normalized = requestedKey?.toLowerCase() ?? "";
+    projectKey =
+      normalized === "keeta" || normalized === "americana" || normalized === "unassigned"
+        ? normalized
+        : "keeta";
+  } else {
+    throw new HttpsError("permission-denied", "not_authorized");
+  }
   const zoneId = pickText(data, "zoneId", "zone_id");
   const loaded = await loadDashboard(day);
   const projectDrivers = loaded.drivers.filter((driver) => driver.project === projectKey);

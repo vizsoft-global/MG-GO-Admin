@@ -1138,7 +1138,13 @@ export async function saveHrPayrollCells(
   return { saved, skipped };
 }
 
-export type PayrollIdentityField = "employeeId" | "fullName" | "clientId" | "restaurantName";
+export type PayrollIdentityField =
+  | "employeeId"
+  | "fullName"
+  | "clientId"
+  | "restaurantName"
+  | "projectKey"
+  | "zoneId";
 
 export async function savePayrollIdentity(
   driverId: string,

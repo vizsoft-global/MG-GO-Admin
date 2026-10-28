@@ -155,3 +155,25 @@ export function slotCapacityAt(
   );
   return template?.capacity ?? fallback;
 }
+
+export type VisitLoadLevel = 0 | 1 | 2 | 3 | 4 | 5;
+
+export function visitLoadLevel(booked: number, capacity: number): VisitLoadLevel {
+  if (capacity <= 0 && booked > 0) return 5;
+  if (booked <= 0) return 0;
+  const ratio = booked / capacity;
+  if (ratio >= 1) return 5;
+  if (ratio >= 0.8) return 4;
+  if (ratio >= 0.6) return 3;
+  if (ratio >= 0.4) return 2;
+  if (ratio >= 0.2) return 1;
+  return 0;
+}
+
+export function countActiveBookings(rows: { status: string }[]): number {
+  return rows.reduce((total, row) => (row.status === "cancelled" ? total : total + 1), 0);
+}
+
+export function sumDepartmentCounts(departments: Record<string, number>): number {
+  return Object.values(departments).reduce((total, count) => total + count, 0);
+}

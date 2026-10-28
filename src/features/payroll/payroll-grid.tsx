@@ -30,7 +30,8 @@ import {
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { cn } from "@/lib/utils";
-import { PayrollIdentityCell, payrollIdentityField, payrollIdentityValue } from "./payroll-identity-cell";
+import { payrollAssignField } from "./payroll-assign";
+import { PayrollAssignCell, PayrollIdentityCell, payrollIdentityField, payrollIdentityValue } from "./payroll-identity-cell";
 import {
   countDaysByStatus,
   countedRiderDays,
@@ -231,6 +232,7 @@ export function PayrollDayGrid({
   onExport,
   empty,
   editor,
+  identityEdit = false,
   headingConfig,
   headingManage = false,
   today,
@@ -242,6 +244,8 @@ export function PayrollDayGrid({
   onExport: (rows: readonly PayrollRiderRow[]) => void;
   empty: string;
   editor?: PayrollGridEditor;
+  /** Client Name and Zone on Combined. Day cells stay on `editor`. */
+  identityEdit?: boolean;
   headingConfig?: ReadonlyMap<string, PayrollColumnConfigRow>;
   headingManage?: boolean;
   /** Kuwait date the page calls today; drives the Rider Status column. */
@@ -848,7 +852,7 @@ export function PayrollDayGrid({
                           )}
                           style={sticky?.style}
                         >
-                          {renderIdentityCell(row, column, today, editable)}
+                          {renderIdentityCell(row, column, today, identityEdit || editable)}
                         </td>
                         );
                       })}
@@ -1068,6 +1072,8 @@ function renderIdentityCell(
 ) {
   if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
   if (column.id === "status") return <PayrollStatusCell row={row} today={today} canEdit={canEdit} />;
+  const assign = payrollAssignField(column.id);
+  if (assign) return <PayrollAssignCell row={row} field={assign} canEdit={canEdit} />;
   const field = payrollIdentityField(column.id);
   if (field) {
     return (
@@ -1091,6 +1097,8 @@ function renderSummaryCell(
 ) {
   if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
   if (column.id === "status") return <PayrollStatusCell row={row} today={today} canEdit={canEdit} />;
+  const assign = payrollAssignField(column.id);
+  if (assign) return <PayrollAssignCell row={row} field={assign} canEdit={canEdit} />;
   const field = payrollIdentityField(column.id);
   if (field) {
     return (

@@ -119,6 +119,10 @@ export const DEFAULT_SPONSORSHIPS: readonly EmployeeCatalogRow[] = [
   { key: "government", label_en: "Government", label_ar: "حكومي", is_active: true, is_system: true, sort_order: 40 },
 ];
 
+export function isSystemSponsorshipKey(key: string): boolean {
+  return DEFAULT_SPONSORSHIPS.some((row) => row.key === key);
+}
+
 export const DEFAULT_BANK_CODES: readonly EmployeeCatalogRow[] = [
   { key: "nbk", label_en: "National Bank of Kuwait", label_ar: "بنك الكويت الوطني", is_active: true, is_system: true, sort_order: 10, is_nbk: true },
   { key: "kfh", label_en: "Kuwait Finance House", label_ar: "بيت التمويل الكويتي", is_active: true, is_system: true, sort_order: 20 },

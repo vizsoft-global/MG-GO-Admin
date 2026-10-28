@@ -354,7 +354,7 @@ function MatrixColumnHeader({
   return (
     <div className="sticky top-0 z-10 flex items-end gap-2 border-b border-border bg-card px-4 py-2">
             <div className="min-w-0 flex-1 pb-0.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs font-medium text-muted-foreground">
           {t("permissionColumn")}
         </p>
       </div>

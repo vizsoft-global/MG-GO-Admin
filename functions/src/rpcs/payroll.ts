@@ -867,12 +867,13 @@ async function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: Staff
         zone: zoneName ?? "—",
         zoneId,
         zoneName,
-        partner:
-          projectKey === "americana"
-            ? "Americana"
-            : isKeetaProjectKey(projectKey)
-              ? "Keeta"
-              : trimmedOrNull(raw["partner_name"]) ?? "—",
+        partner: (() => {
+          const catalogName = client ? trimmedOrNull(client.name) : null;
+          if (catalogName) return catalogName;
+          if (projectKey === "americana") return "Americana";
+          if (isKeetaProjectKey(projectKey)) return "Keeta";
+          return trimmedOrNull(raw["partner_name"]) ?? "—";
+        })(),
         projectKey,
         nationality:
           nationalityLabel(

@@ -1,12 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { FieldValue } from "firebase-admin/firestore";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { logAdminActivity } from "@/lib/audit/log-admin-activity";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import {
+  previewSponsorshipImport,
+  type SponsorshipImportFileError,
+} from "./sponsorship-import";
 import {
   deleteSponsorshipLogoFiles,
   resolveSponsorshipLogoUrl,
@@ -138,6 +143,76 @@ export async function upsertEmployeeCatalog(input: {
     if (logoError) return { error: logoError };
   }
   return { ok: true };
+}
+
+export type SponsorshipImportApplyError = EmployeeCatalogError | SponsorshipImportFileError | "nothing_to_apply";
+
+export async function importSponsorships(input: {
+  headers: string[];
+  rows: string[][];
+}): Promise<{ ok: true; created: number; updated: number } | { error: SponsorshipImportApplyError }> {
+  try {
+    await requireManage("sponsorships");
+  } catch {
+    return { error: "not_authorized" };
+  }
+  const db = await staffDb();
+  if (!db) return { error: "not_configured" };
+
+  const snap = await db.collection(KIND_COLLECTION.sponsorships).get();
+  const stored = snap.docs
+    .map((doc) => parseCatalogRow({ key: doc.id, ...doc.data() }))
+    .filter((row): row is EmployeeCatalogRow => row !== null);
+  const existing = mergeCatalogRows(stored, seedsForKind("sponsorships"));
+  const preview = previewSponsorshipImport({
+    headers: input.headers,
+    rows: input.rows,
+    existing,
+  });
+  if (preview.error) return { error: preview.error };
+
+  const ready = preview.rows.filter((row) => row.payload);
+  if (ready.length === 0) return { error: "nothing_to_apply" };
+
+  const batch = db.batch();
+  let created = 0;
+  let updated = 0;
+  for (const row of ready) {
+    const payload = row.payload;
+    if (!payload) continue;
+    batch.set(
+      db.collection(KIND_COLLECTION.sponsorships).doc(payload.key),
+      {
+        key: payload.key,
+        label_en: payload.label_en,
+        label_ar: payload.label_ar,
+        is_active: payload.is_active,
+        is_system: payload.is_system,
+        sort_order: payload.sort_order,
+        updated_at: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    if (row.status === "create") created += 1;
+    else updated += 1;
+  }
+  try {
+    await batch.commit();
+  } catch {
+    return { error: "save_failed" };
+  }
+
+  void logAdminActivity({
+    action: "update",
+    entityType: "employee_catalog",
+    entityId: "sponsorships:import",
+    context: { kind: "sponsorships", created, updated },
+  });
+  revalidatePath("/settings/sponsorships");
+  revalidatePath("/operations");
+  revalidatePath("/payroll");
+  revalidatePath("/payroll-hub");
+  return { ok: true, created, updated };
 }
 
 const LOGO_ERROR: Record<SponsorshipLogoError, EmployeeCatalogError> = {

@@ -363,7 +363,7 @@ export function StaffAccessDetailShell({
 
           {resourceRows.length > 0 ? (
             <div className="overflow-x-auto rounded-xl border border-border bg-card p-4 shadow-sm">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="mb-2 text-xs font-semibold text-muted-foreground">
                 {t("matrixTitle")}
               </p>
               <Table>
@@ -393,7 +393,7 @@ export function StaffAccessDetailShell({
 
           {byCategory.map(([category, rows]) => (
             <div key={category} className="rounded-xl border border-border bg-card p-4 shadow-sm">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="mb-2 text-xs font-semibold text-muted-foreground">
                 {category}
               </p>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">

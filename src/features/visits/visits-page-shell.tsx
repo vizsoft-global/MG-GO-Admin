@@ -1090,7 +1090,7 @@ function KpiTile({
         >
           {icon}
         </span>
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <p className="text-xs font-semibold text-muted-foreground">
           {label}
         </p>
       </div>

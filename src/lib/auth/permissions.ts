@@ -17,7 +17,7 @@ export type AuthProfile = {
   adminRoleId: string | null;
   approvalStatus: AdminApprovalStatus;
   isSuperAdmin: boolean;
-  archivedAt: string | null;
+  archivedAt: string | null | undefined;
 };
 
 export function hasPermissionInSet(
@@ -83,7 +83,7 @@ export function canManageRestaurants(
 export function canAccessAdminPanel(profile: AuthProfile): boolean {
   return (
     profile.role === "staff" &&
-    profile.archivedAt === null &&
+    profile.archivedAt == null &&
     profile.approvalStatus === "approved" &&
     profile.adminRoleId !== null
   );

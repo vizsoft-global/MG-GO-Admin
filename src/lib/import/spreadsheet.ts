@@ -182,7 +182,7 @@ function isCsvFile(file: File): boolean {
 
 export async function parseSpreadsheetFile(
   file: File,
-  options?: { raw?: boolean },
+  options?: { raw?: boolean; sheetName?: string },
 ): Promise<ParsedSheet> {
   if (isCsvFile(file)) {
     return parseCsvText(await file.text());
@@ -190,7 +190,9 @@ export async function parseSpreadsheetFile(
   const XLSX = await import("xlsx");
   const buffer = await file.arrayBuffer();
   const wb = XLSX.read(buffer, { type: "array", cellDates: false });
-  const sheetName = wb.SheetNames[0];
+  const named = options?.sheetName;
+  const sheetName =
+    named && wb.SheetNames.includes(named) ? named : wb.SheetNames[0];
   const sheet = wb.Sheets[sheetName];
   const matrix = XLSX.utils.sheet_to_json<(string | number | null)[]>(sheet, {
     header: 1,

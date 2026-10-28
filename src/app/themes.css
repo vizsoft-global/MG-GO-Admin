@@ -15,24 +15,63 @@ html[data-theme="shopify"] {
   --pending: oklch(0.58 0.16 38);
   --pending-bg: oklch(0.96 0.04 38);
 
-  /* Light mode — brand canvas #D9D2CF, white cards, black body, navy primary */
-  --background: #d9d2cf;
-  --foreground: #000000;
-  --card: #ffffff;
-  --card-foreground: #000000;
-  --popover: #ffffff;
-  --popover-foreground: #000000;
+  /* Frame 7159:14456 surfaces, type, and status. */
+  --surface-page: #f2eeeb;
+  --surface-card: #ffffff;
+  --surface-subtle: #f8f5f3;
+  --border-default: #e4ddd9;
+  --text-primary: #27273f;
+  --text-secondary: #5e5e72;
+  --text-muted: #8c8798;
+  --accent-rust: #a73c24;
+  --accent-rust-hover: #8f331f;
+  --accent-rust-active: #7a2b1a;
+  --selected-navy: #27273f;
+  --status-working-fg: #2f5d50;
+  --status-working-bg: #e4eeea;
+  --status-leave-fg: #3d5a80;
+  --status-leave-bg: #e5eaf2;
+  --status-sick-fg: #9a6420;
+  --status-sick-bg: #f5ede0;
+  --status-absent-fg: #a73c24;
+  --status-absent-bg: #f6e9e4;
+  --status-neutral-fg: #a8a3b3;
+  --status-neutral-bg: #eeebef;
+  --status-accident-fg: #7a3b5c;
+  --status-accident-bg: #f3e8ee;
+  --radius-card: 12px;
+  --radius-control: 10px;
+  --radius-sm: 8px;
+  --radius-pill: 999px;
+  --radius-bar: 3px;
+  --pad-card: 24px;
+  --pad-kpi-y: 18px;
+  --pad-kpi-x: 20px;
+  --gap-section: 16px;
+  --gap-tight: 8px;
+  --table-cell-y: 12px;
+  --table-cell-x: 16px;
+  --font-display: "Montserrat", "Gotham", system-ui, sans-serif;
+  --font-body: "Inter", "Gotham", system-ui, sans-serif;
+
+  /* Light mode — page canvas, white cards, navy text */
+  --background: var(--surface-page);
+  --foreground: var(--text-primary);
+  --card: var(--surface-card);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface-card);
+  --popover-foreground: var(--text-primary);
   --primary: #27273f;
   --primary-foreground: #ffffff;
-  --secondary: #f2efed;
-  --secondary-foreground: #27273f;
-  --muted: #edeae7;
-  --muted-foreground: #55535f;
+  --secondary: var(--surface-subtle);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--surface-subtle);
+  --muted-foreground: var(--text-secondary);
   --accent: #edebf1;
   --accent-foreground: #27273f;
   --destructive: oklch(0.55 0.2 25);
-  --border: #e4e0dd;
-  --input: #e4e0dd;
+  --border: var(--border-default);
+  --input: var(--border-default);
   --ring: #27273f;
   --chart-1: oklch(0.55 0.18 150);
   --chart-2: oklch(0.65 0.12 200);
@@ -86,28 +125,98 @@ html[data-theme="shopify"] {
   --icon-inline: 20px;
   --icon-indicator: 16px;
   --launcher-tile: 56px;
+
+  /* Aliases of the frame tokens. Kept so existing portal classes keep resolving. */
+  --portal-btn: var(--accent-rust);
+  --portal-btn-fg: #ffffff;
+  --portal-btn-hover: var(--accent-rust-hover);
+  --portal-btn-active: var(--accent-rust-active);
+  --portal-ink: var(--text-primary);
+  --portal-muted: var(--text-secondary);
+  --portal-border: var(--border-default);
+  --portal-canvas: var(--surface-card);
+  --portal-toggle-off: #d6d1da;
+  --portal-check-border: #c9c3cc;
+  --portal-locked-bg: var(--status-neutral-bg);
+  --portal-locked-border: #d6d1da;
+  --portal-badge-green-bg: var(--status-working-bg);
+  --portal-badge-green-fg: var(--status-working-fg);
+  --portal-badge-blue-bg: var(--status-leave-bg);
+  --portal-badge-blue-fg: var(--status-leave-fg);
+  --portal-badge-red-bg: var(--status-absent-bg);
+  --portal-badge-red-fg: var(--status-absent-fg);
+  --portal-badge-ochre-bg: var(--status-sick-bg);
+  --portal-badge-ochre-fg: var(--status-sick-fg);
+  --portal-badge-grey-bg: var(--status-neutral-bg);
+  --portal-badge-grey-fg: var(--text-secondary);
+  --portal-badge-plum-bg: var(--status-accident-bg);
+  --portal-badge-plum-fg: var(--status-accident-fg);
+
+  --visit-service-compliance: #3d7070;
+  --visit-service-hr: #7a3b5c;
+  --visit-service-legal: #3d5a80;
+  --visit-service-operations: #9a6420;
+  --visit-service-exit: #a73c24;
+  --visit-service-documents: #2f5d50;
+  --visit-service-training: #6161a3;
+  --visit-service-meeting: #387a9e;
+  --visit-service-other: #6e6a7c;
+
+  --visit-status-confirmed: #3d5a80;
+  --visit-status-confirmed-bg: #e5eaf2;
+  --visit-status-checked-in: #2f5d50;
+  --visit-status-checked-in-bg: #e4eeea;
+  --visit-status-completed: #6e6a7c;
+  --visit-status-completed-bg: #eeebef;
+  --visit-status-no-show: #a73c24;
+  --visit-status-no-show-bg: #f6e9e4;
+
+  --visit-load-0: #f4f1ee;
+  --visit-load-1: #ddebe5;
+  --visit-load-2: #b3d2c5;
+  --visit-load-3: #7faf9c;
+  --visit-load-4: #3f7a66;
+  --visit-load-5: #a73c24;
+
+  --visit-cap-open: #2f5d50;
+  --visit-cap-high: #9a6420;
+  --visit-cap-full: #a73c24;
 }
 
 html.dark,
 html[data-theme].dark,
 html[data-theme="shopify"].dark {
-  --background: #1e1e2e;
-  --foreground: #f2f0f5;
-  --card: #27273f;
-  --card-foreground: #f2f0f5;
-  --popover: #27273f;
-  --popover-foreground: #f2f0f5;
+  --surface-page: #1c1c2e;
+  --surface-card: #242438;
+  --surface-subtle: #2a2a42;
+  --border-default: rgb(255 255 255 / 12%);
+  --text-primary: #f4f4f5;
+  --text-secondary: #c4c0d0;
+  --text-muted: #8c8798;
+  --status-working-bg: #1e3330;
+  --status-leave-bg: #243044;
+  --status-sick-bg: #3a2e1c;
+  --status-absent-bg: #3a2420;
+  --status-neutral-bg: #2e2e3c;
+  --status-accident-bg: #3a2430;
+
+  --background: var(--surface-page);
+  --foreground: var(--text-primary);
+  --card: var(--surface-card);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface-card);
+  --popover-foreground: var(--text-primary);
   --primary: #a73c24;
   --primary-foreground: #ffffff;
-  --secondary: #2c2c44;
-  --secondary-foreground: #f2f0f5;
-  --muted: #2c2c44;
-  --muted-foreground: #b4b1c2;
+  --secondary: var(--surface-subtle);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--surface-subtle);
+  --muted-foreground: var(--text-secondary);
   --accent: #34344f;
   --accent-foreground: #f2f0f5;
   --destructive: oklch(0.6 0.18 25);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 12%);
+  --border: var(--border-default);
+  --input: rgb(255 255 255 / 12%);
   --ring: #a73c24;
   --chart-1: oklch(0.65 0.18 150);
   --chart-2: oklch(0.7 0.12 200);
@@ -152,4 +261,60 @@ html[data-theme="shopify"].dark {
   --icon-inline: 20px;
   --icon-indicator: 16px;
   --launcher-tile: 56px;
+
+  /* Aliases of the frame tokens. Kept so existing portal classes keep resolving. */
+  --portal-btn: var(--accent-rust);
+  --portal-btn-fg: #ffffff;
+  --portal-btn-hover: var(--accent-rust-hover);
+  --portal-btn-active: var(--accent-rust-active);
+  --portal-ink: var(--text-primary);
+  --portal-muted: var(--text-secondary);
+  --portal-border: var(--border-default);
+  --portal-canvas: var(--surface-card);
+  --portal-toggle-off: #d6d1da;
+  --portal-check-border: #c9c3cc;
+  --portal-locked-bg: var(--status-neutral-bg);
+  --portal-locked-border: #d6d1da;
+  --portal-badge-green-bg: var(--status-working-bg);
+  --portal-badge-green-fg: var(--status-working-fg);
+  --portal-badge-blue-bg: var(--status-leave-bg);
+  --portal-badge-blue-fg: var(--status-leave-fg);
+  --portal-badge-red-bg: var(--status-absent-bg);
+  --portal-badge-red-fg: var(--status-absent-fg);
+  --portal-badge-ochre-bg: var(--status-sick-bg);
+  --portal-badge-ochre-fg: var(--status-sick-fg);
+  --portal-badge-grey-bg: var(--status-neutral-bg);
+  --portal-badge-grey-fg: var(--text-secondary);
+  --portal-badge-plum-bg: var(--status-accident-bg);
+  --portal-badge-plum-fg: var(--status-accident-fg);
+
+  --visit-service-compliance: #3d7070;
+  --visit-service-hr: #7a3b5c;
+  --visit-service-legal: #3d5a80;
+  --visit-service-operations: #9a6420;
+  --visit-service-exit: #a73c24;
+  --visit-service-documents: #2f5d50;
+  --visit-service-training: #6161a3;
+  --visit-service-meeting: #387a9e;
+  --visit-service-other: #6e6a7c;
+
+  --visit-status-confirmed: #3d5a80;
+  --visit-status-confirmed-bg: #e5eaf2;
+  --visit-status-checked-in: #2f5d50;
+  --visit-status-checked-in-bg: #e4eeea;
+  --visit-status-completed: #6e6a7c;
+  --visit-status-completed-bg: #eeebef;
+  --visit-status-no-show: #a73c24;
+  --visit-status-no-show-bg: #f6e9e4;
+
+  --visit-load-0: #f4f1ee;
+  --visit-load-1: #ddebe5;
+  --visit-load-2: #b3d2c5;
+  --visit-load-3: #7faf9c;
+  --visit-load-4: #3f7a66;
+  --visit-load-5: #a73c24;
+
+  --visit-cap-open: #2f5d50;
+  --visit-cap-high: #9a6420;
+  --visit-cap-full: #a73c24;
 }

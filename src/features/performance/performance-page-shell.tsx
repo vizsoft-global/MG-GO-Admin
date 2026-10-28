@@ -242,7 +242,7 @@ export function PerformancePageShell() {
           } as CSSProperties
         }
       >
-      <div className="flex items-center gap-3 rounded-xl bg-[var(--ops-header,#27273F)] px-4 py-3">
+      <div className="flex items-center gap-3 rounded-xl bg-[var(--ops-header,var(--text-primary))] px-4 py-3">
         {theme.logoUrl ? (
           <img
             src={theme.logoUrl}
@@ -293,7 +293,7 @@ export function PerformancePageShell() {
           setMetric(resolveViewByMetric(next, metric));
         }}
         className="mb-2"
-        markerClassName="bg-[var(--ops-accent,#A73C24)]"
+        markerClassName="bg-[var(--ops-accent,var(--accent-rust))]"
       />
 
       <div className={cn("flex flex-col", LAYOUT.stackGap)}>

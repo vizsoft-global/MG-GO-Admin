@@ -20,6 +20,7 @@ import {
 } from "./import/import-progress";
 import { pendingRowDocId, storedImportRow } from "./import/import-job-rows";
 import {
+  IMPORT_HEARTBEAT_MS,
   IMPORT_JOB_STALE_MS,
   nextImportJobStatus,
   type ImportJobAction,
@@ -153,6 +154,18 @@ function mapSummary(row: {
     approveImmediately: row.approve_immediately,
     sealed: row.sealed !== false,
   };
+}
+
+async function beatImportJob(db: StaffClient, jobId: string): Promise<void> {
+  try {
+    await db
+      .from("driver_import_batches")
+      .update({ heartbeat_at: new Date().toISOString() })
+      .eq("id", jobId)
+      .eq("status", "running");
+  } catch {
+    return;
+  }
 }
 
 async function pauseStaleJobs(
@@ -396,6 +409,12 @@ export async function processDriverImportChunk(
     };
   }
 
+  await beatImportJob(db, jobId);
+  const heart = setInterval(() => {
+    void beatImportJob(db, jobId);
+  }, IMPORT_HEARTBEAT_MS);
+
+  try {
   const stored = batch as typeof batch & { pending_store?: string | null; sealed?: boolean | null };
   if (stored.pending_store === "sub" && stored.sealed !== true) {
     const latest = await getDriverImportJob(jobId);
@@ -581,6 +600,9 @@ export async function processDriverImportChunk(
     done: latest.job.status === "applied" || latest.job.status === "failed",
     stopped: latest.job.status !== "running" && !finished,
   };
+  } finally {
+    clearInterval(heart);
+  }
 }
 
 export async function setDriverImportJobStatus(
