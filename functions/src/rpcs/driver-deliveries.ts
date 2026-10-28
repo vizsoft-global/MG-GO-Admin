@@ -304,6 +304,40 @@ export function restaurantDeliveryAllowed(args: {
   return restaurantAllowed(args);
 }
 
+/**
+ * Does the assigned zone actually describe where this rider works?
+ *
+ * Americana assigns stores that sit kilometres outside the zone polygon, and a
+ * rider's work area is their store. The phone used to test the polygon alone,
+ * so those riders were told they were "outside your delivery area" and checked
+ * out while standing at the counter. A zone that holds none of the rider's
+ * stores cannot describe their shift, so it is not sent to the app; the store
+ * range then decides, which is the same rule `driver_report_location` uses.
+ *
+ * A rider with no store (Keeta) keeps the zone, and so does a rider with any
+ * store inside it.
+ */
+export function zoneDescribesWorkArea(args: {
+  zone: { geometry: unknown; zone_type: unknown } | null;
+  stores: Array<{ lat: number | null; lng: number | null }>;
+}): boolean {
+  if (!args.zone || args.zone.geometry == null) return false;
+  const pins = args.stores.filter(
+    (store): store is { lat: number; lng: number } =>
+      store.lat !== null && store.lng !== null,
+  );
+  if (pins.length === 0) return true;
+  return pins.some((pin) =>
+    pointWithinZoneProximity(
+      pin.lat,
+      pin.lng,
+      args.zone!.geometry as ZoneFeature,
+      zoneTypeOf(args.zone!.zone_type),
+      0,
+    ),
+  );
+}
+
 /** `driver_resolve_pickup_restaurant` after published candidates are loaded. */
 export function resolvePickupRestaurantId(args: {
   candidates: Array<{ id: string; restaurant: Dict; geofences: Dict[] }>;
@@ -1098,16 +1132,31 @@ export const driverGetDeliveryProximityContext = onCall(async (request) => {
         })),
     }));
 
+  // A zone that holds none of the rider's stores cannot describe their shift.
+  // Sending it made every installed build read "you are outside your delivery
+  // area" at the counter. Withholding it here fixes the phone without a Play
+  // release, and the store range decides instead — the same rule the server
+  // writes to `driver_report_location`.
+  const workZone =
+    zoneData &&
+    zoneDescribesWorkArea({
+      zone: { geometry: zoneData["geometry"] ?? null, zone_type: zoneData["zone_type"] ?? null },
+      stores: restaurants.map((row) => ({ lat: row.latitude, lng: row.longitude })),
+    })
+      ? zoneData
+      : null;
+  const workZoneId = workZone ? zoneId : null;
+
   return {
     proximity_meters: settings.proximityMeters,
-    zone_id: zoneId,
-    zone_type: zoneData ? asString(zoneData["zone_type"]) : null,
-    zone_geometry: zoneData ? (zoneData["geometry"] ?? null) : null,
+    zone_id: workZoneId,
+    zone_type: workZone ? asString(workZone["zone_type"]) : null,
+    zone_geometry: workZone ? (workZone["geometry"] ?? null) : null,
     restaurants,
     rules: deliveryRulesPayload({
       settings,
-      zoneId,
-      zoneData,
+      zoneId: workZoneId,
+      zoneData: workZone,
       driver: ctx.driver,
     }),
   };
