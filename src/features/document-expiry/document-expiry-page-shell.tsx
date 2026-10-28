@@ -13,13 +13,16 @@ import {
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
-  AppListControls,
   GroupedSections,
   fieldSearchMatch,
   groupRows,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -52,8 +55,16 @@ function statusVariant(row: DocumentExpiryRow): "danger" | "warning" | "success"
 
 export function DocumentExpiryPageShell() {
   const t = useTranslations("pages.documentExpiry");
-  const labels = useListControlLabels();
-  const { prefs, update } = useListViewPrefs("document-expiry");
+  const toolbarColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "driver", label: t("columns.driver"), locked: true },
+      { id: "document", label: t("columns.document") },
+      { id: "expires", label: t("columns.expires") },
+      { id: "status", label: t("columns.status"), categorical: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("document-expiry", toolbarColumns);
   const tDocs = useTranslations("pages.driverNew.documents");
   const { can } = useAuth();
   const canManage = can("documents.manage") || can("drivers.manage");
@@ -61,7 +72,6 @@ export function DocumentExpiryPageShell() {
   const router = useRouter();
   const { data, isLoading, refetch, isFetching } = useDocumentExpiryDashboard();
   const [bucket, setBucket] = useState<DocumentExpiryBucket>("expired");
-  const [search, setSearch] = useState("");
   const [activeRow, setActiveRow] = useState<DocumentExpiryRow | null>(null);
   const [sheetMode, setSheetMode] = useState<"date" | "replace" | null>(null);
 
@@ -69,14 +79,14 @@ export function DocumentExpiryPageShell() {
     const all = data?.rows ?? [];
     return all.filter((row) => {
       if (row.bucket !== bucket) return false;
-      return fieldSearchMatch(row, search, {
+      return fieldSearchMatch(row, prefs.appliedQuery, {
         name: (item) => item.driverName,
         employee_id: (item) => item.driverCode,
         status: (item) => item.bucket,
         docType: (item) => tDocs(item.docType),
       });
     });
-  }, [bucket, data?.rows, search, tDocs]);
+  }, [bucket, data?.rows, prefs.appliedQuery, tDocs]);
   const grouped = useMemo(
     () =>
       groupRows(
@@ -155,23 +165,20 @@ export function DocumentExpiryPageShell() {
         }))}
       />
 
-      <AppListCard className="mt-2">
-        <div className="border-b border-border p-3">
-          <AppListControls
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder={t("searchPlaceholder")}
-            clearSearchLabel={labels.clearSearch}
-            groupByOptions={[labels.group.none, labels.group.status]}
-            groupBy={prefs.groupBy}
-            onGroupByChange={(value) => update({ groupBy: value })}
-            groupByLabel={labels.groupBy}
-            viewMode={prefs.viewMode}
-            onViewModeChange={(value) => update({ viewMode: value })}
-            tableViewLabel={labels.viewTable}
-            cardsViewLabel={labels.viewCards}
+      <AppListCard
+        className="mt-2"
+        toolbar={
+          <TableToolbar
+            prefs={prefs}
+            entity={t("title")}
+            columns={toolbarColumns}
+            rowKind="dynamic"
+            entityList
+            filteredCount={rows.length}
+            totalCount={data?.rows.length ?? 0}
           />
-        </div>
+        }
+      >
 
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
@@ -179,7 +186,7 @@ export function DocumentExpiryPageShell() {
           </div>
         ) : rows.length === 0 ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
-        ) : prefs.viewMode === "cards" ? (
+        ) : prefs.view === "grid" ? (
           <div className="p-4">
             <GroupedSections groups={grouped}>
               {(groupRowsList) => (
@@ -195,7 +202,7 @@ export function DocumentExpiryPageShell() {
                         }
                       }}
                     >
-                      <p className="text-sm font-semibold">{row.driverName}</p>
+                      <TableNameCell name={row.driverName} />
                       <p className="mt-1 text-xs text-muted-foreground">
                         {row.driverCode} · {tDocs(row.docType)}
                       </p>
@@ -244,7 +251,7 @@ export function DocumentExpiryPageShell() {
               >
                 <TableCell>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{row.driverName}</p>
+                    <TableNameCell name={row.driverName} />
                     <p className="text-xs text-muted-foreground">{row.driverCode}</p>
                     {row.driverId ? (
                       <Link

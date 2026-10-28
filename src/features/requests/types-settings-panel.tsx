@@ -1,11 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
-import { Lock, Plus, Shapes } from "lucide-react";
+import { Lock } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -52,13 +61,54 @@ export function TypesSettingsPanel() {
     void load();
   }, [load]);
 
+  const typeColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "type", label: t("colType"), locked: true },
+      { id: "fields", label: t("colFields") },
+      { id: "chain", label: t("colChain") },
+      { id: "requests", label: t("colRequests") },
+      { id: "screenshots", label: t("colScreenshots"), categorical: true },
+      { id: "status", label: t("colStatus"), categorical: true },
+    ],
+    [t],
+  );
+  const tablePrefs = useTablePrefs("requests.types", typeColumns);
+  const filteredRows = useMemo(() => {
+    const query = tablePrefs.appliedQuery.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) =>
+      [row.label_en, row.label_ar, row.key].some((value) =>
+        (value ?? "").toLowerCase().includes(query),
+      ),
+    );
+  }, [rows, tablePrefs.appliedQuery]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filteredRows,
+        tablePrefs.groupBy,
+        {
+          status: (row) => (row.is_active ? "active" : "inactive"),
+          screenshots: (row) => (row.screenshot_restricted ? t("blocked") : t("allowed")),
+        },
+        {},
+        "—",
+      ),
+    [filteredRows, t, tablePrefs.groupBy],
+  );
+  const shownColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
+
   const nextSortOrder = useMemo(
     () => rows.reduce((max, row) => Math.max(max, row.sort_order), 0) + 1,
     [rows],
   );
 
   function setAddOpen(open: boolean) {
-    router.replace(open ? `${pathname}?add=1` : pathname);
+    const params = new URLSearchParams(searchParams.toString());
+    if (open) params.set("add", "1");
+    else params.delete("add");
+    const next = params.toString();
+    router.replace(next ? `${pathname}?${next}` : pathname);
   }
 
   function toggle(
@@ -90,44 +140,69 @@ export function TypesSettingsPanel() {
           { label: t("hub"), href: "/requests/settings" },
           { label: t("title") },
         ]}
-        actions={
-          <Button type="button" size="sm" className="h-9" onClick={() => setAddOpen(true)}>
-            <Plus className="me-1.5 h-3.5 w-3.5" />
-            {t("addRequestType")}
-          </Button>
-        }
       />
 
       <AppListCard className="p-0">
+        <TableToolbar
+          prefs={tablePrefs}
+          entity={t("title")}
+          columns={typeColumns}
+          rowKind="dynamic"
+          entityList
+          filteredCount={filteredRows.length}
+          totalCount={rows.length}
+          onAdd={() => setAddOpen(true)}
+          addLabel={t("addRequestType")}
+        />
+        {tablePrefs.view === "grid" && !loading ? (
+          <TableGridCards
+            rows={filteredRows.map((row) => ({
+              id: row.key,
+              name: row.label_en,
+              fields: [
+                { label: t("colFields"), value: row.field_count },
+                { label: t("colChain"), value: row.step_count },
+                { label: t("colRequests"), value: row.request_count },
+                { label: t("colStatus"), value: row.is_active ? "active" : "inactive" },
+              ],
+              onOpen: () => router.push(`/requests/settings/types/${row.key}`),
+            }))}
+          />
+        ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colType")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colFields")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colChain")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colRequests")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colScreenshots")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
+              {shownColumns.map((column) => (
+                <TableHead key={column.id} className={TABLE_HEAD_CLASS}>
+                  {column.label}
+                </TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">
+                <TableCell colSpan={shownColumns.length} className="py-8 text-center text-xs text-muted-foreground">
                   {t("loading")}
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((row) => (
-                <TableRow key={row.key}>
-                  <TableCell>
-                    <div className="flex items-center gap-2.5">
-                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
-                        <Shapes className="h-4 w-4" />
-                      </span>
+              grouped.flatMap((group) => [
+                ...(tablePrefs.groupBy !== "none"
+                  ? [
+                      <TableRow key={`g-${group.key}`}>
+                        <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                          {group.label} · {group.rows.length}
+                        </TableCell>
+                      </TableRow>,
+                    ]
+                  : []),
+                ...group.rows.map((row) => {
+                  const cells: Record<string, ReactNode> = {
+                    type: (
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-medium">{row.label_en}</span>
+                          <TableNameCell name={row.label_en} />
                           {row.is_system ? (
                             <span
                               title={t("systemLockHint")}
@@ -145,45 +220,48 @@ export function TypesSettingsPanel() {
                           {t("viewDetails")}
                         </Link>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {row.field_count}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {row.step_count > 0 ? (
-                      t("stepsCount", { count: row.step_count })
-                    ) : (
-                      <span className="text-warning">{t("noChain")}</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {row.request_count}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
+                    ),
+                    fields: row.field_count,
+                    chain:
+                      row.step_count > 0 ? (
+                        t("stepsCount", { count: row.step_count })
+                      ) : (
+                        <span className="text-warning">{t("noChain")}</span>
+                      ),
+                    requests: row.request_count,
+                    screenshots: (
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={row.screenshot_restricted}
+                          onCheckedChange={() => toggle(row, "screenshot_restricted")}
+                          aria-label={t("colScreenshots")}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {row.screenshot_restricted ? t("blocked") : t("allowed")}
+                        </span>
+                      </div>
+                    ),
+                    status: (
                       <Switch
-                        checked={row.screenshot_restricted}
-                        onCheckedChange={() => toggle(row, "screenshot_restricted")}
-                        aria-label={t("colScreenshots")}
+                        checked={row.is_active}
+                        onCheckedChange={() => toggle(row, "is_active")}
+                        aria-label={t("colStatus")}
                       />
-                      <span className="text-xs text-muted-foreground">
-                        {row.screenshot_restricted ? t("blocked") : t("allowed")}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={row.is_active}
-                      onCheckedChange={() => toggle(row, "is_active")}
-                      aria-label={t("colStatus")}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))
+                    ),
+                  };
+                  return (
+                    <TableRow key={row.key}>
+                      {shownColumns.map((column) => (
+                        <TableCell key={column.id}>{cells[column.id] ?? <EmptyCell />}</TableCell>
+                      ))}
+                    </TableRow>
+                  );
+                }),
+              ])
             )}
           </TableBody>
         </Table>
+        )}
       </AppListCard>
 
       <p className="text-xs text-muted-foreground">{t("systemLockNote")}</p>

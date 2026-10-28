@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -8,6 +8,8 @@ import { approveUser, rejectUser } from "@/features/settings/access-requests-act
 import type { AdminRoleRow } from "@/lib/auth/get-role-permissions";
 import { Button } from "@/components/ui/button";
 import { AppFormSection } from "@/components/app";
+import { EmptyCell, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { groupBanner, groupRows, ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
 import {
   Table,
   TableBody,
@@ -36,6 +38,17 @@ export function AccessRequestsPanel({
   const [isPending, startTransition] = useTransition();
   const [selectedRoles, setSelectedRoles] = useState<Record<string, string>>({});
   const [selectedKinds, setSelectedKinds] = useState<Record<string, "manager" | "user">>({});
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: t("name"), locked: true },
+      { id: "email", label: t("email") },
+      { id: "kind", label: t("kind"), categorical: true },
+      { id: "role", label: t("role"), categorical: true },
+      { id: "actions", label: t("actions"), locked: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("settings.accessRequests", columns);
 
   if (pendingUsers.length === 0) {
     return (
@@ -45,24 +58,56 @@ export function AccessRequestsPanel({
     );
   }
 
+  const matched = pendingUsers.filter((user) =>
+    rowMatches(prefs.appliedQuery, [user.full_name, user.email]),
+  );
+  const groups = groupRows(matched, prefs.groupBy, (user) => {
+    if (prefs.groupBy === "kind") return selectedKinds[user.id] ?? "user";
+    if (prefs.groupBy === "role") {
+      const roleId = selectedRoles[user.id] ?? assignableRoles[0]?.id ?? "";
+      return assignableRoles.find((role) => role.id === roleId)?.name ?? roleId;
+    }
+    return "";
+  });
+  const ids = visibleColumnIds(prefs);
+
   return (
     <AppFormSection title={t("title")} description={t("subtitle")}>
+        <ListToolbar
+          prefs={prefs}
+          entity={t("title")}
+          columns={columns}
+          rowKind="dynamic"
+          filteredCount={matched.length}
+          totalCount={pendingUsers.length}
+        />
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t("name")}</TableHead>
-              <TableHead>{t("email")}</TableHead>
-              <TableHead>{t("kind")}</TableHead>
-              <TableHead>{t("role")}</TableHead>
-              <TableHead className="text-end">{t("actions")}</TableHead>
+              {ids.map((id) => (
+                <TableHead key={id} className={id === "actions" ? "text-end" : undefined}>
+                  {columns.find((column) => column.id === id)?.label}
+                </TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {pendingUsers.map((user) => (
+            {groups.map((group) => (
+              <Fragment key={group.key}>
+                {group.label ? (
+                  <TableRow>
+                    <TableCell colSpan={ids.length} className="bg-muted/40 text-xs font-semibold">
+                      {groupBanner(group.label, group.rows.length)}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {group.rows.map((user) => (
               <TableRow key={user.id}>
-                <TableCell>{user.full_name ?? "—"}</TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>
+                {ids.map((id) => (
+                  <TableCell key={id} className={id === "actions" ? "flex justify-end gap-2" : undefined}>
+                    {id === "name" ? <TableNameCell name={user.full_name} /> : null}
+                    {id === "email" ? (user.email ? user.email : <EmptyCell />) : null}
+                    {id === "kind" ? (
                   <select
                     className="h-9 w-full max-w-[140px] rounded-lg border border-input bg-background px-2 text-sm"
                     value={selectedKinds[user.id] ?? "user"}
@@ -77,8 +122,8 @@ export function AccessRequestsPanel({
                     <option value="user">{t("kindUser")}</option>
                     <option value="manager">{t("kindManager")}</option>
                   </select>
-                </TableCell>
-                <TableCell>
+                    ) : null}
+                    {id === "role" ? (
                   <select
                     className="h-9 w-full max-w-[200px] rounded-lg border border-input bg-background px-2 text-sm"
                     value={selectedRoles[user.id] ?? assignableRoles[0]?.id ?? ""}
@@ -93,8 +138,9 @@ export function AccessRequestsPanel({
                       </option>
                     ))}
                   </select>
-                </TableCell>
-                <TableCell className="flex justify-end gap-2">
+                    ) : null}
+                    {id === "actions" ? (
+                  <>
                   <Button
                     size="sm"
                     className="cursor-pointer rounded-lg"
@@ -135,8 +181,13 @@ export function AccessRequestsPanel({
                   >
                     {t("reject")}
                   </Button>
-                </TableCell>
+                  </>
+                    ) : null}
+                  </TableCell>
+                ))}
               </TableRow>
+                ))}
+              </Fragment>
             ))}
           </TableBody>
         </Table>

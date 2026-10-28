@@ -11,6 +11,13 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { ToggleChip } from "@/components/app/toggle-chip";
@@ -43,6 +50,23 @@ export function OrderReconDetailShell({ runId }: { runId: string }) {
   const router = useRouter();
   const [employeeKey, setEmployeeKey] = useState<string | null>(null);
   const [bucket, setBucket] = useState<"in_app" | "blank">("in_app");
+  const employeeColumns = useMemo((): TableToolbarColumn[] => [
+    { id: "employee", label: t("colEmployee"), locked: true },
+    { id: "excel", label: t("colExcel") },
+    { id: "app", label: t("colApp") },
+    { id: "diff", label: t("colDiff") },
+    { id: "days", label: t("colDaysMatched") },
+    { id: "status", label: t("colStatus") },
+  ], [t]);
+  const employeePrefs = useTablePrefs(`order-recon-employees-${runId}`, employeeColumns);
+  const dayColumns = useMemo((): TableToolbarColumn[] => [
+    { id: "date", label: t("colDate"), locked: true },
+    { id: "excel", label: t("colExcel") },
+    { id: "app", label: t("colApp") },
+    { id: "diff", label: t("colDiff") },
+    { id: "status", label: t("colStatus") },
+  ], [t]);
+  const dayPrefs = useTablePrefs(`order-recon-days-${runId}`, dayColumns);
 
   useEffect(() => {
     const sync = () => setEmployeeKey(new URLSearchParams(window.location.search).get("employee"));
@@ -140,43 +164,54 @@ export function OrderReconDetailShell({ runId }: { runId: string }) {
           </div>
         ) : (
           <AppDataTable
-            columns={[
-              { id: "employee", label: t("colEmployee") },
-              { id: "excel", label: t("colExcel") },
-              { id: "app", label: t("colApp") },
-              { id: "diff", label: t("colDiff") },
-              { id: "days", label: t("colDaysMatched") },
-              { id: "status", label: t("colStatus") },
-            ]}
+            toolbar={
+              <TableToolbar
+                prefs={employeePrefs}
+                entity={t("colEmployee")}
+                columns={employeeColumns}
+                rowKind="dynamic"
+                filteredCount={list.filter((row) => {
+                  const needle = employeePrefs.appliedQuery.trim().toLowerCase();
+                  return !needle || `${row.employee_name} ${row.employee_id} ${row.status}`.toLowerCase().includes(needle);
+                }).length}
+                totalCount={list.length}
+              />
+            }
+            columns={employeePrefs.orderedColumns.filter((column) => employeePrefs.isVisible(column.id)).map((column) => ({
+              id: column.id,
+              label: column.label,
+            }))}
             empty={list.length === 0 ? <AppDataTableEmpty>{t("emptyRows")}</AppDataTableEmpty> : undefined}
           >
-            {list.map((row) => (
+            {list.filter((row) => {
+              const needle = employeePrefs.appliedQuery.trim().toLowerCase();
+              return !needle || `${row.employee_name} ${row.employee_id} ${row.status}`.toLowerCase().includes(needle);
+            }).map((row) => (
               <AppDataTableRow
                 key={row.key}
                 data-selected={row.key === employeeKey ? "true" : undefined}
                 className={row.key === employeeKey ? "bg-primary/10" : undefined}
                 onClick={() => selectEmployee(row.key)}
               >
-                <TableCell className="px-3 py-2 text-sm">
-                  <div className="font-medium">
-                    {employeeLabel(row.employee_name, row.employee_id) || "—"}
-                  </div>
-                  {row.employee_name.trim() && row.employee_id.trim() ? (
-                    <div className="text-xs text-muted-foreground">{row.employee_id}</div>
-                  ) : null}
-                  <div className="mt-1">
-                    <ReconProgressBar pct={row.pct} />
-                  </div>
-                </TableCell>
-                <TableCell className="px-3 py-2 text-sm">{row.excel_orders}</TableCell>
-                <TableCell className="px-3 py-2 text-sm">{row.app_orders}</TableCell>
-                <TableCell className="px-3 py-2 text-sm font-medium">{row.difference}</TableCell>
-                <TableCell className="px-3 py-2 text-sm">
-                  {row.days_matched}/{row.days_in_sheet}
-                </TableCell>
-                <TableCell className="px-3 py-2 text-sm">
-                  <StatusPill variant={reconStatusVariant(row.status)}>{statusLabel(row.status)}</StatusPill>
-                </TableCell>
+                {employeePrefs.orderedColumns.filter((column) => employeePrefs.isVisible(column.id)).map((column) => {
+                  if (column.id === "employee") {
+                    const label = employeeLabel(row.employee_name, row.employee_id);
+                    return (
+                      <TableCell key={column.id} className="px-3 py-2 text-sm">
+                        {label ? <TableNameCell name={label} /> : <EmptyCell />}
+                        {row.employee_name.trim() && row.employee_id.trim() ? (
+                          <div className="text-xs text-muted-foreground">{row.employee_id}</div>
+                        ) : null}
+                        <div className="mt-1"><ReconProgressBar pct={row.pct} /></div>
+                      </TableCell>
+                    );
+                  }
+                  if (column.id === "excel") return <TableCell key={column.id} className="px-3 py-2 text-sm">{row.excel_orders}</TableCell>;
+                  if (column.id === "app") return <TableCell key={column.id} className="px-3 py-2 text-sm">{row.app_orders}</TableCell>;
+                  if (column.id === "diff") return <TableCell key={column.id} className="px-3 py-2 text-sm font-medium">{row.difference}</TableCell>;
+                  if (column.id === "days") return <TableCell key={column.id} className="px-3 py-2 text-sm">{row.days_matched}/{row.days_in_sheet}</TableCell>;
+                  return <TableCell key={column.id} className="px-3 py-2 text-sm"><StatusPill variant={reconStatusVariant(row.status)}>{statusLabel(row.status)}</StatusPill></TableCell>;
+                })}
               </AppDataTableRow>
             ))}
           </AppDataTable>
@@ -196,24 +231,37 @@ export function OrderReconDetailShell({ runId }: { runId: string }) {
           <AppDataTableEmpty>{t("selectEmployee")}</AppDataTableEmpty>
         ) : (
           <AppDataTable
-            columns={[
-              { id: "date", label: t("colDate") },
-              { id: "excel", label: t("colExcel") },
-              { id: "app", label: t("colApp") },
-              { id: "diff", label: t("colDiff") },
-              { id: "status", label: t("colStatus") },
-            ]}
+            toolbar={
+              <TableToolbar
+                prefs={dayPrefs}
+                entity={t("colDate")}
+                columns={dayColumns}
+                rowKind="dynamic"
+                filteredCount={daily.filter((row) => {
+                  const needle = dayPrefs.appliedQuery.trim().toLowerCase();
+                  return !needle || `${row.work_date} ${row.status}`.toLowerCase().includes(needle);
+                }).length}
+                totalCount={daily.length}
+              />
+            }
+            columns={dayPrefs.orderedColumns.filter((column) => dayPrefs.isVisible(column.id)).map((column) => ({
+              id: column.id,
+              label: column.label,
+            }))}
             empty={daily.length === 0 ? <AppDataTableEmpty>{t("emptyRows")}</AppDataTableEmpty> : undefined}
           >
-            {daily.map((row) => (
+            {daily.filter((row) => {
+              const needle = dayPrefs.appliedQuery.trim().toLowerCase();
+              return !needle || `${row.work_date} ${row.status}`.toLowerCase().includes(needle);
+            }).map((row) => (
               <AppDataTableRow key={row.id}>
-                <TableCell className="px-3 py-2 text-sm">{row.work_date}</TableCell>
-                <TableCell className="px-3 py-2 text-sm">{row.excel_orders}</TableCell>
-                <TableCell className="px-3 py-2 text-sm">{row.app_orders}</TableCell>
-                <TableCell className="px-3 py-2 text-sm font-medium">{row.difference}</TableCell>
-                <TableCell className="px-3 py-2 text-sm">
-                  <StatusPill variant={reconStatusVariant(row.status)}>{statusLabel(row.status)}</StatusPill>
-                </TableCell>
+                {dayPrefs.orderedColumns.filter((column) => dayPrefs.isVisible(column.id)).map((column) => {
+                  if (column.id === "date") return <TableCell key={column.id} className="px-3 py-2 text-sm">{row.work_date}</TableCell>;
+                  if (column.id === "excel") return <TableCell key={column.id} className="px-3 py-2 text-sm">{row.excel_orders}</TableCell>;
+                  if (column.id === "app") return <TableCell key={column.id} className="px-3 py-2 text-sm">{row.app_orders}</TableCell>;
+                  if (column.id === "diff") return <TableCell key={column.id} className="px-3 py-2 text-sm font-medium">{row.difference}</TableCell>;
+                  return <TableCell key={column.id} className="px-3 py-2 text-sm"><StatusPill variant={reconStatusVariant(row.status)}>{statusLabel(row.status)}</StatusPill></TableCell>;
+                })}
               </AppDataTableRow>
             ))}
           </AppDataTable>

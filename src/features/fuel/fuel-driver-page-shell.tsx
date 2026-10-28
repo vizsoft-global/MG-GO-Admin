@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
@@ -22,6 +22,12 @@ import {
   TableCell,
 } from "@/components/app/app-data-table";
 import { AppEmptyState } from "@/components/app/app-empty-state";
+import { fieldSearchMatch } from "@/components/app/app-list-controls";
+import {
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,7 +53,6 @@ type DriverFuelTab = "transactions" | "fuel" | "fuel_refund";
 export function FuelDriverPageShell({ driverId }: { driverId: string }) {
   const t = useTranslations("pages.fuel");
   const withHub = useFleetBreadcrumbs();
-  const statusT = useTranslations("pages.requests.status");
   const router = useRouter();
   const [mode, setMode] = useState<FuelRangeMode>("monthly");
   const [customOpen, setCustomOpen] = useState(false);
@@ -287,82 +292,22 @@ export function FuelDriverPageShell({ driverId }: { driverId: string }) {
           </div>
         }
       >
-        {tab === "transactions" ? (
-          loading ? (
-            <div className="flex h-48 items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : fillsQuery.isError ? (
-            <AppEmptyState title={t("driver.loadFailed")} description={t("driver.loadFailedHint")} />
-          ) : fills.length === 0 ? (
-            <AppEmptyState title={t("driver.emptyFills")} description={t("driver.emptyFillsHint")} />
-          ) : (
-            <AppDataTable
-              columns={[
-                { id: "date", label: t("driver.colDate") },
-                { id: "station", label: t("driver.colStation") },
-                { id: "litres", label: t("driver.colLitres") },
-                { id: "kwd", label: t("driver.colKwd") },
-                { id: "payment", label: t("paymentMethod") },
-                { id: "attachments", label: t("driver.colAttachments") },
-              ]}
-            >
-              {fills.map((row) => (
-                <FillRow
-                  key={row.id}
-                  row={row}
-                  payment={fuelPaymentLabel(row.fuel_type ?? fuelType) ?? "—"}
-                  onOpenAttachment={() => {
-                    const key = row.attachments[0]?.storage_key;
-                    if (key) void openAttachment(key);
-                  }}
-                />
-              ))}
-            </AppDataTable>
-          )
-        ) : requestLoading ? (
-          <div className="flex h-48 items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : requestError ? (
-          <AppEmptyState title={t("driver.loadFailed")} description={t("driver.loadFailedHint")} />
-        ) : requestRows.length === 0 ? (
-          <AppEmptyState
-            title={tab === "fuel" ? t("driver.emptyRequests") : t("driver.emptyRefunds")}
-            description={t("driver.emptyRequestsHint")}
-          />
-        ) : (
-          <AppDataTable
-            columns={[
-              { id: "code", label: t("driver.colCode") },
-              { id: "date", label: t("driver.colDate") },
-              { id: "amount", label: t("driver.colKwd") },
-              { id: "status", label: t("driver.colStatus") },
-              { id: "payment", label: t("paymentMethod") },
-            ]}
-            empty={requestRows.length === 0 ? <AppDataTableEmpty>{t("emptyFilters")}</AppDataTableEmpty> : null}
-          >
-            {requestRows.map((row) => (
-              <AppDataTableRow key={row.id} className="cursor-pointer" onClick={() => setSelectedRequest(row)}>
-                <TableCell className="whitespace-nowrap font-medium">{row.request_code}</TableCell>
-                <TableCell className="whitespace-nowrap">
-                  {formatKuwaitDayLabel(toKuwaitYmd(row.created_at))}
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  {row.amount_kwd != null ? `${formatKwd(row.amount_kwd)} KWD` : "—"}
-                </TableCell>
-                <TableCell>
-                  <StatusPill dot variant={requestStatusVariant(row.status)}>
-                    {statusT(requestStatusLabelKey(row.status) as "pending")}
-                  </StatusPill>
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  {fuelPaymentLabel(row.fuel_transfer_type) ?? "—"}
-                </TableCell>
-              </AppDataTableRow>
-            ))}
-          </AppDataTable>
-        )}
+        <FuelDriverRecords
+          key={tab}
+          tab={tab}
+          fills={fills}
+          fillsLoading={loading}
+          fillsError={fillsQuery.isError}
+          fuelType={fuelType}
+          requestRows={requestRows}
+          requestLoading={requestLoading}
+          requestError={requestError}
+          onOpenFill={(row) => {
+            const key = row.attachments[0]?.storage_key;
+            if (key) void openAttachment(key);
+          }}
+          onSelectRequest={setSelectedRequest}
+        />
       </AppListCard>
       <FleetRequestDialog
         open={Boolean(selectedRequest)}
@@ -376,26 +321,295 @@ export function FuelDriverPageShell({ driverId }: { driverId: string }) {
   );
 }
 
+type FillColumnId = "date" | "station" | "litres" | "kwd" | "payment" | "attachments";
+type RequestColumnId = "code" | "date" | "amount" | "status" | "payment";
+
+function isFillColumn(id: string): id is FillColumnId {
+  switch (id) {
+    case "date":
+    case "station":
+    case "litres":
+    case "kwd":
+    case "payment":
+    case "attachments":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isRequestColumn(id: string): id is RequestColumnId {
+  switch (id) {
+    case "code":
+    case "date":
+    case "amount":
+    case "status":
+    case "payment":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function recordsEntity(
+  tab: DriverFuelTab,
+  labels: { transactions: string; fuel: string; refunds: string },
+): string {
+  switch (tab) {
+    case "transactions":
+      return labels.transactions;
+    case "fuel":
+      return labels.fuel;
+    case "fuel_refund":
+      return labels.refunds;
+    default: {
+      const _exhaustive: never = tab;
+      return _exhaustive;
+    }
+  }
+}
+
+function FuelDriverRecords({
+  tab,
+  fills,
+  fillsLoading,
+  fillsError,
+  fuelType,
+  requestRows,
+  requestLoading,
+  requestError,
+  onOpenFill,
+  onSelectRequest,
+}: {
+  tab: DriverFuelTab;
+  fills: FuelFillListItem[];
+  fillsLoading: boolean;
+  fillsError: boolean;
+  fuelType: FuelFillListItem["fuel_type"];
+  requestRows: FleetRequestListRow[];
+  requestLoading: boolean;
+  requestError: boolean;
+  onOpenFill: (row: FuelFillListItem) => void;
+  onSelectRequest: (row: FleetRequestListRow) => void;
+}) {
+  const t = useTranslations("pages.fuel");
+  const statusT = useTranslations("pages.requests.status");
+  const columns = useMemo<TableToolbarColumn[]>(() => {
+    switch (tab) {
+      case "transactions":
+        return [
+          { id: "date", label: t("driver.colDate"), locked: true },
+          { id: "station", label: t("driver.colStation") },
+          { id: "litres", label: t("driver.colLitres") },
+          { id: "kwd", label: t("driver.colKwd") },
+          { id: "payment", label: t("paymentMethod") },
+          { id: "attachments", label: t("driver.colAttachments") },
+        ];
+      case "fuel":
+      case "fuel_refund":
+        return [
+          { id: "code", label: t("driver.colCode"), locked: true },
+          { id: "date", label: t("driver.colDate") },
+          { id: "amount", label: t("driver.colKwd") },
+          { id: "status", label: t("driver.colStatus") },
+          { id: "payment", label: t("paymentMethod") },
+        ];
+      default: {
+        const _exhaustive: never = tab;
+        return _exhaustive;
+      }
+    }
+  }, [t, tab]);
+  const prefs = useTablePrefs("fuel-driver", columns);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+  const visibleFills = useMemo(
+    () =>
+      fills.filter((row) =>
+        fieldSearchMatch(row, prefs.appliedQuery, {
+          date: (item) => formatKuwaitDayLabel(item.ymd),
+          station: (item) => item.station_name,
+          litres: (item) => item.litres.toFixed(1),
+          kwd: (item) => formatKwd(item.cost_kwd),
+          payment: (item) => fuelPaymentLabel(item.fuel_type ?? fuelType) ?? "",
+          attachments: (item) =>
+            item.attachments.length > 0
+              ? t("driver.attachmentCount", { count: item.attachments.length })
+              : "",
+        }),
+      ),
+    [fills, fuelType, prefs.appliedQuery, t],
+  );
+  const visibleRequests = useMemo(
+    () =>
+      requestRows.filter((row) =>
+        fieldSearchMatch(row, prefs.appliedQuery, {
+          code: (item) => item.request_code,
+          date: (item) => formatKuwaitDayLabel(toKuwaitYmd(item.created_at)),
+          amount: (item) => (item.amount_kwd != null ? formatKwd(item.amount_kwd) : ""),
+          status: (item) => statusT(requestStatusLabelKey(item.status) as "pending"),
+          payment: (item) => fuelPaymentLabel(item.fuel_transfer_type) ?? "",
+        }),
+      ),
+    [prefs.appliedQuery, requestRows, statusT],
+  );
+  const entity = recordsEntity(tab, {
+    transactions: t("driver.tabTransactions"),
+    fuel: t("driver.tabRequests"),
+    refunds: t("driver.tabRefunds"),
+  });
+  const filteredCount = tab === "transactions" ? visibleFills.length : visibleRequests.length;
+  const totalCount = tab === "transactions" ? fills.length : requestRows.length;
+
+  return (
+    <>
+      <div className="border-b border-border">
+        <TableToolbar
+          prefs={prefs}
+          entity={entity}
+          columns={columns}
+          rowKind="dynamic"
+          filteredCount={filteredCount}
+          totalCount={totalCount}
+        />
+      </div>
+      {tab === "transactions" ? (
+        fillsLoading ? (
+          <div className="flex h-48 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : fillsError ? (
+          <AppEmptyState title={t("driver.loadFailed")} description={t("driver.loadFailedHint")} />
+        ) : fills.length === 0 ? (
+          <AppEmptyState title={t("driver.emptyFills")} description={t("driver.emptyFillsHint")} />
+        ) : (
+          <AppDataTable
+            columns={shown.map((column) => ({ id: column.id, label: column.label }))}
+            empty={visibleFills.length === 0 ? <AppDataTableEmpty>{t("emptyFilters")}</AppDataTableEmpty> : null}
+          >
+            {visibleFills.map((row) => (
+              <FillRow
+                key={row.id}
+                row={row}
+                columns={shown}
+                payment={fuelPaymentLabel(row.fuel_type ?? fuelType) ?? "—"}
+                onOpenAttachment={() => onOpenFill(row)}
+              />
+            ))}
+          </AppDataTable>
+        )
+      ) : requestLoading ? (
+        <div className="flex h-48 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : requestError ? (
+        <AppEmptyState title={t("driver.loadFailed")} description={t("driver.loadFailedHint")} />
+      ) : requestRows.length === 0 ? (
+        <AppEmptyState
+          title={tab === "fuel" ? t("driver.emptyRequests") : t("driver.emptyRefunds")}
+          description={t("driver.emptyRequestsHint")}
+        />
+      ) : (
+        <AppDataTable
+          columns={shown.map((column) => ({ id: column.id, label: column.label }))}
+          empty={visibleRequests.length === 0 ? <AppDataTableEmpty>{t("emptyFilters")}</AppDataTableEmpty> : null}
+        >
+          {visibleRequests.map((row) => (
+            <AppDataTableRow key={row.id} className="cursor-pointer" onClick={() => onSelectRequest(row)}>
+              {shown.map((column) => {
+                if (!isRequestColumn(column.id)) return null;
+                const statusLabel = statusT(requestStatusLabelKey(row.status) as "pending");
+                return (
+                  <TableCell
+                    key={column.id}
+                    className={column.id === "status" ? undefined : "whitespace-nowrap"}
+                  >
+                    {requestColumnValue(column.id, row, statusLabel)}
+                  </TableCell>
+                );
+              })}
+            </AppDataTableRow>
+          ))}
+        </AppDataTable>
+      )}
+    </>
+  );
+}
+
+function requestColumnValue(id: RequestColumnId, row: FleetRequestListRow, statusLabel: string): ReactNode {
+  switch (id) {
+    case "code":
+      return <span className="font-medium">{row.request_code}</span>;
+    case "date":
+      return formatKuwaitDayLabel(toKuwaitYmd(row.created_at));
+    case "amount":
+      return row.amount_kwd != null ? `${formatKwd(row.amount_kwd)} KWD` : "—";
+    case "status":
+      return (
+        <StatusPill dot variant={requestStatusVariant(row.status)}>
+          {statusLabel}
+        </StatusPill>
+      );
+    case "payment":
+      return fuelPaymentLabel(row.fuel_transfer_type) ?? "—";
+    default: {
+      const _exhaustive: never = id;
+      return _exhaustive;
+    }
+  }
+}
+
+function fillColumnValue(id: FillColumnId, row: FuelFillListItem, payment: string, attachmentLabel: string): ReactNode {
+  switch (id) {
+    case "date":
+      return formatKuwaitDayLabel(row.ymd);
+    case "station":
+      return row.station_name || "—";
+    case "litres":
+      return row.litres.toFixed(1);
+    case "kwd":
+      return `${formatKwd(row.cost_kwd)} KWD`;
+    case "payment":
+      return payment;
+    case "attachments":
+      return attachmentLabel;
+    default: {
+      const _exhaustive: never = id;
+      return _exhaustive;
+    }
+  }
+}
+
 function FillRow({
   row,
   payment,
+  columns,
   onOpenAttachment,
 }: {
   row: FuelFillListItem;
   payment: string;
+  columns: TableToolbarColumn[];
   onOpenAttachment: () => void;
 }) {
   const t = useTranslations("pages.fuel");
+  const attachmentLabel =
+    row.attachments.length > 0 ? t("driver.attachmentCount", { count: row.attachments.length }) : "—";
   return (
     <AppDataTableRow className="cursor-pointer" onClick={onOpenAttachment}>
-      <TableCell className="whitespace-nowrap">{formatKuwaitDayLabel(row.ymd)}</TableCell>
-      <TableCell className="whitespace-nowrap">{row.station_name || "—"}</TableCell>
-      <TableCell className="whitespace-nowrap">{row.litres.toFixed(1)}</TableCell>
-      <TableCell className="whitespace-nowrap">{`${formatKwd(row.cost_kwd)} KWD`}</TableCell>
-      <TableCell className="whitespace-nowrap">{payment}</TableCell>
-      <TableCell className="whitespace-nowrap text-muted-foreground">
-        {row.attachments.length > 0 ? t("driver.attachmentCount", { count: row.attachments.length }) : "—"}
-      </TableCell>
+      {columns.map((column) => {
+        if (!isFillColumn(column.id)) return null;
+        return (
+          <TableCell
+            key={column.id}
+            className={
+              column.id === "attachments"
+                ? "whitespace-nowrap text-muted-foreground"
+                : "whitespace-nowrap"
+            }
+          >
+            {fillColumnValue(column.id, row, payment, attachmentLabel)}
+          </TableCell>
+        );
+      })}
     </AppDataTableRow>
   );
 }

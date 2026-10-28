@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,9 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { EmptyCell, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { groupBanner, groupRows, ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
+import type { LeavePlanRow } from "@/features/operations-dashboard/shape";
 import { EmptyState } from "@/components/app/empty-state";
 import { ErrorState } from "@/components/app/error-state";
 import { downloadCsv } from "@/lib/csv/client-download";
@@ -362,34 +365,20 @@ export function ClientPortalShell({
           </span>
         </div>
         <p className="mb-2 mt-3 text-sm text-[var(--portal-ink)]">{t("planTitle")}</p>
-        {monthPlans.length === 0 ? (
-          <EmptyState title={t("planEmpty")} />
-        ) : (
-          <Table className="text-xs [&_td]:px-2 [&_td]:py-1 [&_th]:h-8">
-            <TableHeader>
-              <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colRider")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colZone")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colLeaveStarts")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colBackOn")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colDays")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {monthPlans.map((row, index) => (
-                <TableRow key={row.id || `${row.employeeId}-${index}`}>
-                  <TableCell>{row.employeeId || "—"}</TableCell>
-                  <TableCell>{row.name || "—"}</TableCell>
-                  <TableCell>{row.zone || "—"}</TableCell>
-                  <TableCell>{row.start || "—"}</TableCell>
-                  <TableCell>{row.end || "—"}</TableCell>
-                  <TableCell>{row.days || "—"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+        <PortalLeaveTable
+          tableId="clientPortal.leavePlans"
+          entity={t("planTitle")}
+          rows={monthPlans}
+          empty={t("planEmpty")}
+          columns={[
+            { id: "employeeId", label: t("colEmployeeId"), locked: true },
+            { id: "name", label: t("colRider"), locked: true },
+            { id: "zone", label: t("colZone"), categorical: true },
+            { id: "start", label: t("colLeaveStarts") },
+            { id: "end", label: t("colBackOn") },
+            { id: "days", label: t("colDays") },
+          ]}
+        />
         <p className="mt-2 text-xs text-[var(--portal-muted)]">{t("leaveHiddenNote")}</p>
       </section>
 
@@ -399,34 +388,101 @@ export function ClientPortalShell({
             {t("onLeaveNowTitle")} ({data?.onLeaveNow.length ?? 0})
           </p>
         </div>
-        {(data?.onLeaveNow.length ?? 0) === 0 ? (
-          <EmptyState title={t("onLeaveNowEmpty")} />
-        ) : (
-          <Table className="text-xs [&_td]:px-2 [&_td]:py-1 [&_th]:h-8">
-            <TableHeader>
-              <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colRider")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colZone")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colSince")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colBackOn")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data?.onLeaveNow.map((row, index) => (
-                <TableRow key={row.id || `${row.employeeId}-${index}`}>
-                  <TableCell>{row.name || "—"}</TableCell>
-                  <TableCell>{row.zone || "—"}</TableCell>
-                  <TableCell>{row.start || "—"}</TableCell>
-                  <TableCell className={soon(row.end, today) ? "font-semibold text-[var(--portal-badge-green-fg)]" : undefined}>
-                    {row.end || "—"}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+        <PortalLeaveTable
+          tableId="clientPortal.onLeaveNow"
+          entity={t("onLeaveNowTitle")}
+          rows={data?.onLeaveNow ?? []}
+          empty={t("onLeaveNowEmpty")}
+          soonDay={today}
+          columns={[
+            { id: "name", label: t("colRider"), locked: true },
+            { id: "zone", label: t("colZone"), categorical: true },
+            { id: "start", label: t("colSince") },
+            { id: "end", label: t("colBackOn") },
+          ]}
+        />
       </section>
       <p className="text-sm text-[var(--portal-muted)]">{t("contactLine")}</p>
+    </div>
+  );
+}
+
+function PortalLeaveTable({
+  tableId,
+  entity,
+  columns,
+  rows,
+  empty,
+  soonDay,
+}: {
+  tableId: string;
+  entity: string;
+  columns: TableToolbarColumn[];
+  rows: LeavePlanRow[];
+  empty: string;
+  soonDay?: string;
+}) {
+  const signature = columns.map((column) => `${column.id}:${column.label}:${column.categorical ? 1 : 0}:${column.locked ? 1 : 0}`).join("|");
+  const stableColumns = useMemo(() => columns, [signature]);
+  const prefs = useTablePrefs(tableId, stableColumns);
+  const matched = rows.filter((row) =>
+    rowMatches(prefs.appliedQuery, [row.employeeId, row.name, row.zone, row.start, row.end, row.days]),
+  );
+  const groups = groupRows(matched, prefs.groupBy, (row) => (prefs.groupBy === "zone" ? row.zone : ""));
+  const ids = visibleColumnIds(prefs);
+  return (
+    <div>
+      <ListToolbar
+        prefs={prefs}
+        entity={entity}
+        columns={stableColumns}
+        rowKind="dynamic"
+        filteredCount={matched.length}
+        totalCount={rows.length}
+      />
+      {matched.length === 0 ? <EmptyState title={empty} /> : (
+        <Table className="text-xs [&_td]:px-2 [&_td]:py-1 [&_th]:h-8">
+          <TableHeader>
+            <TableRow>
+              {ids.map((id) => (
+                <TableHead key={id} className={TABLE_HEAD_CLASS}>
+                  {stableColumns.find((column) => column.id === id)?.label}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {groups.map((group) => (
+              <Fragment key={group.key}>
+                {group.label ? (
+                  <TableRow>
+                    <TableCell colSpan={ids.length} className="bg-muted/40 text-xs font-semibold">
+                      {groupBanner(group.label, group.rows.length)}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {group.rows.map((row, index) => (
+                  <TableRow key={row.id || `${row.employeeId}-${index}`}>
+                    {ids.map((id) => (
+                      <TableCell
+                        key={id}
+                        className={id === "end" && soonDay && soon(row.end, soonDay) ? "font-semibold text-[var(--portal-badge-green-fg)]" : undefined}
+                      >
+                        {id === "name" ? <TableNameCell name={row.name} /> : null}
+                        {id === "employeeId" ? (row.employeeId ? row.employeeId : <EmptyCell />) : null}
+                        {id === "zone" ? (row.zone ? row.zone : <EmptyCell />) : null}
+                        {id === "start" ? (row.start ? row.start : <EmptyCell />) : null}
+                        {id === "end" ? (row.end ? row.end : <EmptyCell />) : null}
+                        {id === "days" ? (row.days ? row.days : <EmptyCell />) : null}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </Fragment>
+            ))}
+          </TableBody>
+        </Table>
+      )}
     </div>
   );
 }

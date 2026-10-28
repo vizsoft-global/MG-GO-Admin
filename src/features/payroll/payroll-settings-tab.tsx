@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { TABLE_HEAD_CLASS } from "@/components/app";
+import { useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { ListToolbar, rowMatches } from "@/features/roster/table-kit";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
@@ -123,6 +125,28 @@ export function PayrollSettingsTab({
   riders?: readonly PayrollRiderRow[];
 }) {
   const t = useTranslations("pages.payroll.settings");
+  const auditColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "when", label: t("audit.when") },
+      { id: "who", label: t("audit.who"), locked: true },
+      { id: "change", label: t("audit.change") },
+    ],
+    [t],
+  );
+  const ruleColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "order", label: t("rules.order"), locked: true },
+      { id: "zoneCategory", label: t("rules.colZoneCategory") },
+      { id: "zone", label: t("rules.colZone") },
+      { id: "criteria", label: t("rules.colCriteria") },
+      { id: "then", label: t("rules.colThen") },
+      { id: "reads", label: t("rules.colReadsAs") },
+      { id: "actions", label: t("rules.actions"), locked: true },
+    ],
+    [t],
+  );
+  const auditPrefs = useTablePrefs("payroll.settingsAudit", auditColumns);
+  const rulePrefs = useTablePrefs("payroll.settingsRules", ruleColumns);
   const tDayStatus = useTranslations("pages.payroll.dayStatus");
   const tZoneCategory = useTranslations("pages.payroll.zoneCategory");
   const config = usePayrollRuleConfig(month.key);
@@ -734,6 +758,14 @@ export function PayrollSettingsTab({
               ) : null}
             </div>
 
+            <ListToolbar
+              prefs={rulePrefs}
+              entity={t("rules.addRule")}
+              columns={ruleColumns}
+              rowKind="dynamic"
+              filteredCount={rules.filter((rule) => rowMatches(rulePrefs.appliedQuery, [JSON.stringify(rule.conditions), JSON.stringify(rule.result)])).length}
+              totalCount={rules.length}
+            />
             <div className="overflow-x-auto">
               <table className="w-max min-w-full border-collapse text-xs">
                 <thead>
@@ -761,6 +793,7 @@ export function PayrollSettingsTab({
                   ) : (
                     rules.map((rule, index) => {
                       const row = conditionsToColumns(rule.conditions, rule.result);
+                      if (!rowMatches(rulePrefs.appliedQuery, [JSON.stringify(rule.conditions), JSON.stringify(rule.result)])) return null;
                       return (
                         <tr key={rule.uid} className="border-b border-border/60 align-top">
                           <td className="px-2 py-2 text-center font-semibold tabular-nums">{index + 1}</td>
@@ -1051,6 +1084,14 @@ export function PayrollSettingsTab({
           <h3 className="text-sm font-semibold">{t("audit.title")}</h3>
         </div>
         <p className="text-xs text-muted-foreground">{t("audit.hint")}</p>
+        <ListToolbar
+          prefs={auditPrefs}
+          entity={t("audit.title")}
+          columns={auditColumns}
+          rowKind="dynamic"
+          filteredCount={(config.data?.audit ?? []).filter((row) => rowMatches(auditPrefs.appliedQuery, [row.actorName, row.action, row.entity, row.clientKey])).length}
+          totalCount={(config.data?.audit ?? []).length}
+        />
         <div className="max-h-[min(320px,38dvh)] overflow-auto">
           <table className="w-max min-w-full border-collapse text-xs">
             <thead className="sticky top-0 bg-card">
@@ -1068,7 +1109,7 @@ export function PayrollSettingsTab({
                   </td>
                 </tr>
               ) : (
-                (config.data?.audit ?? []).map((row) => (
+                (config.data?.audit ?? []).filter((row) => rowMatches(auditPrefs.appliedQuery, [row.actorName, row.action, row.entity, row.clientKey])).map((row) => (
                   <tr key={row.id} className="border-b border-border/60">
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums">{row.createdAt}</td>
                     <td className="whitespace-nowrap px-2 py-1.5">{row.actorName}</td>
@@ -1170,6 +1211,22 @@ function ZonesView({
 
   const noZone = noZoneAggregate(riders, t("zones.noZone"));
   const rows = [...zoneMetrics, noZone];
+  const zoneColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "zone", label: t("zones.zone"), locked: true },
+      { id: "riders", label: t("zones.riders") },
+      { id: "orders", label: t("zones.monthOrders") },
+      { id: "dpd", label: t("zones.dpd") },
+      { id: "auto", label: t("zones.efficiencyAuto") },
+      { id: "used", label: t("zones.efficiencyUsed") },
+      { id: "categoryAuto", label: t("zones.categoryAuto") },
+      { id: "override", label: t("zones.manualOverride") },
+      { id: "final", label: t("zones.finalCategory") },
+    ],
+    [t],
+  );
+  const zonePrefs = useTablePrefs("payroll.zoneEfficiency", zoneColumns);
+  const shownZones = rows.filter((zone) => rowMatches(zonePrefs.appliedQuery, [zone.zoneName, zone.categoryAuto, zone.categoryOverride]));
 
   return (
     <div className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -1234,6 +1291,14 @@ function ZonesView({
           }}
         />
       </div>
+      <ListToolbar
+        prefs={zonePrefs}
+        entity={t("zones.zone")}
+        columns={zoneColumns}
+        rowKind="aggregate"
+        filteredCount={shownZones.length}
+        totalCount={rows.length}
+      />
       <div className="overflow-x-auto">
         <table className="w-max min-w-full border-collapse text-xs">
           <thead>
@@ -1257,7 +1322,7 @@ function ZonesView({
                 </td>
               </tr>
             ) : (
-              rows.map((zone) => {
+              shownZones.map((zone) => {
                 const readOnly = !zone.zoneId;
                 const used = zone.efficiencyOverride ?? zone.efficiency;
                 const finalCat = zone.categoryOverride ?? zone.categoryAuto;

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { Loader2, Pencil, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import {
@@ -13,17 +13,20 @@ import {
   AppPageHeader,
 } from "@/components/app";
 import {
-  AppListControls,
   FlatListPager,
   GroupedSections,
   GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
   useGroupedListView,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
@@ -68,11 +71,25 @@ import {
 } from "./types";
 import { useDpdScopeOptions, useIncentiveRules } from "./use-dpd";
 
+const INCENTIVE_COLUMN_IDS = [
+  "name",
+  "scope",
+  "period",
+  "target",
+  "reward",
+  "status",
+  "actions",
+] as const;
+
+type IncentiveColumnId = (typeof INCENTIVE_COLUMN_IDS)[number];
+
+function isIncentiveColumnId(id: string): id is IncentiveColumnId {
+  return (INCENTIVE_COLUMN_IDS as readonly string[]).includes(id);
+}
+
 export function IncentiveRulesPageShell() {
   const t = useTranslations("pages.dpd");
   const tPage = useTranslations("pages.incentiveRules");
-  const labels = useListControlLabels();
-  const { prefs, update } = useListViewPrefs("incentive-rules");
   const { can } = useAuth();
   const canManage = can("earnings.manage");
   const router = useRouter();
@@ -89,9 +106,22 @@ export function IncentiveRulesPageShell() {
   const [deleteTarget, setDeleteTarget] = useState<IncentiveRuleRow | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<IncentiveRuleStatusFilter>("all");
   const [periodFilter, setPeriodFilter] = useState<IncentiveRulePeriodFilter>("all");
+  const columns = useMemo((): TableToolbarColumn[] => {
+    const cols: TableToolbarColumn[] = [
+      { id: "name", label: t("colName"), locked: true },
+      { id: "scope", label: t("colScope") },
+      { id: "period", label: t("colPeriod"), categorical: true },
+      { id: "target", label: t("colTarget") },
+      { id: "reward", label: t("colReward") },
+      { id: "status", label: t("colStatus"), categorical: true },
+    ];
+    if (canManage) cols.push({ id: "actions", label: t("edit") });
+    return cols;
+  }, [canManage, t]);
+  const prefs = useTablePrefs("incentive-rules", columns);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
 
   const filteredRules = useMemo(() => {
     const scoped = filterIncentiveRules(incentiveRules ?? [], {
@@ -100,31 +130,37 @@ export function IncentiveRulesPageShell() {
       period: periodFilter,
     });
     return scoped.filter((row) =>
-      fieldSearchMatch(row, search, {
+      fieldSearchMatch(row, prefs.appliedQuery, {
         name: (item) => displayIncentiveRuleName(item.name),
         status: (item) => item.status,
         scope_label: (item) => item.scope_label,
         period: (item) => item.period,
       }),
     );
-  }, [incentiveRules, periodFilter, search, statusFilter]);
+  }, [incentiveRules, periodFilter, prefs.appliedQuery, statusFilter]);
   const grouped = useMemo(
     () =>
       groupRows(
         filteredRules,
         prefs.groupBy,
-        { status: (row) => row.status },
-        {},
+        {
+          status: (row) => row.status,
+          period: (row) => row.period,
+        },
+        {
+          draft: t("status.draft"),
+          active: t("status.active"),
+          ended: t("status.ended"),
+          daily: t("period.daily"),
+          weekly: t("period.weekly"),
+          monthly: t("period.monthly"),
+        },
         "—",
       ),
-    [filteredRules, prefs.groupBy],
+    [filteredRules, prefs.groupBy, t],
   );
-  const listView = useGroupedListView(
-    grouped,
-    prefs.groupBy !== "none",
-    `${prefs.groupBy}\u0001${search}\u0001${statusFilter}\u0001${periodFilter}`,
-  );
-  const tableColCount = canManage ? 7 : 6;
+  const listResetKey = `${prefs.groupBy}\u0001${prefs.appliedQuery}\u0001${statusFilter}\u0001${periodFilter}`;
+  const listView = useGroupedListView(grouped, prefs.groupBy !== "none", listResetKey);
 
   const statusItems = selectOptions([
     { value: "all", label: tPage("statusAll") },
@@ -151,6 +187,102 @@ export function IncentiveRulesPageShell() {
     });
   };
 
+  const exportRules = () => {
+    if (exporting) return;
+    if (!filteredRules.length) {
+      toast.error(t("incentiveExportEmpty"));
+      return;
+    }
+    setExporting(true);
+    void (async () => {
+      try {
+        const buf = await buildIncentiveRulesWorkbook(filteredRules);
+        const blob = new Blob([buf], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "incentive-rules.xlsx";
+        a.click();
+        URL.revokeObjectURL(url);
+      } finally {
+        setExporting(false);
+      }
+    })();
+  };
+
+  const ruleCell = (columnId: IncentiveColumnId, row: IncentiveRuleRow) => {
+    switch (columnId) {
+      case "name":
+        return (
+          <TableCell key={columnId} className="font-medium">
+            <TableNameCell name={displayIncentiveRuleName(row.name)} />
+            <p className="text-xs font-normal text-primary">{tPage("viewDetails")}</p>
+          </TableCell>
+        );
+      case "scope":
+        return <TableCell key={columnId}>{row.scope_label}</TableCell>;
+      case "period":
+        return <TableCell key={columnId}>{t(`period.${row.period}`)}</TableCell>;
+      case "target":
+        return (
+          <TableCell key={columnId}>
+            {formatIncentiveTargetSummary(row, (key, values) => t(key, values))}
+          </TableCell>
+        );
+      case "reward":
+        return (
+          <TableCell key={columnId} className="tabular-nums text-sm">
+            {formatIncentiveRewardSummary(row, (key, values) => t(key, values))}
+          </TableCell>
+        );
+      case "status":
+        return (
+          <TableCell key={columnId}>
+            <DpdStatusBadge status={row.status} />
+          </TableCell>
+        );
+      case "actions":
+        return (
+          <TableCell key={columnId} className="text-end">
+            <div className="flex items-center justify-end gap-0.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="cursor-pointer"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSheet({ open: true, row });
+                }}
+                aria-label={t("editIncentiveRule")}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="cursor-pointer text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setDeleteTarget(row);
+                }}
+                aria-label={t("delete")}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </TableCell>
+        );
+      default: {
+        const _exhaustive: never = columnId;
+        return _exhaustive;
+      }
+    }
+  };
+
   return (
     <AppPage>
       <AppPageHeader
@@ -159,38 +291,6 @@ export function IncentiveRulesPageShell() {
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <ClearAllModuleButton entity="incentive_rules" />
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9 cursor-pointer rounded-lg"
-                disabled={exporting || filteredRules.length === 0}
-              onClick={async () => {
-                if (!filteredRules.length) {
-                  toast.error(t("incentiveExportEmpty"));
-                  return;
-                }
-                setExporting(true);
-                try {
-                  const buf = await buildIncentiveRulesWorkbook(filteredRules);
-                  const blob = new Blob([buf], {
-                    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                  });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = "incentive-rules.xlsx";
-                  a.click();
-                  URL.revokeObjectURL(url);
-                } finally {
-                  setExporting(false);
-                }
-              }}
-            >
-              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              {t("incentiveExport")}
-            </Button>
             {canManage ? (
               <Button
                 type="button"
@@ -203,18 +303,6 @@ export function IncentiveRulesPageShell() {
                 {t("incentivePreview")}
               </Button>
             ) : null}
-            {canManage ? (
-              <Button
-                type="button"
-                size="sm"
-                className="h-9 cursor-pointer rounded-lg"
-                onClick={() => setSheet({ open: true, row: null })}
-              >
-                <Plus className="h-4 w-4" />
-                {t("addIncentiveRule")}
-              </Button>
-            ) : null}
-            </div>
           </div>
         }
       />
@@ -223,60 +311,58 @@ export function IncentiveRulesPageShell() {
       <AppListCard
         toolbar={
           !isLoading && (incentiveRules?.length ?? 0) > 0 ? (
-            <AppListControls
-              searchValue={search}
-              onSearchChange={setSearch}
-              searchPlaceholder={tPage("searchPlaceholder")}
-              clearSearchLabel={labels.clearSearch}
-              groupByOptions={[labels.group.none, labels.group.status]}
-              groupBy={prefs.groupBy}
-              onGroupByChange={(value) => update({ groupBy: value })}
-              groupByLabel={labels.groupBy}
-              viewMode={prefs.viewMode}
-              onViewModeChange={(value) => update({ viewMode: value })}
-              tableViewLabel={labels.viewTable}
-              cardsViewLabel={labels.viewCards}
-              filterSlot={
-                <>
-                  <Select
-                    items={statusItems}
-                    value={statusFilter}
-                    onValueChange={(value) => {
-                      if (value && isIncentiveRuleStatusFilter(value)) setStatusFilter(value);
-                    }}
-                  >
-                    <SelectTrigger className="h-9 w-[150px]" aria-label={tPage("filterStatus")}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statusItems.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    items={periodItems}
-                    value={periodFilter}
-                    onValueChange={(value) => {
-                      if (value && isIncentiveRulePeriodFilter(value)) setPeriodFilter(value);
-                    }}
-                  >
-                    <SelectTrigger className="h-9 w-[150px]" aria-label={tPage("filterPeriod")}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {periodItems.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </>
-              }
-            />
+            <div>
+              <TableToolbar
+                prefs={prefs}
+                entity={tPage("title")}
+                columns={columns}
+                rowKind="dynamic"
+                entityList
+                filteredCount={filteredRules.length}
+                totalCount={incentiveRules?.length ?? 0}
+                onExport={exportRules}
+                onAdd={canManage ? () => setSheet({ open: true, row: null }) : undefined}
+                addLabel={t("addIncentiveRule")}
+              />
+              <div className="flex flex-wrap gap-2 px-4 pb-3">
+                <Select
+                  items={statusItems}
+                  value={statusFilter}
+                  onValueChange={(value) => {
+                    if (value && isIncentiveRuleStatusFilter(value)) setStatusFilter(value);
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-[150px]" aria-label={tPage("filterStatus")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statusItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  items={periodItems}
+                  value={periodFilter}
+                  onValueChange={(value) => {
+                    if (value && isIncentiveRulePeriodFilter(value)) setPeriodFilter(value);
+                  }}
+                >
+                  <SelectTrigger className="h-9 w-[150px]" aria-label={tPage("filterPeriod")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {periodItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           ) : undefined
         }
       >
@@ -290,9 +376,9 @@ export function IncentiveRulesPageShell() {
           <div className="p-4">
             <AppEmptyState title={tPage("emptyFiltered")} />
           </div>
-        ) : prefs.viewMode === "cards" ? (
+        ) : prefs.view === "grid" ? (
           <div className="p-4">
-            <GroupedSections groups={grouped} paged resetKey={`${prefs.groupBy}\u0001${search}\u0001${statusFilter}\u0001${periodFilter}`}>
+            <GroupedSections groups={grouped} paged resetKey={listResetKey}>
               {(groupRowsList) => (
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {groupRowsList.map((row) => (
@@ -302,7 +388,7 @@ export function IncentiveRulesPageShell() {
                       className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
                       onClick={() => router.push(`/incentive-rules/${row.id}`)}
                     >
-                      <p className="text-sm font-semibold">{displayIncentiveRuleName(row.name)}</p>
+                      <TableNameCell name={displayIncentiveRuleName(row.name)} />
                       <p className="mt-1 text-xs text-muted-foreground">{row.scope_label}</p>
                       <div className="mt-2">
                         <DpdStatusBadge status={row.status} />
@@ -319,17 +405,14 @@ export function IncentiveRulesPageShell() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colScope")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colPeriod")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colTarget")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colReward")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
-                {canManage ? (
-                  <TableHead className={cn(TABLE_HEAD_CLASS, "w-24 text-end")}>
-                    {t("edit")}
+                {shown.map((column) => (
+                  <TableHead
+                    key={column.id}
+                    className={cn(TABLE_HEAD_CLASS, column.id === "actions" && "w-24 text-end")}
+                  >
+                    {column.label}
                   </TableHead>
-                ) : null}
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -338,7 +421,7 @@ export function IncentiveRulesPageShell() {
                   ? [
                       <GroupTableHeaderRow
                         key={`g-${section.key}`}
-                        colSpan={tableColCount}
+                        colSpan={shown.length}
                         label={section.label}
                         total={section.total}
                         open={section.open}
@@ -355,59 +438,9 @@ export function IncentiveRulesPageShell() {
                   className="cursor-pointer hover:bg-muted/40"
                   onClick={() => router.push(`/incentive-rules/${row.id}`)}
                 >
-                  <TableCell className="font-medium">
-                    {displayIncentiveRuleName(row.name)}
-                    <p className="text-xs font-normal text-primary">
-                      {tPage("viewDetails")}
-                    </p>
-                  </TableCell>
-                  <TableCell>{row.scope_label}</TableCell>
-                  <TableCell>{t(`period.${row.period}`)}</TableCell>
-                  <TableCell>
-                    {formatIncentiveTargetSummary(row, (key, values) =>
-                      t(key, values),
-                    )}
-                  </TableCell>
-                  <TableCell className="tabular-nums text-sm">
-                    {formatIncentiveRewardSummary(row, (key, values) =>
-                      t(key, values),
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <DpdStatusBadge status={row.status} />
-                  </TableCell>
-                  {canManage ? (
-                    <TableCell className="text-end">
-                      <div className="flex items-center justify-end gap-0.5">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          className="cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSheet({ open: true, row });
-                          }}
-                          aria-label={t("editIncentiveRule")}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          className="cursor-pointer text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteTarget(row);
-                          }}
-                          aria-label={t("delete")}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  ) : null}
+                  {shown.map((column) =>
+                    isIncentiveColumnId(column.id) ? ruleCell(column.id, row) : null,
+                  )}
                 </TableRow>
                 )),
               ])}

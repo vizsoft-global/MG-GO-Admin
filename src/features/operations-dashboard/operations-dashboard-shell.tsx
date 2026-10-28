@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { ChevronRight, Download, RefreshCw, Trash2 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { AppPage } from "@/components/app/app-page";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { EmptyCell, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { groupBanner, groupRows, ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
 import { KpiCard, type PortalKpiAccent } from "@/components/dashboard/kpi-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -434,6 +436,7 @@ function MonthChart({
 }
 
 function CountMatrix({
+  tableId,
   months,
   matrix,
   locale,
@@ -442,6 +445,7 @@ function CountMatrix({
   allLabel,
   onProject,
 }: {
+  tableId: string;
   months: string[];
   matrix: { rows: MatrixRow[]; totals: number[]; grand: number };
   locale: string;
@@ -450,21 +454,41 @@ function CountMatrix({
   allLabel: string;
   onProject: (key: string) => void;
 }) {
+  const monthKey = months.join("|");
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "label", label: allLabel, locked: true },
+      ...months.map((item) => ({ id: item, label: monthTick(item, locale) })),
+      { id: "total", label: totalLabel, locked: true },
+    ],
+    [allLabel, locale, monthKey, totalLabel],
+  );
+  const prefs = useTablePrefs(tableId, columns);
+  const filtered = matrix.rows.filter((row) => rowMatches(prefs.appliedQuery, [row.label, row.key]));
+  const ids = visibleColumnIds(prefs);
   if (matrix.rows.length === 0) return null;
   return (
     <div className="mt-4 overflow-x-auto">
+      <ListToolbar
+        prefs={prefs}
+        entity={allLabel}
+        columns={columns}
+        rowKind="aggregate"
+        filteredCount={filtered.length}
+        totalCount={matrix.rows.length}
+      />
       <Table className={DENSE_TABLE}>
         <TableHeader>
           <TableRow>
-            <TableHead className={TABLE_HEAD_CLASS} />
-            {months.map((item) => (
-              <TableHead key={item} className={TABLE_HEAD_CLASS}>{monthTick(item, locale)}</TableHead>
+            {ids.map((id) => (
+              <TableHead key={id} className={TABLE_HEAD_CLASS}>
+                {id === "label" ? "" : columns.find((column) => column.id === id)?.label}
+              </TableHead>
             ))}
-            <TableHead className={TABLE_HEAD_CLASS}>{totalLabel}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {matrix.rows.map((row) => (
+          {filtered.map((row) => (
             <TableRow
               key={row.key}
               style={
@@ -475,23 +499,29 @@ function CountMatrix({
                     : undefined
               }
             >
-              <TableCell>
-                <button type="button" className="cursor-pointer text-[var(--portal-btn)]" onClick={() => onProject(row.key)}>
-                  {row.label}
-                </button>
-              </TableCell>
-              {row.cells.map((count, index) => (
-                <TableCell key={`${row.key}-${months[index] ?? index}`}>{count}</TableCell>
-              ))}
-              <TableCell>{row.total}</TableCell>
+              {ids.map((id) => {
+                if (id === "label") {
+                  return (
+                    <TableCell key={id}>
+                      <button type="button" className="cursor-pointer text-[var(--portal-btn)]" onClick={() => onProject(row.key)}>
+                        {row.label}
+                      </button>
+                    </TableCell>
+                  );
+                }
+                if (id === "total") return <TableCell key={id}>{row.total}</TableCell>;
+                const index = months.indexOf(id);
+                return <TableCell key={id}>{row.cells[index] ?? 0}</TableCell>;
+              })}
             </TableRow>
           ))}
           <TableRow className="bg-[var(--portal-locked-bg)]">
-            <TableCell>{allLabel}</TableCell>
-            {matrix.totals.map((count, index) => (
-              <TableCell key={`total-${months[index] ?? index}`}>{count}</TableCell>
-            ))}
-            <TableCell>{matrix.grand}</TableCell>
+            {ids.map((id) => {
+              if (id === "label") return <TableCell key={id}>{allLabel}</TableCell>;
+              if (id === "total") return <TableCell key={id}>{matrix.grand}</TableCell>;
+              const index = months.indexOf(id);
+              return <TableCell key={id}>{matrix.totals[index] ?? 0}</TableCell>;
+            })}
           </TableRow>
         </TableBody>
       </Table>
@@ -529,7 +559,6 @@ export function OperationsDashboardShell() {
   const [importOpen, setImportOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [rosterFilter, setRosterFilter] = useState<RosterFilter | null>(null);
-  const [rosterQuery, setRosterQuery] = useState("");
   const rosterRef = useRef<HTMLElement | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -586,13 +615,26 @@ export function OperationsDashboardShell() {
   const dateLabel = rangeActive ? `${formatDay(shownFrom)} – ${formatDay(shownTo)}` : formatDay(shownDay);
   const barTotal = (data?.statusBar ?? []).reduce((sum, item) => sum + item.count, 0);
   const rosterBase = filterRoster(data?.roster ?? [], rosterFilter ?? "all", "");
-  const rosterRows = filterRoster(data?.roster ?? [], rosterFilter ?? "all", rosterQuery);
   const showPhone = !readOnly && (data?.roster ?? []).some((row) => row.phone !== "");
+  const rosterColumns = useMemo<TableToolbarColumn[]>(() => {
+    const cols: TableToolbarColumn[] = [
+      { id: "employeeId", label: t("colEmployeeId"), locked: true },
+      { id: "name", label: t("colName"), locked: true },
+      { id: "project", label: t("colProject"), categorical: true },
+      { id: "zone", label: t("colZone"), categorical: true },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "joined", label: t("colJoined") },
+    ];
+    if (showPhone) cols.push({ id: "phone", label: t("colPhone") });
+    return cols;
+  }, [showPhone, t]);
+  const rosterPrefs = useTablePrefs("ops.roster", rosterColumns);
+  const rosterRows = filterRoster(data?.roster ?? [], rosterFilter ?? "all", rosterPrefs.appliedQuery);
   const rosterProject = data?.byProject.find((project) => project.key === (readOnly ? data.byProject[0]?.key : projectKey))?.label ?? t("allProjects");
 
   const openRoster = (filter: RosterFilter) => {
     setRosterFilter((current) => (current === filter ? null : filter));
-    setRosterQuery("");
+    rosterPrefs.setQuery("");
   };
 
   useEffect(() => {
@@ -840,7 +882,6 @@ export function OperationsDashboardShell() {
               <p className="text-xs text-[var(--portal-muted)]">{rosterSubtitle(rosterFilter, rosterBase.length, t)}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Input className="h-9 w-56 border-[var(--portal-border)] bg-[var(--portal-canvas)]" value={rosterQuery} placeholder={t("rosterSearch")} onChange={(event) => setRosterQuery(event.target.value)} />
               <Button variant="portal-secondary" className={HEADER_BTN} onClick={() => exportRoster(rosterBase, showPhone, t, locale, data?.byProject ?? [])}>
                 {t("rosterExport")}
               </Button>
@@ -849,39 +890,25 @@ export function OperationsDashboardShell() {
               </Button>
             </div>
           </div>
+          <ListToolbar
+            prefs={rosterPrefs}
+            entity={t("allRiders")}
+            columns={rosterColumns}
+            rowKind="dynamic"
+            filteredCount={rosterRows.length}
+            totalCount={rosterBase.length}
+          />
           {rosterRows.length === 0 ? (
             <p className="text-sm text-[var(--portal-muted)]">{t("rosterEmpty")}</p>
           ) : (
-            <div className="max-h-[min(360px,40dvh)] overflow-auto">
-              <Table className={DENSE_TABLE}>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colProject")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colZone")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colJoined")}</TableHead>
-                    {showPhone ? <TableHead className={TABLE_HEAD_CLASS}>{t("colPhone")}</TableHead> : null}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rosterRows.map((row, index) => (
-                    <TableRow key={`${row.employeeId}-${index}`}>
-                      <TableCell>{row.employeeId || "—"}</TableCell>
-                      <TableCell>{row.name || "—"}</TableCell>
-                      <TableCell>{projectLabelOf(row.project, data?.byProject ?? [], "—")}</TableCell>
-                      <TableCell>{row.zone || "—"}</TableCell>
-                      <TableCell>
-                        <Badge variant={statusBadgeVariant(row.status)}>{dailyLabel(row.status, t)}</Badge>
-                      </TableCell>
-                      <TableCell>{formatJoined(row.joined, locale)}</TableCell>
-                      {showPhone ? <TableCell>{row.phone || "—"}</TableCell> : null}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <OpsRosterRows
+              rows={rosterRows}
+              prefs={rosterPrefs}
+              columns={rosterColumns}
+              projects={data?.byProject ?? []}
+              locale={locale}
+              t={t}
+            />
           )}
           <p className="mt-2 text-[10px] text-[var(--portal-muted)]">{t("rosterFoot", { shown: rosterRows.length, total: rosterBase.length })}</p>
         </section>
@@ -1115,6 +1142,7 @@ export function OperationsDashboardShell() {
         <p className="mt-2 text-xs text-[var(--portal-muted)]">{t("leaveNovDecFootnote")}</p>
         <p className="mt-3 text-xs text-[var(--portal-muted)]">{t("leaveMatrixNote")}</p>
         <CountMatrix
+          tableId="ops.leaveMatrix"
           months={chart.map((item) => item.yearMonth)}
           matrix={leaveMatrix}
           locale={locale}
@@ -1253,6 +1281,7 @@ export function OperationsDashboardShell() {
         )}
         <p className="mt-3 text-xs text-[var(--portal-muted)]">{t("jobMatrixNote")}</p>
         <CountMatrix
+          tableId="ops.jobMatrix"
           months={jobMonths}
           matrix={jobMatrix}
           locale={locale}
@@ -1282,39 +1311,21 @@ export function OperationsDashboardShell() {
             </Button>
           ) : null}
         </div>
-        {leaveRiders.length === 0 ? (
-          <p className="text-sm text-[var(--portal-muted)]">{t("ridersOnLeaveEmpty")}</p>
-        ) : (
-          <Table className={DENSE_TABLE}>
-            <TableHeader>
-              <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colProject")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colLeaveType")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colFrom")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colReturns")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visibleRiders.map((row, index) => (
-                <TableRow key={`${row.employeeId}-${index}`}>
-                  <TableCell>{row.employeeId || "—"}</TableCell>
-                  <TableCell>{row.name || "—"}</TableCell>
-                  <TableCell>{row.project || "—"}</TableCell>
-                  <TableCell>{row.leaveType ? leaveTypeLabel(row.leaveType, t) : "—"}</TableCell>
-                  <TableCell>{row.start || "—"}</TableCell>
-                  <TableCell className={row.returnWithin3Days ? "font-semibold text-[var(--portal-badge-green-fg)]" : undefined}>
-                    {row.end || "—"}
-                    {row.returnWithin3Days ? (
-                      <span className="ms-2 text-xs">{t("returnSoon")}</span>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+        <LeaveRidersTable
+          rows={visibleRiders}
+          total={leaveRiders.length}
+          empty={t("ridersOnLeaveEmpty")}
+          soonLabel={t("returnSoon")}
+          labels={{
+            employeeId: t("colEmployeeId"),
+            name: t("colName"),
+            project: t("colProject"),
+            leaveType: t("colLeaveType"),
+            from: t("colFrom"),
+            returns: t("colReturns"),
+          }}
+          t={t}
+        />
       </section>
       </div>
 
@@ -1327,28 +1338,14 @@ export function OperationsDashboardShell() {
           <Tile accent="ink" label={t("turnoverTotal")} value={data?.turnover.total ?? 0} />
         </div>
         <p className="mt-3 text-xs text-[var(--portal-muted)]">{t("turnoverNote")}</p>
-        {(data?.turnover.months.length ?? 0) === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">{t("turnoverEmpty")}</p>
-        ) : (
-          <Table className={`${DENSE_TABLE} mt-3`}>
-            <TableHeader>
-              <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colMonth")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colCount")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("turnoverRate")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data?.turnover.months.map((monthRow) => (
-                <TableRow key={monthRow.yearMonth}>
-                  <TableCell>{monthLabel(monthRow.yearMonth, locale)}</TableCell>
-                  <TableCell>{monthRow.count}</TableCell>
-                  <TableCell>{formatPct(monthRow.rate)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+        <TurnoverTable
+          rows={data?.turnover.months ?? []}
+          locale={locale}
+          empty={t("turnoverEmpty")}
+          monthLabelText={t("colMonth")}
+          countLabel={t("colCount")}
+          rateLabel={t("turnoverRate")}
+        />
       </section>
 
       <section className={card}>
@@ -1371,28 +1368,13 @@ export function OperationsDashboardShell() {
           <Tile accent="grey" label={t("hiringToHire")} value="—" />
         </div>
         <p className="mt-3 text-xs text-[var(--portal-muted)]">{t("hiringNote")}</p>
-        {hiringRows(data?.hiring, hireBy).length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">{t("hiringEmpty")}</p>
-        ) : (
-          <Table className={`${DENSE_TABLE} mt-3`}>
-            <TableHeader>
-              <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{hireBy === "designation" ? t("hiringDesignation") : hireBy === "zone" ? t("hiringZone") : t("hiringProject")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colCurrent")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colLeaving")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {hiringRows(data?.hiring, hireBy).map((row) => (
-                <TableRow key={row.label || "blank"}>
-                  <TableCell>{row.label || "—"}</TableCell>
-                  <TableCell>{row.current}</TableCell>
-                  <TableCell>{row.leaving}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+        <HiringTable
+          rows={hiringRows(data?.hiring, hireBy)}
+          empty={t("hiringEmpty")}
+          nameLabel={hireBy === "designation" ? t("hiringDesignation") : hireBy === "zone" ? t("hiringZone") : t("hiringProject")}
+          currentLabel={t("colCurrent")}
+          leavingLabel={t("colLeaving")}
+        />
       </section>
 
 
@@ -1580,6 +1562,257 @@ function exportDashboard(data: OperationsDashboard, t: Translator, projectName: 
   }]);
 }
 
+function LeaveRidersTable({
+  rows,
+  total,
+  empty,
+  soonLabel,
+  labels,
+  t,
+}: {
+  rows: { employeeId: string; name: string; project: string; leaveType: string; start: string; end: string; returnWithin3Days?: boolean }[];
+  total: number;
+  empty: string;
+  soonLabel: string;
+  labels: { employeeId: string; name: string; project: string; leaveType: string; from: string; returns: string };
+  t: Translator;
+}) {
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "employeeId", label: labels.employeeId, locked: true },
+      { id: "name", label: labels.name, locked: true },
+      { id: "project", label: labels.project, categorical: true },
+      { id: "leaveType", label: labels.leaveType, categorical: true },
+      { id: "from", label: labels.from },
+      { id: "returns", label: labels.returns },
+    ],
+    [labels.employeeId, labels.from, labels.leaveType, labels.name, labels.project, labels.returns],
+  );
+  const prefs = useTablePrefs("ops.leaveRiders", columns);
+  const matched = rows.filter((row) => rowMatches(prefs.appliedQuery, [row.employeeId, row.name, row.project, row.leaveType]));
+  const groups = groupRows(matched, prefs.groupBy, (row) => {
+    if (prefs.groupBy === "project") return row.project;
+    if (prefs.groupBy === "leaveType") return row.leaveType ? leaveTypeLabel(row.leaveType, t) : "";
+    return "";
+  });
+  const ids = visibleColumnIds(prefs);
+  return (
+    <div>
+      <ListToolbar prefs={prefs} entity={labels.name} columns={columns} rowKind="dynamic" filteredCount={matched.length} totalCount={total} />
+      {rows.length === 0 ? <p className="text-sm text-[var(--portal-muted)]">{empty}</p> : (
+        <Table className={DENSE_TABLE}>
+          <TableHeader>
+            <TableRow>
+              {ids.map((id) => (
+                <TableHead key={id} className={TABLE_HEAD_CLASS}>{columns.find((column) => column.id === id)?.label}</TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {groups.map((group) => (
+              <Fragment key={group.key}>
+                {group.label ? (
+                  <TableRow>
+                    <TableCell colSpan={ids.length} className="bg-muted/40 text-xs font-semibold">{groupBanner(group.label, group.rows.length)}</TableCell>
+                  </TableRow>
+                ) : null}
+                {group.rows.map((row, index) => (
+                  <TableRow key={`${row.employeeId}-${index}`}>
+                    {ids.map((id) => (
+                      <TableCell key={id} className={id === "returns" && row.returnWithin3Days ? "font-semibold text-[var(--portal-badge-green-fg)]" : undefined}>
+                        {id === "employeeId" ? (row.employeeId ? row.employeeId : <EmptyCell />) : null}
+                        {id === "name" ? <TableNameCell name={row.name} /> : null}
+                        {id === "project" ? (row.project ? row.project : <EmptyCell />) : null}
+                        {id === "leaveType" ? (row.leaveType ? leaveTypeLabel(row.leaveType, t) : <EmptyCell />) : null}
+                        {id === "from" ? (row.start ? row.start : <EmptyCell />) : null}
+                        {id === "returns" ? (
+                          <>
+                            {row.end ? row.end : <EmptyCell />}
+                            {row.returnWithin3Days ? <span className="ms-2 text-xs">{soonLabel}</span> : null}
+                          </>
+                        ) : null}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </Fragment>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
+function TurnoverTable({
+  rows,
+  locale,
+  empty,
+  monthLabelText,
+  countLabel,
+  rateLabel,
+}: {
+  rows: { yearMonth: string; count: number; rate: number }[];
+  locale: string;
+  empty: string;
+  monthLabelText: string;
+  countLabel: string;
+  rateLabel: string;
+}) {
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "month", label: monthLabelText, locked: true },
+      { id: "count", label: countLabel },
+      { id: "rate", label: rateLabel },
+    ],
+    [countLabel, monthLabelText, rateLabel],
+  );
+  const prefs = useTablePrefs("ops.turnover", columns);
+  const matched = rows.filter((row) => rowMatches(prefs.appliedQuery, [monthLabel(row.yearMonth, locale), row.count, row.rate]));
+  return (
+    <div>
+      <ListToolbar prefs={prefs} entity={monthLabelText} columns={columns} rowKind="aggregate" filteredCount={matched.length} totalCount={rows.length} />
+      {matched.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">{empty}</p> : (
+        <Table className={`${DENSE_TABLE} mt-3`}>
+          <TableHeader>
+            <TableRow>
+              <TableHead className={TABLE_HEAD_CLASS}>{monthLabelText}</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS}>{countLabel}</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS}>{rateLabel}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {matched.map((monthRow) => (
+              <TableRow key={monthRow.yearMonth}>
+                <TableCell>{monthLabel(monthRow.yearMonth, locale)}</TableCell>
+                <TableCell>{monthRow.count}</TableCell>
+                <TableCell>{formatPct(monthRow.rate)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
+function HiringTable({
+  rows,
+  empty,
+  nameLabel,
+  currentLabel,
+  leavingLabel,
+}: {
+  rows: { label: string; current: number; leaving: number }[];
+  empty: string;
+  nameLabel: string;
+  currentLabel: string;
+  leavingLabel: string;
+}) {
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: nameLabel, locked: true },
+      { id: "current", label: currentLabel },
+      { id: "leaving", label: leavingLabel },
+    ],
+    [currentLabel, leavingLabel, nameLabel],
+  );
+  const prefs = useTablePrefs("ops.hiring", columns);
+  const matched = rows.filter((row) => rowMatches(prefs.appliedQuery, [row.label, row.current, row.leaving]));
+  return (
+    <div>
+      <ListToolbar prefs={prefs} entity={nameLabel} columns={columns} rowKind="aggregate" filteredCount={matched.length} totalCount={rows.length} />
+      {matched.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">{empty}</p> : (
+        <Table className={`${DENSE_TABLE} mt-3`}>
+          <TableHeader>
+            <TableRow>
+              <TableHead className={TABLE_HEAD_CLASS}>{nameLabel}</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS}>{currentLabel}</TableHead>
+              <TableHead className={TABLE_HEAD_CLASS}>{leavingLabel}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {matched.map((row) => (
+              <TableRow key={row.label || "blank"}>
+                <TableCell>{row.label ? row.label : <EmptyCell />}</TableCell>
+                <TableCell>{row.current}</TableCell>
+                <TableCell>{row.leaving}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
+function OpsRosterRows({
+  rows,
+  prefs,
+  columns,
+  projects,
+  locale,
+  t,
+}: {
+  rows: RosterRow[];
+  prefs: ReturnType<typeof useTablePrefs>;
+  columns: TableToolbarColumn[];
+  projects: readonly ProjectRow[];
+  locale: string;
+  t: Translator;
+}) {
+  const ids = visibleColumnIds(prefs);
+  const groups = groupRows(rows, prefs.groupBy, (row) => {
+    if (prefs.groupBy === "project") return projectLabelOf(row.project, projects, "—");
+    if (prefs.groupBy === "zone") return row.zone;
+    if (prefs.groupBy === "status") return dailyLabel(row.status, t);
+    return "";
+  });
+  return (
+    <div className="max-h-[min(360px,40dvh)] overflow-auto">
+      <Table className={DENSE_TABLE}>
+        <TableHeader>
+          <TableRow>
+            {ids.map((id) => (
+              <TableHead key={id} className={TABLE_HEAD_CLASS}>
+                {columns.find((column) => column.id === id)?.label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {groups.map((group) => (
+            <Fragment key={group.key}>
+              {group.label ? (
+                <TableRow>
+                  <TableCell colSpan={ids.length} className="bg-muted/40 text-xs font-semibold">
+                    {groupBanner(group.label, group.rows.length)}
+                  </TableCell>
+                </TableRow>
+              ) : null}
+              {group.rows.map((row, index) => (
+                <TableRow key={`${row.employeeId}-${index}`}>
+                  {ids.map((id) => (
+                    <TableCell key={id}>
+                      {id === "employeeId" ? (row.employeeId ? row.employeeId : <EmptyCell />) : null}
+                      {id === "name" ? <TableNameCell name={row.name} /> : null}
+                      {id === "project" ? projectLabelOf(row.project, projects, "—") : null}
+                      {id === "zone" ? (row.zone ? row.zone : <EmptyCell />) : null}
+                      {id === "status" ? <Badge variant={statusBadgeVariant(row.status)}>{dailyLabel(row.status, t)}</Badge> : null}
+                      {id === "joined" ? formatJoined(row.joined, locale) : null}
+                      {id === "phone" ? (row.phone ? row.phone : <EmptyCell />) : null}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </Fragment>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 function exportRoster(rows: readonly RosterRow[], showPhone: boolean, t: Translator, locale: string, projects: readonly ProjectRow[]) {
   const headers = [t("colEmployeeId"), t("colName"), t("colProject"), t("colZone"), t("colStatus"), t("colJoined")];
   if (showPhone) headers.push(t("colPhone"));
@@ -1657,23 +1890,51 @@ function PlanTable({
   onDelete: (id: string) => void;
   readOnly?: boolean;
 }) {
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "employeeId", label: t("colEmployeeId"), locked: true },
+      { id: "name", label: t("colName"), locked: true },
+      { id: "project", label: t("colProject"), categorical: true },
+      { id: "leaveType", label: t("colLeaveType"), categorical: true },
+      { id: "start", label: t("colStart") },
+      { id: "end", label: t("colEnd") },
+      { id: "days", label: t("colDays") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "actions", label: t("delete"), locked: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("ops.leavePlans", columns);
+  const matched = rows.filter((row) => rowMatches(prefs.appliedQuery, [row.employeeId, row.name, row.project, row.leaveType, row.status]));
+  const groups = groupRows(matched, prefs.groupBy, (row) => {
+    if (prefs.groupBy === "project") return row.project;
+    if (prefs.groupBy === "leaveType") return row.leaveType ? leaveTypeLabel(row.leaveType, t) : "";
+    if (prefs.groupBy === "status") return planStatusLabel(row.status, t);
+    return "";
+  });
+  const ids = visibleColumnIds(prefs);
   return (
+    <div>
+    <ListToolbar prefs={prefs} entity={t("planTitle")} columns={columns} rowKind="dynamic" filteredCount={matched.length} totalCount={rows.length} />
     <Table className={DENSE_TABLE}>
       <TableHeader>
         <TableRow>
-          <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
-          <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
-          <TableHead className={TABLE_HEAD_CLASS}>{t("colProject")}</TableHead>
-          <TableHead className={TABLE_HEAD_CLASS}>{t("colLeaveType")}</TableHead>
-          <TableHead className={TABLE_HEAD_CLASS}>{t("colStart")}</TableHead>
-          <TableHead className={TABLE_HEAD_CLASS}>{t("colEnd")}</TableHead>
-          <TableHead className={TABLE_HEAD_CLASS}>{t("colDays")}</TableHead>
-          <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
-          <TableHead className={TABLE_HEAD_CLASS} />
+          {ids.map((id) => (
+            <TableHead key={id} className={TABLE_HEAD_CLASS}>
+              {id === "actions" ? "" : columns.find((column) => column.id === id)?.label}
+            </TableHead>
+          ))}
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row, index) => {
+        {groups.map((group) => (
+          <Fragment key={group.key}>
+            {group.label ? (
+              <TableRow>
+                <TableCell colSpan={ids.length} className="bg-muted/40 text-xs font-semibold">{groupBanner(group.label, group.rows.length)}</TableCell>
+              </TableRow>
+            ) : null}
+        {group.rows.map((row, index) => {
           const statusValue = (PLAN_STATUSES as readonly string[]).includes(row.status) ? row.status : "pending";
           const items = (PLAN_STATUSES as readonly string[]).includes(row.status) || !row.status
             ? statusItems
@@ -1683,57 +1944,62 @@ function PlanTable({
               ]);
           return (
             <TableRow key={row.id || `${row.employeeId}-${index}`}>
-              <TableCell>{row.employeeId || "—"}</TableCell>
-              <TableCell>{row.name || "—"}</TableCell>
-              <TableCell>{row.project || "—"}</TableCell>
-              <TableCell>{row.leaveType ? leaveTypeLabel(row.leaveType, t) : "—"}</TableCell>
-              <TableCell>{row.start || "—"}</TableCell>
-              <TableCell>{row.end || "—"}</TableCell>
-              <TableCell>{row.days || "—"}</TableCell>
-              <TableCell>
-                {readOnly || row.source === "request" ? (
-                  <span>{planStatusLabel(statusValue, t)}</span>
-                ) : (
-                  <Select
-                    items={items}
-                    value={row.status || statusValue}
-                    disabled={!row.id}
-                    onValueChange={(value) => {
-                      if (value && row.id) onStatus(row.id, value);
-                    }}
-                  >
-                    <SelectTrigger className="h-9 w-36 border-[var(--portal-border)] bg-[var(--portal-canvas)]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {items.map((item) => (
-                        <SelectItem key={String(item.value)} value={String(item.value)}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </TableCell>
-              <TableCell>
-                {readOnly || row.source === "request" ? null : (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="cursor-pointer text-destructive hover:bg-destructive/10"
-                    disabled={!row.id}
-                    onClick={() => { if (row.id) onDelete(row.id); }}
-                  >
-                    <Trash2 className="size-4" />
-                    <span className="sr-only">{t("delete")}</span>
-                  </Button>
-                )}
-              </TableCell>
+              {ids.map((id) => (
+                <TableCell key={id}>
+                  {id === "employeeId" ? (row.employeeId ? row.employeeId : <EmptyCell />) : null}
+                  {id === "name" ? <TableNameCell name={row.name} /> : null}
+                  {id === "project" ? (row.project ? row.project : <EmptyCell />) : null}
+                  {id === "leaveType" ? (row.leaveType ? leaveTypeLabel(row.leaveType, t) : <EmptyCell />) : null}
+                  {id === "start" ? (row.start ? row.start : <EmptyCell />) : null}
+                  {id === "end" ? (row.end ? row.end : <EmptyCell />) : null}
+                  {id === "days" ? (row.days ? row.days : <EmptyCell />) : null}
+                  {id === "status" ? (
+                    readOnly || row.source === "request" ? (
+                      <span>{planStatusLabel(statusValue, t)}</span>
+                    ) : (
+                      <Select
+                        items={items}
+                        value={row.status || statusValue}
+                        disabled={!row.id}
+                        onValueChange={(value) => {
+                          if (value && row.id) onStatus(row.id, value);
+                        }}
+                      >
+                        <SelectTrigger className="h-9 w-36 border-[var(--portal-border)] bg-[var(--portal-canvas)]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {items.map((item) => (
+                            <SelectItem key={String(item.value)} value={String(item.value)}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )
+                  ) : null}
+                  {id === "actions" && !(readOnly || row.source === "request") ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="cursor-pointer text-destructive hover:bg-destructive/10"
+                      disabled={!row.id}
+                      onClick={() => { if (row.id) onDelete(row.id); }}
+                    >
+                      <Trash2 className="size-4" />
+                      <span className="sr-only">{t("delete")}</span>
+                    </Button>
+                  ) : null}
+                </TableCell>
+              ))}
             </TableRow>
           );
         })}
+          </Fragment>
+        ))}
       </TableBody>
     </Table>
+    </div>
   );
 }
 

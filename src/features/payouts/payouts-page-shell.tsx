@@ -7,16 +7,18 @@ import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppListCard } from "@/components/app/app-list-card";
 import {
-  AppListControls,
   GroupedSections,
   fieldSearchMatch,
   groupRows,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/dashboard/status-pill";
@@ -39,28 +41,36 @@ import type { PayoutRunRow } from "./types";
 
 export function PayoutsPageShell() {
   const t = useTranslations("pages.payouts");
-  const labels = useListControlLabels();
+  const toolbarColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "period", label: t("colPeriod"), locked: true },
+      { id: "drivers", label: t("colDrivers") },
+      { id: "payable", label: t("colTotalPayable") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "created", label: t("colCreated") },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("payouts", toolbarColumns);
   const router = useRouter();
   const { can } = useAuth();
   const canManage = can("earnings.manage");
   const [startDate, setStartDate] = useState(defaultStartDateMonthsAgo);
   const [endDate, setEndDate] = useState(defaultEndDate);
-  const [search, setSearch] = useState("");
   const [newRunOpen, setNewRunOpen] = useState(false);
-  const { prefs, update } = useListViewPrefs("payouts");
   const runsQuery = usePayoutRuns(startDate, endDate);
   const runs = runsQuery.data ?? [];
 
   const filtered = useMemo(
     () =>
       runs.filter((row) =>
-        fieldSearchMatch(row, search, {
+        fieldSearchMatch(row, prefs.appliedQuery, {
           name: (item) => item.period_start,
           status: (item) => item.status,
           employee_id: (item) => item.id,
         }),
       ),
-    [runs, search],
+    [prefs.appliedQuery, runs],
   );
   const grouped = useMemo(
     () =>
@@ -89,9 +99,7 @@ export function PayoutsPageShell() {
         className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
         onClick={() => router.push(`/payouts/${row.id}`)}
       >
-        <p className="text-sm font-semibold">
-          {row.period_start} - {row.period_end}
-        </p>
+        <TableNameCell name={`${row.period_start} - ${row.period_end}`} />
         <p className="mt-1 text-xs text-muted-foreground">
           {row.total_drivers} · {Number(row.total_payable_kwd).toFixed(3)}
         </p>
@@ -104,15 +112,7 @@ export function PayoutsPageShell() {
 
   return (
     <AppPage>
-      <AppPageHeader
-        title={t("title")}
-        description={t("subtitle")}
-        actions={
-          canManage ? (
-            <Button onClick={() => setNewRunOpen(true)}>{t("newRunTitle")}</Button>
-          ) : null
-        }
-      />
+      <AppPageHeader title={t("title")} description={t("subtitle")} />
 
       <KpiGrid
         items={[
@@ -125,54 +125,53 @@ export function PayoutsPageShell() {
         ]}
       />
 
-      <AppListCard>
+      <AppListCard
+        toolbar={
+          <>
+            <TableToolbar
+              prefs={prefs}
+              entity={t("title")}
+              columns={toolbarColumns}
+              rowKind="dynamic"
+              entityList
+              filteredCount={filtered.length}
+              totalCount={runs.length}
+              onAdd={canManage ? () => setNewRunOpen(true) : undefined}
+              addLabel={t("newRunTitle")}
+            />
+            <div className="flex flex-wrap gap-2 px-4 pb-3">
+              <div className="space-y-1">
+                <Label htmlFor="payout-start-filter" className="sr-only">
+                  {t("periodStart")}
+                </Label>
+                <Input
+                  id="payout-start-filter"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="h-9 w-40 rounded-lg"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="payout-end-filter" className="sr-only">
+                  {t("periodEnd")}
+                </Label>
+                <Input
+                  id="payout-end-filter"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="h-9 w-40 rounded-lg"
+                />
+              </div>
+            </div>
+          </>
+        }
+      >
         <div className="space-y-3 p-4">
-          <AppListControls
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder={t("searchPlaceholder")}
-            clearSearchLabel={labels.clearSearch}
-            groupByOptions={[labels.group.none, labels.group.status]}
-            groupBy={prefs.groupBy}
-            onGroupByChange={(value) => update({ groupBy: value })}
-            groupByLabel={labels.groupBy}
-            viewMode={prefs.viewMode}
-            onViewModeChange={(value) => update({ viewMode: value })}
-            tableViewLabel={labels.viewTable}
-            cardsViewLabel={labels.viewCards}
-            filterSlot={
-              <>
-                <div className="space-y-1">
-                  <Label htmlFor="payout-start-filter" className="sr-only">
-                    {t("periodStart")}
-                  </Label>
-                  <Input
-                    id="payout-start-filter"
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="h-9 w-40 rounded-lg"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="payout-end-filter" className="sr-only">
-                    {t("periodEnd")}
-                  </Label>
-                  <Input
-                    id="payout-end-filter"
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="h-9 w-40 rounded-lg"
-                  />
-                </div>
-              </>
-            }
-          />
-
           {filtered.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">{t("emptyFiltered")}</p>
-          ) : prefs.viewMode === "cards" ? (
+          ) : prefs.view === "grid" ? (
             <GroupedSections groups={grouped}>
               {(rows) => (
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -209,7 +208,7 @@ export function PayoutsPageShell() {
                       onClick={() => router.push(`/payouts/${row.id}`)}
                     >
                       <TableCell className="text-sm">
-                        {row.period_start} - {row.period_end}
+                        <TableNameCell name={`${row.period_start} - ${row.period_end}`} />
                       </TableCell>
                       <TableCell className="tabular-nums">{row.total_drivers}</TableCell>
                       <TableCell className="tabular-nums font-medium">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
@@ -10,10 +10,8 @@ import {
   CalendarDays,
   Check,
   Clock,
-  Download,
   Eye,
   Loader2,
-  Plus,
   RefreshCw,
   Settings,
   Timer,
@@ -27,19 +25,23 @@ import {
   TableCell,
 } from "@/components/app/app-data-table";
 import {
-  AppListControls,
   GroupedSections,
   fieldSearchMatch,
   groupRows,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import { StatusBadge, type FrameStatus } from "@/components/app/status-badge";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { TabBar } from "@/components/dashboard/tab-bar";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -60,7 +62,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { avatarTintFromName } from "@/features/drivers/form/driver-form-primitives";
 import { useZonesList } from "@/features/zones/use-zones";
 import { useAuth } from "@/contexts/auth-context";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -94,6 +95,23 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
  * page stride here, so "Showing 50 of 300" and the footer cannot disagree.
  */
 const PAGE_SIZE = 50;
+
+function frameStatus(status: string): FrameStatus | null {
+  switch (status) {
+    case "working":
+    case "leave":
+    case "sick":
+    case "pending":
+    case "absent":
+    case "overdue":
+    case "neutral":
+    case "accident":
+    case "other":
+      return status;
+    default:
+      return null;
+  }
+}
 
 const REQUEST_SEARCH_ACCESSORS = {
   name: (row: RequestListRow) => (row.is_confidential ? "" : row.driver_name),
@@ -232,8 +250,6 @@ export function RequestsPageShell({
 }) {
   const t = useTranslations("pages.requests");
   const tRcm = useTranslations("pages.rcmV2");
-  const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs("requests");
   const router = useRouter();
   const fromEmployeeDesk = listScope != null || scopeTabs;
   const [datePreset, setDatePreset] = useState<RequestDatePreset>(
@@ -297,6 +313,35 @@ export function RequestsPageShell({
   const canDecide = can("requests.approve") || can("requests.manage");
   const canCreate = can("requests.create");
   const bulkDecide = useBulkDecideRequests();
+  const requestColumns = useMemo<TableToolbarColumn[]>(() => {
+    const cols: TableToolbarColumn[] = [];
+    if (canDecide) cols.push({ id: "select", label: t("bulk.selectAll"), locked: true });
+    cols.push(
+      { id: "code", label: t("colCode"), locked: true },
+      { id: "driver", label: t("colDriver"), locked: true },
+    );
+    if (isLoanQueue) {
+      cols.push(
+        { id: "amount", label: t("colLoanAmount") },
+        { id: "repayment", label: t("colRepaymentPeriod") },
+      );
+    }
+    cols.push(
+      { id: "type", label: t("colType"), categorical: true },
+      { id: "department", label: t("colDepartment"), categorical: true },
+      { id: "zone", label: t("filters.zone"), categorical: true, defaultHidden: true },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "step", label: t("colStep") },
+      { id: "date", label: t("colDate") },
+      { id: "actions", label: t("colActions"), locked: true },
+    );
+    return cols;
+  }, [canDecide, isLoanQueue, t]);
+  const tablePrefs = useTablePrefs("requests.list", requestColumns);
+  useEffect(() => {
+    setSearch(tablePrefs.appliedQuery);
+    setSearchApplied(tablePrefs.appliedQuery.trim());
+  }, [tablePrefs.appliedQuery]);
 
   // The identity the stored page index is valid for. Any change here makes the
   // index meaningless, so it reads back as page 0 rather than as an empty page.
@@ -387,22 +432,25 @@ export function RequestsPageShell({
     () =>
       groupRows(
         visibleRows,
-        prefs.groupBy,
+        tablePrefs.groupBy,
         {
           status: (row) => row.status,
           zone: (row) => row.driver_zone,
+          type: (row) => row.request_type,
+          department: (row) => row.department_label,
         },
         {},
         "—",
       ),
-    [prefs.groupBy, visibleRows],
+    [tablePrefs.groupBy, visibleRows],
   );
   const selectableRows = visibleRows.filter((row) => canBulkSelectRequest(row.status));
   const showSelectColumn = canDecide;
   const selectedRows = visibleRows.filter((row) => selected.has(row.id));
   const approvableRows = selectedRows.filter(canBulkApprove);
-  const tableColCount =
-    (showSelectColumn ? 1 : 0) + (isLoanQueue ? 2 : 0) + 8;
+  const shownRequestColumns = tablePrefs.orderedColumns.filter((column) =>
+    tablePrefs.isVisible(column.id),
+  );
 
   const toggleRow = (id: string) =>
     setSelected((current) => {
@@ -571,59 +619,16 @@ export function RequestsPageShell({
               variant="outline"
               size="sm"
               className="h-8"
-              disabled={visibleRows.length === 0}
-              onClick={() =>
-                exportRowsToCsv(visibleRows, `requests-${datePreset}-${Date.now()}.csv`)
-              }
-            >
-              <Download className="me-1.5 h-3.5 w-3.5" />
-              {t("export")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8"
               render={<Link href="/requests/settings" />}
             >
               <Settings className="me-1.5 h-3.5 w-3.5" />
               {t("settingsLink")}
             </Button>
             <ClearAllModuleButton entity="requests" compact />
-            {canCreate ? (
-              <Button
-                type="button"
-                size="sm"
-                className="h-8"
-                onClick={() => setCreateOpen(true)}
-              >
-                <Plus className="me-1.5 h-3.5 w-3.5" />
-                {t("create.button")}
-              </Button>
-            ) : null}
           </div>
         </div>
 
-        <div className="border-b border-border px-3 py-1.5">
-          <AppListControls
-            searchValue={search}
-            onSearchChange={(value) => {
-              setSearch(value);
-              setSearchApplied(value.trim());
-            }}
-            searchPlaceholder={t("searchPlaceholder")}
-            searchAriaLabel={t("searchPlaceholder")}
-            clearSearchLabel={labels.clearSearch}
-            groupByOptions={[labels.group.none, labels.group.status, labels.group.zone]}
-            groupBy={prefs.groupBy}
-            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
-            groupByLabel={labels.groupBy}
-            viewMode={prefs.viewMode}
-            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
-            tableViewLabel={labels.viewTable}
-            cardsViewLabel={labels.viewCards}
-            filterSlot={
-              <>
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
           <Select
             items={TYPE_FILTERS.map((key) => ({
               value: key,
@@ -725,17 +730,6 @@ export function RequestsPageShell({
               ))}
             </SelectContent>
           </Select>
-              </>
-            }
-            trailing={
-              <p className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                {t("resultCount", {
-                  shown: `${visibleRows.length}`,
-                  total: `${filteredTotal}`,
-                })}
-              </p>
-            }
-          />
         </div>
 
         {canDecide && selected.size > 0 ? (
@@ -785,6 +779,21 @@ export function RequestsPageShell({
           </div>
         ) : null}
 
+        {isLoading || visibleRows.length === 0 || tablePrefs.view === "grid" ? (
+          <TableToolbar
+            prefs={tablePrefs}
+            entity={t("title")}
+            columns={requestColumns}
+            rowKind="dynamic"
+            entityList
+            filteredCount={visibleRows.length}
+            totalCount={filteredTotal}
+            onExport={() => exportRowsToCsv(visibleRows, `requests-${datePreset}-${Date.now()}.csv`)}
+            onAdd={canCreate ? () => setCreateOpen(true) : undefined}
+            addLabel={t("create.button")}
+          />
+        ) : null}
+
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -796,7 +805,7 @@ export function RequestsPageShell({
               filtersNarrow || search ? t("emptyFilteredDescription") : t("emptyDescription")
             }
           />
-        ) : prefs.viewMode === "cards" ? (
+        ) : tablePrefs.view === "grid" ? (
           <div className="p-3">
             <GroupedSections groups={grouped}>
               {(groupRowsForCards) => (
@@ -837,47 +846,41 @@ export function RequestsPageShell({
           </div>
         ) : (
           <AppDataTable
-            columns={[
-              ...(showSelectColumn
-                ? [
-                    {
-                      id: "select",
-                      className: "w-10",
-                      label: (
-                        <Checkbox
-                          aria-label={t("bulk.selectAll")}
-                          checked={
-                            selectableRows.length > 0 &&
-                            selected.size === selectableRows.length
-                          }
-                          disabled={selectableRows.length === 0}
-                          onCheckedChange={toggleAll}
-                        />
-                      ),
-                    },
-                  ]
-                : []),
-              { id: "code", label: t("colCode") },
-              { id: "driver", label: t("colDriver") },
-              ...(isLoanQueue
-                ? [
-                    { id: "amount", label: t("colLoanAmount") },
-                    { id: "repayment", label: t("colRepaymentPeriod") },
-                  ]
-                : []),
-              { id: "type", label: t("colType") },
-              { id: "department", label: t("colDepartment") },
-              { id: "status", label: t("colStatus") },
-              { id: "step", label: t("colStep") },
-              { id: "date", label: t("colDate") },
-              { id: "actions", label: t("colActions") },
-            ]}
+            toolbar={
+              <TableToolbar
+                prefs={tablePrefs}
+                entity={t("title")}
+                columns={requestColumns}
+                rowKind="dynamic"
+                entityList
+                filteredCount={visibleRows.length}
+                totalCount={filteredTotal}
+                onExport={() => exportRowsToCsv(visibleRows, `requests-${datePreset}-${Date.now()}.csv`)}
+                onAdd={canCreate ? () => setCreateOpen(true) : undefined}
+                addLabel={t("create.button")}
+              />
+            }
+            columns={shownRequestColumns.map((column) => ({
+              id: column.id,
+              label:
+                column.id === "select" ? (
+                  <Checkbox
+                    aria-label={t("bulk.selectAll")}
+                    checked={selectableRows.length > 0 && selected.size === selectableRows.length}
+                    disabled={selectableRows.length === 0}
+                    onCheckedChange={toggleAll}
+                  />
+                ) : (
+                  column.label
+                ),
+              className: column.id === "select" ? "w-10" : column.id === "actions" ? "w-12" : undefined,
+            }))}
           >
             {grouped.flatMap((group) => [
-              ...(prefs.groupBy !== "none"
+              ...(tablePrefs.groupBy !== "none"
                 ? [
                     <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
-                      <TableCell colSpan={tableColCount} className="text-xs font-semibold">
+                      <TableCell colSpan={shownRequestColumns.length} className="text-xs font-semibold">
                         {group.label} · {group.rows.length}
                       </TableCell>
                     </AppDataTableRow>,
@@ -896,110 +899,93 @@ export function RequestsPageShell({
                   )
                 }
               >
-                {showSelectColumn ? (
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    {canBulkSelectRequest(row.status) ? (
+                {shownRequestColumns.map((column) => {
+                  const statusKey = requestStatusLabelKey(row.status, {
+                    awaiting_driver_ack: row.awaiting_driver_ack,
+                  });
+                  const statusLabel = t(`status.${statusKey}` as "status.pending");
+                  const framed = frameStatus(row.status);
+                  const cells: Record<string, ReactNode> = {
+                    select: canBulkSelectRequest(row.status) ? (
                       <Checkbox
                         aria-label={row.request_code}
                         checked={selected.has(row.id)}
                         onCheckedChange={() => toggleRow(row.id)}
                       />
-                    ) : null}
-                  </TableCell>
-                ) : null}
-                <TableCell>
-                  <div className="flex items-center gap-1.5">
-                    {row.needs_attention ? (
-                      <span
-                        className="inline-block h-2 w-2 rounded-full bg-primary"
-                        title={t("attentionBadge")}
-                      />
-                    ) : null}
-                    <span className="font-medium tabular-nums">{row.request_code}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Avatar className="h-7 w-7 shrink-0 border border-border">
-                      <AvatarFallback
-                        className={cn(
-                          "bg-transparent text-xs font-semibold",
-                          avatarTintFromName(row.driver_name),
-                        )}
+                    ) : null,
+                    code: (
+                      <div className="flex items-center gap-1.5">
+                        {row.needs_attention ? (
+                          <span
+                            className="inline-block h-2 w-2 rounded-full bg-primary"
+                            title={t("attentionBadge")}
+                          />
+                        ) : null}
+                        <span className="font-medium tabular-nums">{row.request_code}</span>
+                      </div>
+                    ),
+                    driver: (
+                      <div className="min-w-0">
+                        <TableNameCell name={row.is_confidential ? t("confidential") : row.driver_name} />
+                        <p className="text-xs leading-tight text-muted-foreground tabular-nums">
+                          {row.is_confidential || !row.driver_code ? <EmptyCell /> : row.driver_code}
+                        </p>
+                      </div>
+                    ),
+                    amount: row.amount_kwd != null ? `${row.amount_kwd} KD` : <EmptyCell />,
+                    repayment: <EmptyCell />,
+                    type: t(`types.${row.request_type}` as "types.leave"),
+                    department: row.department_label ? (
+                      <span className="inline-flex items-center rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                        {row.department_label}
+                      </span>
+                    ) : (
+                      <EmptyCell />
+                    ),
+                    zone: row.driver_zone ? row.driver_zone : <EmptyCell />,
+                    status: framed ? (
+                      <StatusBadge status={framed} label={statusLabel} />
+                    ) : (
+                      <StatusPill
+                        variant={requestStatusVariant(row.status, {
+                          awaiting_driver_ack: row.awaiting_driver_ack,
+                        })}
                       >
-                        {row.driver_name
-                          .split(" ")
-                          .filter(Boolean)
-                          .slice(0, 2)
-                          .map((part) => part[0]?.toUpperCase() ?? "")
-                          .join("")}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium leading-tight">
-                        {row.is_confidential ? t("confidential") : row.driver_name}
-                      </p>
-                      <p className="text-xs leading-tight text-muted-foreground tabular-nums">
-                        {row.is_confidential ? "—" : row.driver_code || "—"}
-                      </p>
-                    </div>
-                  </div>
-                </TableCell>
-                {isLoanQueue ? (
-                  <>
-                    <TableCell className="text-sm tabular-nums">
-                      {row.amount_kwd != null ? `${row.amount_kwd} KD` : "—"}
+                        {statusLabel}
+                      </StatusPill>
+                    ),
+                    step: row.current_step_label ? row.current_step_label : <EmptyCell />,
+                    date: shortDate(row.created_at),
+                    actions: (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-primary hover:bg-primary/10"
+                        aria-label={t("viewDetails")}
+                        title={t("viewDetails")}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setViewRow(row);
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    ),
+                  };
+                  return (
+                    <TableCell
+                      key={column.id}
+                      onClick={
+                        column.id === "select" || column.id === "actions"
+                          ? (event) => event.stopPropagation()
+                          : undefined
+                      }
+                    >
+                      {cells[column.id] ?? <EmptyCell />}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">—</TableCell>
-                  </>
-                ) : null}
-                <TableCell className="text-sm">
-                  {t(`types.${row.request_type}` as "types.leave")}
-                </TableCell>
-                <TableCell>
-                  {row.department_label ? (
-                    <span className="inline-flex items-center rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                      {row.department_label}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <StatusPill
-                    variant={requestStatusVariant(row.status, {
-                      awaiting_driver_ack: row.awaiting_driver_ack,
-                    })}
-                  >
-                    {t(
-                      `status.${requestStatusLabelKey(row.status, {
-                        awaiting_driver_ack: row.awaiting_driver_ack,
-                      })}` as "status.pending",
-                    )}
-                  </StatusPill>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {row.current_step_label ?? "—"}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground tabular-nums">
-                  {shortDate(row.created_at)}
-                </TableCell>
-                <TableCell>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-primary hover:bg-primary/10"
-                    aria-label={t("viewDetails")}
-                    title={t("viewDetails")}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setViewRow(row);
-                    }}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                </TableCell>
+                  );
+                })}
               </AppDataTableRow>
               )),
             ])}

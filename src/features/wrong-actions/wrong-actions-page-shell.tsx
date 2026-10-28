@@ -7,20 +7,22 @@ import {
   CalendarClock,
   Layers,
   Loader2,
-  Plus,
   Scale,
   ShieldAlert,
   Users,
 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
-  AppListControls,
   GroupedSections,
   fieldSearchMatch,
   groupRows,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { useRouter } from "@/i18n/navigation";
 import {
   AppDataTable,
@@ -30,7 +32,6 @@ import {
 } from "@/components/app/app-data-table";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { useAuth } from "@/contexts/auth-context";
@@ -75,8 +76,18 @@ export function WrongActionsPageShell({
   tab?: string;
 }) {
   const t = useTranslations("pages.wrongActions");
-  const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs("wrong-actions");
+  const toolbarColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "driver", label: t("colDriver"), locked: true },
+      { id: "type", label: t("colType") },
+      { id: "status", label: t("colSeverity"), categorical: true },
+      { id: "zone", label: t("colZone"), categorical: true },
+      { id: "date", label: t("colDate") },
+      { id: "source", label: t("colSource"), categorical: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("wrong-actions", toolbarColumns);
   const { can } = useAuth();
   const canManage = can("wrong_actions.manage");
   const router = useRouter();
@@ -84,7 +95,6 @@ export function WrongActionsPageShell({
   const { data: drivers = [], isLoading: driversLoading } = useWrongActionDriverOptions(
     addOpen && canManage,
   );
-  const [search, setSearch] = useState("");
   const activeTab = parseWrongActionTab(tab);
 
   // One clock for the whole render, so the "this week" tab and the KPI counting
@@ -106,7 +116,7 @@ export function WrongActionsPageShell({
       rows.filter(
         (row) =>
           wrongActionMatchesTab(row, activeTab, now) &&
-          fieldSearchMatch(row, search, {
+          fieldSearchMatch(row, prefs.appliedQuery, {
             name: (item) => item.driver_name,
             employee_id: (item) => item.driver_code,
             zone: (item) => item.driver_zone_name,
@@ -116,7 +126,7 @@ export function WrongActionsPageShell({
             createdBy: (item) => item.created_by_name,
           }),
       ),
-    [activeTab, now, rows, search],
+    [activeTab, now, prefs.appliedQuery, rows],
   );
   const grouped = useMemo(
     () =>
@@ -162,16 +172,6 @@ export function WrongActionsPageShell({
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <ClearAllModuleButton entity="wrong_actions" />
-            <Button
-              className="h-9 cursor-pointer rounded-lg"
-              disabled={!canManage}
-              onClick={() => {
-                if (canManage) replaceQuery({ add: true });
-              }}
-            >
-              <Plus className="me-2 h-3.5 w-3.5" />
-              {t("addIncident")}
-            </Button>
           </div>
         }
         tabs={
@@ -191,20 +191,16 @@ export function WrongActionsPageShell({
       <KpiGrid items={kpis} compact />
       <AppListCard
         toolbar={
-          <AppListControls
-            className="min-w-0 flex-1"
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder={t("searchPlaceholder")}
-            clearSearchLabel={labels.clearSearch}
-            groupByOptions={[labels.group.none, labels.group.status, labels.group.zone]}
-            groupBy={prefs.groupBy}
-            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
-            groupByLabel={labels.groupBy}
-            viewMode={prefs.viewMode}
-            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
-            tableViewLabel={labels.viewTable}
-            cardsViewLabel={labels.viewCards}
+          <TableToolbar
+            prefs={prefs}
+            entity={t("title")}
+            columns={toolbarColumns}
+            rowKind="dynamic"
+            entityList
+            filteredCount={visible.length}
+            totalCount={rows.length}
+            onAdd={canManage ? () => replaceQuery({ add: true }) : undefined}
+            addLabel={t("addIncident")}
           />
         }
       >
@@ -214,7 +210,7 @@ export function WrongActionsPageShell({
           </div>
         ) : rows.length === 0 ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyHint")} />
-        ) : prefs.viewMode === "cards" ? (
+        ) : prefs.view === "grid" ? (
           visible.length === 0 ? (
             <AppDataTableEmpty>{t("emptyFilters")}</AppDataTableEmpty>
           ) : (
@@ -308,7 +304,7 @@ function WrongActionListRow({ row, onOpen }: { row: WrongActionRow; onOpen: () =
     <AppDataTableRow className="cursor-pointer" onClick={onOpen}>
       <TableCell>
         <div className="flex items-center gap-2">
-          <p className="font-medium">{row.driver_name ?? "—"}</p>
+          <TableNameCell name={row.driver_name} />
           {row.driver_code ? (
             <span className="rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
               {row.driver_code}

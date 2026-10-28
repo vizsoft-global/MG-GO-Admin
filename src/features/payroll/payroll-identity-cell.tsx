@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { SearchSelect } from "@/components/ui/search-select";
 import { queryKeys } from "@/lib/query/query-keys";
+import { INLINE_EDIT_CELL_CLASS } from "@/components/app/constants";
 import { cn } from "@/lib/utils";
 import { usePayrollAssignCatalog } from "./payroll-assign-catalog";
 import type { PayrollAssignField } from "./payroll-assign";
@@ -16,8 +17,10 @@ import {
 } from "./payroll-actions";
 import type { PayrollRiderRow } from "./payroll-types";
 
-const INPUT =
-  "h-6 w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-xs text-foreground outline-none transition-colors focus:border-border focus:bg-background";
+const INPUT = cn(
+  "w-full min-w-0 rounded-sm px-1 text-xs text-foreground outline-none",
+  INLINE_EDIT_CELL_CLASS,
+);
 
 function cellError(message: string, t: (key: string) => string): string {
   if (message.includes("employee_id_taken")) return t("employeeIdTaken");
@@ -317,7 +320,7 @@ export function PayrollAssignCell({
       recentsKey={field === "projectKey" ? "payroll.client" : "payroll.zone"}
       clearable
       disabled={saving}
-      className="h-7 min-w-[8.5rem] max-w-[14rem] rounded-md px-2 text-xs shadow-none"
+      className={cn("min-w-[8.5rem] max-w-[14rem] rounded-md px-2 text-xs", INLINE_EDIT_CELL_CLASS)}
     />
     </div>
   );

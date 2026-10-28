@@ -18,7 +18,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { canResendEsign, esignResendHref } from "./esign-resend";
 import { EsignDotKpis } from "./esign-kpi-strip";
 import { esignDocumentHref } from "./esign-storage-key";
@@ -60,11 +67,26 @@ import {
   recipientTabCounts,
   type EsignRecipientTab,
 } from "./esign-tracker";
-import type { EsignTemplateFieldRow } from "./types";
+import type { EsignBatchLine, EsignTemplateFieldRow } from "./types";
+import { useEsignBatch, useEsignTemplate, useRemoveEsignBatchRow, useUpdateEsignBatchRow } from "./use-esign";
 
 const NO_TEMPLATE_FIELDS: EsignTemplateFieldRow[] = [];
-import { useEsignBatch, useEsignTemplate, useRemoveEsignBatchRow, useUpdateEsignBatchRow } from "./use-esign";
-import type { EsignBatchLine } from "./types";
+
+type BatchColumnId = "name" | "emp" | "sent" | "status" | "signedOn" | "actions";
+
+function isBatchColumnId(id: string): id is BatchColumnId {
+  switch (id) {
+    case "name":
+    case "emp":
+    case "sent":
+    case "status":
+    case "signedOn":
+    case "actions":
+      return true;
+    default:
+      return false;
+  }
+}
 
 /**
  * Batch detail — reference panels D1, D3, D4, F3.
@@ -111,7 +133,19 @@ export function EsignBatchDetailShell({ batchId }: { batchId: string }) {
   const templateFields = templateQuery.data?.template?.fields ?? NO_TEMPLATE_FIELDS;
 
   const [tab, setTab] = useState<EsignRecipientTab>("all");
-  const [employeeQuery, setEmployeeQuery] = useState("");
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: t("colName"), locked: true },
+      { id: "emp", label: t("colEmployee"), locked: true },
+      { id: "sent", label: tTracker("colSent") },
+      { id: "status", label: t("colStage"), categorical: true },
+      { id: "signedOn", label: t("colSignedOn") },
+      { id: "actions", label: t("colActions") },
+    ],
+    [t, tTracker],
+  );
+  const prefs = useTablePrefs("esign-batch-detail", columns);
+  const shownColumns = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
   const [busy, setBusy] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -164,16 +198,27 @@ export function EsignBatchDetailShell({ batchId }: { batchId: string }) {
   );
 
   const visible = useMemo(() => {
-    const query = employeeQuery.trim().toLowerCase();
+    const query = prefs.appliedQuery.trim().toLowerCase();
     return lines.filter((line) => {
       if (tab !== "all" && (!line.recipient_stage || recipientTab(line.recipient_stage) !== tab)) {
         return false;
       }
       if (!query) return true;
-      const haystack = `${line.employee_id ?? ""} ${line.signer_display_name ?? ""}`.toLowerCase();
+      const haystack = `${line.employee_id ?? ""} ${line.signer_display_name ?? ""} ${lineStatusLabel(line, t)}`.toLowerCase();
       return haystack.includes(query);
     });
-  }, [lines, tab, employeeQuery]);
+  }, [lines, prefs.appliedQuery, t, tab]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        visible,
+        prefs.groupBy,
+        { status: (line) => lineStatusLabel(line, t) },
+        {},
+        "—",
+      ),
+    [prefs.groupBy, t, visible],
+  );
 
   const reminderTargets: EsignRemindTarget[] = useMemo(
     () =>
@@ -441,12 +486,6 @@ export function EsignBatchDetailShell({ batchId }: { batchId: string }) {
               );
             })}
           </div>
-          <Input
-            className="h-9 w-56"
-            value={employeeQuery}
-            placeholder={t("searchEmployees")}
-            onChange={(event) => setEmployeeQuery(event.target.value)}
-          />
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
@@ -476,45 +515,64 @@ export function EsignBatchDetailShell({ batchId }: { batchId: string }) {
           </div>
         </div>
 
+        <TableToolbar
+          prefs={prefs}
+          entity={t("colEmployee")}
+          columns={columns}
+          rowKind="dynamic"
+          entityList={false}
+          filteredCount={visible.length}
+          totalCount={lines.length}
+        />
+
         {lines.length === 0 ? (
           <AppEmptyState title={t("emptyRows")} description={t("emptyFiltered")} />
         ) : visible.length === 0 ? (
           <AppEmptyState title={t("emptyFiltered")} />
         ) : (
           <AppDataTable
-            columns={[
-              { id: "name", label: t("colName") },
-              { id: "emp", label: t("colEmployee") },
-              { id: "sent", label: tTracker("colSent") },
-              { id: "stage", label: t("colStage") },
-              { id: "signedOn", label: t("colSignedOn") },
-              { id: "actions", label: t("colActions"), className: "text-end" },
-            ]}
+            columns={shownColumns.map((column) => ({
+              id: column.id,
+              label: column.label,
+              className: column.id === "actions" ? "text-end" : undefined,
+            }))}
           >
-            {visible.map((line) => (
-              <Row
-                key={line.id}
-                line={line}
-                sentAt={batch.created_at}
-                t={t}
-                onFix={() => setFixRow(line)}
-                onRemove={() => setRemoveRow(line)}
-                onDeclined={() => setDeclinedRow(line)}
-                onRemind={() => {
-                  if (!line.request_id || !line.recipient_status) return;
-                  setRemindFocus([
-                    {
-                      id: line.request_id,
-                      request_code: line.request_code ?? line.employee_id ?? `#${line.row_index + 1}`,
-                      status: line.recipient_status,
-                      viewed_at: line.recipient_viewed_at ?? null,
-                      label: line.signer_display_name ?? line.employee_id ?? undefined,
-                    },
-                  ]);
-                  setRemindOpen(true);
-                }}
-              />
-            ))}
+            {grouped.flatMap((group) => [
+              ...(prefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((line) => (
+                <Row
+                  key={line.id}
+                  line={line}
+                  sentAt={batch.created_at}
+                  t={t}
+                  shown={shownColumns}
+                  onFix={() => setFixRow(line)}
+                  onRemove={() => setRemoveRow(line)}
+                  onDeclined={() => setDeclinedRow(line)}
+                  onRemind={() => {
+                    if (!line.request_id || !line.recipient_status) return;
+                    setRemindFocus([
+                      {
+                        id: line.request_id,
+                        request_code: line.request_code ?? line.employee_id ?? `#${line.row_index + 1}`,
+                        status: line.recipient_status,
+                        viewed_at: line.recipient_viewed_at ?? null,
+                        label: line.signer_display_name ?? line.employee_id ?? undefined,
+                      },
+                    ]);
+                    setRemindOpen(true);
+                  }}
+                />
+              )),
+            ])}
           </AppDataTable>
         )}
       </AppListCard>
@@ -591,10 +649,55 @@ function rowVariant(status: EsignBatchLine["status"]): "success" | "warning" | "
   return "warning";
 }
 
+function lineStatusLabel(
+  line: EsignBatchLine,
+  t: ReturnType<typeof useTranslations>,
+): string {
+  if (line.recipient_stage) return stageWord(line.recipient_stage, t);
+  return rowStatusWord(line.status, t);
+}
+
+function rowStatusWord(
+  status: EsignBatchLine["status"],
+  t: ReturnType<typeof useTranslations>,
+): string {
+  switch (status) {
+    case "pending":
+    case "created":
+    case "failed":
+      return t(`rowStage.${status}`);
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
+function cellClass(id: BatchColumnId): string | undefined {
+  switch (id) {
+    case "name":
+      return "max-w-[180px] text-xs";
+    case "emp":
+      return "font-mono text-xs";
+    case "sent":
+    case "signedOn":
+      return "text-xs tabular-nums text-muted-foreground";
+    case "status":
+      return undefined;
+    case "actions":
+      return "text-end";
+    default: {
+      const _exhaustive: never = id;
+      return _exhaustive;
+    }
+  }
+}
+
 function Row({
   line,
   sentAt,
   t,
+  shown,
   onFix,
   onRemove,
   onDeclined,
@@ -603,6 +706,7 @@ function Row({
   line: EsignBatchLine;
   sentAt: string;
   t: ReturnType<typeof useTranslations>;
+  shown: TableToolbarColumn[];
   onFix: () => void;
   onRemove: () => void;
   onDeclined: () => void;
@@ -610,17 +714,16 @@ function Row({
 }) {
   const stage: EsignRecipientStage | null = line.recipient_stage ?? null;
 
-  return (
-    <AppDataTableRow>
-      <TableCell className="max-w-[180px] truncate text-xs">
-        {line.signer_display_name ?? "—"}
-      </TableCell>
-      <TableCell className="font-mono text-xs">{line.employee_id ?? "—"}</TableCell>
-      <TableCell className="text-xs tabular-nums text-muted-foreground">
-        {formatEsignTrackerDate(sentAt)}
-      </TableCell>
-      <TableCell>
-        {stage ? (
+  function cellBody(id: BatchColumnId) {
+    switch (id) {
+      case "name":
+        return <TableNameCell name={line.signer_display_name} />;
+      case "emp":
+        return line.employee_id ?? "—";
+      case "sent":
+        return formatEsignTrackerDate(sentAt);
+      case "status":
+        return stage ? (
           <span
             className={cn(
               "inline-flex items-center gap-1.5 text-xs font-medium",
@@ -638,85 +741,100 @@ function Row({
           </span>
         ) : (
           <StatusPill variant={rowVariant(line.status)}>
-            {t(`rowStage.${line.status}`)}
+            {rowStatusWord(line.status, t)}
           </StatusPill>
-        )}
-      </TableCell>
-      <TableCell className="text-xs tabular-nums text-muted-foreground">
-        {line.recipient_signed_at ? formatEsignTrackerDate(line.recipient_signed_at) : "—"}
-      </TableCell>
-      <TableCell className="text-end">
-        <div className="flex items-center justify-end gap-1">
-          {stage === "signed" && line.request_id ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 cursor-pointer px-2 text-xs font-medium"
-              render={
-                <a href={esignDocumentHref(line.request_id, "signed", "attachment")} />
-              }
-            >
-              <Download className="me-1 h-3.5 w-3.5" />
-              {t("download")}
-            </Button>
-          ) : null}
-          {stage === "opened" || stage === "not_opened" ? (
-            <button
-              type="button"
-              className="cursor-pointer px-2 text-xs font-semibold text-[#F04438] disabled:opacity-40"
-              onClick={onRemind}
-              disabled={!line.request_id}
-            >
-              {t("remindAction")}
-            </button>
-          ) : null}
-          {stage === "declined" ? (
-            <button
-              type="button"
-              className="cursor-pointer px-2 text-xs font-semibold text-foreground"
-              onClick={onDeclined}
-            >
-              {t("viewReason")}
-            </button>
-          ) : null}
-          {line.status === "failed" ? (
-            <Tooltip>
-              <TooltipTrigger
+        );
+      case "signedOn":
+        return line.recipient_signed_at ? formatEsignTrackerDate(line.recipient_signed_at) : "—";
+      case "actions":
+        return (
+          <div className="flex items-center justify-end gap-1">
+            {stage === "signed" && line.request_id ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 cursor-pointer px-2 text-xs font-medium"
                 render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 cursor-pointer p-0 text-primary hover:bg-primary/10"
-                    onClick={onFix}
-                    aria-label={t("repairShort")}
-                  >
-                    <Wrench className="h-3.5 w-3.5" />
-                  </Button>
+                  <a href={esignDocumentHref(line.request_id, "signed", "attachment")} />
                 }
-              />
-              <TooltipContent>{t("repair")}</TooltipContent>
-            </Tooltip>
-          ) : null}
-          {line.status === "failed" ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 cursor-pointer p-0 text-destructive hover:bg-destructive/10"
-                    onClick={onRemove}
-                    aria-label={t("removeShort")}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                }
-              />
-              <TooltipContent>{t("remove")}</TooltipContent>
-            </Tooltip>
-          ) : null}
-        </div>
-      </TableCell>
+              >
+                <Download className="me-1 h-3.5 w-3.5" />
+                {t("download")}
+              </Button>
+            ) : null}
+            {stage === "opened" || stage === "not_opened" ? (
+              <button
+                type="button"
+                className="cursor-pointer px-2 text-xs font-semibold text-[#F04438] disabled:opacity-40"
+                onClick={onRemind}
+                disabled={!line.request_id}
+              >
+                {t("remindAction")}
+              </button>
+            ) : null}
+            {stage === "declined" ? (
+              <button
+                type="button"
+                className="cursor-pointer px-2 text-xs font-semibold text-foreground"
+                onClick={onDeclined}
+              >
+                {t("viewReason")}
+              </button>
+            ) : null}
+            {line.status === "failed" ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 cursor-pointer p-0 text-primary hover:bg-primary/10"
+                      onClick={onFix}
+                      aria-label={t("repairShort")}
+                    >
+                      <Wrench className="h-3.5 w-3.5" />
+                    </Button>
+                  }
+                />
+                <TooltipContent>{t("repair")}</TooltipContent>
+              </Tooltip>
+            ) : null}
+            {line.status === "failed" ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 cursor-pointer p-0 text-destructive hover:bg-destructive/10"
+                      onClick={onRemove}
+                      aria-label={t("removeShort")}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  }
+                />
+                <TooltipContent>{t("remove")}</TooltipContent>
+              </Tooltip>
+            ) : null}
+          </div>
+        );
+      default: {
+        const _exhaustive: never = id;
+        return _exhaustive;
+      }
+    }
+  }
+
+  return (
+    <AppDataTableRow>
+      {shown.map((column) =>
+        isBatchColumnId(column.id) ? (
+          <TableCell key={column.id} className={cellClass(column.id)}>
+            {cellBody(column.id)}
+          </TableCell>
+        ) : null,
+      )}
     </AppDataTableRow>
   );
 }

@@ -6,6 +6,13 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { AppPage } from "@/components/app/app-page";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import {
@@ -30,6 +37,14 @@ export function PayoutDetailPageShell({ runId }: { runId: string }) {
   const markPaid = useMarkPayoutRunPaid();
   const voidRun = useVoidPayoutRun();
   const [selectedLine, setSelectedLine] = useState<DriverPayoutLine | null>(null);
+  const columns = useMemo((): TableToolbarColumn[] => [
+    { id: "driver", label: t("colDriver"), locked: true },
+    { id: "deliveries", label: t("colDeliveries") },
+    { id: "incentive", label: t("colIncentive") },
+    { id: "payable", label: t("colTotalPayable") },
+    { id: "status", label: t("colStatus") },
+  ], [t]);
+  const prefs = useTablePrefs(`payout-lines-${runId}`, columns);
 
   const run = (detailQuery.data?.run ?? {}) as Record<string, unknown>;
   const lines = (detailQuery.data?.lines ?? []) as DriverPayoutLine[];
@@ -121,40 +136,68 @@ export function PayoutDetailPageShell({ runId }: { runId: string }) {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-3">
+      <div className="rounded-xl border border-border bg-card">
+        <TableToolbar
+          prefs={prefs}
+          entity={t("colDriver")}
+          columns={columns}
+          rowKind="dynamic"
+          entityList
+          filteredCount={lines.filter((line) => {
+            const needle = prefs.appliedQuery.trim().toLowerCase();
+            return !needle || `${line.driver_name} ${line.driver_code} ${line.status}`.toLowerCase().includes(needle);
+          }).length}
+          totalCount={lines.length}
+        />
+        {prefs.view === "grid" ? (
+          <TableGridCards
+            rows={lines.filter((line) => {
+              const needle = prefs.appliedQuery.trim().toLowerCase();
+              return !needle || `${line.driver_name} ${line.driver_code} ${line.status}`.toLowerCase().includes(needle);
+            }).map((line) => ({
+              id: line.driver_code || line.id,
+              name: line.driver_name,
+              status: { status: "neutral", label: line.status },
+              fields: [
+                { label: t("colDeliveries"), value: String(line.delivery_count) },
+                { label: t("colTotalPayable"), value: String(line.net_payable_kwd) },
+              ],
+              onOpen: () => setSelectedLine(line),
+            }))}
+          />
+        ) : (
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30 hover:bg-muted/30">
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colDriver")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colDeliveries")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colIncentive")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colTotalPayable")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
+              {prefs.orderedColumns.filter((column) => prefs.isVisible(column.id)).map((column) => (
+                <TableHead key={column.id} className={TABLE_HEAD_CLASS}>{column.label}</TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {lines.map((line) => (
+            {lines.filter((line) => {
+              const needle = prefs.appliedQuery.trim().toLowerCase();
+              return !needle || `${line.driver_name} ${line.driver_code} ${line.status}`.toLowerCase().includes(needle);
+            }).map((line) => (
               <TableRow
                 key={line.id}
                 className="cursor-pointer hover:bg-muted/40"
                 onClick={() => setSelectedLine(line)}
               >
-                <TableCell>
-                  <div>
-                    <p className="font-medium">{line.driver_name}</p>
-                    <p className="font-mono text-xs text-muted-foreground">{line.driver_code}</p>
-                  </div>
-                </TableCell>
-                <TableCell className="tabular-nums">{line.delivery_count}</TableCell>
-                <TableCell className="tabular-nums">{line.incentive_kwd}</TableCell>
-                <TableCell className="tabular-nums font-medium">{line.net_payable_kwd}</TableCell>
-                <TableCell>
-                  <StatusPill variant="neutral">{line.status}</StatusPill>
-                </TableCell>
+                {prefs.orderedColumns.filter((column) => prefs.isVisible(column.id)).map((column) => {
+                  if (column.id === "driver") {
+                    return <TableCell key={column.id}><TableNameCell name={line.driver_name} /><p className="font-mono text-xs text-muted-foreground">{line.driver_code}</p></TableCell>;
+                  }
+                  if (column.id === "deliveries") return <TableCell key={column.id} className="tabular-nums">{line.delivery_count}</TableCell>;
+                  if (column.id === "incentive") return <TableCell key={column.id} className="tabular-nums">{line.incentive_kwd}</TableCell>;
+                  if (column.id === "payable") return <TableCell key={column.id} className="tabular-nums font-medium">{line.net_payable_kwd}</TableCell>;
+                  return <TableCell key={column.id}><StatusPill variant="neutral">{line.status}</StatusPill></TableCell>;
+                })}
               </TableRow>
             ))}
           </TableBody>
         </Table>
+        )}
       </div>
 
       <PayoutLineDetailDialog

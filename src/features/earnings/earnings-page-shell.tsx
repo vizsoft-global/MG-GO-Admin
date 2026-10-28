@@ -10,14 +10,17 @@ import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppListCard } from "@/components/app/app-list-card";
 import {
-  AppListControls,
   GroupedSections,
   fieldSearchMatch,
   groupRows,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Button } from "@/components/ui/button";
@@ -67,8 +70,17 @@ type DriverGroupedRow = {
 
 export function EarningsPageShell() {
   const t = useTranslations("pages.earnings");
-  const labels = useListControlLabels();
-  const { prefs, update } = useListViewPrefs("earnings");
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "driver", label: t("colDriver"), locked: true },
+      { id: "date", label: t("colDate"), categorical: true },
+      { id: "deliveries", label: t("colDeliveries") },
+      { id: "incentive", label: t("colIncentive") },
+      { id: "net", label: t("colNet") },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("earnings", columns);
   const toolsT = useTranslations("pages.earningsCalculation");
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -85,7 +97,6 @@ export function EarningsPageShell() {
 
   const [startDate, setStartDate] = useState(defaultStartDate);
   const [endDate, setEndDate] = useState(defaultEndDate);
-  const [search, setSearch] = useState("");
   const [groupBy, setGroupBy] = useState<"day" | "driver" | "zone" | "partner" | "restaurant">(
     "driver",
   );
@@ -123,13 +134,13 @@ export function EarningsPageShell() {
   const visibleRows = useMemo(
     () =>
       rows.filter((row) =>
-        fieldSearchMatch(row, search, {
+        fieldSearchMatch(row, prefs.appliedQuery, {
           name: (item) => item.driver_name,
           employee_id: (item) => item.driver_code,
           earn_date: (item) => item.earn_date,
         }),
       ),
-    [rows, search],
+    [prefs.appliedQuery, rows],
   );
   const dailyGrouped = useMemo(
     () =>
@@ -146,13 +157,13 @@ export function EarningsPageShell() {
   const driverRows = useMemo(() => {
     const grouped = (driverGroupedQuery.data ?? []) as DriverGroupedRow[];
     return grouped.filter((row) =>
-      fieldSearchMatch(row, search, {
+      fieldSearchMatch(row, prefs.appliedQuery, {
         name: (item) => item.group_name,
         employee_id: (item) => item.driver_code,
         group_id: (item) => item.group_id,
       }),
     );
-  }, [driverGroupedQuery.data, search]);
+  }, [driverGroupedQuery.data, prefs.appliedQuery]);
   const driverGrouped = useMemo(
     () => groupRows(driverRows, "none", {}, {}, "—"),
     [driverRows],
@@ -235,6 +246,14 @@ export function EarningsPageShell() {
     });
   };
 
+  const toolbarColumns =
+    tab === "daily" ? columns : columns.filter((column) => column.id !== "date");
+  const filteredCount = tab === "driver" ? driverRows.length : visibleRows.length;
+  const totalCount =
+    tab === "driver"
+      ? ((driverGroupedQuery.data ?? []) as DriverGroupedRow[]).length
+      : rows.length;
+
   return (
     <AppPage>
       <AppPageHeader
@@ -288,80 +307,65 @@ export function EarningsPageShell() {
           />
 
           {tab !== "reports" ? (
-          <div className="border-b border-border pb-4">
-            <AppListControls
-              searchValue={search}
-              onSearchChange={setSearch}
-              searchPlaceholder={t("searchDriver")}
-              clearSearchLabel={labels.clearSearch}
-              groupByOptions={
-                tab === "daily"
-                  ? [labels.group.none, labels.group.date]
-                  : undefined
-              }
-              groupBy={tab === "daily" ? prefs.groupBy : undefined}
-              onGroupByChange={
-                tab === "daily" ? (value) => update({ groupBy: value }) : undefined
-              }
-              groupByLabel={labels.groupBy}
-              viewMode={tab === "tools" ? undefined : prefs.viewMode}
-              onViewModeChange={
-                tab === "tools" ? undefined : (value) => update({ viewMode: value })
-              }
-              tableViewLabel={labels.viewTable}
-              cardsViewLabel={labels.viewCards}
-              filterSlot={
-                <>
-                  <div className="space-y-1">
-                    <Label htmlFor="earn-start" className="sr-only">
-                      {t("startDate")}
-                    </Label>
-                    <Input
-                      id="earn-start"
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="h-9 w-40 rounded-lg"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="earn-end" className="sr-only">
-                      {t("endDate")}
-                    </Label>
-                    <Input
-                      id="earn-end"
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="h-9 w-40 rounded-lg"
-                    />
-                  </div>
-                  <Select
-                    value={selectedDriverId || "__all"}
-                    onValueChange={(v) => setSelectedDriverId(!v || v === "__all" ? "" : v)}
-                  >
-                    <SelectTrigger id="earn-driver" className="h-9 w-56 rounded-lg">
-                      <SelectValue placeholder="All drivers" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all">All drivers</SelectItem>
-                      {driverOptions.map((d) => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.name} ({d.code})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </>
-              }
+          <div className="-mx-4 border-b border-border">
+            <TableToolbar
+              prefs={prefs}
+              entity={t("colDriver")}
+              columns={toolbarColumns}
+              rowKind="dynamic"
+              entityList={tab === "tools" ? undefined : true}
+              filteredCount={filteredCount}
+              totalCount={totalCount}
             />
+            <div className="flex flex-wrap items-center gap-2 px-4 pb-4">
+              <div className="space-y-1">
+                <Label htmlFor="earn-start" className="sr-only">
+                  {t("startDate")}
+                </Label>
+                <Input
+                  id="earn-start"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="h-9 w-40 rounded-lg"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="earn-end" className="sr-only">
+                  {t("endDate")}
+                </Label>
+                <Input
+                  id="earn-end"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="h-9 w-40 rounded-lg"
+                />
+              </div>
+              <Select
+                value={selectedDriverId || "__all"}
+                onValueChange={(v) => setSelectedDriverId(!v || v === "__all" ? "" : v)}
+              >
+                <SelectTrigger id="earn-driver" className="h-9 w-56 rounded-lg">
+                  <SelectValue placeholder="All drivers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all">All drivers</SelectItem>
+                  {driverOptions.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name} ({d.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           ) : null}
 
           {tab === "daily" ? (
             visibleRows.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">{t("emptyTitle")}</p>
-            ) : prefs.viewMode === "cards" ? (
+            ) : prefs.view === "grid" ? (
               <GroupedSections groups={dailyGrouped}>
                 {(groupRowsList) => (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -372,7 +376,7 @@ export function EarningsPageShell() {
                         className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
                         onClick={() => openDetail(row)}
                       >
-                        <p className="text-sm font-semibold">{row.driver_name}</p>
+                        <TableNameCell name={row.driver_name} />
                         <p className="mt-1 text-xs text-muted-foreground">
                           {row.driver_code} · {row.earn_date}
                         </p>
@@ -413,10 +417,8 @@ export function EarningsPageShell() {
                     onClick={() => openDetail(row)}
                   >
                     <TableCell>
-                      <div>
-                        <p className="font-medium">{row.driver_name}</p>
-                        <p className="font-mono text-xs text-muted-foreground">{row.driver_code}</p>
-                      </div>
+                      <TableNameCell name={row.driver_name} />
+                      <p className="font-mono text-xs text-muted-foreground">{row.driver_code}</p>
                     </TableCell>
                     <TableCell className="tabular-nums">{row.earn_date}</TableCell>
                     <TableCell className="tabular-nums">{row.deliveries}</TableCell>
@@ -433,7 +435,7 @@ export function EarningsPageShell() {
           {tab === "driver" ? (
             driverRows.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">{t("emptyTitle")}</p>
-            ) : prefs.viewMode === "cards" ? (
+            ) : prefs.view === "grid" ? (
               <GroupedSections groups={driverGrouped}>
                 {(groupRowsList) => (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -444,7 +446,7 @@ export function EarningsPageShell() {
                         className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
                         onClick={() => openDriverDetail(row)}
                       >
-                        <p className="text-sm font-semibold">{row.group_name}</p>
+                        <TableNameCell name={row.group_name} />
                         {row.driver_code ? (
                           <p className="mt-1 font-mono text-xs text-muted-foreground">
                             {row.driver_code}
@@ -477,14 +479,12 @@ export function EarningsPageShell() {
                     onClick={() => openDriverDetail(row)}
                   >
                     <TableCell>
-                      <div>
-                        <p className="font-medium">{row.group_name}</p>
-                        {row.driver_code ? (
-                          <p className="font-mono text-xs text-muted-foreground">
-                            {row.driver_code}
-                          </p>
-                        ) : null}
-                      </div>
+                      <TableNameCell name={row.group_name} />
+                      {row.driver_code ? (
+                        <p className="font-mono text-xs text-muted-foreground">
+                          {row.driver_code}
+                        </p>
+                      ) : null}
                     </TableCell>
                     <TableCell className="tabular-nums">{row.delivery_count}</TableCell>
                     <TableCell className="tabular-nums">

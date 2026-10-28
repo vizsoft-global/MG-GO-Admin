@@ -26,13 +26,16 @@ import { toast } from "sonner";
 
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
-  AppListControls,
   GroupedSections,
   fieldSearchMatch,
   groupRows,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -131,8 +134,26 @@ function SelectBox({
 
 export function DriverDevicesPageShell() {
   const t = useTranslations("pages.driverDevices");
-  const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs("driver-devices");
+  const tList = useTranslations("common.listControls");
+  const toolbarColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "driver", label: t("colDriver"), locked: true },
+      { id: "phone", label: t("colPhone") },
+      { id: "severity", label: t("colSeverity") },
+      { id: "zone", label: tList("groupZone"), categorical: true },
+      { id: "build", label: t("colBuild") },
+      { id: "device", label: t("colDevice") },
+      { id: "android", label: t("colAndroid") },
+      { id: "ram", label: t("colRam") },
+      { id: "processor", label: t("colProcessor") },
+      { id: "battery", label: t("colBattery") },
+      { id: "lastSeen", label: t("colLastSeen") },
+      { id: "sentry", label: t("colSentry") },
+      { id: "force", label: t("colForce") },
+    ],
+    [t, tList],
+  );
+  const prefs = useTablePrefs("driver-devices", toolbarColumns);
   const { can } = useAuth();
   const canForce = can("drivers.manage");
   const canNotify = can("notifications.send");
@@ -147,7 +168,6 @@ export function DriverDevicesPageShell() {
   const buildParam = searchParams.get("build");
   const buildFilter = buildParam != null && /^\d+$/.test(buildParam) ? Number(buildParam) : null;
 
-  const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<DriverDevicesSortKey>("default");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [notifyOpen, setNotifyOpen] = useState(false);
@@ -187,7 +207,7 @@ export function DriverDevicesPageShell() {
     const filtered = rows.filter(
       (row) =>
         driverDeviceMatchesTab(row, activeTab) &&
-        fieldSearchMatch(row, search, {
+        fieldSearchMatch(row, prefs.appliedQuery, {
           name: (item) => item.full_name,
           employee_id: (item) => item.employee_id ?? item.driver_code,
           zone: (item) => item.zone_name,
@@ -199,7 +219,7 @@ export function DriverDevicesPageShell() {
         (buildFilter == null || row.app_version_code === buildFilter),
     );
     return sortDriverDeviceRows(filtered, sortKey);
-  }, [rows, activeTab, search, buildFilter, sortKey]);
+  }, [rows, activeTab, prefs.appliedQuery, buildFilter, sortKey]);
   const grouped = useMemo(
     () =>
       groupRows(
@@ -233,11 +253,13 @@ export function DriverDevicesPageShell() {
   );
 
   const replaceQuery = (next: { tab?: DriverDevicesTab; build?: number | null }) => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams.toString());
     const nextTab = next.tab ?? activeTab;
     const nextBuild = next.build === undefined ? buildFilter : next.build;
-    if (nextTab !== "all") params.set("tab", nextTab);
-    if (nextBuild != null) params.set("build", String(nextBuild));
+    if (nextTab === "all") params.delete("tab");
+    else params.set("tab", nextTab);
+    if (nextBuild == null) params.delete("build");
+    else params.set("build", String(nextBuild));
     const qs = params.toString();
     router.replace(qs ? `/driver-devices?${qs}` : "/driver-devices");
   };
@@ -455,42 +477,32 @@ export function DriverDevicesPageShell() {
 
       <AppListCard
         toolbar={
-          <AppListControls
-            className="min-w-0 flex-1"
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder={t("searchPlaceholder")}
-            clearSearchLabel={labels.clearSearch}
-            groupByOptions={[labels.group.none, labels.group.zone]}
-            groupBy={prefs.groupBy}
-            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
-            groupByLabel={labels.groupBy}
-            viewMode={prefs.viewMode}
-            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
-            tableViewLabel={labels.viewTable}
-            cardsViewLabel={labels.viewCards}
-            filterSlot={
-              <>
-                {buildFilter != null ? (
-                  <button
-                    type="button"
-                    onClick={() => replaceQuery({ build: null })}
-                    className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-emerald-500 bg-emerald-100 px-2.5 text-xs font-semibold text-emerald-900"
-                  >
-                    <Check className="h-3 w-3 stroke-[2.5]" />
-                    {t("buildFilter", { code: buildFilter })}
-                    <X className="h-3 w-3" />
-                  </button>
-                ) : null}
-                {sentry && !sentry.connected ? (
-                  <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-amber-200 bg-amber-100 px-2.5 text-xs font-medium text-amber-800">
-                    <Bug className="h-3.5 w-3.5" />
-                    {t(`sentry.${sentry.reason}`)}
-                  </span>
-                ) : null}
-              </>
-            }
-          />
+          <>
+            <TableToolbar
+              prefs={prefs}
+              entity={t("title")}
+              columns={toolbarColumns}
+              rowKind="dynamic"
+              entityList
+              filteredCount={visible.length}
+              totalCount={rows.length}
+              chips={
+                buildFilter != null
+                  ? [{ id: "build", label: t("buildFilter", { code: buildFilter }) }]
+                  : undefined
+              }
+              onRemoveChip={() => replaceQuery({ build: null })}
+              onClearChips={() => replaceQuery({ build: null })}
+            />
+            {sentry && !sentry.connected ? (
+              <div className="px-4 pb-3">
+                <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-amber-200 bg-amber-100 px-2.5 text-xs font-medium text-amber-800">
+                  <Bug className="h-3.5 w-3.5" />
+                  {t(`sentry.${sentry.reason}`)}
+                </span>
+              </div>
+            ) : null}
+          </>
         }
       >
         {isLoading ? (
@@ -554,7 +566,7 @@ export function DriverDevicesPageShell() {
               </div>
             ) : null}
 
-            {prefs.viewMode === "cards" ? (
+            {prefs.view === "grid" ? (
               visible.length === 0 ? (
                 <AppDataTableEmpty>{t("emptyFilters")}</AppDataTableEmpty>
               ) : (
@@ -568,7 +580,7 @@ export function DriverDevicesPageShell() {
                             href={`/drivers/${row.driver_id}?from=driver-devices`}
                             className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
                           >
-                            <p className="truncate text-sm font-semibold">{row.full_name}</p>
+                            <TableNameCell name={row.full_name} />
                             <p className="mt-1 truncate text-xs text-muted-foreground">
                               #{row.driver_code}
                               {row.zone_name ? ` · ${row.zone_name}` : ""}
@@ -834,9 +846,9 @@ function DeviceRow({
           <div className="min-w-0">
             <Link
               href={`/drivers/${row.driver_id}?from=driver-devices`}
-              className="block truncate text-sm font-medium text-foreground hover:text-primary hover:underline"
+              className="block text-foreground hover:text-primary"
             >
-              {row.full_name}
+              <TableNameCell name={row.full_name} />
             </Link>
             <span className="text-xs text-muted-foreground">#{row.driver_code}</span>
           </div>

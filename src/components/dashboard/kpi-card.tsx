@@ -5,6 +5,7 @@ import {
   NEUTRAL_TILE,
   TONE_STYLES,
 } from "@/lib/ui/tone-styles";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export type KpiAccent = "default" | "success" | "warning" | "danger" | "primary";
@@ -92,9 +93,16 @@ export function KpiCard({
         </span>
       ) : null}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <p className="whitespace-normal break-words text-xs font-semibold text-muted-foreground">
+                {label}
+              </p>
+            }
+          />
+          <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
         {compact ? (
           <p className="flex min-w-0 items-baseline gap-1.5">
             <span className="text-xl font-semibold tabular-nums tracking-tight text-foreground">

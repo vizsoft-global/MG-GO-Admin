@@ -1,12 +1,14 @@
 "use client";
 
 import { Check, Download, Upload } from "lucide-react";
-import { useState, type ChangeEvent } from "react";
+import { useMemo, useState, type ChangeEvent } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import * as XLSX from "xlsx";
 import { formatKuwaitDateTime } from "@/features/driver-tracking/shift-adherence-display";
 import { downloadWorkbookXlsx } from "@/features/drivers/import/export-xlsx";
 import { cn } from "@/lib/utils";
+import { TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { ListToolbar, rowMatches } from "@/features/roster/table-kit";
 import { applyRosterSheet, previewRosterSheet } from "./roster-actions";
 import { RosterNav } from "./roster-nav";
 import { clock12, weekdayShort } from "./roster-range";
@@ -78,6 +80,16 @@ function sessionCopy(row: RosterPreviewRow, overnightLabel: string, offLabel: st
 
 export function RosterUploadShell() {
   const t = useTranslations("pages.roster");
+  const issueColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "row", label: "#", locked: true },
+      { id: "key", label: t("nameOrId") },
+      { id: "rider", label: t("rider"), locked: true },
+      { id: "issue", label: t("issue") },
+    ],
+    [t],
+  );
+  const issuePrefs = useTablePrefs("roster.uploadIssues", issueColumns);
   const locale = useLocale();
   const [fileName, setFileName] = useState("");
   const [sheetName, setSheetName] = useState("");
@@ -282,6 +294,14 @@ export function RosterUploadShell() {
                         {t("downloadIssues")}
                       </button>
                     </div>
+                    <ListToolbar
+                      prefs={issuePrefs}
+                      entity={t("rider")}
+                      columns={issueColumns}
+                      rowKind="dynamic"
+                      filteredCount={issues.filter((row) => rowMatches(issuePrefs.appliedQuery, [row.driverKey, row.driverName, row.driverLabel, row.errors.join(" ")])).length}
+                      totalCount={issues.length}
+                    />
                     <div className="max-h-48 overflow-auto">
                       <table className="w-full">
                         <thead>
@@ -294,11 +314,11 @@ export function RosterUploadShell() {
                           </tr>
                         </thead>
                         <tbody>
-                          {issues.map((row) => (
+                          {issues.filter((row) => rowMatches(issuePrefs.appliedQuery, [row.driverKey, row.driverName, row.driverLabel, row.errors.join(" ")])).map((row) => (
                             <tr key={`${row.driverKey}-${row.date}-${row.rows[0] ?? ""}`} className="border-b border-[#E2DCD8]">
                               <td className={rosterTd}>{row.rows[0] ?? "—"}</td>
                               <td className={rosterTd}>{row.driverKey}</td>
-                              <td className={rosterTd}>{row.driverName || row.driverLabel}</td>
+                              <td className={rosterTd}><TableNameCell name={row.driverName || row.driverLabel} /></td>
                               <td className={rosterTd}>{row.errors.map((code) => t(`errors.${code}`)).join(", ")}</td>
                             </tr>
                           ))}

@@ -27,6 +27,13 @@ import {
 } from "../performance-ops-format";
 import type { OpsRiderView, OpsSnapshot } from "../performance-ops-types";
 import { OpsHeaderFilter, OpsSortButton } from "./ops-header-filter";
+import {
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { cn } from "@/lib/utils";
 
 const NUMERIC_COLS = new Set([
@@ -87,9 +94,9 @@ export function OpsRidersTab({
     setSortDir(null);
   }, [resetKey]);
 
-  const cols: Array<{ id: string; label: string; align?: "end" }> = [
+  const cols = useMemo((): Array<TableToolbarColumn & { align?: "end" }> => [
     { id: "display_id", label: t("col.id") },
-    { id: "name", label: t("col.name") },
+    { id: "name", label: t("col.name"), locked: true },
     { id: "partner_label", label: t("col.partner") },
     { id: "store_label", label: t("col.store") },
     { id: "zone", label: t("col.zone") },
@@ -109,7 +116,9 @@ export function OpsRidersTab({
     { id: "utr", label: t("col.utr"), align: "end" },
     { id: "avg_delivery_min", label: t("col.avgDelivery"), align: "end" },
     { id: "status", label: t("col.status") },
-  ];
+  ], [t]);
+  const prefs = useTablePrefs("ops-riders", cols);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
 
   function cell(row: OpsRiderView, id: string): string {
     switch (id) {
@@ -156,12 +165,16 @@ export function OpsRidersTab({
       rows as unknown as Array<Record<string, unknown>>,
       filters,
     ) as unknown as OpsRiderView[];
+    const needle = prefs.appliedQuery.trim().toLowerCase();
+    const searched = needle
+      ? narrowed.filter((row) => `${row.name ?? ""} ${row.display_id ?? ""}`.toLowerCase().includes(needle))
+      : narrowed;
     return sortOpsRiders(
-      narrowed as unknown as Array<Record<string, unknown>>,
+      searched as unknown as Array<Record<string, unknown>>,
       sortKey,
       sortDir,
     ) as unknown as OpsRiderView[];
-  }, [riders, filters, sortKey, sortDir, t]);
+  }, [riders, filters, sortKey, sortDir, t, prefs.appliedQuery]);
 
   const virtualizer = useVirtualizer({
     count: filtered.length,
@@ -187,26 +200,23 @@ export function OpsRidersTab({
       />
       <p className="text-xs text-muted-foreground">{t("tableFiltersHint")}</p>
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="flex items-center justify-end gap-2 border-b border-border px-3 py-2">
-          <span className="text-xs text-muted-foreground">
-            {t("showingRiders", { count: filtered.length })}
-          </span>
-          <button
-            type="button"
-            className="h-8 text-xs text-primary"
-            onClick={() =>
-              downloadCsv(
-                "ops-riders",
-                toCsv(
-                  cols.map((c) => c.label),
-                  filtered.map((r) => cols.map((c) => cell(r, c.id))),
-                ),
-              )
-            }
-          >
-            {t("exportTab")}
-          </button>
-        </div>
+        <TableToolbar
+          prefs={prefs}
+          entity={t("tabRiders")}
+          columns={cols}
+          rowKind="dynamic"
+          filteredCount={filtered.length}
+          totalCount={riders.length}
+          onExport={() =>
+            downloadCsv(
+              "ops-riders",
+              toCsv(
+                shown.map((c) => c.label),
+                filtered.map((r) => shown.map((c) => cell(r, c.id))),
+              ),
+            )
+          }
+        />
         <div ref={parentRef} className="h-[min(420px,48dvh)] overflow-auto">
           <div
             className={cn(
@@ -214,7 +224,7 @@ export function OpsRidersTab({
               TABLE_HEAD_CLASS,
             )}
           >
-            {cols.map((c) => (
+            {shown.map((c) => (
               <div
                 key={c.id}
                 className={cn(
@@ -225,7 +235,7 @@ export function OpsRidersTab({
                 <span
                   className={cn(
                     "min-w-0 whitespace-normal leading-tight",
-                    c.align === "end" && "text-end",
+                    NUMERIC_COLS.has(c.id) && "text-end",
                   )}
                 >
                   {c.label}
@@ -275,17 +285,17 @@ export function OpsRidersTab({
                   className="absolute inset-x-0 flex min-w-[2320px] items-center border-b border-border/60 px-3 text-xs"
                   style={{ height: item.size, transform: `translateY(${item.start}px)` }}
                 >
-                  {cols.map((c) => (
+                  {shown.map((c) => (
                     <span
                       key={c.id}
                       className={cn(
                         "truncate px-1 tabular-nums",
                         COL_WIDTH[c.id],
-                        c.align === "end" && "text-end",
+                        NUMERIC_COLS.has(c.id) && "text-end",
                         c.id === "name" && "font-medium",
                       )}
                     >
-                      {cell(row, c.id)}
+                      {c.id === "name" ? <TableNameCell name={cell(row, c.id)} /> : cell(row, c.id) === "—" ? "—" : cell(row, c.id)}
                     </span>
                   ))}
                 </div>

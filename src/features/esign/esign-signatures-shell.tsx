@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
   CircleSlash,
@@ -11,12 +11,21 @@ import {
   RefreshCw,
   XCircle,
 } from "lucide-react";
+import { groupRows } from "@/components/app/app-list-controls";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
   AppDataTable,
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -63,6 +72,42 @@ export function EsignSignaturesShell() {
   const { data, isLoading, isFetching, refetch } = useEsignRequestsList(filters);
   const { data: counts } = useEsignStatusCounts();
   const rows = data?.rows ?? [];
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "ref", label: t("colCode"), locked: true },
+      { id: "document", label: t("colDocument"), locked: true },
+      { id: "recipient", label: t("colRecipient"), locked: true },
+      { id: "category", label: t("colCategory"), categorical: true },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "sent", label: t("colSent") },
+      { id: "signedOn", label: t("colSignedOn") },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("esign.signatures", columns);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+  const filtered = useMemo(() => {
+    const q = prefs.appliedQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) =>
+      [row.request_code, row.title, row.driver_name, row.driver_code, row.category_label]
+        .some((value) => (value ?? "").toLowerCase().includes(q)),
+    );
+  }, [prefs.appliedQuery, rows]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filtered,
+        prefs.groupBy,
+        {
+          category: (row) => row.category_label ?? "",
+          status: (row) => tCommon(`status.${row.status}`),
+        },
+        {},
+        "—",
+      ),
+    [filtered, prefs.groupBy, tCommon],
+  );
 
   function tabCount(tab: StatusTab): number | null {
     if (!counts) return null;
@@ -154,65 +199,93 @@ export function EsignSignaturesShell() {
           })}
         </div>
 
+        <TableToolbar
+          prefs={prefs}
+          entity={t("title")}
+          columns={columns}
+          rowKind="dynamic"
+          entityList
+          filteredCount={filtered.length}
+          totalCount={rows.length}
+        />
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
+        ) : prefs.view === "grid" ? (
+          <TableGridCards
+            rows={filtered.map((row) => ({
+              id: row.request_code,
+              name: row.title || row.driver_name,
+              fields: [
+                { label: t("colRecipient"), value: row.driver_name },
+                { label: t("colCategory"), value: row.category_label || "—" },
+                { label: t("colStatus"), value: tCommon(`status.${row.status}`) },
+                { label: t("colSent"), value: row.created_at ? formatDay(row.created_at) : "—" },
+              ],
+              onOpen: () => router.push(`/requests/esign/${row.id}`),
+            }))}
+          />
         ) : (
-          <AppDataTable
-            columns={[
-              { id: "ref", label: t("colCode") },
-              { id: "document", label: t("colDocument") },
-              { id: "recipient", label: t("colRecipient") },
-              { id: "category", label: t("colCategory") },
-              { id: "status", label: t("colStatus") },
-              { id: "sent", label: t("colSent") },
-              { id: "signedOn", label: t("colSignedOn") },
-            ]}
-          >
-            {rows.map((row) => (
-              <AppDataTableRow
-                key={row.id}
-                className="cursor-pointer"
-                onClick={() => router.push(`/requests/esign/${row.id}`)}
-              >
-                <TableCell className="font-mono text-xs">
-                  {row.request_code}
-                  {/* ui-system §6: row click opens the detail page; the link is the affordance,
-                      so the list keeps Figma's seven columns instead of an actions column. */}
-                  <Link
-                    href={`/requests/esign/${row.id}`}
-                    className="mt-0.5 flex items-center gap-1 font-sans text-xs text-primary hover:underline"
-                    onClick={(e) => e.stopPropagation()}
+          <AppDataTable columns={shown.map((column) => ({ id: column.id, label: column.label }))}>
+            {grouped.flatMap((group) => [
+              ...(prefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`}>
+                      <TableCell colSpan={shown.length} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => {
+                const cells: Record<string, ReactNode> = {
+                  ref: (
+                    <>
+                      <span className="font-mono text-xs">{row.request_code}</span>
+                      <Link
+                        href={`/requests/esign/${row.id}`}
+                        className="mt-0.5 flex items-center gap-1 font-sans text-xs text-primary hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        {t("viewDetails")}
+                      </Link>
+                    </>
+                  ),
+                  document: row.title ? <TableNameCell name={row.title} /> : <EmptyCell />,
+                  recipient: (
+                    <>
+                      <div>{row.driver_name || <EmptyCell />}</div>
+                      <div className="text-xs text-muted-foreground">{row.driver_code}</div>
+                    </>
+                  ),
+                  category: row.category_label || <EmptyCell />,
+                  status: (
+                    <StatusPill variant={statusVariant(row.status)}>
+                      {tCommon(`status.${row.status}`)}
+                    </StatusPill>
+                  ),
+                  sent: row.created_at ? formatDay(row.created_at) : <EmptyCell />,
+                  signedOn: row.signed_at ? formatDay(row.signed_at) : <EmptyCell />,
+                };
+                return (
+                  <AppDataTableRow
+                    key={row.id}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/requests/esign/${row.id}`)}
                   >
-                    <ExternalLink className="h-3 w-3" />
-                    {t("viewDetails")}
-                  </Link>
-                </TableCell>
-                <TableCell
-                  className="max-w-[320px] truncate text-sm font-medium"
-                  title={row.title ?? undefined}
-                >
-                  {row.title}
-                </TableCell>
-                <TableCell className="text-sm">
-                  <div>{row.driver_name}</div>
-                  <div className="text-xs text-muted-foreground">{row.driver_code}</div>
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {row.category_label ?? "—"}
-                </TableCell>
-                <TableCell>
-                  <StatusPill variant={statusVariant(row.status)}>
-                    {tCommon(`status.${row.status}`)}
-                  </StatusPill>
-                </TableCell>
-                <TableCell className="text-sm tabular-nums">{formatDay(row.created_at)}</TableCell>
-                <TableCell className="text-sm tabular-nums">{formatDay(row.signed_at)}</TableCell>
-              </AppDataTableRow>
-            ))}
+                    {shown.map((column) => (
+                      <TableCell key={column.id} className="text-sm">
+                        {cells[column.id]}
+                      </TableCell>
+                    ))}
+                  </AppDataTableRow>
+                );
+              }),
+            ])}
           </AppDataTable>
         )}
       </AppListCard>

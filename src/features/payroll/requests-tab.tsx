@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Banknote,
@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { TABLE_HEAD_CLASS } from "@/components/app";
+import { EmptyCell, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { groupBanner, groupRows, ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
@@ -86,13 +88,28 @@ export function RequestsTab({
   const [tile, setTile] = useState<PayrollTileKey | "all">("all");
   const [status, setStatus] = useState<PayrollUiStatus | "all">("all");
 
+  const requestColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "code", label: t("cols.requestId"), locked: true },
+      { id: "rider", label: t("cols.rider"), locked: true },
+      { id: "id", label: t("cols.id") },
+      { id: "type", label: t("cols.type"), categorical: true },
+      { id: "day", label: t("cols.day") },
+      { id: "zone", label: t("cols.zone"), categorical: true },
+      { id: "partner", label: t("cols.partner"), categorical: true },
+      { id: "dept", label: t("cols.dept"), categorical: true },
+      { id: "status", label: t("cols.status"), categorical: true },
+    ],
+    [t],
+  );
+  const requestPrefs = useTablePrefs("payroll.requests", requestColumns);
   const list = useMemo(() => {
     return requests.filter((r) => {
       if (tile !== "all" && r.tile !== tile) return false;
       if (status !== "all" && r.uiStatus !== status) return false;
-      return true;
+      return rowMatches(requestPrefs.appliedQuery, [r.code, r.riderName, r.riderCode, r.zone, r.partner, r.reviewingDept, r.day]);
     });
-  }, [requests, tile, status]);
+  }, [requestPrefs.appliedQuery, requests, status, tile]);
 
   return (
     <div className="space-y-2">
@@ -164,22 +181,6 @@ export function RequestsTab({
                 {t("queueSub", { count: list.length, month: month.label })}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (canExport) {
-                  exportRequestsCsv(
-                    month.key,
-                    list,
-                    (key) => t(`tiles.${key}`),
-                    (s) => t(`status.${s}`),
-                  );
-                }
-              }}
-              className="inline-flex h-8 items-center rounded-md px-2 text-xs text-primary hover:bg-primary/10"
-            >
-              {t("exportCsv")}
-            </button>
           </div>
           <div className="mb-2 flex flex-wrap gap-1.5">
             {STATUSES.map((s) => (
@@ -188,74 +189,119 @@ export function RequestsTab({
               </ToggleChip>
             ))}
           </div>
-          <div className="max-h-[min(480px,46dvh)] overflow-auto">
-            <table className="w-full min-w-[1100px] border-collapse text-xs">
-              <thead className="sticky top-0 bg-card">
-                <tr>
-                  {[
-                    t("cols.requestId"),
-                    t("cols.rider"),
-                    t("cols.id"),
-                    t("cols.type"),
-                    t("cols.day"),
-                    t("cols.zone"),
-                    t("cols.partner"),
-                    t("cols.dept"),
-                    t("cols.status"),
-                  ].map((h) => (
-                    <th key={h} className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {list.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="px-3 py-8 text-center text-xs text-muted-foreground">
-                      {t("emptyRequests")}
-                    </td>
-                  </tr>
-                ) : (
-                  list.map((row) => (
-                    <tr key={row.id} className="border-b border-border/60 hover:bg-muted/30">
-                      <td className="px-2 py-1.5">
-                        <Link
-                          href={`/requests/${row.id}`}
-                          className="font-semibold text-primary hover:bg-primary/10"
-                        >
-                          {row.code}
-                        </Link>
-                      </td>
-                      <td className="px-2 py-1.5">{row.riderName}</td>
-                      <td className="px-2 py-1.5">{row.riderCode}</td>
-                      <td className="px-2 py-1.5">{t(`tiles.${row.tile}`)}</td>
-                      <td className="px-2 py-1.5">{row.day}</td>
-                      <td className="px-2 py-1.5">{row.zone}</td>
-                      <td className="px-2 py-1.5">{row.partner}</td>
-                      <td className="px-2 py-1.5">{row.reviewingDept}</td>
-                      <td className="px-2 py-1.5">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-2 py-0.5 text-xs font-bold",
-                            statusPill(row.uiStatus),
-                          )}
-                        >
-                          {t(`status.${row.uiStatus}`)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          <ListToolbar
+            prefs={requestPrefs}
+            entity={t("queueTitle")}
+            columns={requestColumns}
+            rowKind="dynamic"
+            filteredCount={list.length}
+            totalCount={requests.length}
+            onExport={
+              canExport
+                ? () =>
+                    exportRequestsCsv(
+                      month.key,
+                      list,
+                      (key) => t(`tiles.${key}`),
+                      (s) => t(`status.${s}`),
+                    )
+                : undefined
+            }
+          />
+          <RequestRows columns={requestColumns} prefs={requestPrefs} rows={list} empty={t("emptyRequests")} statusLabel={(row) => t(`status.${row.uiStatus}`)} typeLabel={(row) => t(`tiles.${row.tile}`)} />
         </div>
         <ApprovalWorkflowPanel
           awaitingAction={workflow.awaitingAction}
           requestsPerRider={workflow.requestsPerRider}
         />
       </div>
+    </div>
+  );
+}
+
+function RequestRows({
+  columns,
+  prefs,
+  rows,
+  empty,
+  statusLabel,
+  typeLabel,
+}: {
+  columns: TableToolbarColumn[];
+  prefs: ReturnType<typeof useTablePrefs>;
+  rows: readonly PayrollRequestRow[];
+  empty: string;
+  statusLabel: (row: PayrollRequestRow) => string;
+  typeLabel: (row: PayrollRequestRow) => string;
+}) {
+  const ids = visibleColumnIds(prefs);
+  const groups = groupRows(rows, prefs.groupBy, (row) => {
+    if (prefs.groupBy === "type") return typeLabel(row);
+    if (prefs.groupBy === "zone") return row.zone;
+    if (prefs.groupBy === "partner") return row.partner;
+    if (prefs.groupBy === "dept") return row.reviewingDept;
+    if (prefs.groupBy === "status") return statusLabel(row);
+    return "";
+  });
+  return (
+    <div className="max-h-[min(480px,46dvh)] overflow-auto">
+      <table className="w-full min-w-[1100px] border-collapse text-xs">
+        <thead className="sticky top-0 bg-card">
+          <tr>
+            {ids.map((id) => (
+              <th key={id} className={cn(TABLE_HEAD_CLASS, "px-2 py-2")}>
+                {columns.find((column) => column.id === id)?.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={Math.max(ids.length, 1)} className="px-3 py-8 text-center text-xs text-muted-foreground">
+                {empty}
+              </td>
+            </tr>
+          ) : (
+            groups.map((group) => (
+              <Fragment key={group.key}>
+                {group.label ? (
+                  <tr>
+                    <td colSpan={ids.length} className="bg-muted/40 px-2 py-1 text-xs font-semibold">
+                      {groupBanner(group.label, group.rows.length)}
+                    </td>
+                  </tr>
+                ) : null}
+                {group.rows.map((row) => (
+                  <tr key={row.id} className="border-b border-border/60 hover:bg-muted/30">
+                    {ids.map((id) => (
+                      <td key={id} className="px-2 py-1.5">
+                        {id === "code" ? (
+                          <Link href={`/requests/${row.id}`} className="font-semibold text-primary hover:bg-primary/10">
+                            {row.code}
+                          </Link>
+                        ) : null}
+                        {id === "rider" ? <TableNameCell name={row.riderName} /> : null}
+                        {id === "id" ? (row.riderCode ? row.riderCode : <EmptyCell />) : null}
+                        {id === "type" ? typeLabel(row) : null}
+                        {id === "day" ? (row.day ? row.day : <EmptyCell />) : null}
+                        {id === "zone" ? (row.zone ? row.zone : <EmptyCell />) : null}
+                        {id === "partner" ? (row.partner ? row.partner : <EmptyCell />) : null}
+                        {id === "dept" ? (row.reviewingDept ? row.reviewingDept : <EmptyCell />) : null}
+                        {id === "status" ? (
+                          <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-bold", statusPill(row.uiStatus))}>
+                            {statusLabel(row)}
+                          </span>
+                        ) : null}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </Fragment>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }

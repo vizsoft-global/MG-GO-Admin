@@ -1,11 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Building2, Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
+import { Building2, Loader2, Pencil, RefreshCw } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import {
   AppDataTable,
@@ -35,7 +43,6 @@ import {
   updateVisitDepartment,
   type VisitDepartmentRow,
 } from "./visits-actions";
-import { avatarTintClass, departmentBadgeClass, initialsOf } from "./visit-status-utils";
 
 /** Sentinel for "offered at every branch", which is stored as a NULL branch_id. */
 const ALL_BRANCHES = "all";
@@ -102,7 +109,48 @@ export function VisitsDepartmentsShell() {
 
   const rows = data?.rows ?? [];
   const branches = branchesData?.rows ?? [];
-  const branchNameById = new Map(branches.map((b) => [b.id, b.name]));
+  const branchNameById = useMemo(
+    () => new Map(branches.map((branch) => [branch.id, branch.name])),
+    [branches],
+  );
+  const deptColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "dept", label: t("colDepartment"), locked: true },
+      { id: "branch", label: t("colBranch"), categorical: true },
+      { id: "desk", label: t("departments.deskCounter") },
+      { id: "staff", label: t("departments.assignedStaff") },
+      { id: "handling", label: t("departments.avgHandling") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "actions", label: t("colActions"), locked: true },
+    ],
+    [t],
+  );
+  const tablePrefs = useTablePrefs("visits.departments", deptColumns);
+  const filteredRows = useMemo(() => {
+    const query = tablePrefs.appliedQuery.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) =>
+      [row.label_en, row.label_ar, branchNameById.get(row.branch_id ?? "") ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [branchNameById, rows, tablePrefs.appliedQuery]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filteredRows,
+        tablePrefs.groupBy,
+        {
+          branch: (row) => (row.branch_id ? branchNameById.get(row.branch_id) : t("departments.branchAll")),
+          status: (row) => (row.is_active ? t("catalog.active") : t("slots.inactive")),
+        },
+        {},
+        "—",
+      ),
+    [branchNameById, filteredRows, t, tablePrefs.groupBy],
+  );
+  const shownColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
   const branchItems = [
     { value: ALL_BRANCHES, label: t("departments.branchAll") },
     ...branches.map((b) => ({ value: b.id, label: b.name })),
@@ -191,12 +239,6 @@ export function VisitsDepartmentsShell() {
             <span className="text-xs text-muted-foreground">
               {t("departments.countLabel", { count: rows.length })}
             </span>
-            {canManage ? (
-              <Button type="button" size="sm" className="h-9" onClick={openCreate}>
-                <Plus className="me-1.5 h-3.5 w-3.5" />
-                {t("departments.add")}
-              </Button>
-            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -215,6 +257,17 @@ export function VisitsDepartmentsShell() {
       />
 
       <AppListCard className="mt-2 p-0">
+        <TableToolbar
+          prefs={tablePrefs}
+          entity={t("departments.pageTitle")}
+          columns={deptColumns}
+          rowKind="dynamic"
+          entityList
+          filteredCount={filteredRows.length}
+          totalCount={rows.length}
+          onAdd={canManage ? openCreate : undefined}
+          addLabel={t("departments.add")}
+        />
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -226,81 +279,53 @@ export function VisitsDepartmentsShell() {
           />
         ) : (
           <AppDataTable
-            columns={[
-              { id: "dept", label: t("colDepartment") },
-              { id: "branch", label: t("colBranch") },
-              { id: "desk", label: t("departments.deskCounter") },
-              { id: "staff", label: t("departments.assignedStaff") },
-              { id: "handling", label: t("departments.avgHandling") },
-              { id: "status", label: t("colStatus") },
-              { id: "actions", label: t("colActions") },
-            ]}
+            columns={shownColumns.map((column) => ({ id: column.id, label: column.label }))}
           >
-            {rows.map((row) => (
-              <AppDataTableRow key={row.id}>
-                <TableCell>
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-                      departmentBadgeClass(row.key),
-                    )}
-                  >
-                    {row.label_en}
-                  </span>
-                </TableCell>
-                <TableCell className="text-sm">
-                  {row.branch_id ? (
+            {grouped.flatMap((group) => [
+              ...(tablePrefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => {
+                const cells: Record<string, ReactNode> = {
+                  dept: <TableNameCell name={row.label_en} />,
+                  branch: row.branch_id ? (
                     <span className="inline-flex items-center gap-1 text-foreground">
                       <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
                       {branchNameById.get(row.branch_id) ?? row.branch_id}
                     </span>
                   ) : (
-                    <span className="text-muted-foreground">{t("departments.branchAll")}</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-sm">
-                  <span className="tabular-nums text-foreground">
-                    {t("departments.desksValue", { count: row.desks_count })}
-                  </span>
-                  {row.desk_location ? (
-                    <p className="text-xs text-muted-foreground">{row.desk_location}</p>
-                  ) : null}
-                </TableCell>
-                <TableCell>
-                  {row.assigned_staff_name ? (
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                          avatarTintClass(row.assigned_staff_name),
-                        )}
-                      >
-                        {initialsOf(row.assigned_staff_name)}
+                    t("departments.branchAll")
+                  ),
+                  desk: (
+                    <>
+                      <span className="tabular-nums text-foreground">
+                        {t("departments.desksValue", { count: row.desks_count })}
                       </span>
-                      <span className="text-sm">{row.assigned_staff_name}</span>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-sm tabular-nums text-muted-foreground">
-                  {row.avg_handling_minutes != null
-                    ? t("departments.minutesValue", { minutes: row.avg_handling_minutes })
-                    : "—"}
-                </TableCell>
-                <TableCell>
-                  {canManage ? (
+                      {row.desk_location ? (
+                        <p className="text-xs text-muted-foreground">{row.desk_location}</p>
+                      ) : null}
+                    </>
+                  ),
+                  staff: row.assigned_staff_name ? <TableNameCell name={row.assigned_staff_name} /> : <EmptyCell />,
+                  handling:
+                    row.avg_handling_minutes != null ? (
+                      t("departments.minutesValue", { minutes: row.avg_handling_minutes })
+                    ) : (
+                      <EmptyCell />
+                    ),
+                  status: canManage ? (
                     <div className="flex items-center gap-2">
                       <Switch
                         checked={row.is_active}
                         onCheckedChange={(checked) => void toggleActive(row.id, checked)}
                       />
-                      <span
-                        className={cn(
-                          "text-xs font-medium",
-                          row.is_active ? "text-success" : "text-muted-foreground",
-                        )}
-                      >
+                      <span className={cn("text-xs font-medium", row.is_active ? "text-success" : "text-muted-foreground")}>
                         {row.is_active ? t("catalog.active") : t("slots.inactive")}
                       </span>
                     </div>
@@ -308,10 +333,8 @@ export function VisitsDepartmentsShell() {
                     <StatusPill variant={row.is_active ? "success" : "neutral"}>
                       {row.is_active ? t("catalog.active") : t("slots.inactive")}
                     </StatusPill>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {canManage ? (
+                  ),
+                  actions: canManage ? (
                     <Button
                       type="button"
                       size="sm"
@@ -323,11 +346,18 @@ export function VisitsDepartmentsShell() {
                       {t("catalog.edit")}
                     </Button>
                   ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </TableCell>
+                    <EmptyCell />
+                  ),
+                };
+                return (
+              <AppDataTableRow key={row.id}>
+                {shownColumns.map((column) => (
+                  <TableCell key={column.id}>{cells[column.id] ?? <EmptyCell />}</TableCell>
+                ))}
               </AppDataTableRow>
-            ))}
+                );
+              }),
+            ])}
           </AppDataTable>
         )}
       </AppListCard>

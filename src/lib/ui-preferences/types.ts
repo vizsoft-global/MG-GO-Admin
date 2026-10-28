@@ -7,6 +7,10 @@ export type ListColumnPreference = {
   order: string[];
   visible: string[];
   sort: UiPreferenceSort | null;
+  /** Last Group by column id, or "none". Optional so older saved prefs still load. */
+  groupBy?: string | null;
+  /** Last list or grid choice. Optional so older saved prefs still load. */
+  viewMode?: "list" | "grid";
 };
 
 export type UiPreferenceSource = "user" | "role" | "system";

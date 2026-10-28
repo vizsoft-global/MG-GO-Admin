@@ -15,6 +15,13 @@ import {
 } from "@/components/ui/select";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
+import {
   Table,
   TableBody,
   TableCell,
@@ -84,6 +91,16 @@ export function NotificationImportPanel({
   onImportPreviewStatsChange,
 }: Props) {
   const t = useTranslations("pages.notifications");
+  const columns = useMemo((): TableToolbarColumn[] => [
+    { id: "row", label: "#" },
+    { id: "employee", label: t("colEmployeeId") },
+    { id: "code", label: t("colDriverCode") },
+    { id: "driver", label: t("colDriver"), locked: true },
+    { id: "title", label: t("fieldTitle") },
+    { id: "body", label: t("fieldBody") },
+    { id: "status", label: t("colStatus") },
+  ], [t]);
+  const prefs = useTablePrefs("notification-import-preview", columns);
   const [pending, startTransition] = useTransition();
   const [previewRows, setPreviewRows] = useState<
     Array<{
@@ -298,30 +315,47 @@ export function NotificationImportPanel({
                 </Select>
               </div>
               <div className="overflow-x-auto rounded-lg border border-border">
+                <TableToolbar
+                  prefs={prefs}
+                  entity={t("importPreviewAs")}
+                  columns={columns}
+                  rowKind="dynamic"
+                  filteredCount={previewRows.slice(0, 50).filter((row) => {
+                    const needle = prefs.appliedQuery.trim().toLowerCase();
+                    if (!needle) return true;
+                    return `${row.employee_id} ${row.driver_code} ${row.driver_name ?? ""} ${row.resolved_title} ${row.status}`.toLowerCase().includes(needle);
+                  }).length}
+                  totalCount={Math.min(previewRows.length, 50)}
+                />
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className={TABLE_HEAD_CLASS}>#</TableHead>
-                      <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
-                      <TableHead className={TABLE_HEAD_CLASS}>{t("colDriverCode")}</TableHead>
-                      <TableHead className={TABLE_HEAD_CLASS}>{t("colDriver")}</TableHead>
-                      <TableHead className={TABLE_HEAD_CLASS}>{t("fieldTitle")}</TableHead>
-                      <TableHead className={TABLE_HEAD_CLASS}>{t("fieldBody")}</TableHead>
-                      <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
+                      {prefs.orderedColumns.filter((column) => prefs.isVisible(column.id)).map((column) => (
+                        <TableHead key={column.id} className={TABLE_HEAD_CLASS}>{column.label}</TableHead>
+                      ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {previewRows.slice(0, 50).map((row) => (
-                      <TableRow key={row.row_index}>
-                        <TableCell>{row.row_index + 1}</TableCell>
-                        <TableCell>{row.employee_id}</TableCell>
-                        <TableCell>{row.driver_code || "—"}</TableCell>
-                        <TableCell>{row.driver_name ?? "—"}</TableCell>
-                        <TableCell className="max-w-[160px] truncate">{row.resolved_title}</TableCell>
-                        <TableCell className="max-w-[200px] truncate">{row.resolved_body}</TableCell>
-                        <TableCell>{importStatusPill(row.status, t)}</TableCell>
-                      </TableRow>
-                    ))}
+                    {previewRows.slice(0, 50).filter((row) => {
+                      const needle = prefs.appliedQuery.trim().toLowerCase();
+                      if (!needle) return true;
+                      return `${row.employee_id} ${row.driver_code} ${row.driver_name ?? ""} ${row.resolved_title} ${row.status}`.toLowerCase().includes(needle);
+                    }).map((row) => {
+                      const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+                      return (
+                        <TableRow key={row.row_index}>
+                          {shown.map((column) => {
+                            if (column.id === "row") return <TableCell key={column.id}>{row.row_index + 1}</TableCell>;
+                            if (column.id === "employee") return <TableCell key={column.id}>{row.employee_id ? row.employee_id : <EmptyCell />}</TableCell>;
+                            if (column.id === "code") return <TableCell key={column.id}>{row.driver_code ? row.driver_code : <EmptyCell />}</TableCell>;
+                            if (column.id === "driver") return <TableCell key={column.id}><TableNameCell name={row.driver_name} /></TableCell>;
+                            if (column.id === "title") return <TableCell key={column.id} className="max-w-[160px] truncate">{row.resolved_title ? row.resolved_title : <EmptyCell />}</TableCell>;
+                            if (column.id === "body") return <TableCell key={column.id} className="max-w-[200px] truncate">{row.resolved_body ? row.resolved_body : <EmptyCell />}</TableCell>;
+                            return <TableCell key={column.id}>{importStatusPill(row.status, t)}</TableCell>;
+                          })}
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

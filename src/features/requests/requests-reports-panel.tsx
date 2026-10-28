@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, Clock, Download, FileText, Loader2, Signature } from "lucide-react";
+import { CheckCircle2, Clock, FileText, Loader2, Signature } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
@@ -12,7 +12,8 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
-import { Button } from "@/components/ui/button";
+import { StatusBadge, type FrameStatus } from "@/components/app/status-badge";
+import { EmptyCell, TableNameCell, TableToolbar, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
 import {
   Select,
   SelectContent,
@@ -79,6 +80,23 @@ function formatDays(seconds: number | null | undefined): string {
 const CHART_WEEKS = 12;
 const EXPORT_ROW_CAP = 1000;
 
+function reportFrameStatus(status: string): FrameStatus | null {
+  switch (status) {
+    case "working":
+    case "leave":
+    case "sick":
+    case "pending":
+    case "absent":
+    case "overdue":
+    case "neutral":
+    case "accident":
+    case "other":
+      return status;
+    default:
+      return null;
+  }
+}
+
 export function RequestsReportsPanel() {
   const t = useTranslations("pages.requests.settings.reports");
   const tRoot = useTranslations("pages.requests");
@@ -130,6 +148,46 @@ export function RequestsReportsPanel() {
   });
 
   const departmentRows = useMemo(() => departmentReport?.rows ?? [], [departmentReport?.rows]);
+  const deptColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "department", label: t("colDepartment"), locked: true },
+      { id: "requests", label: t("colRequests") },
+      { id: "approved", label: t("colApproved") },
+      { id: "rejected", label: t("colRejected") },
+      { id: "rate", label: t("colApprovalRate") },
+      { id: "avg", label: t("colAvgStepTime") },
+    ],
+    [t],
+  );
+  const typeColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "type", label: t("colType"), locked: true },
+      { id: "count", label: t("colCount") },
+      { id: "share", label: t("colShare") },
+    ],
+    [t],
+  );
+  const statusColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "status", label: tRoot("colStatus"), locked: true },
+      { id: "count", label: t("colCount") },
+      { id: "share", label: t("colShare") },
+    ],
+    [t, tRoot],
+  );
+  const deptPrefs = useTablePrefs("requests.reports.department", deptColumns);
+  const typePrefs = useTablePrefs("requests.reports.type", typeColumns);
+  const statusPrefs = useTablePrefs("requests.reports.status", statusColumns);
+  const deptShown = deptPrefs.orderedColumns.filter((column) => deptPrefs.isVisible(column.id));
+  const typeShown = typePrefs.orderedColumns.filter((column) => typePrefs.isVisible(column.id));
+  const statusShown = statusPrefs.orderedColumns.filter((column) => statusPrefs.isVisible(column.id));
+  const deptFiltered = useMemo(() => {
+    const query = deptPrefs.appliedQuery.trim().toLowerCase();
+    if (!query) return departmentRows;
+    return departmentRows.filter((row) =>
+      (row.department_label ?? "").toLowerCase().includes(query),
+    );
+  }, [departmentRows, deptPrefs.appliedQuery]);
   const maxStepSeconds = useMemo(
     () => departmentRows.reduce((max, row) => Math.max(max, row.avg_step_seconds ?? 0), 0),
     [departmentRows],
@@ -250,25 +308,6 @@ export function RequestsReportsPanel() {
                 ))}
               </SelectContent>
             </Select>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-9"
-              disabled={rows.length === 0}
-              title={
-                totalCount > rows.length
-                  ? t("exportTruncated", {
-                      shown: `${rows.length}`,
-                      total: `${totalCount}`,
-                    })
-                  : undefined
-              }
-              onClick={exportCsv}
-            >
-              <Download className="me-1.5 h-3.5 w-3.5" />
-              {t("export")}
-            </Button>
             {totalCount > rows.length ? (
               <p className="text-xs text-muted-foreground">
                 {t("exportTruncated", {
@@ -418,39 +457,47 @@ export function RequestsReportsPanel() {
               </div>
               <AppDataTable
                 headerRowClassName="[&>th]:h-8"
-                columns={[
-                  { id: "department", label: t("colDepartment") },
-                  { id: "requests", label: t("colRequests") },
-                  { id: "approved", label: t("colApproved") },
-                  { id: "rejected", label: t("colRejected") },
-                  { id: "rate", label: t("colApprovalRate") },
-                  { id: "avg", label: t("colAvgStepTime") },
-                ]}
+                toolbar={
+                  <TableToolbar
+                    prefs={deptPrefs}
+                    entity={t("byDepartment")}
+                    columns={deptColumns}
+                    rowKind="aggregate"
+                    filteredCount={deptFiltered.length}
+                    totalCount={departmentRows.length}
+                    onExport={exportCsv}
+                  />
+                }
+                columns={deptShown.map((column) => ({ id: column.id, label: column.label }))}
                 empty={
-                  departmentRows.length === 0 ? (
+                  deptFiltered.length === 0 ? (
                     <AppDataTableEmpty>{t("departmentEmpty")}</AppDataTableEmpty>
                   ) : undefined
                 }
               >
-                {departmentRows.length === 0 ? null : (
-                  departmentRows.map((row) => {
+                {deptFiltered.length === 0 ? null : (
+                  deptFiltered.map((row) => {
                     const decided = row.approved + row.rejected;
+                    const cells: Record<string, ReactNode> = {
+                      department: <TableNameCell name={row.department_label} />,
+                      requests: row.requests,
+                      approved: row.approved,
+                      rejected: row.rejected,
+                      rate: decided === 0 ? <EmptyCell /> : formatPct((row.approved / decided) * 100),
+                      avg:
+                        row.avg_step_seconds == null ? (
+                          <EmptyCell />
+                        ) : (
+                          `${formatDays(row.avg_step_seconds)}${t("days")}`
+                        ),
+                    };
                     return (
                       <AppDataTableRow key={row.department_key}>
-                        <TableCell className="text-sm">{row.department_label}</TableCell>
-                        <TableCell className="tabular-nums">{row.requests}</TableCell>
-                        <TableCell className="tabular-nums">{row.approved}</TableCell>
-                        <TableCell className="tabular-nums">{row.rejected}</TableCell>
-                        <TableCell className="tabular-nums text-muted-foreground">
-                          {decided === 0
-                            ? "—"
-                            : formatPct((row.approved / decided) * 100)}
-                        </TableCell>
-                        <TableCell className="tabular-nums text-muted-foreground">
-                          {row.avg_step_seconds == null
-                            ? "—"
-                            : `${formatDays(row.avg_step_seconds)}${t("days")}`}
-                        </TableCell>
+                        {deptShown.map((column) => (
+                          <TableCell key={column.id} className="tabular-nums">
+                            {cells[column.id] ?? <EmptyCell />}
+                          </TableCell>
+                        ))}
                       </AppDataTableRow>
                     );
                   })
@@ -461,11 +508,20 @@ export function RequestsReportsPanel() {
             <AppListCard className="p-0">
               <h3 className="border-b border-border p-3 text-sm font-semibold">{t("byType")}</h3>
               <AppDataTable
-                columns={[
-                  { id: "type", label: t("colType") },
-                  { id: "count", label: t("colCount") },
-                  { id: "share", label: t("colShare") },
-                ]}
+                toolbar={
+                  <TableToolbar
+                    prefs={typePrefs}
+                    entity={t("byType")}
+                    columns={typeColumns}
+                    rowKind="aggregate"
+                    filteredCount={REQUEST_TYPES.filter((type) =>
+                      tTypes(type).toLowerCase().includes(typePrefs.appliedQuery.trim().toLowerCase()),
+                    ).length}
+                    totalCount={REQUEST_TYPES.length}
+                    onExport={exportCsv}
+                  />
+                }
+                columns={typeShown.map((column) => ({ id: column.id, label: column.label }))}
                 empty={
                   totalCount === 0 ? (
                     <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty>
@@ -473,14 +529,23 @@ export function RequestsReportsPanel() {
                 }
               >
                 {totalCount === 0 ? null : (
-                  REQUEST_TYPES.map((type) => {
+                  REQUEST_TYPES.filter((type) =>
+                    tTypes(type).toLowerCase().includes(typePrefs.appliedQuery.trim().toLowerCase()),
+                  ).map((type) => {
                     const count = byType[type] ?? 0;
                     const share = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
+                    const cells: Record<string, ReactNode> = {
+                      type: <TableNameCell name={tTypes(type)} />,
+                      count,
+                      share: `${share}%`,
+                    };
                     return (
                       <AppDataTableRow key={type}>
-                        <TableCell className="text-sm">{tTypes(type)}</TableCell>
-                        <TableCell className="tabular-nums">{count}</TableCell>
-                        <TableCell className="tabular-nums text-muted-foreground">{share}%</TableCell>
+                        {typeShown.map((column) => (
+                          <TableCell key={column.id} className="tabular-nums">
+                            {cells[column.id] ?? <EmptyCell />}
+                          </TableCell>
+                        ))}
                       </AppDataTableRow>
                     );
                   })
@@ -491,11 +556,20 @@ export function RequestsReportsPanel() {
             <AppListCard className="p-0">
               <h3 className="border-b border-border p-3 text-sm font-semibold">{t("byStatus")}</h3>
               <AppDataTable
-                columns={[
-                  { id: "status", label: tRoot("colStatus") },
-                  { id: "count", label: t("colCount") },
-                  { id: "share", label: t("colShare") },
-                ]}
+                toolbar={
+                  <TableToolbar
+                    prefs={statusPrefs}
+                    entity={t("byStatus")}
+                    columns={statusColumns}
+                    rowKind="aggregate"
+                    filteredCount={REQUEST_STATUSES.filter((status) =>
+                      tStatus(status).toLowerCase().includes(statusPrefs.appliedQuery.trim().toLowerCase()),
+                    ).length}
+                    totalCount={REQUEST_STATUSES.length}
+                    onExport={exportCsv}
+                  />
+                }
+                columns={statusShown.map((column) => ({ id: column.id, label: column.label }))}
                 empty={
                   totalCount === 0 ? (
                     <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty>
@@ -503,14 +577,28 @@ export function RequestsReportsPanel() {
                 }
               >
                 {totalCount === 0 ? null : (
-                  REQUEST_STATUSES.map((status) => {
+                  REQUEST_STATUSES.filter((status) =>
+                    tStatus(status).toLowerCase().includes(statusPrefs.appliedQuery.trim().toLowerCase()),
+                  ).map((status) => {
                     const count = byStatus[status] ?? 0;
                     const share = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
+                    const framed = reportFrameStatus(status);
+                    const cells: Record<string, ReactNode> = {
+                      status: framed ? (
+                        <StatusBadge status={framed} label={tStatus(status)} />
+                      ) : (
+                        <TableNameCell name={tStatus(status)} />
+                      ),
+                      count,
+                      share: `${share}%`,
+                    };
                     return (
                       <AppDataTableRow key={status}>
-                        <TableCell className="text-sm">{tStatus(status)}</TableCell>
-                        <TableCell className="tabular-nums">{count}</TableCell>
-                        <TableCell className="tabular-nums text-muted-foreground">{share}%</TableCell>
+                        {statusShown.map((column) => (
+                          <TableCell key={column.id} className="tabular-nums">
+                            {cells[column.id] ?? <EmptyCell />}
+                          </TableCell>
+                        ))}
                       </AppDataTableRow>
                     );
                   })

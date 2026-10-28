@@ -80,6 +80,22 @@
       "clearSearch": "Clear search",
       "pagerPrevious": "Previous",
       "pagerNext": "Next"
+    },
+    "tableToolbar": {
+      "searchEntity": "Search {entity}…",
+      "groupBy": "Group by",
+      "groupNone": "None",
+      "showing": "Showing {filtered} of {total}",
+      "list": "List",
+      "grid": "Grid",
+      "columns": "Columns",
+      "reset": "Reset",
+      "clearAll": "Clear all",
+      "clearSearch": "Clear search",
+      "nameMissing": "Name missing",
+      "select": "Select …",
+      "export": "Export",
+      "add": "Add"
     }
   },
   "nav": {

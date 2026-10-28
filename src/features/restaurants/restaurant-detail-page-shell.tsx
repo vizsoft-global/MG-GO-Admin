@@ -20,6 +20,14 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { StatusPill } from "@/components/dashboard/status-pill";
@@ -146,15 +154,20 @@ export function RestaurantDetailPageShell({ id }: { id: string }) {
     [t],
   );
 
-  const deliveryTableColumns = useMemo(
-    () => [
-      { id: "order", label: tDeliveries("colOrderId"), className: "min-w-[140px]" },
-      { id: "driver", label: tDeliveries("colDriver"), className: "min-w-[160px]" },
-      { id: "status", label: tDeliveries("colStatus"), className: "w-[140px]" },
-      { id: "when", label: tDeliveries("colWhen"), className: "min-w-[160px]" },
-    ],
-    [tDeliveries],
-  );
+  const deliveryColumns = useMemo((): TableToolbarColumn[] => [
+    { id: "order", label: tDeliveries("colOrderId"), locked: true },
+    { id: "driver", label: tDeliveries("colDriver") },
+    { id: "status", label: tDeliveries("colStatus") },
+    { id: "when", label: tDeliveries("colWhen") },
+  ], [tDeliveries]);
+  const deliveryPrefs = useTablePrefs(`restaurant-deliveries-${id}`, deliveryColumns);
+  const deliveryTableColumns = deliveryPrefs.orderedColumns
+    .filter((column) => deliveryPrefs.isVisible(column.id))
+    .map((column) => ({
+      id: column.id,
+      label: column.label,
+      className: column.id === "status" ? "w-[140px]" : "min-w-[140px]",
+    }));
 
   const formatWhenColumn = (delivery: DeliveryListRow): string => {
     if (delivery.status === "in_transit" && delivery.pickup_at) {
@@ -579,35 +592,97 @@ export function RestaurantDetailPageShell({ id }: { id: string }) {
                   />
                 </div>
               ) : (
-                <AppDataTable columns={deliveryTableColumns}>
-                  {(deliveriesQuery.data ?? []).map((row) => (
+                deliveryPrefs.view === "grid" ? (
+                  <>
+                    <TableToolbar
+                      prefs={deliveryPrefs}
+                      entity={t("tabs.deliveries")}
+                      columns={deliveryColumns}
+                      rowKind="dynamic"
+                      entityList
+                      filteredCount={(deliveriesQuery.data ?? []).filter((row) => {
+                        const needle = deliveryPrefs.appliedQuery.trim().toLowerCase();
+                        return !needle || `${row.short_id} ${row.external_order_id ?? ""} ${row.driver_name} ${row.driver_code}`.toLowerCase().includes(needle);
+                      }).length}
+                      totalCount={(deliveriesQuery.data ?? []).length}
+                    />
+                    <TableGridCards
+                      rows={(deliveriesQuery.data ?? []).filter((row) => {
+                        const needle = deliveryPrefs.appliedQuery.trim().toLowerCase();
+                        return !needle || `${row.short_id} ${row.external_order_id ?? ""} ${row.driver_name} ${row.driver_code}`.toLowerCase().includes(needle);
+                      }).map((row) => ({
+                        id: row.short_id,
+                        name: row.driver_name,
+                        status: { status: "neutral" as const, label: deliveryStatusLabel(row.status) },
+                        fields: [{ label: tDeliveries("colWhen"), value: formatWhenColumn(row) }],
+                        onOpen: () => setSelectedDelivery(row),
+                      }))}
+                    />
+                  </>
+                ) : (
+                <AppDataTable
+                  toolbar={
+                    <TableToolbar
+                      prefs={deliveryPrefs}
+                      entity={t("tabs.deliveries")}
+                      columns={deliveryColumns}
+                      rowKind="dynamic"
+                      entityList
+                      filteredCount={(deliveriesQuery.data ?? []).filter((row) => {
+                        const needle = deliveryPrefs.appliedQuery.trim().toLowerCase();
+                        return !needle || `${row.short_id} ${row.external_order_id ?? ""} ${row.driver_name} ${row.driver_code}`.toLowerCase().includes(needle);
+                      }).length}
+                      totalCount={(deliveriesQuery.data ?? []).length}
+                    />
+                  }
+                  columns={deliveryTableColumns}
+                >
+                  {(deliveriesQuery.data ?? []).filter((row) => {
+                    const needle = deliveryPrefs.appliedQuery.trim().toLowerCase();
+                    return !needle || `${row.short_id} ${row.external_order_id ?? ""} ${row.driver_name} ${row.driver_code}`.toLowerCase().includes(needle);
+                  }).map((row) => (
                     <AppDataTableRow
                       key={row.id}
                       onClick={() => setSelectedDelivery(row)}
                     >
-                      <TableCell className="whitespace-normal align-top">
-                        <p className="font-mono text-xs tabular-nums">{row.short_id}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {row.external_order_id ?? "—"}
-                        </p>
-                      </TableCell>
-                      <TableCell className="whitespace-normal align-top">
-                        <p className="font-medium">{row.driver_name}</p>
-                        <p className="font-mono text-xs text-muted-foreground">
-                          {row.driver_code}
-                        </p>
-                      </TableCell>
-                      <TableCell className="align-top">
-                        <StatusPill variant={resolveDeliveryStatusVariant(row.status)}>
-                          {deliveryStatusLabel(row.status)}
-                        </StatusPill>
-                      </TableCell>
-                      <TableCell className="whitespace-normal align-top text-sm text-muted-foreground">
-                        {formatWhenColumn(row)}
-                      </TableCell>
+                      {deliveryTableColumns.map((column) => {
+                        if (column.id === "order") {
+                          return (
+                            <TableCell key={column.id} className="whitespace-normal align-top">
+                              <p className="font-mono text-xs tabular-nums">{row.short_id}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {row.external_order_id ? row.external_order_id : <EmptyCell />}
+                              </p>
+                            </TableCell>
+                          );
+                        }
+                        if (column.id === "driver") {
+                          return (
+                            <TableCell key={column.id} className="whitespace-normal align-top">
+                              <TableNameCell name={row.driver_name} />
+                              <p className="font-mono text-xs text-muted-foreground">{row.driver_code}</p>
+                            </TableCell>
+                          );
+                        }
+                        if (column.id === "status") {
+                          return (
+                            <TableCell key={column.id} className="align-top">
+                              <StatusPill variant={resolveDeliveryStatusVariant(row.status)}>
+                                {deliveryStatusLabel(row.status)}
+                              </StatusPill>
+                            </TableCell>
+                          );
+                        }
+                        return (
+                          <TableCell key={column.id} className="whitespace-normal align-top text-sm text-muted-foreground">
+                            {formatWhenColumn(row)}
+                          </TableCell>
+                        );
+                      })}
                     </AppDataTableRow>
                   ))}
                 </AppDataTable>
+                )
               )}
             </div>
           </div>

@@ -2,15 +2,21 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   AppDataTable,
   AppDataTableEmpty,
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "@/i18n/navigation";
 import { WrongActionFormDialog } from "./wrong-action-form-dialog";
@@ -28,6 +34,14 @@ export function DriverWrongActionsTab({ driverId }: { driverId: string }) {
   const { data: drivers = [], isLoading: driversLoading } =
     useWrongActionDriverOptions(addOpen);
 
+  const columns = useMemo((): TableToolbarColumn[] => [
+    { id: "type", label: t("colType"), locked: true },
+    { id: "severity", label: t("colSeverity") },
+    { id: "date", label: t("colDate") },
+    { id: "source", label: t("colSource") },
+    { id: "details", label: t("fieldDetails") },
+  ], [t]);
+  const prefs = useTablePrefs(`driver-wrong-actions-${driverId}`, columns);
   const now = useMemo(() => new Date(), []);
   const counts = useMemo(() => wrongActionKpis(rows, now), [now, rows]);
 
@@ -42,16 +56,7 @@ export function DriverWrongActionsTab({ driverId }: { driverId: string }) {
             </p>
           ) : null}
         </div>
-        {canManage ? (
-          <Button
-            size="sm"
-            className="h-9 cursor-pointer rounded-lg"
-            onClick={() => setAddOpen(true)}
-          >
-            <Plus className="me-2 h-3.5 w-3.5" />
-            {t("addIncident")}
-          </Button>
-        ) : null}
+        {null}
       </div>
 
       {isLoading ? (
@@ -60,37 +65,51 @@ export function DriverWrongActionsTab({ driverId }: { driverId: string }) {
         </div>
       ) : (
         <AppDataTable
-          columns={[
-            { id: "type", label: t("colType") },
-            { id: "severity", label: t("colSeverity") },
-            { id: "date", label: t("colDate") },
-            { id: "source", label: t("colSource") },
-            { id: "details", label: t("fieldDetails") },
-          ]}
+          toolbar={
+            <TableToolbar
+              prefs={prefs}
+              entity={t("title")}
+              columns={columns}
+              rowKind="dynamic"
+              filteredCount={rows.filter((row) => {
+                const needle = prefs.appliedQuery.trim().toLowerCase();
+                return !needle || `${row.action_type} ${row.severity} ${row.details ?? ""} ${row.source}`.toLowerCase().includes(needle);
+              }).length}
+              totalCount={rows.length}
+              onAdd={canManage ? () => setAddOpen(true) : undefined}
+              addLabel={t("addIncident")}
+            />
+          }
+          columns={prefs.orderedColumns.filter((column) => prefs.isVisible(column.id)).map((column) => ({
+            id: column.id,
+            label: column.label,
+          }))}
           empty={
             rows.length === 0 ? (
               <AppDataTableEmpty>{t("noneForDriver")}</AppDataTableEmpty>
             ) : null
           }
         >
-          {rows.map((row) => (
+          {rows.filter((row) => {
+            const needle = prefs.appliedQuery.trim().toLowerCase();
+            return !needle || `${row.action_type} ${row.severity} ${row.details ?? ""} ${row.source}`.toLowerCase().includes(needle);
+          }).map((row) => (
             <AppDataTableRow
               key={row.id}
               className="cursor-pointer"
               onClick={() => router.push(`/wrong-actions/${row.id}`)}
             >
-              <TableCell>
-                <p className="font-medium">{t(`type.${row.action_type}` as "type.delay")}</p>
-                <p className="text-xs text-primary">{t("viewDetails")}</p>
-              </TableCell>
-              <TableCell>
-                <Badge variant={severityTone(row.severity)}>
-                  {t(`severity.${row.severity}` as "severity.low")}
-                </Badge>
-              </TableCell>
-              <TableCell>{formatKuwait(row.occurred_at)}</TableCell>
-              <TableCell>{t(`source.${row.source}` as "source.admin")}</TableCell>
-              <TableCell className="max-w-[280px] truncate">{row.details ?? "—"}</TableCell>
+              {prefs.orderedColumns.filter((column) => prefs.isVisible(column.id)).map((column) => {
+                if (column.id === "type") {
+                  return <TableCell key={column.id}><TableNameCell name={t(`type.${row.action_type}` as "type.delay")} /><p className="text-xs text-primary">{t("viewDetails")}</p></TableCell>;
+                }
+                if (column.id === "severity") {
+                  return <TableCell key={column.id}><Badge variant={severityTone(row.severity)}>{t(`severity.${row.severity}` as "severity.low")}</Badge></TableCell>;
+                }
+                if (column.id === "date") return <TableCell key={column.id}>{formatKuwait(row.occurred_at)}</TableCell>;
+                if (column.id === "source") return <TableCell key={column.id}>{t(`source.${row.source}` as "source.admin")}</TableCell>;
+                return <TableCell key={column.id} className="max-w-[280px] truncate">{row.details ? row.details : <EmptyCell />}</TableCell>;
+              })}
             </AppDataTableRow>
           ))}
         </AppDataTable>

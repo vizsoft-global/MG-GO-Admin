@@ -2,15 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Download, ExternalLink, Search } from "lucide-react";
+import { Fragment } from "react";
+import { Download, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { EmptyCell, TableGridCards, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import type { FrameStatus } from "@/components/app/status-badge";
+import { groupBanner, groupRows, ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
 import { EmptyState } from "@/components/app/empty-state";
 import { ErrorState } from "@/components/app/error-state";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
@@ -91,7 +94,29 @@ export function ClientPortalEmployeesShell({
   const router = useRouter();
   const { accessKind } = useAuth();
   const readOnlyProject = accessKind === "partner";
-  const [query, setQuery] = useState("");
+  const employeeColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "mgId", label: t("colMgId"), locked: true },
+      { id: "clientId", label: t("colClientId") },
+      { id: "fullName", label: t("colFullName"), locked: true },
+      { id: "civilId", label: t("colCivilId") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "documents", label: t("colDocuments"), locked: true },
+    ],
+    [t],
+  );
+  const documentColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "document", label: t("colDocument"), locked: true },
+      { id: "number", label: t("colNumber") },
+      { id: "expiry", label: t("colExpiry") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "file", label: t("colFile"), locked: true },
+    ],
+    [t],
+  );
+  const employeePrefs = useTablePrefs("clientPortal.employees", employeeColumns);
+  const documentPrefs = useTablePrefs("clientPortal.documents", documentColumns);
   const [rows, setRows] = useState<ClientPortalEmployee[]>([]);
   const [documents, setDocuments] = useState<ClientPortalDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -140,16 +165,13 @@ export function ClientPortalEmployeesShell({
     };
   }, [employeeId, project]);
 
-  const shown = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter((row) =>
-      [row.mgId, row.clientId, row.fullName, row.civilId, statusLabel(row.status)]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle),
-    );
-  }, [query, rows]);
+  const shown = useMemo(
+    () =>
+      rows.filter((row) =>
+        rowMatches(employeePrefs.appliedQuery, [row.mgId, row.clientId, row.fullName, row.civilId, statusLabel(row.status)]),
+      ),
+    [employeePrefs.appliedQuery, rows],
+  );
 
   const selected = rows.find((row) => row.id === employeeId) ?? null;
   const validDocuments = documents.filter((doc) => doc.status === "valid").length;
@@ -238,53 +260,16 @@ export function ClientPortalEmployeesShell({
             <EmptyState title={t("documentsEmpty")} />
           ) : null}
           {documents.length > 0 ? (
-            <Table className="text-sm">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colDocument")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colNumber")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colExpiry")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colFile")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {documents.map((doc) => (
-                  <TableRow key={doc.id}>
-                    <TableCell className="text-[var(--portal-ink)]">
-                      {doc.labelKey ? docT(doc.labelKey) : doc.label}
-                    </TableCell>
-                    <TableCell>{doc.number}</TableCell>
-                    <TableCell>{doc.expiry || "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={documentBadgeVariant(doc.status)}>
-                        {doc.status === "expired" ? t("docExpired") : t("docValid")}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="portal-secondary"
-                          className="h-9 cursor-pointer"
-                          onClick={() => void openDocument(doc, "view")}
-                        >
-                          <ExternalLink className="size-4" />
-                          {t("docView")}
-                        </Button>
-                        <Button
-                          variant="portal-neutral"
-                          className="h-9 cursor-pointer"
-                          onClick={() => void openDocument(doc, "read")}
-                        >
-                          <Download className="size-4" />
-                          {t("docDownload")}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DocumentTable
+              columns={documentColumns}
+              prefs={documentPrefs}
+              documents={documents}
+              labelOf={(doc) => (doc.labelKey ? docT(doc.labelKey) : doc.label)}
+              statusLabel={(status) => (status === "expired" ? t("docExpired") : t("docValid"))}
+              viewLabel={t("docView")}
+              downloadLabel={t("docDownload")}
+              onOpen={(doc, kind) => void openDocument(doc, kind)}
+            />
           ) : null}
         </section>
       ) : (
@@ -313,58 +298,214 @@ export function ClientPortalEmployeesShell({
                 </Select>
               </label>
             )}
-            <label className="flex min-w-56 flex-1 flex-col gap-1 text-xs text-[var(--portal-muted)]">
-              <span className="inline-flex items-center gap-1">
-                <Search className="size-4" />
-                {t("searchEmployees")}
-              </span>
-              <Input className={field} value={query} onChange={(event) => setQuery(event.target.value)} />
-            </label>
           </div>
           {failed ? <ErrorState title={t("employeesLoadFailed")} /> : null}
           {loading ? <p className="text-sm text-[var(--portal-muted)]">{t("loading")}</p> : null}
           {!loading && !failed && shown.length === 0 ? (
             <EmptyState title={t("employeesEmpty")} />
           ) : null}
-          {shown.length > 0 ? (
-            <Table className="text-sm">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colMgId")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colClientId")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colFullName")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colCivilId")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colDocuments")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {shown.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>{row.mgId || "—"}</TableCell>
-                    <TableCell>{row.clientId || "—"}</TableCell>
-                    <TableCell className="font-medium text-[var(--portal-ink)]">{row.fullName || "—"}</TableCell>
-                    <TableCell>{row.civilId || "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={statusBadgeVariant(row.status)}>{statusLabel(row.status)}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="portal-secondary"
-                        className="h-9 cursor-pointer"
-                        onClick={() => go({ employee: row.id })}
-                      >
-                        <ExternalLink className="size-4" />
-                        {t("viewDocuments")}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : null}
+          <EmployeeTable
+            columns={employeeColumns}
+            prefs={employeePrefs}
+            rows={shown}
+            total={rows.length}
+            entity={t("searchEmployees")}
+            documentsLabel={t("viewDocuments")}
+            onOpen={(id) => go({ employee: id })}
+          />
         </section>
       )}
+    </div>
+  );
+}
+
+function frameStatus(value: string): FrameStatus {
+  const key = value.trim().toLowerCase();
+  if (key.includes("leave")) return "leave";
+  if (key.includes("sick")) return "sick";
+  if (key.includes("absent")) return "absent";
+  if (key.includes("pending")) return "pending";
+  if (key.includes("accident")) return "accident";
+  if (key.includes("run") || key.includes("active") || key.includes("work")) return "working";
+  return "neutral";
+}
+
+function EmployeeTable({
+  columns,
+  prefs,
+  rows,
+  total,
+  entity,
+  documentsLabel,
+  onOpen,
+}: {
+  columns: TableToolbarColumn[];
+  prefs: ReturnType<typeof useTablePrefs>;
+  rows: ClientPortalEmployee[];
+  total: number;
+  entity: string;
+  documentsLabel: string;
+  onOpen: (id: string) => void;
+}) {
+  const ids = visibleColumnIds(prefs);
+  const groups = groupRows(rows, prefs.groupBy, (row) => (prefs.groupBy === "status" ? statusLabel(row.status) : ""));
+  return (
+    <div>
+      <ListToolbar
+        prefs={prefs}
+        entity={entity}
+        columns={columns}
+        rowKind="dynamic"
+        entityList
+        filteredCount={rows.length}
+        totalCount={total}
+      />
+      {prefs.view === "grid" ? (
+        <TableGridCards
+          rows={rows.map((row) => ({
+            id: row.mgId || row.id,
+            name: row.fullName,
+            status: { status: frameStatus(row.status), label: statusLabel(row.status) },
+            fields: [
+              { label: columns.find((column) => column.id === "clientId")?.label ?? "", value: row.clientId || "—" },
+              { label: columns.find((column) => column.id === "civilId")?.label ?? "", value: row.civilId || "—" },
+            ],
+            onOpen: () => onOpen(row.id),
+          }))}
+        />
+      ) : (
+        <Table className="text-sm">
+          <TableHeader>
+            <TableRow>
+              {ids.map((id) => (
+                <TableHead key={id} className={TABLE_HEAD_CLASS}>
+                  {columns.find((column) => column.id === id)?.label}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {groups.map((group) => (
+              <Fragment key={group.key}>
+                {group.label ? (
+                  <TableRow>
+                    <TableCell colSpan={ids.length} className="bg-muted/40 text-xs font-semibold">
+                      {groupBanner(group.label, group.rows.length)}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+                {group.rows.map((row) => (
+                  <TableRow key={row.id}>
+                    {ids.map((id) => (
+                      <TableCell key={id}>
+                        {id === "mgId" ? (row.mgId ? row.mgId : <EmptyCell />) : null}
+                        {id === "clientId" ? (row.clientId ? row.clientId : <EmptyCell />) : null}
+                        {id === "fullName" ? <TableNameCell name={row.fullName} /> : null}
+                        {id === "civilId" ? (row.civilId ? row.civilId : <EmptyCell />) : null}
+                        {id === "status" ? <Badge variant={statusBadgeVariant(row.status)}>{statusLabel(row.status)}</Badge> : null}
+                        {id === "documents" ? (
+                          <Button variant="portal-secondary" className="h-9 cursor-pointer" onClick={() => onOpen(row.id)}>
+                            <ExternalLink className="size-4" />
+                            {documentsLabel}
+                          </Button>
+                        ) : null}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </Fragment>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
+function DocumentTable({
+  columns,
+  prefs,
+  documents,
+  labelOf,
+  statusLabel: statusText,
+  viewLabel,
+  downloadLabel,
+  onOpen,
+}: {
+  columns: TableToolbarColumn[];
+  prefs: ReturnType<typeof useTablePrefs>;
+  documents: ClientPortalDocument[];
+  labelOf: (doc: ClientPortalDocument) => string;
+  statusLabel: (status: ClientPortalDocument["status"]) => string;
+  viewLabel: string;
+  downloadLabel: string;
+  onOpen: (doc: ClientPortalDocument, kind: "view" | "read") => void;
+}) {
+  const matched = documents.filter((doc) =>
+    rowMatches(prefs.appliedQuery, [labelOf(doc), doc.number, doc.expiry, doc.status]),
+  );
+  const groups = groupRows(matched, prefs.groupBy, (doc) => (prefs.groupBy === "status" ? statusText(doc.status) : ""));
+  const ids = visibleColumnIds(prefs);
+  return (
+    <div>
+      <ListToolbar
+        prefs={prefs}
+        entity={columns[0]?.label ?? "documents"}
+        columns={columns}
+        rowKind="dynamic"
+        filteredCount={matched.length}
+        totalCount={documents.length}
+      />
+      <Table className="text-sm">
+        <TableHeader>
+          <TableRow>
+            {ids.map((id) => (
+              <TableHead key={id} className={TABLE_HEAD_CLASS}>
+                {columns.find((column) => column.id === id)?.label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {groups.map((group) => (
+            <Fragment key={group.key}>
+              {group.label ? (
+                <TableRow>
+                  <TableCell colSpan={ids.length} className="bg-muted/40 text-xs font-semibold">
+                    {groupBanner(group.label, group.rows.length)}
+                  </TableCell>
+                </TableRow>
+              ) : null}
+              {group.rows.map((doc) => (
+                <TableRow key={doc.id}>
+                  {ids.map((id) => (
+                    <TableCell key={id}>
+                      {id === "document" ? <span className="text-[var(--portal-ink)]">{labelOf(doc)}</span> : null}
+                      {id === "number" ? (doc.number ? doc.number : <EmptyCell />) : null}
+                      {id === "expiry" ? (doc.expiry ? doc.expiry : <EmptyCell />) : null}
+                      {id === "status" ? (
+                        <Badge variant={documentBadgeVariant(doc.status)}>{statusText(doc.status)}</Badge>
+                      ) : null}
+                      {id === "file" ? (
+                        <div className="flex gap-1">
+                          <Button variant="portal-secondary" className="h-9 cursor-pointer" onClick={() => onOpen(doc, "view")}>
+                            <ExternalLink className="size-4" />
+                            {viewLabel}
+                          </Button>
+                          <Button variant="portal-neutral" className="h-9 cursor-pointer" onClick={() => onOpen(doc, "read")}>
+                            <Download className="size-4" />
+                            {downloadLabel}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </Fragment>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export function StatTile({
@@ -18,7 +19,14 @@ export function StatTile({
         className,
       )}
     >
-      <p className="text-[13px] text-[var(--text-secondary)]">{label}</p>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <p className="whitespace-normal break-words text-[13px] text-[var(--text-secondary)]">{label}</p>
+          }
+        />
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
       <p className="text-[28px] leading-none font-bold tabular-nums text-[var(--text-primary)]">{value}</p>
       {delta ? <p className="mt-1 text-xs text-[var(--text-muted)]">{delta}</p> : null}
     </div>

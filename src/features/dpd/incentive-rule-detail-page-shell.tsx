@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
@@ -8,6 +8,11 @@ import { toast } from "sonner";
 import { AppPage, AppPageHeader } from "@/components/app";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -62,6 +67,12 @@ export function IncentiveRuleDetailPageShell({
   const [editOpen, setEditOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<IncentiveRuleRow | null>(null);
   const [isPending, startTransition] = useTransition();
+  const tierColumns = useMemo((): TableToolbarColumn[] => [
+    { id: "threshold", label: t("fields.tierThreshold") },
+    { id: "mode", label: t("fields.rewardMode") },
+    { id: "reward", label: t("colReward") },
+  ], [t]);
+  const tierPrefs = useTablePrefs(`incentive-tiers-${rule.id}`, tierColumns);
 
   const handleDelete = () => {
     if (!deleteTarget) return;
@@ -161,36 +172,43 @@ export function IncentiveRuleDetailPageShell({
           {rule.target_mode !== "tiered" || rule.tiers.length === 0 ? (
             <p className="text-sm text-muted-foreground">{tPage("tiersEmpty")}</p>
           ) : (
+            <>
+            <TableToolbar
+              prefs={tierPrefs}
+              entity={t("fields.tieredTargets")}
+              columns={tierColumns}
+              rowKind="fixed"
+              fixedRows={rule.tiers.length}
+              filteredCount={rule.tiers.length}
+              totalCount={rule.tiers.length}
+            />
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/30 hover:bg-muted/30">
-                  <TableHead className={TABLE_HEAD_CLASS}>
-                    {t("fields.tierThreshold")}
-                  </TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>
-                    {t("fields.rewardMode")}
-                  </TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>
-                    {t("colReward")}
-                  </TableHead>
+                  {tierPrefs.orderedColumns.filter((column) => tierPrefs.isVisible(column.id)).map((column) => (
+                    <TableHead key={column.id} className={TABLE_HEAD_CLASS}>{column.label}</TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rule.tiers.map((tier) => (
                   <TableRow key={tier.id}>
-                    <TableCell className="tabular-nums">
-                      {tier.threshold_deliveries}
-                    </TableCell>
-                    <TableCell>{t(`rewardTypes.${tier.reward_mode}`)}</TableCell>
-                    <TableCell className="tabular-nums">
-                      {tier.reward_mode === "per_delivery"
-                        ? `${tier.reward_per_delivery_kwd ?? 0} ${t("perDeliveryShort")}`
-                        : (tier.reward_kwd ?? 0)}
-                    </TableCell>
+                    {tierPrefs.orderedColumns.filter((column) => tierPrefs.isVisible(column.id)).map((column) => {
+                      if (column.id === "threshold") return <TableCell key={column.id} className="tabular-nums">{tier.threshold_deliveries}</TableCell>;
+                      if (column.id === "mode") return <TableCell key={column.id}>{t(`rewardTypes.${tier.reward_mode}`)}</TableCell>;
+                      return (
+                        <TableCell key={column.id} className="tabular-nums">
+                          {tier.reward_mode === "per_delivery"
+                            ? `${tier.reward_per_delivery_kwd ?? 0} ${t("perDeliveryShort")}`
+                            : (tier.reward_kwd ?? 0)}
+                        </TableCell>
+                      );
+                    })}
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            </>
           )}
         </CardContent>
       </Card>
