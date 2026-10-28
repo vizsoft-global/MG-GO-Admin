@@ -48,7 +48,6 @@ import {
 } from "./driver-client-fields";
 import { parseDriverRiderCategory } from "./driver-rider-category";
 import {
-  companyMatchesCategory,
   resolveCompanyInput,
   type SourceCompany,
 } from "./source-companies";
@@ -173,8 +172,8 @@ async function resolveSourceCompanyForSave(
   const exact = companies.find((c) => c.key === value);
   const resolved = exact ? exact.key : resolveCompanyInput(value, companies);
   if (resolved === "invalid" || resolved === null) return null;
-  if (!riderCategory) return resolved;
-  return companyMatchesCategory(riderCategory, resolved, companies) ? resolved : null;
+  void riderCategory;
+  return resolved;
 }
 
 /** Server-side R2 check — must not call isR2Configured() from client components. */
@@ -2403,6 +2402,11 @@ export async function saveDriverPrivateInformation(
       !sponsorshipRaw || sponsorshipRaw === "none" ? null : sponsorshipRaw;
     if (sponsorshipKey && !CATALOG_KEY_RE.test(sponsorshipKey)) {
       return { error: "missing_fields" };
+    }
+    if (sponsorshipKey) {
+      const sponsors = await listEmployeeCatalog("sponsorships");
+      const known = sponsors.some((row) => row.key === sponsorshipKey && row.is_active);
+      if (!known) return { error: "invalid_sponsorship" };
     }
 
     const jobPosition = optionalChoice(formData.get("jobPosition"), isJobPosition);

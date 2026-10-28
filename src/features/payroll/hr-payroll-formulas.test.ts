@@ -5,11 +5,13 @@ import {
   buildHrPayrollRows,
   computeHrPayroll,
   filterHrRows,
+  filterHrRowsByColumns,
   formatHrEfficiency,
   hrFooterTotals,
   hrKpis,
   summarizeHr,
 } from "./hr-payroll-formulas";
+import { HR_STATUS_LABEL } from "./hr-payroll-status";
 import type { HrRateLine } from "./hr-rate";
 import type { HrBundle } from "./hr-payroll-types";
 import type { PayrollRiderRow } from "./payroll-types";
@@ -340,5 +342,51 @@ describe("buildHrPayrollRows", () => {
     assert.equal(line?.incentives, 10);
     assert.equal(line?.totalAllowances, 3);
     assert.equal(line?.riders, 1);
+  });
+
+  it("filters the sheet through column funnels including #", () => {
+    const rows = buildHrPayrollRows({
+      riders: [
+        rider({ driverId: "d1", name: "Ada" }),
+        rider({ driverId: "d2", name: "Bea", mgId: "10002", amId: "C-2" }),
+      ],
+      bundle: {
+        ...bundle(true),
+        rows: [
+          { ...bundle(true).rows[0]!, statusKey: "new", statusLabel: "New" },
+          {
+            ...bundle(true).rows[0]!,
+            driverId: "d2",
+            employeeId: "10002",
+            clientId: "C-2",
+            fullName: "Bea",
+            statusKey: "running",
+            statusLabel: "Running",
+          },
+        ],
+      },
+      monthDays: 30,
+      statusLabels: HR_STATUS_LABEL,
+    });
+    const byName = filterHrRowsByColumns(rows, { name: { kind: "text", text: "bea" } }, "Awaiting");
+    assert.deepEqual(byName.map((row) => row.driverId), ["d2"]);
+    const byStatus = filterHrRowsByColumns(
+      rows,
+      { status: { kind: "list", values: ["New"] } },
+      "Awaiting",
+    );
+    assert.deepEqual(byStatus.map((row) => row.driverId), ["d1"]);
+    const byIndex = filterHrRowsByColumns(
+      rows,
+      { i: { kind: "range", min: 2, max: 2 } },
+      "Awaiting",
+    );
+    assert.deepEqual(byIndex.map((row) => row.driverId), ["d2"]);
+    const byClient = filterHrRowsByColumns(
+      rows,
+      { client: { kind: "list", values: ["C-2"] } },
+      "Awaiting",
+    );
+    assert.deepEqual(byClient.map((row) => row.driverId), ["d2"]);
   });
 });

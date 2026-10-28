@@ -9293,6 +9293,9 @@
       "fileTooLarge": "File is larger than 5 MB."
     },
     "payroll": {
+      "sponsorship": {
+        "title": "Sponsorships"
+      },
       "payPlan": {
         "title": "Driver pay plan",
         "hint": "The base, band rates and penalties the rider app's Pay calculator reads. Saved per driver; the phone recalculates locally.",
@@ -11547,6 +11550,10 @@
           "hrPayroll": {
             "title": "HR Payroll",
             "body": "Salary sheet, increments, imported adjustments and the monthly summary."
+          },
+          "sponsorships": {
+            "title": "Sponsorships",
+            "body": "The sponsorship list used on the employee record and payroll."
           }
         }
       }
@@ -11632,6 +11639,10 @@
           "nationalityCategories": {
             "title": "Nationality",
             "body": "Nationality values used on Employees and reports."
+          },
+          "sponsorships": {
+            "title": "Sponsorships",
+            "body": "Who sponsors the rider's residency. The employee form reads this list."
           },
           "bankCodes": {
             "title": "Bank codes",

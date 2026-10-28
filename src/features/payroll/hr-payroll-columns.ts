@@ -15,6 +15,32 @@ export type HrColumn = {
   mono?: boolean;
 };
 
+export function hrColumnIsNumeric(column: HrColumn): boolean {
+  switch (column.key) {
+    case "mg":
+    case "civil":
+    case "rate":
+      return true;
+    default:
+      break;
+  }
+  switch (column.kind) {
+    case "money":
+    case "dec2":
+    case "int":
+    case "pct":
+    case "index":
+    case "select":
+      return true;
+    case "text":
+      return false;
+    default: {
+      const unreachable: never = column.kind;
+      return unreachable;
+    }
+  }
+}
+
 export const HR_GROUP_ORDER = ["emp", "cfg", "ops", "in", "calc", "imp", "pay"] as const;
 
 export const HR_GROUP_FILL: Record<HrPayrollGroup, string> = {
@@ -32,7 +58,7 @@ const FOOD = [0, 15] as const;
 const SICK = Array.from({ length: 31 }, (_, n) => n);
 
 export const HR_COLUMNS: readonly HrColumn[] = [
-  { key: "i", header: "#", group: "emp", kind: "index", width: 44, filter: "none" },
+  { key: "i", header: "#", group: "emp", kind: "index", width: 56, filter: "contains" },
   { key: "client", header: "Client ID", group: "emp", kind: "text", width: 86, filter: "contains" },
   { key: "mg", header: "MG ID", group: "emp", kind: "text", width: 96, filter: "contains", mono: true },
   { key: "name", header: "Employee Name", group: "emp", kind: "text", width: 230, filter: "contains" },

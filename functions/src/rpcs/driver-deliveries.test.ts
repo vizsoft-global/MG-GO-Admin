@@ -4,6 +4,7 @@ import {
   assertExternalOrderId,
   assertPublishedPickupRestaurant,
   isWithinDeliveryRange,
+  pickupAssignmentGate,
   normalizeExternalOrderId,
   orderIdSpellings,
   parseProofKeys,
@@ -191,5 +192,37 @@ describe("restaurant geofence", () => {
       (error: unknown) => messageOf(error) === "no_restaurants_assigned",
     );
     assert.doesNotThrow(() => assertPublishedPickupRestaurant([{ id: "r1" }]));
+    assert.equal(
+      pickupAssignmentGate({
+        hasPublishedRestaurant: false,
+        hasZoneShape: true,
+        inRange: true,
+      }),
+      "ok",
+    );
+    assert.equal(
+      pickupAssignmentGate({
+        hasPublishedRestaurant: false,
+        hasZoneShape: true,
+        inRange: false,
+      }),
+      "delivery_out_of_range",
+    );
+    assert.equal(
+      pickupAssignmentGate({
+        hasPublishedRestaurant: false,
+        hasZoneShape: false,
+        inRange: true,
+      }),
+      "no_restaurants_assigned",
+    );
+    assert.equal(
+      pickupAssignmentGate({
+        hasPublishedRestaurant: true,
+        hasZoneShape: false,
+        inRange: false,
+      }),
+      "delivery_out_of_range",
+    );
   });
 });

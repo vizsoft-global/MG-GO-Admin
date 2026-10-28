@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calculator, CalendarOff, Download, FilterX, Loader2 } from "lucide-react";
+import { Calculator, CalendarOff, Download, FilterX, Loader2, ScrollText } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
 import { TabBar } from "@/components/dashboard/tab-bar";
@@ -304,6 +304,17 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
               <Calculator className="size-3.5" />
               {t("payPlan.title")}
             </Button>
+            {canManage || can("drivers.manage") ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9"
+                onClick={() => router.push("/settings/sponsorships")}
+              >
+                <ScrollText className="size-3.5" />
+                {t("sponsorship.title")}
+              </Button>
+            ) : null}
             {canManage ? (
               <Button type="button" variant="outline" className="h-9" onClick={() => setOffOpen(true)}>
                 <CalendarOff className="size-3.5" />

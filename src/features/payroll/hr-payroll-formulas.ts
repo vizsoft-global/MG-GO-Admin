@@ -372,6 +372,95 @@ export function filterHrRows(
   });
 }
 
+export type HrFunnelFilter =
+  | { kind: "text"; text: string }
+  | { kind: "list"; values: string[] }
+  | { kind: "range"; min: number | null; max: number | null };
+
+function parseHrNumber(text: string): number | null {
+  const match = text.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const value = Number(match[0]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function hrFunnelDisplay(row: HrPayrollRow, index: number, key: string, awaiting: string): string {
+  if (key === "i") return String(index + 1);
+  const raw = row.cells[key] ?? "";
+  if (raw === HR_AWAITING) return awaiting;
+  return raw === DASH ? "" : raw;
+}
+
+function hrFunnelNumber(row: HrPayrollRow, index: number, key: string): number | null {
+  if (key === "i") return index + 1;
+  const mapped: Record<string, keyof HrPayrollNumbers> = {
+    payment: "payment",
+    total: "totalSalary",
+    salH: "salaryAsPerHours",
+    pending: "pendingSalary",
+    traffic: "trafficViolation",
+    loan: "loanDeduction",
+    allow: "totalAllowances",
+    ded: "totalDeductions",
+    sickR: "sickReimbursement",
+    inc2v: "twoYearAmount",
+    inc4v: "fourYearAmount",
+    incent: "incentives",
+    food: "foodAllowance",
+    orders: "orders",
+  };
+  const numberKey = mapped[key];
+  if (numberKey) return row.numbers[numberKey];
+  return parseHrNumber(row.cells[key] ?? "");
+}
+
+function funnelActive(filter: HrFunnelFilter | undefined): boolean {
+  if (!filter) return false;
+  if (filter.kind === "text") return filter.text.trim().length > 0;
+  if (filter.kind === "list") return filter.values.length > 0;
+  return filter.min !== null || filter.max !== null;
+}
+
+function funnelMatches(
+  row: HrPayrollRow,
+  index: number,
+  key: string,
+  filter: HrFunnelFilter,
+  awaiting: string,
+): boolean {
+  switch (filter.kind) {
+    case "text":
+      return hrFunnelDisplay(row, index, key, awaiting)
+        .toLowerCase()
+        .includes(filter.text.trim().toLowerCase());
+    case "list":
+      return filter.values.includes(hrFunnelDisplay(row, index, key, awaiting));
+    case "range": {
+      const parsed = hrFunnelNumber(row, index, key);
+      if (parsed === null || !Number.isFinite(parsed)) return false;
+      if (filter.min !== null && parsed < filter.min) return false;
+      if (filter.max !== null && parsed > filter.max) return false;
+      return true;
+    }
+    default: {
+      const unreachable: never = filter;
+      return unreachable;
+    }
+  }
+}
+
+export function filterHrRowsByColumns(
+  rows: readonly HrPayrollRow[],
+  filters: Readonly<Record<string, HrFunnelFilter>>,
+  awaiting: string,
+): HrPayrollRow[] {
+  const active = Object.entries(filters).filter(([, filter]) => funnelActive(filter));
+  if (active.length === 0) return [...rows];
+  return rows.filter((row, index) =>
+    active.every(([key, filter]) => funnelMatches(row, index, key, filter, awaiting)),
+  );
+}
+
 export function filterHrSheet(rows: readonly HrPayrollRow[], filters: HrSheetFilters): HrPayrollRow[] {
   return rows.filter((row) => {
     if (filters.clientName && row.project !== filters.clientName) return false;

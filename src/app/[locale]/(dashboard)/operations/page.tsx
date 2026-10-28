@@ -8,6 +8,7 @@ import {
   FormInput,
   Globe,
   Handshake,
+  ScrollText,
   Landmark,
   Layers,
   LayoutGrid,
@@ -111,6 +112,12 @@ const CARDS: ReadonlyArray<{
     key: "nationalityCategories",
     href: "/settings/nationality-categories",
     icon: Globe,
+    permission: "drivers.manage",
+  },
+  {
+    key: "sponsorships",
+    href: "/settings/sponsorships",
+    icon: ScrollText,
     permission: "drivers.manage",
   },
   {

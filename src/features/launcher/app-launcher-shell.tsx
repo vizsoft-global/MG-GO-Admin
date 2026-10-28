@@ -167,6 +167,10 @@ export function AppLauncherShell({
     const map = new Map<string, string>();
     const translate = (key: string): string | null => (tNav.has(key) ? tNav(key) : null);
     for (const item of tiles) {
+      if (item.id === "live-tracking-v2") {
+        map.set(item.id, translate("nav.liveTracking") ?? item.label);
+        continue;
+      }
       const sidebarHub = (LAUNCHER_HOME_TILE_IDS as readonly string[]).includes(item.id);
       const override =
         locale === "ar" || sidebarHub

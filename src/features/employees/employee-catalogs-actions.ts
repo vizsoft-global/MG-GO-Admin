@@ -32,11 +32,14 @@ export type EmployeeCatalogError =
   | "system_status_locked"
   | "save_failed";
 
-async function requireManage() {
+async function requireManage(kind?: EmployeeCatalogKind) {
   const session = await getSessionUser();
-  if (!session || !hasPermissionInSet(session.permissions, "drivers.manage", session.isSuperAdmin)) {
-    throw new Error("not_authorized");
-  }
+  if (!session) throw new Error("not_authorized");
+  const drivers = hasPermissionInSet(session.permissions, "drivers.manage", session.isSuperAdmin);
+  const payroll =
+    kind === "sponsorships" &&
+    hasPermissionInSet(session.permissions, "payroll.manage", session.isSuperAdmin);
+  if (!drivers && !payroll) throw new Error("not_authorized");
 }
 
 async function requireView() {
@@ -67,7 +70,7 @@ export async function upsertEmployeeCatalog(input: {
   isOperational?: boolean;
 }): Promise<{ ok: true } | { error: EmployeeCatalogError }> {
   try {
-    await requireManage();
+    await requireManage(input.kind);
   } catch {
     return { error: "not_authorized" };
   }
@@ -105,5 +108,8 @@ export async function upsertEmployeeCatalog(input: {
   revalidatePath("/settings/employee-sections");
   revalidatePath("/settings/nationality-categories");
   revalidatePath("/settings/bank-codes");
+  revalidatePath("/settings/sponsorships");
+  revalidatePath("/payroll");
+  revalidatePath("/payroll-hub");
   return { ok: true };
 }

@@ -1,11 +1,16 @@
 "use client";
 
 import { useState, type JSX } from "react";
-import { HR_FOOTER_KEYS, HR_GROUP_FILL, hrGroupSpans, stickyOffsets } from "../../hr-payroll-columns";
-import type { HrColumn, HrColumnKind } from "../../hr-payroll-columns";
-import { distinctHrValues, HR_AWAITING, hrColumnFilterMode, hrFooterTotals } from "../../hr-payroll-formulas";
+import { HR_FOOTER_KEYS, HR_GROUP_FILL, hrColumnIsNumeric, hrGroupSpans, stickyOffsets } from "../../hr-payroll-columns";
+import type { HrColumn } from "../../hr-payroll-columns";
+import { HR_AWAITING, hrFooterTotals } from "../../hr-payroll-formulas";
 import { HR_STATUS_ORDER, hrStatusPaint, hrStatusStyle } from "../../hr-payroll-status";
 import type { HrEditState, HrGroupBy, HrPayrollGroup, HrPayrollRow } from "../../hr-payroll-types";
+import {
+  PayrollColumnHeader,
+  type ColumnFilterValue,
+  type ColumnSort,
+} from "../../payroll-column-filter";
 import { COLUMN_EDIT, money3, optionLabel } from "./hr-payroll-ui";
 import { PayrollIdentityCell, hrIdentityField } from "../../payroll-identity-cell";
 import "./hr-payroll.css";
@@ -73,36 +78,6 @@ function groupRank(row: HrPayrollRow, groupBy: HrGroupBy): string {
   return hrGroupValue(row, groupBy);
 }
 
-function numericKind(kind: HrColumnKind): boolean {
-  switch (kind) {
-    case "money":
-    case "dec2":
-    case "int":
-    case "pct":
-    case "index":
-    case "select":
-      return true;
-    case "text":
-      return false;
-    default: {
-      const unreachable: never = kind;
-      return unreachable;
-    }
-  }
-}
-
-function numericColumn(column: HrColumn): boolean {
-  switch (column.key) {
-    case "mg":
-    case "civil":
-    case "client":
-    case "rate":
-      return true;
-    default:
-      return numericKind(column.kind);
-  }
-}
-
 function nextSort(column: HrColumn, current: HrSort | null): HrSort | null {
   const mode: HrSortMode | null = current?.key === column.key ? current.mode : null;
   if (column.key === "name" || column.key === "status") {
@@ -124,7 +99,7 @@ function nextSort(column: HrColumn, current: HrSort | null): HrSort | null {
       }
     }
   }
-  if (numericColumn(column)) {
+  if (hrColumnIsNumeric(column)) {
     switch (mode) {
       case null:
         return { key: column.key, mode: "small" };
@@ -214,44 +189,45 @@ function compareSorted(a: HrPayrollRow, b: HrPayrollRow, key: string, mode: HrSo
   }
 }
 
-function hrFilterControl(
-  column: HrColumn,
-  sourceRows: readonly HrPayrollRow[],
-  filters: Readonly<Record<string, string>>,
-  all: string,
-  awaiting: string,
-  onFilter: (key: string, value: string) => void,
-): JSX.Element | null {
-  const mode = hrColumnFilterMode(column.key, sourceRows);
-  switch (mode) {
-    case "none":
+function funnelSortOf(sort: HrSort | null): ColumnSort {
+  if (!sort) return null;
+  switch (sort.mode) {
+    case "az":
+    case "small":
+      return { columnId: sort.key, dir: "asc" };
+    case "za":
+    case "large":
+      return { columnId: sort.key, dir: "desc" };
+    case "colour":
       return null;
-    case "contains":
-      return (
-        <input
-          value={filters[column.key] ?? ""}
-          onChange={(event) => onFilter(column.key, event.target.value)}
-        />
-      );
-    case "exact":
-      return (
-        <select
-          value={filters[column.key] ?? ""}
-          onChange={(event) => onFilter(column.key, event.target.value)}
-        >
-          <option value="">{all}</option>
-          {distinctHrValues(sourceRows, column.key).map((value) => (
-            <option key={value} value={value}>
-              {value === HR_AWAITING ? awaiting : value}
-            </option>
-          ))}
-        </select>
-      );
     default: {
-      const unreachable: never = mode;
+      const unreachable: never = sort.mode;
       return unreachable;
     }
   }
+}
+
+function applyFunnelSort(column: HrColumn, next: ColumnSort): HrSort | null {
+  if (!next || next.columnId !== column.key) return null;
+  if (hrColumnIsNumeric(column)) {
+    return { key: column.key, mode: next.dir === "asc" ? "small" : "large" };
+  }
+  return { key: column.key, mode: next.dir === "asc" ? "az" : "za" };
+}
+
+function columnFilterValues(
+  column: HrColumn,
+  sourceRows: readonly HrPayrollRow[],
+  awaiting: string,
+): string[] {
+  if (column.key === "i") {
+    return sourceRows.map((_, index) => String(index + 1));
+  }
+  return sourceRows.map((row) => {
+    const raw = row.cells[column.key] ?? "";
+    if (raw === HR_AWAITING) return awaiting;
+    return raw === "—" ? "" : raw;
+  });
 }
 
 function footerMoney(
@@ -365,8 +341,8 @@ export function HrPayrollGrid(props: {
   columns: readonly HrColumn[];
   rows: readonly HrPayrollRow[];
   sourceRows: readonly HrPayrollRow[];
-  filters: Readonly<Record<string, string>>;
-  onFilter: (key: string, value: string) => void;
+  filters: Readonly<Record<string, ColumnFilterValue>>;
+  onFilter: (key: string, next: ColumnFilterValue | null) => void;
   groupBy: HrGroupBy;
   canManage: boolean;
   flash: ReadonlySet<string>;
@@ -377,7 +353,7 @@ export function HrPayrollGrid(props: {
   blank: string;
   totalRiders: string;
   empty: string;
-  all: string;
+  statusList: readonly string[];
   onSelect: (driverId: string, key: keyof HrEditState, value: number) => void;
   onAmount: (driverId: string, key: keyof HrEditState, value: number) => void;
 }): JSX.Element {
@@ -478,27 +454,26 @@ export function HrPayrollGrid(props: {
           <tr>{bands}</tr>
           <tr>
             {props.columns.map((column, index) => (
-              <th
+              <PayrollColumnHeader
                 key={column.key}
+                label={props.headers[column.key] ?? column.header}
+                heading={
+                  <button type="button" className="hrpay-sort" onClick={() => setSort((current) => nextSort(column, current))}>
+                    {props.headers[column.key] ?? column.header}
+                    {sort?.key === column.key ? sortMark(sort.mode) : ""}
+                  </button>
+                }
+                columnId={column.key}
+                values={columnFilterValues(column, props.sourceRows, props.awaiting)}
+                fixedList={column.key === "status" ? props.statusList : undefined}
+                filter={props.filters[column.key]}
+                onChange={(next) => props.onFilter(column.key, next)}
+                sort={funnelSortOf(sort)}
+                onSort={(next) => setSort(applyFunnelSort(column, next))}
+                numeric={hrColumnIsNumeric(column)}
                 className={withSticky("hrpay-colhead", index)}
                 style={stickyBox(index, offsets, column.width)}
-              >
-                <button type="button" className="hrpay-sort" onClick={() => setSort((current) => nextSort(column, current))}>
-                  {props.headers[column.key] ?? column.header}
-                  {sort?.key === column.key ? sortMark(sort.mode) : ""}
-                </button>
-              </th>
-            ))}
-          </tr>
-          <tr>
-            {props.columns.map((column, index) => (
-              <th
-                key={column.key}
-                className={withSticky("hrpay-filter", index)}
-                style={stickyBox(index, offsets, column.width)}
-              >
-                {hrFilterControl(column, props.sourceRows, props.filters, props.all, props.awaiting, props.onFilter)}
-              </th>
+              />
             ))}
           </tr>
         </thead>

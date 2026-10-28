@@ -11,6 +11,7 @@ import {
   parseDpdTarget,
   parseRateKwd,
   resolveCompanyInput,
+  listedCompanies,
   selectableCompanies,
   validateSourceCompanyScheme,
   type SourceCompany,
@@ -63,6 +64,13 @@ describe("companyMatchesCategory", () => {
     assert.equal(companyMatchesCategory("outsourced", "mg", companies), false);
     assert.equal(companyMatchesCategory("outsourced", null, companies), true);
     assert.equal(companyMatchesCategory("outsourced", "ghost", companies), false);
+  });
+});
+
+describe("listedCompanies", () => {
+  it("returns every active company and keeps the stored inactive one", () => {
+    assert.deepEqual(listedCompanies(companies, null).map((company) => company.key), ["mg", "kn"]);
+    assert.deepEqual(listedCompanies(companies, "brk").map((company) => company.key), ["mg", "kn", "brk"]);
   });
 });
 
