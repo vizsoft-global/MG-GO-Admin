@@ -53,7 +53,7 @@ import {
 } from "./visit-status-utils";
 
 const SECTION_LABEL =
-  "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+  "text-xs font-semibold text-muted-foreground";
 
 type StepState = "done" | "current" | "pending" | "failed";
 

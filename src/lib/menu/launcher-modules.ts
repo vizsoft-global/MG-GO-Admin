@@ -1,5 +1,6 @@
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { firstChildHref } from "@/lib/menu/inline-group-nav";
+import { sanitizeMenuIconColor, sanitizeMenuIconUrl } from "@/lib/menu/menu-icon";
 import type { ResolvedMenuNode } from "@/lib/menu/menu-merge";
 import { MENU_REGISTRY, type MenuRegistryItem } from "@/lib/menu/menu-registry";
 
@@ -125,7 +126,15 @@ export interface LauncherTile {
   /** The sidebar's resolved label; the shell prefers the `nav.*` translation. */
   label: string;
   icon: string;
+  /** Same-origin menu upload. Wins over the frame glyph on the tile. */
+  iconUrl?: string;
+  iconColor?: string;
 }
+
+/** Home uses the v2 door; a custom icon saved on the sidebar v1 row still belongs on that tile. */
+const LAUNCHER_ICON_TWIN: Record<string, string> = {
+  "live-tracking-v2": "live-tracking",
+};
 
 /**
  * Mirror the sidebar rows onto the launcher.
@@ -144,30 +153,35 @@ export function launcherTilesFromMenu(
   const tiles: LauncherTile[] = [];
   const seen = new Set<string>();
 
-  const add = (
-    id: string,
-    href: string | undefined | null,
-    label: string,
-    icon: string,
-  ) => {
+  const add = (node: Pick<ResolvedMenuNode, "id" | "href" | "label" | "icon" | "iconUrl" | "iconColor">) => {
+    const href = node.href;
     if (!href || href === LAUNCHER_SELF_HREF) return;
-    if (seen.has(id)) return;
-    seen.add(id);
-    tiles.push({ id, href, label, icon });
+    if (seen.has(node.id)) return;
+    seen.add(node.id);
+    const iconUrl = sanitizeMenuIconUrl(node.iconUrl);
+    const iconColor = sanitizeMenuIconColor(node.iconColor);
+    tiles.push({
+      id: node.id,
+      href,
+      label: node.label,
+      icon: node.icon,
+      ...(iconUrl ? { iconUrl } : {}),
+      ...(iconColor ? { iconColor } : {}),
+    });
   };
 
   for (const node of nodes) {
     if (node.type === "item") {
-      add(node.id, node.href, node.label, node.icon);
+      add(node);
       continue;
     }
     if (node.displayMode === "inline") {
-      add(node.id, node.href ?? firstChildHref(node), node.label, node.icon);
+      add({ ...node, href: node.href ?? firstChildHref(node) ?? undefined });
       continue;
     }
     for (const child of node.children ?? []) {
       if (child.type !== "item") continue;
-      add(child.id, child.href, child.label, child.icon);
+      add(child);
     }
   }
 
@@ -189,6 +203,12 @@ export function mergeLauncherTiles(
 ): LauncherTile[] {
   const byId = new Map<string, LauncherTile>();
   const hrefs = new Set<string>();
+  const artById = new Map<string, Pick<LauncherTile, "iconUrl" | "iconColor">>();
+  for (const tile of derived) {
+    if (tile.iconUrl || tile.iconColor) {
+      artById.set(tile.id, { iconUrl: tile.iconUrl, iconColor: tile.iconColor });
+    }
+  }
 
   for (const tile of derived) {
     if (LAUNCHER_HIDDEN_TILE_IDS.has(tile.id)) continue;
@@ -212,7 +232,11 @@ export function mergeLauncherTiles(
 
   return LAUNCHER_HOME_TILE_IDS.flatMap((id) => {
     const tile = byId.get(id);
-    return tile ? [tile] : [];
+    if (!tile) return [];
+    if (tile.iconUrl) return [tile];
+    const twin = artById.get(LAUNCHER_ICON_TWIN[id] ?? "");
+    if (!twin?.iconUrl && !twin?.iconColor) return [tile];
+    return [{ ...tile, ...twin }];
   });
 }
 

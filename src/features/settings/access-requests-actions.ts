@@ -101,6 +101,7 @@ export async function approveUser(
           approval_status: "approved",
           role: "staff",
           access_kind: kind,
+          archived_at: null,
           approved_at: approvedAt,
           approved_by: auth.session.id,
           updated_at: approvedAt,
@@ -113,7 +114,7 @@ export async function approveUser(
         { merge: true },
       );
       tx.set(
-        db.collection(COLLECTIONS.adminAllowlist).doc(encodeURIComponent(allowEmail)),
+        db.collection(COLLECTIONS.adminAllowlist).doc(allowEmail),
         { email: allowEmail, role: "staff" },
         { merge: true },
       );

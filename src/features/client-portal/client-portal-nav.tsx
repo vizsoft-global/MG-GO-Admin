@@ -8,36 +8,46 @@ import { signOut } from "@/features/auth/actions";
 
 const HEADER_BTN = "h-9 cursor-pointer px-3";
 
-export function ClientPortalNav() {
+export function ClientPortalNav({
+  projectLabel,
+  previewProjectKey,
+}: {
+  projectLabel?: string;
+  previewProjectKey?: string;
+}) {
   const t = useTranslations("pages.clientPortal");
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const onEmployees = pathname === "/client-portal/employees" || pathname.startsWith("/client-portal/employees/");
+  const dashboardHref = previewProjectKey ? `/client-portal/preview/${previewProjectKey}` : "/client-portal";
+  const employeesHref = previewProjectKey
+    ? `/client-portal/employees?project=${previewProjectKey}`
+    : "/client-portal/employees";
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap items-center gap-2">
+      {projectLabel ? (
+        <p className="me-1 text-sm font-semibold text-[var(--portal-ink)]">{projectLabel}</p>
+      ) : null}
       <Button
         className={HEADER_BTN}
-        variant={onEmployees ? "outline" : "default"}
-        style={onEmployees ? { borderColor: "#A73C24", color: "#A73C24" } : { background: "#A73C24", color: "#fff" }}
-        onClick={() => router.push("/client-portal")}
+        variant={onEmployees ? "portal-secondary" : "portal"}
+        onClick={() => router.push(dashboardHref)}
       >
         {t("navDashboard")}
       </Button>
       <Button
         className={HEADER_BTN}
-        variant={onEmployees ? "default" : "outline"}
-        style={onEmployees ? { background: "#A73C24", color: "#fff" } : { borderColor: "#A73C24", color: "#A73C24" }}
-        onClick={() => router.push("/client-portal/employees")}
+        variant={onEmployees ? "portal" : "portal-secondary"}
+        onClick={() => router.push(employeesHref)}
       >
         {t("navEmployees")}
       </Button>
       <Button
-        variant="outline"
+        variant="portal-neutral"
         className={HEADER_BTN}
-        style={{ borderColor: "#A73C24", color: "#A73C24" }}
         disabled={pending}
         onClick={() => {
           startTransition(() => {

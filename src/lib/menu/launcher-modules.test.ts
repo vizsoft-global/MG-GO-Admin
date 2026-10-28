@@ -148,6 +148,43 @@ describe("launcher modules", () => {
     }
   });
 
+  it("carries an uploaded icon onto the home tile, including the live-tracking twin", () => {
+    const icon = "/api/menu-icons/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.png";
+    const derived = launcherTilesFromMenu([
+      {
+        id: "drivers",
+        type: "item",
+        label: "Employees",
+        icon: "Users",
+        href: "/drivers",
+        iconUrl: icon,
+        iconColor: "#112233",
+      },
+      {
+        id: "live-tracking",
+        type: "item",
+        label: "Live tracking",
+        icon: "Radar",
+        href: "/live-tracking",
+        iconUrl: icon,
+      },
+      {
+        id: "live-tracking-v2",
+        type: "item",
+        label: "Live tracking",
+        icon: "Satellite",
+        href: "/live-tracking-v2",
+        iconUrl: "https://evil.example/x.png",
+      },
+    ]);
+    const employees = derived.find((tile) => tile.id === "drivers");
+    assert.equal(employees?.iconUrl, icon);
+    assert.equal(employees?.iconColor, "#112233");
+    const merged = mergeLauncherTiles(derived, []);
+    assert.equal(merged.find((tile) => tile.id === "drivers")?.iconUrl, icon);
+    assert.equal(merged.find((tile) => tile.id === "live-tracking-v2")?.iconUrl, icon);
+  });
+
   it("splits the Kuwait day into greeting buckets", () => {
     assert.equal(greetingBucket(8), "morning");
     assert.equal(greetingBucket(14), "afternoon");

@@ -102,7 +102,9 @@ function MenuIcon({
 }) {
   const custom = sanitizeMenuIconUrl(iconUrl);
   if (custom) {
-    return <img src={custom} alt="" width={12} height={12} className="size-3 object-contain" />;
+    return (
+      <img src={custom} alt="" width={16} height={16} className="size-4 object-contain" />
+    );
   }
   const src = id ? launcherGlyphSrc(id) : undefined;
   if (src) {
@@ -229,6 +231,13 @@ function SidebarCollapseTrigger({ className }: { className?: string }) {
   );
 }
 
+function superAdminPortalHref(id: string, href: string, isSuperAdmin: boolean): string {
+  if (isSuperAdmin && (id === "client-portal" || href === "/client-portal")) {
+    return "/client-portal/clients";
+  }
+  return href;
+}
+
 function NavItemLink({
   node,
   label,
@@ -239,10 +248,11 @@ function NavItemLink({
   const activeLeafId = useContext(ActiveNavContext);
   const badges = useContext(NavBadgeContext);
   const queryClient = useQueryClient();
+  const { isSuperAdmin } = useAuth();
   if (!node.href) return null;
   const isActive = node.id === activeLeafId;
   const badge = badges[node.id];
-  const href = node.href;
+  const href = superAdminPortalHref(node.id, node.href, isSuperAdmin);
 
   return (
     <SidebarMenuItem>
@@ -294,6 +304,7 @@ function NavGroup({
   const activeLeafId = useContext(ActiveNavContext);
   const { state } = useSidebar();
   const queryClient = useQueryClient();
+  const { isSuperAdmin } = useAuth();
   const children = node.children ?? [];
   const groupLabel = tGroupLabel(node.label);
   const collapsed = state === "collapsed";
@@ -302,8 +313,9 @@ function NavGroup({
   const hasActiveChild = groupContainsLeaf(node, activeLeafId);
 
   if (isInline) {
-    const href = node.href ?? firstChildHref(node);
-    if (!href) return null;
+    const rawHref = node.href ?? firstChildHref(node);
+    if (!rawHref) return null;
+    const href = superAdminPortalHref(node.id, rawHref, isSuperAdmin);
 
     const isActive = hasActiveChild;
 

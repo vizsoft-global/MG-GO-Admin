@@ -290,7 +290,7 @@ export function OrderReconPageShell() {
                   )}
                   style={!selected ? { backgroundColor: tone.bg, color: tone.fg } : undefined}
                 >
-                  <p className="text-xs font-semibold uppercase tracking-wide">{t(`result.${card.result}`)}</p>
+                  <p className="text-xs font-semibold">{t(`result.${card.result}`)}</p>
                   <p className="text-lg font-semibold">{card.count}</p>
                   <p className="text-xs">
                     {formatPct(card.share)} · AM {card.am} · MGGO {card.mggo}

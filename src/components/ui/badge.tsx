@@ -19,6 +19,18 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        "portal-green":
+          "h-[22px] gap-1.5 rounded-full border-transparent bg-[var(--portal-badge-green-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--portal-badge-green-fg)] before:size-1.5 before:shrink-0 before:rounded-full before:bg-current",
+        "portal-blue":
+          "h-[22px] gap-1.5 rounded-full border-transparent bg-[var(--portal-badge-blue-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--portal-badge-blue-fg)] before:size-1.5 before:shrink-0 before:rounded-full before:bg-current",
+        "portal-red":
+          "h-[22px] gap-1.5 rounded-full border-transparent bg-[var(--portal-badge-red-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--portal-badge-red-fg)] before:size-1.5 before:shrink-0 before:rounded-full before:bg-current",
+        "portal-ochre":
+          "h-[22px] gap-1.5 rounded-full border-transparent bg-[var(--portal-badge-ochre-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--portal-badge-ochre-fg)] before:size-1.5 before:shrink-0 before:rounded-full before:bg-current",
+        "portal-grey":
+          "h-[22px] gap-1.5 rounded-full border-transparent bg-[var(--portal-badge-grey-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--portal-badge-grey-fg)] before:size-1.5 before:shrink-0 before:rounded-full before:bg-current",
+        "portal-plum":
+          "h-[22px] gap-1.5 rounded-full border-transparent bg-[var(--portal-badge-plum-bg)] px-2.5 py-0.5 text-xs font-medium text-[var(--portal-badge-plum-fg)] before:size-1.5 before:shrink-0 before:rounded-full before:bg-current",
       },
     },
     defaultVariants: {

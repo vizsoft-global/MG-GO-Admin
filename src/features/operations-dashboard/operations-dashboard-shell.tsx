@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { AppPage } from "@/components/app/app-page";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { KpiCard, type PortalKpiAccent } from "@/components/dashboard/kpi-card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -56,26 +58,27 @@ import {
 
 const PLAN_STATUSES = ["pending", "approved", "taken", "rejected"] as const;
 const LEAVE_TYPES = ["annual", "emergency", "sick", "unpaid"] as const;
-const HEADER_BTN = "h-9 cursor-pointer px-3";
-const PILL = "h-9 cursor-pointer rounded-full border px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--btn-focus)] disabled:opacity-[var(--btn-disabled-opacity)]";
+const HEADER_BTN = "h-9 cursor-pointer";
+const SELECT_TRIGGER = "h-9 min-h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)] text-[var(--portal-ink)]";
 const DENSE_TABLE = "text-xs [&_td]:px-2 [&_td]:py-1 [&_th]:h-8";
+const SECTION_BAND = "mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--portal-ink)] px-3 py-2 text-[var(--portal-canvas)]";
 
 type Translator = ReturnType<typeof useTranslations<"pages.operationsDashboard">>;
 
 function employeeColor(key: EmployeeStatusKey): string {
   switch (key) {
     case "running":
-      return "#1e7e34";
+      return "var(--portal-badge-green-fg)";
     case "extension":
-      return "#0d7a5f";
+      return "var(--portal-badge-green-fg)";
     case "leave":
-      return "#1565c0";
+      return "var(--portal-badge-blue-fg)";
     case "new":
-      return "#00838f";
+      return "var(--portal-badge-ochre-fg)";
     case "absentFromMosal":
-      return "#c2185b";
+      return "var(--portal-badge-red-fg)";
     case "cancelled":
-      return "#5c6370";
+      return "var(--portal-badge-grey-fg)";
     default: {
       const neverKey: never = key;
       return neverKey;
@@ -86,36 +89,42 @@ function employeeColor(key: EmployeeStatusKey): string {
 function dailyColor(key: string): string {
   switch (key) {
     case "working":
-      return "#22863a";
+      return "var(--portal-badge-green-fg)";
     case "onLeave":
-      return "#1565c0";
+      return "var(--portal-badge-blue-fg)";
     case "absent":
-      return "#c62828";
+      return "var(--portal-badge-red-fg)";
     case "sick":
-      return "#e8710a";
+      return "var(--portal-badge-ochre-fg)";
     case "other":
-      return "#9aa1ab";
+      return "var(--portal-badge-grey-fg)";
     case "accident":
-      return "#714b67";
+      return "var(--portal-badge-plum-fg)";
     default:
-      return "#5c6370";
+      return "var(--portal-muted)";
   }
 }
 
 function legendColor(key: string): string {
+  return dailyColor(key);
+}
+
+function statusBadgeVariant(key: string): "portal-green" | "portal-blue" | "portal-red" | "portal-ochre" | "portal-grey" | "portal-plum" {
   switch (key) {
     case "working":
-      return "#1e7e34";
+      return "portal-green";
     case "onLeave":
-      return "#1565c0";
+      return "portal-blue";
     case "absent":
-      return "#b71c1c";
+      return "portal-red";
     case "sick":
-      return "#b45309";
+      return "portal-ochre";
+    case "accident":
+      return "portal-plum";
     case "other":
-      return "#5c6370";
+      return "portal-grey";
     default:
-      return "#5c6370";
+      return "portal-grey";
   }
 }
 
@@ -205,7 +214,7 @@ function StackBar({ row }: { row: ProjectRow }) {
     { key: "other", count: row.other },
   ] as const;
   const total = parts.reduce((sum, part) => sum + part.count, 0);
-  if (total <= 0) return <div className="h-2.5 w-24 rounded-md bg-[#e3e5e8]" />;
+  if (total <= 0) return <div className="h-2.5 w-24 rounded-md bg-[var(--portal-locked-bg)]" />;
   return (
     <div className="flex h-2.5 w-24 overflow-hidden rounded-md">
       {parts.filter((part) => part.count > 0).map((part) => (
@@ -221,11 +230,11 @@ function StackBar({ row }: { row: ProjectRow }) {
 function leaveBarStyle(tense: LeaveMonthBar["tense"]): { backgroundColor: string; border?: string } {
   switch (tense) {
     case "past":
-      return { backgroundColor: "#1565c0" };
+      return { backgroundColor: "var(--portal-badge-blue-fg)" };
     case "current":
-      return { backgroundColor: "#0f6e78" };
+      return { backgroundColor: "var(--portal-badge-green-fg)" };
     case "future":
-      return { backgroundColor: "#dbe7f7", border: "1px dashed #1565c0" };
+      return { backgroundColor: "var(--portal-badge-blue-bg)", border: "1px dashed var(--portal-badge-blue-fg)" };
     default: {
       const neverTense: never = tense;
       return neverTense;
@@ -412,7 +421,7 @@ function MonthChart({
               style={{
                 height: `${height}%`,
                 minHeight: 8,
-                outline: active ? "2px solid #714b67" : undefined,
+                outline: active ? "2px solid var(--portal-badge-plum-fg)" : undefined,
                 ...(barColor ? { background: barColor } : leaveBarStyle(month.tense)),
               }}
             />
@@ -462,12 +471,12 @@ function CountMatrix({
                 selected && selected !== row.key
                   ? { opacity: 0.55 }
                   : selected === row.key
-                    ? { background: "#f3ecf1", boxShadow: "inset 3px 0 0 #714b67" }
+                    ? { background: "var(--portal-badge-plum-bg)", boxShadow: "inset 3px 0 0 var(--portal-badge-plum-fg)" }
                     : undefined
               }
             >
               <TableCell>
-                <button type="button" className="cursor-pointer text-[var(--btn-secondary-fg)]" onClick={() => onProject(row.key)}>
+                <button type="button" className="cursor-pointer text-[var(--portal-btn)]" onClick={() => onProject(row.key)}>
                   {row.label}
                 </button>
               </TableCell>
@@ -477,7 +486,7 @@ function CountMatrix({
               <TableCell>{row.total}</TableCell>
             </TableRow>
           ))}
-          <TableRow style={{ background: "#f8f9fa" }}>
+          <TableRow className="bg-[var(--portal-locked-bg)]">
             <TableCell>{allLabel}</TableCell>
             {matrix.totals.map((count, index) => (
               <TableCell key={`total-${months[index] ?? index}`}>{count}</TableCell>
@@ -492,6 +501,7 @@ function CountMatrix({
 
 export function OperationsDashboardShell() {
   const t = useTranslations("pages.operationsDashboard");
+  const tCommon = useTranslations("common");
   const locale = useLocale();
   const router = useRouter();
   const { accessKind } = useAuth();
@@ -682,57 +692,60 @@ export function OperationsDashboardShell() {
     }),
     { assigned: 0, working: 0, onLeave: 0, absent: 0, sick: 0, other: 0 },
   );
-  const card = "rounded-xl border bg-white p-4";
+  const card = "rounded-xl border border-[var(--portal-border)] bg-[var(--portal-canvas)] p-4";
+  const mixParts = (data?.statusBar ?? []).filter((item) => item.key !== "accident");
+  const mixTotal = mixParts.reduce((sum, item) => sum + item.count, 0);
 
   return (
-    <AppPage className="space-y-6 bg-[#f4f5f7]">
-      <section className={card} style={{ borderColor: "#e3e5e8" }}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Logo framed size="lg" className="size-11 rounded-lg border-[#e3e5e8] bg-white p-1" />
-            <div>
-              <h1 className="type-h1 text-[#1f2328]">{t("title")}</h1>
-              <p className="text-sm text-[#5c6370]">
-                {rangeActive
-                  ? t.rich("showingRange", {
-                      name: projectName,
-                      from: formatDay(shownFrom),
-                      to: formatDay(shownTo),
-                      b: (chunks) => <span className="font-semibold text-[#1f2328]">{chunks}</span>,
-                    })
-                  : t.rich("showing", {
-                      name: projectName,
-                      date: dateLabel,
-                      b: (chunks) => <span className="font-semibold text-[#1f2328]">{chunks}</span>,
-                    })}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button className={HEADER_BTN} disabled={loading || pending} onClick={reload}>
-              <RefreshCw className="size-5" />
-              {t("refresh")}
-            </Button>
-            <Button className={HEADER_BTN} variant="outline" onClick={() => openRoster("all")}>
-              {rosterFilter === "all" ? t("showingList") : t("allRiders")}
-            </Button>
-            <Button className={HEADER_BTN} variant="outline" onClick={() => { setOutlook("pendingApproval"); scrollToLeave(); }}>
-              {t("leaveRequests")}
-            </Button>
-            <Button
-              className={HEADER_BTN}
-              variant="outline"
-              disabled={!data}
-              onClick={() => {
-                if (data) exportDashboard(data, t, projectName, periodLabel(period, t), dateLabel);
-              }}
-            >
-              <Download className="size-5" />
-              {t("exportDashboard")}
-            </Button>
+    <AppPage className="space-y-4 bg-[var(--portal-canvas)]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Logo framed size="lg" className="size-11 rounded-lg border border-[var(--portal-border)] bg-[var(--portal-canvas)] p-1" />
+          <div>
+            <h1 className="type-h1 text-[var(--portal-ink)]">{t("title")}</h1>
+            <p className="text-sm text-[var(--portal-muted)]">
+              {rangeActive
+                ? t.rich("showingRange", {
+                    name: projectName,
+                    from: formatDay(shownFrom),
+                    to: formatDay(shownTo),
+                    b: (chunks) => <span className="font-semibold text-[var(--portal-ink)]">{chunks}</span>,
+                  })
+                : t.rich("showing", {
+                    name: projectName,
+                    date: dateLabel,
+                    b: (chunks) => <span className="font-semibold text-[var(--portal-ink)]">{chunks}</span>,
+                  })}
+            </p>
           </div>
         </div>
-        <p className="mb-2 mt-4 text-xs uppercase tracking-wide text-[#5c6370]">{t("colProject")}</p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="portal" className={HEADER_BTN} disabled={loading || pending} onClick={reload}>
+            <RefreshCw className="size-5" />
+            {t("refresh")}
+          </Button>
+          <Button variant="portal-secondary" className={HEADER_BTN} onClick={() => openRoster("all")}>
+            {rosterFilter === "all" ? t("showingList") : t("allRiders")}
+          </Button>
+          <Button variant="portal-secondary" className={HEADER_BTN} onClick={() => { setOutlook("pendingApproval"); scrollToLeave(); }}>
+            {t("leaveRequests")}
+          </Button>
+          <Button
+            variant="portal-neutral"
+            className={HEADER_BTN}
+            disabled={!data}
+            onClick={() => {
+              if (data) exportDashboard(data, t, projectName, periodLabel(period, t), dateLabel);
+            }}
+          >
+            <Download className="size-5" />
+            {t("exportDashboard")}
+          </Button>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs text-[var(--text-secondary)]">{t("colProject")}</p>
         <div className="flex flex-wrap gap-2">
           {readOnly ? null : (
             <ProjectPill active={!projectKey} label={t("allProjects")} onClick={() => setProjectKey(undefined)} />
@@ -748,7 +761,10 @@ export function OperationsDashboardShell() {
             />
           ))}
         </div>
-        <p className="mb-2 mt-4 text-xs uppercase tracking-wide text-[#5c6370]">{t("periodLabel")}</p>
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs text-[var(--text-secondary)]">{t("periodLabel")}</p>
         <div className="flex flex-wrap gap-2">
           {DASHBOARD_PERIODS.map((item) => (
             <ProjectPill key={item} active={period === item} label={periodLabel(item, t)} onClick={() => setPeriod(item)} />
@@ -756,81 +772,85 @@ export function OperationsDashboardShell() {
         </div>
         {period === "custom" ? (
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <label className="block text-xs text-[#5c6370]">
+            <label className="block text-xs text-[var(--portal-muted)]">
               {t("customFrom")}
-              <Input className="mt-1 h-9" type="date" max={today} value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} />
+              <Input className="mt-1 h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)]" type="date" max={today} value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} />
             </label>
-            <label className="block text-xs text-[#5c6370]">
+            <label className="block text-xs text-[var(--portal-muted)]">
               {t("customTo")}
-              <Input className="mt-1 h-9" type="date" max={today} value={customTo} onChange={(event) => setCustomTo(event.target.value)} />
+              <Input className="mt-1 h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)]" type="date" max={today} value={customTo} onChange={(event) => setCustomTo(event.target.value)} />
             </label>
           </div>
         ) : null}
-        <p className="mt-3 text-xs text-[#5c6370]">
+        <p className="mt-3 text-xs text-[var(--portal-muted)]">
           {rangeActive
             ? t("numbersForRange", { from: formatDay(shownFrom), to: formatDay(shownTo) })
             : t("numbersFor", { date: dateLabel })}
         </p>
-        {rangeActive ? <p className="text-xs text-[#5c6370]">{t("rangeHint")}</p> : null}
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {rangeActive ? <p className="text-xs text-[var(--portal-muted)]">{t("rangeHint")}</p> : null}
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           <FilterSelect label={t("filterZone")} value={zoneId || "all"} items={zoneItems} onChange={(value) => setZoneId(value === "all" ? "" : value)} />
+          <FilterSelect label={t("filterSupervisor")} value="all" items={[{ value: "all", label: t("supervisorAll") }]} onChange={() => undefined} disabled hint={tCommon("comingSoon")} />
           <FilterSelect label={t("filterVehicle")} value={vehicle || "all"} items={[{ value: "all", label: t("vehicleAll") }, { value: "bike", label: t("vehicleBike") }, { value: "car", label: t("vehicleCar") }]} onChange={(value) => setVehicle(value === "all" ? "" : value)} />
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
+      </div>
+
+      {failed ? <p className="text-sm text-destructive">{t("loadFailed")}</p> : null}
+      {loading && !data ? <p className="text-sm text-[var(--portal-muted)]">{t("loading")}</p> : null}
+
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        <Tile accent="ink" label={t("kpiTotal")} value={data?.kpis.assigned ?? 0} action={rosterFilter === "all" ? t("showingList") : t("seeWho")} onAction={() => openRoster("all")} />
+        <Tile accent="green" label={t("kpiWorkingToday")} value={data?.kpis.working ?? 0} action={rosterFilter === "working" ? t("showingList") : t("seeWho")} onAction={() => openRoster("working")} />
+        <Tile accent="blue" label={t("kpiOnLeave")} value={data?.kpis.onLeave ?? 0} action={rosterFilter === "onLeave" ? t("showingList") : t("seeWho")} onAction={() => openRoster("onLeave")} />
+        <Tile accent="ochre" label={t("kpiSick")} value={data?.kpis.sick ?? 0} action={rosterFilter === "sick" ? t("showingList") : t("seeWho")} onAction={() => openRoster("sick")} />
+        <Tile accent="red" label={t("kpiAbsent")} value={data?.kpis.absent ?? 0} action={rosterFilter === "absent" ? t("showingList") : t("seeWho")} onAction={() => openRoster("absent")} />
+        <Tile accent="grey" label={t("kpiOther")} value={data?.kpis.other ?? 0} action={rosterFilter === "other" ? t("showingList") : t("seeWho")} onAction={() => openRoster("other")} />
+        <Tile accent="plum" label={t("kpiAccident")} value={data?.kpis.accident ?? 0} />
+      </div>
+
+      <section className={card}>
+        <div className="flex flex-wrap items-center gap-3 text-xs">
           {(["working", "onLeave", "absent", "sick", "other"] as const).map((key) => {
             const count = data?.statusBar.find((item) => item.key === key)?.count ?? 0;
             return (
-              <button key={key} type="button" className="inline-flex cursor-pointer items-center gap-1" style={{ color: legendColor(key) }} onClick={() => openRoster(key)}>
+              <button key={key} type="button" className="inline-flex h-9 cursor-pointer items-center gap-1" style={{ color: legendColor(key) }} onClick={() => openRoster(key)}>
                 <span className="size-2.5 rounded-sm" style={{ background: dailyColor(key) }} />
                 {dailyLabel(key, t)} {count}
               </button>
             );
           })}
-          <span className="ms-auto text-[#1f2328]">{t("totalRiders", { count: barTotal })}</span>
+          <span className="ms-auto text-[var(--portal-ink)]">{t("totalRiders", { count: barTotal })}</span>
         </div>
-        {barTotal === 0 ? (
-          <p className="mt-2 text-sm text-[#5c6370]">{t("statusBarEmpty")}</p>
+        {mixTotal === 0 ? (
+          <p className="mt-2 text-sm text-[var(--portal-muted)]">{t("statusBarEmpty")}</p>
         ) : (
           <div className="mt-2 flex h-4 overflow-hidden rounded-md">
-            {data?.statusBar.filter((item) => item.key !== "accident").map((item) => (
-              <div key={item.key} style={{ backgroundColor: dailyColor(item.key), width: `${(item.count / barTotal) * 100}%` }} title={`${dailyLabel(item.key, t)} ${item.count}`} />
+            {mixParts.map((item) => (
+              <div key={item.key} style={{ backgroundColor: dailyColor(item.key), width: `${(item.count / mixTotal) * 100}%` }} title={`${dailyLabel(item.key, t)} ${item.count}`} />
             ))}
           </div>
         )}
       </section>
 
-      {failed ? <p className="text-sm text-destructive">{t("loadFailed")}</p> : null}
-      {loading && !data ? <p className="text-sm text-[#5c6370]">{t("loading")}</p> : null}
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
-        <Tile label={t("kpiTotal")} value={data?.kpis.assigned ?? 0} color="#714b67" action={rosterFilter === "all" ? t("showingList") : t("seeWho")} onAction={() => openRoster("all")} />
-        <Tile label={t("kpiWorkingToday")} value={data?.kpis.working ?? 0} color="#22863a" valueColor="#1e7e34" action={rosterFilter === "working" ? t("showingList") : t("seeWho")} onAction={() => openRoster("working")} />
-        <Tile label={t("kpiOnLeave")} value={data?.kpis.onLeave ?? 0} color="#1565c0" action={rosterFilter === "onLeave" ? t("showingList") : t("seeWho")} onAction={() => openRoster("onLeave")} />
-        <Tile label={t("kpiAbsent")} value={data?.kpis.absent ?? 0} color="#c62828" valueColor="#b71c1c" action={rosterFilter === "absent" ? t("showingList") : t("seeWho")} onAction={() => openRoster("absent")} />
-        <Tile label={t("kpiSick")} value={data?.kpis.sick ?? 0} color="#e8710a" valueColor="#b45309" action={rosterFilter === "sick" ? t("showingList") : t("seeWho")} onAction={() => openRoster("sick")} />
-        <Tile label={t("kpiWorkingRate")} value={formatPct(data?.kpis.workingRate ?? 0)} color="#0f6e78" action={rosterFilter === "notWorking" ? t("showingList") : t("seeWhoNotWorking")} onAction={() => openRoster("notWorking")} />
-        <Tile label={t("kpiAccident")} value={data?.kpis.accident ?? 0} color="#5c6370" />
-      </div>
-
       {rosterFilter ? (
-        <section ref={rosterRef} className={card} style={{ borderColor: "#e3e5e8" }}>
+        <section ref={rosterRef} className={card}>
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>
-              <p className="text-sm font-semibold text-[#1f2328]">{t("allRiders")} — {rosterProject}</p>
-              <p className="text-xs text-[#5c6370]">{rosterSubtitle(rosterFilter, rosterBase.length, t)}</p>
+              <p className="text-sm font-semibold text-[var(--portal-ink)]">{t("allRiders")} — {rosterProject}</p>
+              <p className="text-xs text-[var(--portal-muted)]">{rosterSubtitle(rosterFilter, rosterBase.length, t)}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Input className="h-9 w-56" value={rosterQuery} placeholder={t("rosterSearch")} onChange={(event) => setRosterQuery(event.target.value)} />
-              <Button className={HEADER_BTN} variant="outline" onClick={() => exportRoster(rosterBase, showPhone, t, locale, data?.byProject ?? [])}>
+              <Input className="h-9 w-56 border-[var(--portal-border)] bg-[var(--portal-canvas)]" value={rosterQuery} placeholder={t("rosterSearch")} onChange={(event) => setRosterQuery(event.target.value)} />
+              <Button variant="portal-secondary" className={HEADER_BTN} onClick={() => exportRoster(rosterBase, showPhone, t, locale, data?.byProject ?? [])}>
                 {t("rosterExport")}
               </Button>
-              <Button className={HEADER_BTN} variant="outline" onClick={() => setRosterFilter(null)}>
+              <Button variant="portal-neutral" className={HEADER_BTN} onClick={() => setRosterFilter(null)}>
                 {t("rosterClose")}
               </Button>
             </div>
           </div>
           {rosterRows.length === 0 ? (
-            <p className="text-sm text-[#5c6370]">{t("rosterEmpty")}</p>
+            <p className="text-sm text-[var(--portal-muted)]">{t("rosterEmpty")}</p>
           ) : (
             <div className="max-h-[min(360px,40dvh)] overflow-auto">
               <Table className={DENSE_TABLE}>
@@ -853,9 +873,7 @@ export function OperationsDashboardShell() {
                       <TableCell>{projectLabelOf(row.project, data?.byProject ?? [], "—")}</TableCell>
                       <TableCell>{row.zone || "—"}</TableCell>
                       <TableCell>
-                        <span className="inline-flex h-6 items-center rounded-full border px-2 text-[10px] font-semibold" style={{ color: dailyColor(row.status), borderColor: dailyColor(row.status) }}>
-                          {dailyLabel(row.status, t)}
-                        </span>
+                        <Badge variant={statusBadgeVariant(row.status)}>{dailyLabel(row.status, t)}</Badge>
                       </TableCell>
                       <TableCell>{formatJoined(row.joined, locale)}</TableCell>
                       {showPhone ? <TableCell>{row.phone || "—"}</TableCell> : null}
@@ -865,12 +883,13 @@ export function OperationsDashboardShell() {
               </Table>
             </div>
           )}
-          <p className="mt-2 text-[10px] text-[#5c6370]">{t("rosterFoot", { shown: rosterRows.length, total: rosterBase.length })}</p>
+          <p className="mt-2 text-[10px] text-[var(--portal-muted)]">{t("rosterFoot", { shown: rosterRows.length, total: rosterBase.length })}</p>
         </section>
       ) : null}
 
-      <section className={card} style={{ borderColor: "#e3e5e8" }}>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-white" style={{ background: "#714b67" }}>
+      <div className="grid items-stretch gap-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(240px,0.85fr)]">
+      <section className={`${card} h-full`}>
+        <div className={SECTION_BAND}>
           <p className="text-sm uppercase">{titled(t("byProjectTitle"))}</p>
           {projectKey && !readOnly ? (
             <button type="button" className="cursor-pointer text-xs underline" onClick={() => setProjectKey(undefined)}>
@@ -901,7 +920,7 @@ export function OperationsDashboardShell() {
                   <TableCell>
                     <button
                       type="button"
-                      className="cursor-pointer text-[var(--btn-secondary-fg)]"
+                      className="cursor-pointer text-[var(--portal-btn)]"
                       onClick={() => {
                         if (!readOnly) setProjectKey(project.key);
                       }}
@@ -918,7 +937,7 @@ export function OperationsDashboardShell() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <StackBar row={project} />
-                      <span className="text-xs text-[#5c6370]">
+                      <span className="text-xs text-[var(--portal-muted)]">
                         {t("workingShare", { pct: project.assigned ? roundPercent((project.working / project.assigned) * 100) : 0 })}
                       </span>
                     </div>
@@ -933,18 +952,74 @@ export function OperationsDashboardShell() {
                 <TableCell>{projectTotals.absent}</TableCell>
                 <TableCell>{projectTotals.sick}</TableCell>
                 <TableCell>{projectTotals.other}</TableCell>
-                <TableCell className="text-xs text-[#5c6370]">
+                <TableCell className="text-xs text-[var(--portal-muted)]">
                   {t("workingShare", { pct: projectTotals.assigned ? roundPercent((projectTotals.working / projectTotals.assigned) * 100) : 0 })}
                 </TableCell>
               </TableRow>
             </TableBody>
           </Table>
         )}
-        <p className="mt-2 text-xs text-[#5c6370]">{t("byProjectFootnote")}</p>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-[var(--portal-muted)]">
+            {t("kpiWorkingRate")} {formatPct(data?.kpis.workingRate ?? 0)}
+          </p>
+          <Button variant="portal-secondary" className={HEADER_BTN} onClick={() => openRoster("notWorking")}>
+            {rosterFilter === "notWorking" ? t("showingList") : t("seeWhoNotWorking")}
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-[var(--portal-muted)]">{t("byProjectFootnote")}</p>
       </section>
+      <section className={`${card} h-full`}>
+        <div className={SECTION_BAND}>
+          <p className="text-sm uppercase">{t("outlookTitle")}</p>
+        </div>
+        <ul className="divide-y divide-[var(--portal-border)]">
+          {(["returningThisWeek", "startingThisWeek", "pendingApproval", "overdue", "newJoiners"] as const).map(
+            (key) => {
+              const count = data?.outlook[key].length ?? 0;
+              if (key === "newJoiners") {
+                return (
+                  <li key={key}>
+                    <button
+                      type="button"
+                      className="flex h-9 w-full cursor-pointer items-center justify-between text-sm text-[var(--portal-ink)]"
+                      onClick={() => router.push(employeesHref)}
+                    >
+                      <span>{outlookLabel(key, t)}</span>
+                      <span className="flex items-center gap-2 text-[var(--portal-muted)]">
+                        {count}
+                        <ChevronRight className="size-5" />
+                      </span>
+                    </button>
+                  </li>
+                );
+              }
+              return (
+                <li key={key}>
+                  <button
+                    type="button"
+                    className="flex h-9 w-full cursor-pointer items-center justify-between text-sm text-[var(--portal-ink)]"
+                    onClick={() => {
+                      setOutlook(key);
+                      scrollToLeave();
+                    }}
+                  >
+                    <span>{outlookLabel(key, t)}</span>
+                    <span className="flex items-center gap-2 text-[var(--portal-muted)]">
+                      {count}
+                      <ChevronRight className="size-5" />
+                    </span>
+                  </button>
+                </li>
+              );
+            },
+          )}
+        </ul>
+      </section>
+      </div>
 
-      <section className={card} style={{ borderColor: "#e3e5e8" }}>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-white" style={{ background: "#714b67" }}>
+      <section className={card}>
+        <div className={SECTION_BAND}>
           <p className="text-sm uppercase">{titled(t("employeeStatusTitle"))}</p>
           <button type="button" className="cursor-pointer text-xs underline" onClick={() => router.push(employeesHref)}>
             {t("viewEmployees")}
@@ -957,7 +1032,7 @@ export function OperationsDashboardShell() {
               <div key={tile.key} className="rounded-lg border p-3" style={{ borderColor: employeeColor(tile.key) }}>
                 <p className="text-xs" style={{ color: employeeColor(tile.key) }}>{employeeLabel(tile.key, t)}</p>
                 <p className="text-base tabular-nums" style={{ color: employeeColor(tile.key) }}>{tile.count}</p>
-                <p className="text-xs text-[#5c6370]">{t("ofRiders", { pct: share })}</p>
+                <p className="text-xs text-[var(--portal-muted)]">{t("ofRiders", { pct: share })}</p>
               </div>
             );
           })}
@@ -993,8 +1068,8 @@ export function OperationsDashboardShell() {
         ) : null}
       </section>
 
-      <section className={card} style={{ borderColor: "#e3e5e8" }}>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-white" style={{ background: "#0f6e78" }}>
+      <section className={card}>
+        <div className={SECTION_BAND}>
           <p className="text-sm uppercase">{titled(t("leaveChartTitle"))}</p>
           <div className="flex flex-wrap gap-2">
             <Select
@@ -1004,7 +1079,7 @@ export function OperationsDashboardShell() {
                 if (value) setMonth(`${value}-01`);
               }}
             >
-              <SelectTrigger className="h-9 min-h-9 w-28 bg-white text-[#1f2328]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 min-h-9 w-28 border-[var(--portal-border)] bg-[var(--portal-canvas)] text-[var(--portal-ink)]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {yearChoices.map((item) => (
                   <SelectItem key={item} value={item}>{item}</SelectItem>
@@ -1012,7 +1087,7 @@ export function OperationsDashboardShell() {
               </SelectContent>
             </Select>
             <Select items={leaveTypeItems} value={leaveType || "all"} onValueChange={(value) => setLeaveType(!value || value === "all" ? "" : value)}>
-              <SelectTrigger className="h-9 min-h-9 w-36 bg-white text-[#1f2328]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 min-h-9 w-36 border-[var(--portal-border)] bg-[var(--portal-canvas)] text-[var(--portal-ink)]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {leaveTypeItems.map((item) => (
                   <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
@@ -1022,23 +1097,23 @@ export function OperationsDashboardShell() {
           </div>
         </div>
         <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Tile label={t("leaveTotal", { year })} value={leaveSum} color="#0f6e78" />
-          <Tile label={t("leaveBusiest")} value={busiest ? monthTick(busiest.yearMonth, locale) : "—"} color="#1565c0" />
-          <Tile label={t("leaveAverage")} value={chart.length ? Math.round(leaveSum / chart.length) : 0} color="#714b67" />
-          <Tile label={t("leaveApprovedWindow")} value={novDec} color="#1e7e34" />
+          <Tile accent="green" label={t("leaveTotal", { year })} value={leaveSum} />
+          <Tile accent="blue" label={t("leaveBusiest")} value={busiest ? monthTick(busiest.yearMonth, locale) : "—"} />
+          <Tile accent="plum" label={t("leaveAverage")} value={chart.length ? Math.round(leaveSum / chart.length) : 0} />
+          <Tile accent="green" label={t("leaveApprovedWindow")} value={novDec} />
         </div>
         {chart.length === 0 ? (
-          <p className="text-sm text-[#5c6370]">{t("leaveChartEmpty")}</p>
+          <p className="text-sm text-[var(--portal-muted)]">{t("leaveChartEmpty")}</p>
         ) : (
           <MonthChart months={chart} selected={month} locale={locale} onSelect={(yearMonth) => setMonth(yearMonth)} />
         )}
-        <div className="mt-2 flex flex-wrap gap-3 text-xs text-[#5c6370]">
-          <span className="inline-flex items-center gap-1"><span className="size-2.5 rounded-sm" style={{ background: "#1565c0" }} />{t("legendPast")}</span>
-          <span className="inline-flex items-center gap-1"><span className="size-2.5 rounded-sm" style={{ background: "#0f6e78" }} />{t("legendCurrent")}</span>
-          <span className="inline-flex items-center gap-1"><span className="size-2.5 rounded-sm border border-dashed" style={{ background: "#dbe7f7", borderColor: "#1565c0" }} />{t("legendFuture")}</span>
+        <div className="mt-2 flex flex-wrap gap-3 text-xs text-[var(--portal-muted)]">
+          <span className="inline-flex items-center gap-1"><span className="size-2.5 rounded-sm bg-[var(--portal-badge-blue-fg)]" />{t("legendPast")}</span>
+          <span className="inline-flex items-center gap-1"><span className="size-2.5 rounded-sm bg-[var(--portal-badge-green-fg)]" />{t("legendCurrent")}</span>
+          <span className="inline-flex items-center gap-1"><span className="size-2.5 rounded-sm border border-dashed border-[var(--portal-badge-blue-fg)] bg-[var(--portal-badge-blue-bg)]" />{t("legendFuture")}</span>
         </div>
-        <p className="mt-2 text-xs text-[#5c6370]">{t("leaveNovDecFootnote")}</p>
-        <p className="mt-3 text-xs text-[#5c6370]">{t("leaveMatrixNote")}</p>
+        <p className="mt-2 text-xs text-[var(--portal-muted)]">{t("leaveNovDecFootnote")}</p>
+        <p className="mt-3 text-xs text-[var(--portal-muted)]">{t("leaveMatrixNote")}</p>
         <CountMatrix
           months={chart.map((item) => item.yearMonth)}
           matrix={leaveMatrix}
@@ -1050,29 +1125,29 @@ export function OperationsDashboardShell() {
             if (!readOnly) setProjectKey(key || undefined);
           }}
         />
-        <div id="leave-plans" className="mt-4 rounded-xl border p-4" style={{ borderColor: "#e3e5e8" }}>
+        <div id="leave-plans" className="mt-4 rounded-xl border border-[var(--portal-border)] p-4">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-[#1f2328]">
+          <p className="text-sm text-[var(--portal-ink)]">
             {outlook ? t("planFiltered") : t("planTitle")}
           </p>
           <div className="flex flex-wrap gap-2">
             {outlook ? (
-              <Button variant="outline" className="h-9 cursor-pointer" onClick={() => setOutlook(null)}>
+              <Button variant="portal-neutral" className="h-9 cursor-pointer" onClick={() => setOutlook(null)}>
                 {t("clearFilter")}
               </Button>
             ) : null}
             {readOnly ? null : (
-              <Button variant="outline" className="h-9 cursor-pointer" onClick={() => setAddOpen(true)}>
+              <Button variant="portal" className="h-9 cursor-pointer" onClick={() => setAddOpen(true)}>
                 {t("addLeave")}
               </Button>
             )}
             {readOnly ? null : (
-              <Button variant="outline" className="h-9 cursor-pointer" onClick={() => setImportOpen(true)}>
+              <Button variant="portal-secondary" className="h-9 cursor-pointer" onClick={() => setImportOpen(true)}>
                 {t("bulkImport")}
               </Button>
             )}
             <Button
-              variant="outline"
+              variant="portal-neutral"
               className="h-9 cursor-pointer"
               onClick={() =>
                 downloadCsv(
@@ -1085,7 +1160,7 @@ export function OperationsDashboardShell() {
               {t("exportLeaveYear")}
             </Button>
             <Button
-              variant="outline"
+              variant="portal-neutral"
               className="h-9 cursor-pointer"
               onClick={() =>
                 downloadCsv(
@@ -1109,7 +1184,7 @@ export function OperationsDashboardShell() {
               <ProjectPill key={key} active={planProject === key} label={`${key} (${count})`} onClick={() => setPlanProject(key)} />
             ))}
           </div>
-          <p className="mb-2 text-xs text-[#5c6370]">{t("ridersGoing", { count: typedPlans.length })}</p>
+          <p className="mb-2 text-xs text-[var(--portal-muted)]">{t("ridersGoing", { count: typedPlans.length })}</p>
           <PlanTable
             rows={showAllPlans ? typedPlans : visiblePlans}
             statusItems={statusItems}
@@ -1128,7 +1203,7 @@ export function OperationsDashboardShell() {
             readOnly={readOnly}
           />
           {typedPlans.length > visiblePlans.length ? (
-            <button type="button" className="mt-2 cursor-pointer text-xs text-[var(--btn-secondary-fg)]" onClick={() => setShowAllPlans((open) => !open)}>
+            <button type="button" className="mt-2 cursor-pointer text-xs text-[var(--portal-btn)]" onClick={() => setShowAllPlans((open) => !open)}>
               {showAllPlans ? t("viewLess") : t("showingFirst", { shown: visiblePlans.length, total: typedPlans.length })}
             </button>
           ) : null}
@@ -1137,8 +1212,9 @@ export function OperationsDashboardShell() {
         </div>
       </section>
 
-      <section className={card} style={{ borderColor: "#e3e5e8" }}>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-white" style={{ background: "#b45309" }}>
+      <div className="grid items-stretch gap-2 lg:grid-cols-2">
+      <section className={`${card} h-full`}>
+        <div className={SECTION_BAND}>
           <p className="text-sm uppercase">{titled(t("jobEndTitle"))}</p>
           <div className="flex flex-wrap gap-2">
             <Select
@@ -1148,7 +1224,7 @@ export function OperationsDashboardShell() {
                 if (value === "next6" || value === "next12" || value === "past6") setJobWindow(value);
               }}
             >
-              <SelectTrigger className="h-9 min-h-9 w-44 bg-white text-[#1f2328]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-9 min-h-9 w-44 border-[var(--portal-border)] bg-[var(--portal-canvas)] text-[var(--portal-ink)]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {jobWindowItems.map((item) => (
                   <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
@@ -1156,8 +1232,8 @@ export function OperationsDashboardShell() {
               </SelectContent>
             </Select>
           <Button
-            variant="outline"
-            className="h-9 cursor-pointer"
+            variant="portal-neutral"
+            className="h-9 cursor-pointer border-[var(--portal-canvas)] bg-transparent text-[var(--portal-canvas)] hover:bg-[var(--portal-canvas)]/10"
             onClick={() =>
               downloadCsv(
                 "job-end.csv",
@@ -1173,9 +1249,9 @@ export function OperationsDashboardShell() {
         {jobChart.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("jobEndEmpty")}</p>
         ) : (
-          <MonthChart months={jobChart} locale={locale} barColor="#e8710a" onSelect={() => undefined} />
+          <MonthChart months={jobChart} locale={locale} barColor="var(--portal-badge-ochre-fg)" onSelect={() => undefined} />
         )}
-        <p className="mt-3 text-xs text-[#5c6370]">{t("jobMatrixNote")}</p>
+        <p className="mt-3 text-xs text-[var(--portal-muted)]">{t("jobMatrixNote")}</p>
         <CountMatrix
           months={jobMonths}
           matrix={jobMatrix}
@@ -1189,20 +1265,68 @@ export function OperationsDashboardShell() {
         />
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {(["next30", "eoy", "next6m", "noRenewal"] as const).map((key) => (
-            <Tile key={key} label={jobCardLabel(key, t)} value={data?.jobEndCards[key] ?? 0} color={key === "noRenewal" ? "#b71c1c" : "#b45309"} />
+            <Tile key={key} accent={key === "noRenewal" ? "red" : "ochre"} label={jobCardLabel(key, t)} value={data?.jobEndCards[key] ?? 0} />
           ))}
         </div>
       </section>
-
-      <section className={card} style={{ borderColor: "#e3e5e8" }}>
-        <h2 className="text-sm font-semibold text-[#1f2328]">{scopedTitle(t("turnoverContractTitle"))}</h2>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Tile label={t("turnoverRate")} value={formatPct(data?.turnover.rate ?? 0)} color="#b71c1c" />
-          <Tile label={t("turnoverEnded")} value={data?.turnover.ended ?? 0} color="#b45309" />
-          <Tile label={t("turnoverAssumed")} value={data?.turnover.assumed ?? 0} color="#b45309" />
-          <Tile label={t("turnoverTotal")} value={data?.turnover.total ?? 0} color="#1f2328" />
+      <section className={`${card} h-full`}>
+        <div className={SECTION_BAND}>
+          <p className="text-sm uppercase">{t("ridersOnLeaveTitle")}</p>
+          {leaveRiders.length > 8 ? (
+            <Button
+              variant="portal-secondary"
+              className="h-9 cursor-pointer border-[var(--portal-canvas)] bg-transparent text-[var(--portal-canvas)] hover:bg-[var(--portal-canvas)]/10"
+              onClick={() => setShowAllLeaveRiders((open) => !open)}
+            >
+              {showAllLeaveRiders ? t("viewLess") : t("viewAll")}
+            </Button>
+          ) : null}
         </div>
-        <p className="mt-3 text-xs text-[#5c6370]">{t("turnoverNote")}</p>
+        {leaveRiders.length === 0 ? (
+          <p className="text-sm text-[var(--portal-muted)]">{t("ridersOnLeaveEmpty")}</p>
+        ) : (
+          <Table className={DENSE_TABLE}>
+            <TableHeader>
+              <TableRow>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colProject")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colLeaveType")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colFrom")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colReturns")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleRiders.map((row, index) => (
+                <TableRow key={`${row.employeeId}-${index}`}>
+                  <TableCell>{row.employeeId || "—"}</TableCell>
+                  <TableCell>{row.name || "—"}</TableCell>
+                  <TableCell>{row.project || "—"}</TableCell>
+                  <TableCell>{row.leaveType ? leaveTypeLabel(row.leaveType, t) : "—"}</TableCell>
+                  <TableCell>{row.start || "—"}</TableCell>
+                  <TableCell className={row.returnWithin3Days ? "font-semibold text-[var(--portal-badge-green-fg)]" : undefined}>
+                    {row.end || "—"}
+                    {row.returnWithin3Days ? (
+                      <span className="ms-2 text-xs">{t("returnSoon")}</span>
+                    ) : null}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </section>
+      </div>
+
+      <section className={card}>
+        <h2 className="text-sm font-semibold text-[var(--portal-ink)]">{scopedTitle(t("turnoverContractTitle"))}</h2>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <Tile accent="red" label={t("turnoverRate")} value={formatPct(data?.turnover.rate ?? 0)} />
+          <Tile accent="ochre" label={t("turnoverEnded")} value={data?.turnover.ended ?? 0} />
+          <Tile accent="ochre" label={t("turnoverAssumed")} value={data?.turnover.assumed ?? 0} />
+          <Tile accent="ink" label={t("turnoverTotal")} value={data?.turnover.total ?? 0} />
+        </div>
+        <p className="mt-3 text-xs text-[var(--portal-muted)]">{t("turnoverNote")}</p>
         {(data?.turnover.months.length ?? 0) === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">{t("turnoverEmpty")}</p>
         ) : (
@@ -1227,11 +1351,11 @@ export function OperationsDashboardShell() {
         )}
       </section>
 
-      <section className={card} style={{ borderColor: "#e3e5e8" }}>
+      <section className={card}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-[#1f2328]">{scopedTitle(t("hiringTitle"))}</h2>
+          <h2 className="text-sm font-semibold text-[var(--portal-ink)]">{scopedTitle(t("hiringTitle"))}</h2>
           <Select value={hireBy} onValueChange={(value) => setHireBy(hireByValue(value))}>
-            <SelectTrigger className="h-9 min-h-9 w-44 bg-white text-[#1f2328]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-9 min-h-9 w-44 border-[var(--portal-border)] bg-[var(--portal-canvas)] text-[var(--portal-ink)]"><SelectValue /></SelectTrigger>
             <SelectContent>
               {hireByItems(t).map((item) => (
                 <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
@@ -1240,13 +1364,13 @@ export function OperationsDashboardShell() {
           </Select>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          <Tile label={t("hiringCurrent")} value={data?.hiring.current ?? 0} color="#1f2328" />
-          <Tile label={t("hiringLeaving")} value={data?.hiring.leaving ?? 0} color="#b45309" />
-          <Tile label={t("hiringRequired")} value="—" color="#5c6370" />
-          <Tile label={t("hiringPipeline")} value="—" color="#5c6370" />
-          <Tile label={t("hiringToHire")} value="—" color="#5c6370" />
+          <Tile accent="ink" label={t("hiringCurrent")} value={data?.hiring.current ?? 0} />
+          <Tile accent="ochre" label={t("hiringLeaving")} value={data?.hiring.leaving ?? 0} />
+          <Tile accent="grey" label={t("hiringRequired")} value="—" />
+          <Tile accent="grey" label={t("hiringPipeline")} value="—" />
+          <Tile accent="grey" label={t("hiringToHire")} value="—" />
         </div>
-        <p className="mt-3 text-xs text-[#5c6370]">{t("hiringNote")}</p>
+        <p className="mt-3 text-xs text-[var(--portal-muted)]">{t("hiringNote")}</p>
         {hiringRows(data?.hiring, hireBy).length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">{t("hiringEmpty")}</p>
         ) : (
@@ -1271,103 +1395,6 @@ export function OperationsDashboardShell() {
         )}
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-      <section className={card} style={{ borderColor: "#e3e5e8" }}>
-        <div className="mb-3 flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-white" style={{ background: "#1565c0" }}>
-          <p className="text-sm uppercase">{t("ridersOnLeaveTitle")}</p>
-          {leaveRiders.length > 8 ? (
-            <Button
-              variant="outline"
-              className="h-9 cursor-pointer"
-              onClick={() => setShowAllLeaveRiders((open) => !open)}
-            >
-              {showAllLeaveRiders ? t("viewLess") : t("viewAll")}
-            </Button>
-          ) : null}
-        </div>
-        {leaveRiders.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t("ridersOnLeaveEmpty")}</p>
-        ) : (
-          <Table className={DENSE_TABLE}>
-            <TableHeader>
-              <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colProject")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colLeaveType")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colFrom")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colReturns")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visibleRiders.map((row, index) => (
-                <TableRow key={`${row.employeeId}-${index}`}>
-                  <TableCell>{row.employeeId || "—"}</TableCell>
-                  <TableCell>{row.name || "—"}</TableCell>
-                  <TableCell>{row.project || "—"}</TableCell>
-                  <TableCell>{row.leaveType ? leaveTypeLabel(row.leaveType, t) : "—"}</TableCell>
-                  <TableCell>{row.start || "—"}</TableCell>
-                  <TableCell style={row.returnWithin3Days ? { color: "#1e7e34", fontWeight: 600 } : undefined}>
-                    {row.end || "—"}
-                    {row.returnWithin3Days ? (
-                      <span className="ms-2 text-xs">{t("returnSoon")}</span>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </section>
-
-      <section className={card} style={{ borderColor: "#e3e5e8" }}>
-        <div className="mb-3 rounded-lg px-3 py-2 text-white" style={{ background: "#1e7e34" }}>
-          <p className="text-sm uppercase">{t("outlookTitle")}</p>
-        </div>
-        <ul className="divide-y divide-border">
-          {(["returningThisWeek", "startingThisWeek", "pendingApproval", "overdue", "newJoiners"] as const).map(
-            (key) => {
-              const count = data?.outlook[key].length ?? 0;
-              if (key === "newJoiners") {
-                return (
-                  <li key={key}>
-                    <button
-                      type="button"
-                      className="flex h-9 w-full cursor-pointer items-center justify-between text-sm"
-                      onClick={() => router.push(employeesHref)}
-                    >
-                      <span>{outlookLabel(key, t)}</span>
-                      <span className="flex items-center gap-2 text-muted-foreground">
-                        {count}
-                        <ChevronRight className="size-5" />
-                      </span>
-                    </button>
-                  </li>
-                );
-              }
-              return (
-                <li key={key}>
-                  <button
-                    type="button"
-                    className="flex h-9 w-full cursor-pointer items-center justify-between text-sm"
-                    onClick={() => {
-                      setOutlook(key);
-                      scrollToLeave();
-                    }}
-                  >
-                    <span>{outlookLabel(key, t)}</span>
-                    <span className="flex items-center gap-2 text-muted-foreground">
-                      {count}
-                      <ChevronRight className="size-5" />
-                    </span>
-                  </button>
-                </li>
-              );
-            },
-          )}
-        </ul>
-      </section>
-      </div>
 
       <AddLeaveDialog
         open={addOpen}
@@ -1413,7 +1440,7 @@ export function OperationsDashboardShell() {
         <DialogContent closeOutside showCloseButton className="w-[min(1200px,96vw)] max-w-none">
           <div className="px-5 pt-4" />
           <AppModalFooter title={t("deleteLeave")} subtitle={t("deleteLeaveSubtitle")}>
-            <Button variant="outline" className="h-9 cursor-pointer" onClick={() => setDeleteId(null)}>
+            <Button variant="portal-neutral" className="h-9 cursor-pointer" onClick={() => setDeleteId(null)}>
               {t("cancel")}
             </Button>
             <Button
@@ -1445,31 +1472,34 @@ export function OperationsDashboardShell() {
 
 function ProjectPill({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
   return (
-    <button
-      type="button"
-      className={`${PILL} ${
-        active
-          ? "border-transparent bg-[var(--btn-primary)] text-[var(--btn-primary-fg)] hover:bg-[var(--btn-primary-hover)] active:bg-[var(--btn-primary-active)]"
-          : "border-[var(--btn-secondary-border)] bg-transparent text-[var(--btn-secondary-fg)] hover:bg-[var(--btn-secondary-hover)] active:bg-[var(--btn-secondary-active)]"
-      }`}
-      onClick={onClick}
-    >
+    <Button type="button" variant={active ? "portal" : "portal-neutral"} className="h-9 cursor-pointer rounded-full" onClick={onClick}>
       {label}
-    </button>
+    </Button>
   );
 }
 
-function Tile({ label, value, color, valueColor, action, onAction }: { label: string; value: string | number; color: string; valueColor?: string; action?: string; onAction?: () => void }) {
+function Tile({
+  label,
+  value,
+  accent = "ink",
+  action,
+  onAction,
+}: {
+  label: string;
+  value: string | number;
+  accent?: PortalKpiAccent;
+  action?: string;
+  onAction?: () => void;
+}) {
   return (
-    <div className="rounded-xl border bg-white px-3 py-2" style={{ borderColor: "#e3e5e8", borderTop: `3px solid ${color}` }}>
-      <p className="text-xl tabular-nums" style={{ color: valueColor ?? color }}>{value}</p>
-      <p className="type-caption mt-1 uppercase tracking-wide text-[#5c6370]">{label}</p>
-      {action && onAction ? (
-        <button type="button" className="mt-1 cursor-pointer text-xs text-primary underline" onClick={onAction}>
-          {action}
-        </button>
-      ) : null}
-    </div>
+    <KpiCard
+      layout="portal"
+      portalAccent={accent}
+      label={label}
+      value={value}
+      caption={action}
+      onClick={onAction}
+    />
   );
 }
 
@@ -1578,17 +1608,26 @@ function FilterSelect({
   value,
   items,
   onChange,
+  disabled = false,
+  hint,
 }: {
   label: string;
   value: string;
   items: ReadonlyArray<{ value: string; label: string }>;
   onChange: (value: string) => void;
+  disabled?: boolean;
+  hint?: string;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-xs text-[#5c6370]">
-      {label}
-      <Select items={items} value={value} onValueChange={(next) => onChange(next ?? value)}>
-        <SelectTrigger className="h-9 w-full bg-white">
+    <label className="flex flex-col gap-1 text-xs text-[var(--text-secondary)]">
+      <span className="flex items-center gap-2">
+        {label}
+        {hint ? (
+          <Badge className="border-amber-200 bg-amber-100 text-amber-800">{hint}</Badge>
+        ) : null}
+      </span>
+      <Select items={items} value={value} disabled={disabled} onValueChange={(next) => onChange(next ?? value)}>
+        <SelectTrigger className="h-9 w-full border-[var(--border-default)] bg-[var(--surface-card)]" disabled={disabled}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -1663,7 +1702,7 @@ function PlanTable({
                       if (value && row.id) onStatus(row.id, value);
                     }}
                   >
-                    <SelectTrigger className="h-9 w-36">
+                    <SelectTrigger className="h-9 w-36 border-[var(--portal-border)] bg-[var(--portal-canvas)]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1735,12 +1774,12 @@ function AddLeaveDialog({
         <div className="space-y-3 px-5 pt-4">
           <label className="block space-y-1 text-xs">
             <span>{t("employeeId")}</span>
-            <Input className="h-9" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} />
+            <Input className="h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)]" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} />
           </label>
           <label className="block space-y-1 text-xs">
             <span>{t("leaveType")}</span>
             <Select items={typeItems} value={leaveType} onValueChange={(value) => { if (value) setLeaveType(value); }}>
-              <SelectTrigger className="h-9">
+              <SelectTrigger className="h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1755,17 +1794,17 @@ function AddLeaveDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block space-y-1 text-xs">
               <span>{t("startDate")}</span>
-              <Input className="h-9" type="date" openPickerOnFocus={false} value={start} onChange={(event) => setStart(event.target.value)} />
+              <Input className="h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)]" type="date" openPickerOnFocus={false} value={start} onChange={(event) => setStart(event.target.value)} />
             </label>
             <label className="block space-y-1 text-xs">
               <span>{t("endDate")}</span>
-              <Input className="h-9" type="date" openPickerOnFocus={false} value={end} onChange={(event) => setEnd(event.target.value)} />
+              <Input className="h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)]" type="date" openPickerOnFocus={false} value={end} onChange={(event) => setEnd(event.target.value)} />
             </label>
           </div>
           <label className="block space-y-1 text-xs">
             <span>{t("status")}</span>
             <Select items={items} value={status} onValueChange={(value) => { if (value) setStatus(value); }}>
-              <SelectTrigger className="h-9">
+              <SelectTrigger className="h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1780,10 +1819,11 @@ function AddLeaveDialog({
         </div>
         <div className="px-5 pb-4">
           <AppModalFooter title={t("addLeaveTitle")} subtitle={t("addLeaveSubtitle")}>
-            <Button variant="outline" className="h-9 cursor-pointer" onClick={() => onOpenChange(false)}>
+            <Button variant="portal-neutral" className="h-9 cursor-pointer" onClick={() => onOpenChange(false)}>
               {t("cancel")}
             </Button>
             <Button
+              variant="portal"
               className="h-9 cursor-pointer"
               disabled={pending || !employeeId.trim() || !start || !end}
               onClick={() =>
@@ -1830,10 +1870,10 @@ function ImportLeaveDialog({
         </div>
         <div className="px-5 pb-4">
           <AppModalFooter title={t("bulkImportTitle")} subtitle={t("bulkImportSubtitle")}>
-            <Button variant="outline" className="h-9 cursor-pointer" onClick={() => onOpenChange(false)}>
+            <Button variant="portal-neutral" className="h-9 cursor-pointer" onClick={() => onOpenChange(false)}>
               {t("cancel")}
             </Button>
-            <Button className="h-9 cursor-pointer" disabled={pending || !csv.trim()} onClick={() => onImport(csv)}>
+            <Button variant="portal" className="h-9 cursor-pointer" disabled={pending || !csv.trim()} onClick={() => onImport(csv)}>
               {pending ? t("saving") : t("bulkImport")}
             </Button>
           </AppModalFooter>

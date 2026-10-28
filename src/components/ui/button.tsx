@@ -19,6 +19,18 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30",
         link: "text-[var(--btn-secondary-fg)] underline-offset-4 hover:underline",
+        portal:
+          "h-9 rounded-lg border-transparent bg-[var(--portal-btn)] px-4 text-sm font-semibold text-[var(--portal-btn-fg)] hover:bg-[var(--portal-btn-hover)] active:bg-[var(--portal-btn-active)]",
+        "portal-secondary":
+          "h-9 rounded-lg border border-[var(--portal-btn)] bg-[var(--portal-canvas)] px-4 text-sm font-semibold text-[var(--portal-btn)] hover:bg-[var(--portal-btn)]/10 active:bg-[var(--portal-btn)]/15",
+        "portal-neutral":
+          "h-9 rounded-lg border border-[var(--portal-border)] bg-[var(--portal-canvas)] px-4 text-sm font-semibold text-[var(--portal-ink)] hover:bg-[var(--portal-locked-bg)]",
+        rust:
+          "h-9 rounded-[var(--radius-control)] border-transparent bg-[var(--accent-rust)] px-4 text-sm font-semibold text-white hover:bg-[var(--accent-rust-hover)] active:bg-[var(--accent-rust-active)]",
+        "rust-outline":
+          "h-9 rounded-[var(--radius-control)] border border-[var(--accent-rust)] bg-transparent px-4 text-sm font-semibold text-[var(--accent-rust)] hover:bg-[var(--accent-rust)]/10",
+        "rust-secondary":
+          "h-9 rounded-[var(--radius-control)] border border-[var(--border-default)] bg-[var(--surface-card)] px-4 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-subtle)]",
       },
       size: {
         default:
