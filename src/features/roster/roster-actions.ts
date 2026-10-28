@@ -20,7 +20,6 @@ import {
   previewRosterImport,
   readRosterSettings,
   saveStaffZones,
-  sweepRosterDay,
   writeRosterSettings,
 } from "@/features/roster/roster-data";
 import { createRosterChange, decideRosterChangeDoc, listRosterChanges, type RosterChangeView } from "@/features/roster/roster-changes";
@@ -132,7 +131,6 @@ export async function fetchRosterAlerts(input?: { day?: string; restaurantId?: s
   const gate = await viewDb();
   if ("error" in gate) return gate;
   const day = input?.day || kuwaitToday();
-  if (day === kuwaitToday()) await sweepRosterDay(gate.db, day);
   return { day, rows: await listRosterAlerts(gate.db, gate.scope, day, input?.restaurantId ?? null) };
 }
 
@@ -141,8 +139,6 @@ export async function fetchRosterAlertsRange(input: { from: string; to: string; 
   if ("error" in gate) return gate;
   const days = daysInRange(input.from, input.to, 31);
   if (days.length === 0) return { from: input.from, to: input.to, rows: [] as Awaited<ReturnType<typeof listRosterAlerts>> };
-  const today = kuwaitToday();
-  if (days.includes(today)) await sweepRosterDay(gate.db, today);
   const pages = await Promise.all(days.map((day) => listRosterAlerts(gate.db, gate.scope, day, input.restaurantId ?? null)));
   return { from: days[0], to: days[days.length - 1], rows: pages.flat() };
 }

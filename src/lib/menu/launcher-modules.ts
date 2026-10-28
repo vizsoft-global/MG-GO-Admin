@@ -45,7 +45,7 @@ export type LauncherTileId = (typeof LAUNCHER_TILE_IDS)[number];
  * Dashboard itself is not a tile. Nested hub cards stay off this grid.
  */
 export const LAUNCHER_HOME_TILE_IDS = [
-  "live-tracking",
+  "live-tracking-v2",
   "drivers",
   "vehicles",
   "deliveries",

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  HR_STATUS_LEGEND_ORDER,
   HR_STATUS_ORDER,
   hrStatusKeyFromLabel,
   hrStatusPaint,
@@ -39,5 +40,24 @@ describe("hr status", () => {
     assert.equal(isHrActive("on_hold"), false);
     assert.equal(isHrActive("absent_mosal"), false);
     assert.equal(isHrActive("absent_moi"), false);
+  });
+
+  it("lists the compact legend in screenshot order without dropping a catalog key", () => {
+    assert.deepEqual([...HR_STATUS_LEGEND_ORDER], [
+      "new",
+      "training",
+      "running",
+      "extension",
+      "leave",
+      "leave_return",
+      "accident",
+      "absent_mosal",
+      "absent_moi",
+      "on_hold",
+      "cancelled",
+      "transfer_from_company",
+    ]);
+    assert.equal(new Set(HR_STATUS_LEGEND_ORDER).size, 12);
+    assert.deepEqual([...HR_STATUS_LEGEND_ORDER].sort(), [...HR_STATUS_ORDER].sort());
   });
 });

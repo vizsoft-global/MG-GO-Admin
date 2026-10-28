@@ -486,6 +486,23 @@ export function assertPublishedPickupRestaurant(candidates: Array<{ id: string }
   }
 }
 
+/**
+ * A published restaurant still has to be in range. With none, the rider's own
+ * zone is enough when the fix is inside it. No zone and no restaurant stays
+ * `no_restaurants_assigned`.
+ */
+export function pickupAssignmentGate(args: {
+  hasPublishedRestaurant: boolean;
+  hasZoneShape: boolean;
+  inRange: boolean;
+}): "ok" | "no_restaurants_assigned" | "delivery_out_of_range" {
+  if (args.hasPublishedRestaurant) {
+    return args.inRange ? "ok" : "delivery_out_of_range";
+  }
+  if (!args.hasZoneShape) return "no_restaurants_assigned";
+  return args.inRange ? "ok" : "delivery_out_of_range";
+}
+
 function publishedCandidates(
   assigned: Array<{ id: string; data: Dict; geofences: Dict[] }>,
   partnerId: string | null,
@@ -660,20 +677,23 @@ export const driverCreatePickup = onCall(async (request) => {
   const settings = await loadProximitySettings();
   const assigned = await loadAssignedRestaurantContext(ctx.uid, ctx.driver);
   const candidates = publishedCandidates(assigned, asString(ctx.driver["partner_id"]));
-  assertPublishedPickupRestaurant(candidates);
   const zone = await loadDriverZone(asString(ctx.driver["zone_id"]));
-
-  if (
-    settings.proximityMeters > 0 &&
-    !isWithinDeliveryRange({
+  const inRange =
+    settings.proximityMeters <= 0 ||
+    isWithinDeliveryRange({
       lat,
       lng,
       proximityMeters: settings.proximityMeters,
       zone,
       restaurants: assigned.map((row) => ({ restaurant: row.data, geofences: row.geofences })),
-    })
-  ) {
-    throw riderError("failed-precondition", "delivery_out_of_range");
+    });
+  const gate = pickupAssignmentGate({
+    hasPublishedRestaurant: candidates.length > 0,
+    hasZoneShape: zone?.geometry != null,
+    inRange,
+  });
+  if (gate !== "ok") {
+    throw riderError("failed-precondition", gate);
   }
 
   const restaurantId = resolvePickupRestaurantId({

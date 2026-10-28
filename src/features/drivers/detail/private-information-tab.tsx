@@ -26,7 +26,7 @@ import {
   isNbkBank,
   type EmployeeCatalogRow,
 } from "@/features/employees/employee-catalogs";
-import { selectableCompanies } from "../source-companies";
+import { listedCompanies } from "../source-companies";
 import { useSourceCompanies } from "../use-source-companies";
 import {
   useBankCodes,
@@ -220,11 +220,7 @@ export function PrivateInformationTab({
   const nationRows = catalogRows(nationalityCategories.data, DEFAULT_NATIONALITY_CATEGORIES);
   const bankRows = catalogRows(banks.data, DEFAULT_BANK_CODES);
   const sponsorRows = catalogRows(sponsorships.data, DEFAULT_SPONSORSHIPS);
-  const companyOptions = selectableCompanies(
-    form.riderCategory === "outsourced" ? "outsourced" : "in_house",
-    companies,
-    form.sourceCompany || null,
-  );
+  const companyOptions = listedCompanies(companies, form.sourceCompany || null);
   const companyItems = [
     { value: "none", label: t("fields.company") },
     ...companyOptions.map((row) => ({ value: row.key, label: row.name })),

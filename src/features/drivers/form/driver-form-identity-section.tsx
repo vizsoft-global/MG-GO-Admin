@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import type { DriverProjectKey } from "@/features/fleet/fleet-labels";
 import { ProjectKeyField } from "@/features/fleet/project-key-field";
 import type { DriverRiderCategory } from "../types";
-import { companyMatchesCategory, selectableCompanies } from "../source-companies";
+import { listedCompanies } from "../source-companies";
 import { useSourceCompanies } from "../use-source-companies";
 import { DriverAvatarUpload } from "../driver-avatar-upload";
 import { CIVIL_ID_DIGIT_COUNT, restrictDigits } from "../driver-phone";
@@ -125,19 +125,16 @@ export function DriverFormIdentitySection({
         label: placeholders.sourceCompany ?? "—",
         keywords: ["none"],
       },
-      ...selectableCompanies(riderCategory, companies, sourceCompany || null).map((c) => ({
+      ...listedCompanies(companies, sourceCompany || null).map((c) => ({
         value: c.key,
         label: c.client_code ? `${c.name} · ${c.client_code}` : c.name,
         keywords: [c.key, c.name, c.client_code ?? ""],
       })),
     ],
-    [placeholders.sourceCompany, riderCategory, companies, sourceCompany],
+    [placeholders.sourceCompany, companies, sourceCompany],
   );
   const changeCategory = (next: DriverRiderCategory) => {
     onRiderCategoryChange(next);
-    if (sourceCompany && !companyMatchesCategory(next, sourceCompany, companies)) {
-      onSourceCompanyChange("");
-    }
   };
 
   return (

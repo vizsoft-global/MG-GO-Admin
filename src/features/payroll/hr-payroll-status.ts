@@ -15,6 +15,22 @@ export const HR_STATUS_ORDER = [
 
 export type HrStatusKey = (typeof HR_STATUS_ORDER)[number];
 
+/** Compact legend above the HR KPIs — screenshot order, same 12 catalog keys. */
+export const HR_STATUS_LEGEND_ORDER: readonly HrStatusKey[] = [
+  "new",
+  "training",
+  "running",
+  "extension",
+  "leave",
+  "leave_return",
+  "accident",
+  "absent_mosal",
+  "absent_moi",
+  "on_hold",
+  "cancelled",
+  "transfer_from_company",
+];
+
 const HR_STATUS_SET = new Set<string>(HR_STATUS_ORDER);
 
 /** English labels the HR sheet and the ops Status column both print. */

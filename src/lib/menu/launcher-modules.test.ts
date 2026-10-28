@@ -113,7 +113,8 @@ describe("launcher modules", () => {
     assert.equal(new Set(hrefs).size, hrefs.length);
     assert.equal(hrefs.includes("/settings"), true);
     assert.equal(hrefs.includes("/drivers"), true);
-    assert.equal(hrefs.includes("/live-tracking"), true);
+    assert.equal(hrefs.includes("/live-tracking-v2"), true);
+    assert.equal(hrefs.includes("/live-tracking"), false);
     assert.equal(hrefs.includes("/notifications"), true);
     assert.equal(hrefs.includes("/settings/roles"), true);
   });
@@ -135,11 +136,11 @@ describe("launcher modules", () => {
       "payroll",
       "assistant",
       "assets",
-      "live-tracking-v2",
     ]) {
       assert.ok(!ids.includes(id), id);
       assert.ok(LAUNCHER_HIDDEN_TILE_IDS.has(id), id);
     }
+    assert.ok(!ids.includes("live-tracking"));
 
     const visible = visibleLauncherTiles(new Set(), true).map((tile) => tile.id);
     for (const hidden of LAUNCHER_HIDDEN_TILE_IDS) {

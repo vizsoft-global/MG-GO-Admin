@@ -16,19 +16,19 @@ import {
   HR_AWAITING,
   buildHrPayrollRows,
   filterHrRows,
+  filterHrRowsByColumns,
   filterHrSheet,
-  hrColumnFilterMode,
   hrKpis,
   summarizeHr,
 } from "../../hr-payroll-formulas";
 import { parseHrImport } from "../../hr-payroll-import";
-import { HR_STATUS_ORDER, hrStatusPaint, type HrStatusKey } from "../../hr-payroll-status";
+import { HR_STATUS_LEGEND_ORDER, HR_STATUS_ORDER, hrStatusPaint, type HrStatusKey } from "../../hr-payroll-status";
+import { columnFilterActive, type ColumnFilters } from "../../payroll-column-filter";
 import type { HrRateEvent, HrRateLine } from "../../hr-rate";
 import { listHrRateCatalog, saveHrRateLines } from "../../hr-rate-actions";
 import type {
   HrBundle,
   HrCellPatch,
-  HrColumnFilter,
   HrEditState,
   HrGroupBy,
   HrImportField,
@@ -163,7 +163,7 @@ export function HrPayrollTab(props: {
   const [sheetView, setSheetView] = useState<"table" | "cards">("table");
   const [groupBy, setGroupBy] = useState<HrGroupBy>("none");
   const [shown, setShown] = useState<Set<HrPayrollGroup>>(() => new Set(HR_GROUP_ORDER));
-  const [colFilters, setColFilters] = useState<Record<string, string>>({});
+  const [colFilters, setColFilters] = useState<ColumnFilters>({});
   const [edits, setEdits] = useState<Record<string, Partial<HrEditState>>>({});
   const [flash, setFlash] = useState<Set<string>>(() => new Set());
   const [summaryBy, setSummaryBy] = useState<HrSummaryBy>("company");
@@ -285,28 +285,9 @@ export function HrPayrollTab(props: {
   );
   const sheeted = useMemo(() => filterHrSheet(searched, sheetFilters), [searched, sheetFilters]);
   const visible: readonly HrColumn[] = useMemo(() => visibleHrColumns(shown), [shown]);
-  const columnFilters = useMemo(() => {
-    const filters: HrColumnFilter[] = [];
-    for (const column of visible) {
-      const mode = hrColumnFilterMode(column.key, sheeted);
-      switch (mode) {
-        case "none":
-          break;
-        case "contains":
-        case "exact":
-          filters.push({ key: column.key, mode, value: colFilters[column.key] ?? "" });
-          break;
-        default: {
-          const unreachable: never = mode;
-          return unreachable;
-        }
-      }
-    }
-    return filters;
-  }, [visible, sheeted, colFilters]);
   const filtered = useMemo(
-    () => filterHrRows(sheeted, { search: "", statusKey: "", filters: columnFilters }),
-    [sheeted, columnFilters],
+    () => filterHrRowsByColumns(sheeted, colFilters, t("awaiting")),
+    [sheeted, colFilters, t],
   );
   const monthKpis = hrKpis(rows);
   const statusCounts = useMemo(() => {
@@ -516,7 +497,14 @@ export function HrPayrollTab(props: {
               rows={filtered}
               sourceRows={sheeted}
               filters={colFilters}
-              onFilter={(key, value) => setColFilters((current) => ({ ...current, [key]: value }))}
+              onFilter={(key, next) => {
+                setColFilters((current) => {
+                  const copy = { ...current };
+                  if (!next || !columnFilterActive(next)) delete copy[key];
+                  else copy[key] = next;
+                  return copy;
+                });
+              }}
               groupBy={groupBy}
               canManage={canManage}
               flash={flash}
@@ -527,7 +515,7 @@ export function HrPayrollTab(props: {
               blank={t("blank")}
               totalRiders={t("totalRiders", { count: filtered.length })}
               empty={t("empty")}
-              all={t("all")}
+              statusList={HR_STATUS_LEGEND_ORDER.map((key) => statusLabels[key])}
               onSelect={(driverId, key, value) => {
                 void saveCell(driverId, key, value);
               }}
@@ -778,6 +766,27 @@ export function HrPayrollTab(props: {
                 ))}
               </select>
             </label>
+          </div>
+          <div className="hrpay-legend">
+            {HR_STATUS_LEGEND_ORDER.map((key) => {
+              const paint = hrStatusPaint(key, key === "cancelled" ? "End of Contract" : "");
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className="hrpay-legend-item"
+                  data-on={statusKey === key ? "true" : "false"}
+                  onClick={() => setStatusKey((current) => (current === key ? "" : key))}
+                >
+                  <i
+                    className="hrpay-legend-dot"
+                    data-bordered={paint.bordered ? "true" : undefined}
+                    style={paint.bordered ? undefined : { background: paint.fill }}
+                  />
+                  <span>{statusLabels[key]} - {statusCounts.get(key) ?? 0}</span>
+                </button>
+              );
+            })}
           </div>
           <div className="hrpay-kpis">
             <div className="hrpay-kpi hrpay-kpi-lead">

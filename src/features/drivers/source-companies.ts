@@ -146,6 +146,17 @@ export function companyMatchesCategory(
   return riderCategory === "in_house" ? company.is_system : !company.is_system;
 }
 
+/**
+ * Every company in the collection the profile may pick. Inactive rows stay
+ * hidden unless they are the value already stored on this rider.
+ */
+export function listedCompanies(
+  companies: readonly SourceCompany[],
+  currentKey: string | null,
+): SourceCompany[] {
+  return companies.filter((company) => company.is_active || company.key === currentKey);
+}
+
 /** Companies an operator may pick for this category (current value kept even if inactive). */
 export function selectableCompanies(
   riderCategory: DriverRiderCategory,

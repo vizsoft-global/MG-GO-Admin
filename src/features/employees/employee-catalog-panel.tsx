@@ -46,7 +46,11 @@ export function EmployeeCatalogPanel({
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<EmployeeCatalogRow | null>(null);
   const [operational, setOperational] = useState(true);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [removeLogo, setRemoveLogo] = useState(false);
   const isSections = kind === "employee_sections";
+  const isSponsorships = kind === "sponsorships";
 
   const reset = () => {
     setKey("");
@@ -54,6 +58,9 @@ export function EmployeeCatalogPanel({
     setLabelAr("");
     setEditing(null);
     setOperational(true);
+    setLogoFile(null);
+    setLogoPreview(null);
+    setRemoveLogo(false);
   };
 
   const startAdd = () => {
@@ -67,6 +74,9 @@ export function EmployeeCatalogPanel({
     setLabelEn(row.label_en);
     setLabelAr(row.label_ar);
     setOperational(row.is_operational !== false);
+    setLogoFile(null);
+    setLogoPreview(row.logo_display_url ?? null);
+    setRemoveLogo(false);
     setOpen(true);
   };
 
@@ -86,6 +96,8 @@ export function EmployeeCatalogPanel({
       sortOrder: editing?.sort_order,
       color: editing?.color,
       isOperational: isSections ? operational : undefined,
+      logoFile: isSponsorships ? logoFile : undefined,
+      removeLogo: isSponsorships ? removeLogo && !logoFile : undefined,
     });
     setSaving(false);
     if ("error" in result) {
@@ -117,6 +129,9 @@ export function EmployeeCatalogPanel({
               <TableHead className={TABLE_HEAD_CLASS}>{t("colKey")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colLabelEn")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colLabelAr")}</TableHead>
+              {isSponsorships ? (
+                <TableHead className={TABLE_HEAD_CLASS}>{t("logo")}</TableHead>
+              ) : null}
               <TableHead className={TABLE_HEAD_CLASS}>{t("colSystem")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -130,6 +145,19 @@ export function EmployeeCatalogPanel({
                 <TableCell className="font-mono text-xs">{row.key}</TableCell>
                 <TableCell className="text-sm">{row.label_en}</TableCell>
                 <TableCell className="text-sm">{row.label_ar || "—"}</TableCell>
+                {isSponsorships ? (
+                  <TableCell>
+                    {row.logo_display_url ? (
+                      <img
+                        src={row.logo_display_url}
+                        alt=""
+                        className="h-8 w-8 rounded-md border border-border object-contain"
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                ) : null}
                 <TableCell className="text-xs text-muted-foreground">
                   <span className="inline-flex items-center gap-1.5">
                     {row.is_system ? t("system") : t("custom")}
@@ -190,6 +218,47 @@ export function EmployeeCatalogPanel({
                 onChange={(event) => setKey(event.target.value.toLowerCase())}
               />
             </div>
+            {isSponsorships ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="catalog-logo">{t("logo")}</Label>
+                <div className="flex items-center gap-2">
+                  {logoPreview ? (
+                    <img
+                      src={logoPreview}
+                      alt=""
+                      className="h-9 w-9 rounded-md border border-border object-contain"
+                    />
+                  ) : null}
+                  <Input
+                    id="catalog-logo"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="h-9"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      setLogoFile(file);
+                      setRemoveLogo(false);
+                      setLogoPreview(file ? URL.createObjectURL(file) : logoPreview);
+                    }}
+                  />
+                </div>
+                <p className="text-[10px] leading-4 text-muted-foreground">{t("logoHint")}</p>
+                {logoPreview ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 px-2 text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                      setLogoFile(null);
+                      setLogoPreview(null);
+                      setRemoveLogo(true);
+                    }}
+                  >
+                    {t("removeLogo")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             {isSections ? (
               <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3">
                 <div className="space-y-0.5">

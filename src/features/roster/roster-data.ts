@@ -1,4 +1,4 @@
-import { FieldValue, type Firestore, type QueryDocumentSnapshot } from "firebase-admin/firestore";
+import { FieldValue, type DocumentData, type Firestore, type QueryDocumentSnapshot } from "firebase-admin/firestore";
 
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { haversineMeters } from "@/features/locations/location-status";
@@ -422,6 +422,20 @@ async function restaurantZone(
   };
 }
 
+async function docsById(db: Firestore, collection: string, ids: Iterable<string>) {
+  const out = new Map<string, DocumentData>();
+  const unique = [...new Set(ids)].filter(Boolean).slice(0, 300);
+  for (let index = 0; index < unique.length; index += 100) {
+    const chunk = unique.slice(index, index + 100);
+    const snaps = await db.getAll(...chunk.map((id) => db.collection(collection).doc(id)));
+    for (const snap of snaps) {
+      const data = snap.data();
+      if (data) out.set(snap.id, data);
+    }
+  }
+  return out;
+}
+
 function inScope(scope: RosterScope, zoneId: string | null): boolean {
   if (scope.all) return true;
   return zoneId != null && scope.zoneIds.includes(zoneId);
@@ -564,20 +578,16 @@ export async function listRosterAlerts(db: Firestore, scope: RosterScope, day: s
   const names = new Map<string, string>();
   const codes = new Map<string, string>();
   const places = new Map<string, string>();
-  await Promise.all([
-    ...[...driverIds].slice(0, 200).map(async (id) => {
-      const [profile, driver] = await Promise.all([
-        db.collection(COLLECTIONS.profiles).doc(id).get(),
-        db.collection(COLLECTIONS.drivers).doc(id).get(),
-      ]);
-      names.set(id, str(profile.data()?.full_name) || id);
-      codes.set(id, str(driver.data()?.employee_id) || str(driver.data()?.driver_code));
-    }),
-    ...[...restaurantIds].slice(0, 200).map(async (id) => {
-      const snap = await db.collection(COLLECTIONS.restaurants).doc(id).get();
-      places.set(id, str(snap.data()?.name) || id);
-    }),
+  const [profiles, drivers, restaurants] = await Promise.all([
+    docsById(db, COLLECTIONS.profiles, [...driverIds]),
+    docsById(db, COLLECTIONS.drivers, [...driverIds]),
+    docsById(db, COLLECTIONS.restaurants, [...restaurantIds]),
   ]);
+  for (const id of driverIds) {
+    names.set(id, str(profiles.get(id)?.full_name) || id);
+    codes.set(id, str(drivers.get(id)?.employee_id) || str(drivers.get(id)?.driver_code));
+  }
+  for (const id of restaurantIds) places.set(id, str(restaurants.get(id)?.name) || id);
   return rows.map((row) => ({
     ...row,
     driverName: names.get(row.driverId) || row.driverId,

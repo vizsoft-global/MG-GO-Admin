@@ -43,7 +43,11 @@ import {
   loadIntakeProfileSnapshot,
   logDriverChange,
 } from "./driver-change-log";
-import type { DriverImportLogEvent } from "./import/import-progress";
+import {
+  IMPORT_APPLY_CONCURRENCY,
+  mapWithConcurrency,
+  type DriverImportLogEvent,
+} from "./import/import-progress";
 import {
   importOffNeedsApprovedDriver,
   kuwaitCalendarMonthDays,
@@ -88,7 +92,7 @@ import {
   syncImportExpiries,
   syncImportRestaurants,
 } from "./import/driver-import-write";
-import type { DriverImportJournal } from "./import/driver-import-stack";
+import type { DriverImportJournal, DriverImportTrackingSnap } from "./import/driver-import-stack";
 import { clearRedo } from "./import/driver-import-stack";
 import {
   buildEmployeeCatalogIndex,
@@ -1023,6 +1027,163 @@ function logWho(row: DriverImportPreviewRow) {
   };
 }
 
+const IMPORT_MATCH_SELECT =
+  "id, linked, driver_code, linked_profile_id, employee_id, custom_fields, bank_details, full_name, phone, civil_id, partner_id, zone_id, vehicle_id, nationality, rider_category, client_id, client_name, source_company, project_key, workflow_status";
+
+type ImportMatch = {
+  id: string;
+  linked?: boolean | null;
+  driver_code?: string | null;
+  linked_profile_id?: string | null;
+  employee_id?: string | null;
+  custom_fields?: Record<string, unknown> | null;
+  bank_details?: Record<string, unknown> | null;
+  full_name?: string | null;
+  phone?: string | null;
+  civil_id?: string | null;
+  partner_id?: string | null;
+  zone_id?: string | null;
+  vehicle_id?: string | null;
+  nationality?: string | null;
+  rider_category?: string | null;
+  client_id?: string | null;
+  client_name?: string | null;
+  source_company?: string | null;
+  project_key?: string | null;
+  workflow_status?: string | null;
+};
+
+export type ImportMatchIndex = {
+  byEmployee: Map<string, ImportMatch[]>;
+  byClient: Map<string, ImportMatch[]>;
+};
+
+function pushMatch(map: Map<string, ImportMatch[]>, key: string, row: ImportMatch) {
+  const list = map.get(key);
+  if (list) list.push(row);
+  else map.set(key, [row]);
+}
+
+async function queryImportMatches(
+  db: StaffClient,
+  column: "employee_id_lower" | "client_id_lower" | "employee_id" | "client_id",
+  keys: string[],
+): Promise<{ rows: ImportMatch[]; error: string | null }> {
+  if (keys.length === 0) return { rows: [], error: null };
+  const { data, error } = await db
+    .from("driver_intakes")
+    .select(IMPORT_MATCH_SELECT)
+    .is("archived_at", null)
+    .in(column, keys);
+  if (error || !data) return { rows: [], error: error?.message ?? "save_failed" };
+  return { rows: data as ImportMatch[], error: null };
+}
+
+/** One indexed lookup for the whole chunk. Equality on the stored lowercase field, not a collection scan. */
+export async function loadImportMatches(
+  db: StaffClient,
+  rows: readonly {
+    employee_id?: string | null;
+    resolved_employee_id?: string | null;
+    client_id?: string | null;
+  }[],
+): Promise<{ index: ImportMatchIndex } | { error: string }> {
+  const employeeIds = new Map<string, string>();
+  const clientIds = new Map<string, string>();
+  for (const row of rows) {
+    const employeeId = normalizeEmployeeId(row.employee_id ?? row.resolved_employee_id ?? "");
+    if (employeeId) employeeIds.set(employeeIdKey(employeeId), employeeId);
+    const clientId = normalizeClientValue(row.client_id ?? null);
+    const clientKey = clientIdKey(clientId);
+    if (clientId && clientKey) clientIds.set(clientKey, clientId);
+  }
+  const byEmployee = new Map<string, ImportMatch[]>();
+  const byClient = new Map<string, ImportMatch[]>();
+  const [empHits, clientHits] = await Promise.all([
+    queryImportMatches(db, "employee_id_lower", [...employeeIds.keys()]),
+    queryImportMatches(db, "client_id_lower", [...clientIds.keys()]),
+  ]);
+  if (empHits.error) return { error: empHits.error };
+  if (clientHits.error) return { error: clientHits.error };
+  for (const row of empHits.rows) {
+    const key = row.employee_id ? employeeIdKey(row.employee_id) : "";
+    if (key) pushMatch(byEmployee, key, row);
+  }
+  const missedEmp = [...employeeIds.entries()]
+    .filter(([key]) => !byEmployee.has(key))
+    .map(([, raw]) => raw);
+  if (missedEmp.length > 0) {
+    const extra = await queryImportMatches(db, "employee_id", missedEmp);
+    if (extra.error) return { error: extra.error };
+    for (const row of extra.rows) {
+      const key = row.employee_id ? employeeIdKey(row.employee_id) : "";
+      if (key && !byEmployee.has(key)) pushMatch(byEmployee, key, row);
+    }
+  }
+  for (const row of clientHits.rows) {
+    const key = row.client_id ? clientIdKey(row.client_id) : "";
+    if (key) pushMatch(byClient, key, row);
+  }
+  const missedClient = [...clientIds.entries()]
+    .filter(([key]) => !byClient.has(key))
+    .map(([, raw]) => raw);
+  if (missedClient.length > 0) {
+    const extra = await queryImportMatches(db, "client_id", missedClient);
+    if (extra.error) return { error: extra.error };
+    for (const row of extra.rows) {
+      const key = row.client_id ? clientIdKey(row.client_id) : "";
+      if (key && !byClient.has(key)) pushMatch(byClient, key, row);
+    }
+  }
+  return { index: { byEmployee, byClient } };
+}
+
+function lookupImportMatch(
+  index: ImportMatchIndex,
+  employeeId: string | null,
+  clientId: string | null,
+  duplicateStrategy: "skip" | "update",
+): { data: ImportMatch | null; error: { message: string } | null } {
+  if (employeeId) {
+    const hits = index.byEmployee.get(employeeIdKey(employeeId)) ?? [];
+    if (hits.length > 1) return { data: null, error: { message: "ambiguous_id" } };
+    if (hits.length === 1) return { data: hits[0] ?? null, error: null };
+  }
+  const clientKey = clientIdKey(clientId);
+  if (!clientKey || duplicateStrategy !== "update") return { data: null, error: null };
+  const hits = index.byClient.get(clientKey) ?? [];
+  if (hits.length > 1) return { data: null, error: { message: "ambiguous_id" } };
+  if (hits.length === 1) return { data: hits[0] ?? null, error: null };
+  return { data: null, error: null };
+}
+
+function rowWritesExpiry(row: DriverImportPreviewRow): boolean {
+  return DRIVER_IMPORT_EXPIRY_FIELDS.some((field) =>
+    writesCell(row, field, Boolean(row.expiries[field]), "update"),
+  );
+}
+
+function compactImportBefore(existing: ImportMatch) {
+  return flattenProfileSnapshot({
+    full_name: existing.full_name,
+    phone: existing.phone,
+    civil_id: existing.civil_id,
+    employee_id: existing.employee_id,
+    driver_code: existing.driver_code,
+    partner: existing.partner_id,
+    zone: existing.zone_id,
+    vehicle: existing.vehicle_id,
+    nationality: existing.nationality,
+    rider_category: existing.rider_category,
+    source_company: existing.source_company,
+    project_key: existing.project_key,
+    client_id: existing.client_id,
+    client_name: existing.client_name,
+    workflow_status: existing.workflow_status,
+    custom_fields: existing.custom_fields ?? null,
+  });
+}
+
 export async function applyOneImportRow(
   row: DriverImportPreviewRow,
   ctx: {
@@ -1031,6 +1192,10 @@ export async function applyOneImportRow(
     approveImmediately: boolean;
     customFieldDefs: Awaited<ReturnType<typeof listCustomFieldDefinitions>>;
     fileName?: string;
+    actorId?: string;
+    /** The job processor does not store undo rows, so it skips the before/after snapshot reads. */
+    persistJournal?: boolean;
+    matches?: ImportMatchIndex;
   },
 ): Promise<{
   events: DriverImportLogEvent[];
@@ -1051,7 +1216,10 @@ export async function applyOneImportRow(
       failure: { rowIndex: row.rowIndex, reason },
     };
   };
-  const mutationAuth = await requireMutationAuth();
+  const persistJournal = ctx.persistJournal !== false;
+  const mutationAuth = ctx.actorId
+    ? { session: { id: ctx.actorId } }
+    : await requireMutationAuth();
   if ("error" in mutationAuth) return fail(mutationAuth.error);
 
   const phone = row.phone?.trim() ? normalizeKuwaitPhone(row.phone) : null;
@@ -1069,34 +1237,76 @@ export async function applyOneImportRow(
   let beforeSnap = {};
   let journalBefore: Awaited<ReturnType<typeof readImportSnapshot>> | null = null;
 
+  let matched: { data: ImportMatch | null; error: { message: string } | null } | null = null;
   const matchExisting = async () => {
-    if (requestedEmployeeId) {
-      const byEmp = await ctx.db
-        .from("driver_intakes")
-        .select("id, linked, driver_code, linked_profile_id, employee_id")
-        .is("archived_at", null)
-        .ilike("employee_id", requestedEmployeeId)
-        .maybeSingle();
-      if (byEmp.data) return byEmp;
-    }
+    if (matched) return matched;
     const clientId = normalizeClientValue(row.client_id);
-    if (!clientId || ctx.duplicateStrategy !== "update") {
-      return { data: null, error: null };
+    if (ctx.matches) {
+      matched = lookupImportMatch(
+        ctx.matches,
+        requestedEmployeeId,
+        clientId,
+        ctx.duplicateStrategy,
+      );
+      return matched;
     }
-    const { data: rows, error } = await ctx.db
-      .from("driver_intakes")
-      .select("id, linked, driver_code, linked_profile_id, employee_id")
-      .is("archived_at", null)
-      .ilike("client_id", clientId);
-    if (error) return { data: null, error };
-    if (!rows || rows.length !== 1) return { data: null, error: null };
-    return { data: rows[0], error: null };
+    if (requestedEmployeeId) {
+      const hits = await queryImportMatches(ctx.db, "employee_id_lower", [
+        employeeIdKey(requestedEmployeeId),
+      ]);
+      if (hits.error) {
+        matched = { data: null, error: { message: hits.error } };
+        return matched;
+      }
+      const raw =
+        hits.rows.length > 0
+          ? hits
+          : await queryImportMatches(ctx.db, "employee_id", [requestedEmployeeId]);
+      if (raw.error) {
+        matched = { data: null, error: { message: raw.error } };
+        return matched;
+      }
+      const found = raw.rows;
+      if (found.length > 1) {
+        matched = { data: null, error: { message: "ambiguous_id" } };
+        return matched;
+      }
+      if (found.length === 1) {
+        matched = { data: found[0] ?? null, error: null };
+        return matched;
+      }
+    }
+    const clientKey = clientIdKey(clientId);
+    if (!clientId || !clientKey || ctx.duplicateStrategy !== "update") {
+      matched = { data: null, error: null };
+      return matched;
+    }
+    const hits = await queryImportMatches(ctx.db, "client_id_lower", [clientKey]);
+    if (hits.error) {
+      matched = { data: null, error: { message: hits.error } };
+      return matched;
+    }
+    const raw =
+      hits.rows.length > 0 ? hits : await queryImportMatches(ctx.db, "client_id", [clientId]);
+    if (raw.error) {
+      matched = { data: null, error: { message: raw.error } };
+      return matched;
+    }
+    const found = raw.rows;
+    if (found.length > 1) {
+      matched = { data: null, error: { message: "ambiguous_id" } };
+      return matched;
+    }
+    matched = { data: found.length === 1 ? (found[0] ?? null) : null, error: null };
+    return matched;
   };
 
   let employeeId = requestedEmployeeId;
 
   if (row.off_days != null) {
-    const { data: existingForOff } = await matchExisting();
+    const offMatch = await matchExisting();
+    if (offMatch.error) return fail(offMatch.error.message);
+    const existingForOff = offMatch.data;
     const linkedId = existingForOff?.linked_profile_id ?? null;
     const already = Boolean(existingForOff?.linked || linkedId);
     const approveRequested = row.active ?? ctx.approveImmediately;
@@ -1113,7 +1323,9 @@ export async function applyOneImportRow(
   }
 
   if (ctx.duplicateStrategy === "update") {
-    const { data: existing } = await matchExisting();
+    const found = await matchExisting();
+    if (found.error) return fail(found.error.message);
+    const existing = found.data;
 
     if (existing) {
       employeeId =
@@ -1121,21 +1333,32 @@ export async function applyOneImportRow(
         normalizeEmployeeId(existing.employee_id ?? "") ||
         employeeId;
       alreadyLinked = Boolean(existing.linked || existing.linked_profile_id);
-      const prior = await loadIntakeProfileSnapshot(ctx.db, existing.id);
-      beforeSnap = prior?.snapshot ?? {};
-      journalBefore = await readImportSnapshot(
-        ctx.db,
-        existing.id,
-        existing.linked_profile_id ?? null,
-      );
+      if (persistJournal) {
+        const prior = await loadIntakeProfileSnapshot(ctx.db, existing.id);
+        beforeSnap = prior?.snapshot ?? {};
+        journalBefore = await readImportSnapshot(
+          ctx.db,
+          existing.id,
+          existing.linked_profile_id ?? null,
+        );
+      } else {
+        beforeSnap = compactImportBefore(existing);
+      }
       const { intake: intakePatch, profile: profilePatch } = buildImportWritePatch({
         row: { ...row, phone, civil_id: civilId, employee_id: employeeId },
         mode: "update",
-        existingCustom: (journalBefore.intake?.custom_fields as Record<string, unknown> | null) ?? null,
+        existingCustom:
+          ((journalBefore?.intake?.custom_fields as Record<string, unknown> | null) ??
+            existing.custom_fields ??
+            null),
         existingBank:
-          (journalBefore.intake?.bank_details as Parameters<
+          ((journalBefore?.intake?.bank_details as Parameters<
             typeof buildImportWritePatch
-          >[0]["existingBank"]) ?? null,
+          >[0]["existingBank"]) ??
+            (existing.bank_details as Parameters<
+              typeof buildImportWritePatch
+            >[0]["existingBank"]) ??
+            null),
       });
       intakePatch.employee_id = employeeId;
       intakePatch.updated_at = new Date().toISOString();
@@ -1146,7 +1369,7 @@ export async function applyOneImportRow(
 
       if (updErr) return fail(updErr.message);
       intakeId = existing.id;
-      driverCode = existing.driver_code;
+      driverCode = existing.driver_code ?? null;
       updated = true;
       if (writesCell(row, "restaurant_ids", row.restaurant_ids.length > 0, "update")) {
         const linkError = await syncImportRestaurants(
@@ -1357,18 +1580,38 @@ export async function applyOneImportRow(
       mode,
     );
     if (assetError) return fail(assetError);
+    const trackingRows = journalBefore
+      ? null
+      : rowWritesExpiry(row) && driverForLinks
+        ? await ctx.db
+            .from("document_tracking")
+            .select("doc_type, object_key")
+            .eq("driver_id", driverForLinks)
+        : null;
+    const tracking: DriverImportTrackingSnap[] =
+      journalBefore?.tracking ??
+      (trackingRows?.data ?? []).map((item) => {
+        const row = item as { doc_type?: unknown; object_key?: string | null };
+        return {
+          doc_type: typeof row.doc_type === "string" ? row.doc_type : "",
+          object_key: row.object_key ?? null,
+          expires_at: null,
+          track_expiry: true,
+        };
+      });
     const expiryError = await syncImportExpiries(
       row,
       intakeId,
       driverForLinks,
       mode,
-      journalBefore?.tracking ?? [],
+      tracking,
     );
     if (expiryError) return fail(expiryError);
   }
-  const journalAfter = intakeId
-    ? await readImportSnapshot(ctx.db, intakeId, driverForLinks)
-    : null;
+  const journalAfter =
+    persistJournal && intakeId
+      ? await readImportSnapshot(ctx.db, intakeId, driverForLinks)
+      : null;
 
   return {
     events,
@@ -1464,6 +1707,9 @@ export async function applyDriverImportChunk(payload: {
   }
 
   const customFieldDefs = await listCustomFieldDefinitions("driver");
+  const loaded = await loadImportMatches(db, ready);
+  if ("error" in loaded) return { error: loaded.error };
+  const matches = loaded.index;
   const events: DriverImportLogEvent[] = [];
   const failures: Array<{ rowIndex: number; reason: string }> = [];
   const credentials: DriverImportCredential[] = [];
@@ -1471,14 +1717,18 @@ export async function applyDriverImportChunk(payload: {
   let approved = 0;
   let skipped = 0;
 
-  for (const row of ready) {
-    const result = await applyOneImportRow(row, {
+  const results = await mapWithConcurrency(ready, IMPORT_APPLY_CONCURRENCY, (row) =>
+    applyOneImportRow(row, {
       db,
       duplicateStrategy: payload.duplicateStrategy,
       approveImmediately: payload.approveImmediately,
       customFieldDefs,
       fileName: payload.fileName,
-    });
+      actorId: auth.session.id,
+      matches,
+    }),
+  );
+  for (const result of results) {
     events.push(...result.events);
     applied += result.applied;
     approved += result.approved;

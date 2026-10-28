@@ -111,7 +111,7 @@ export function DriverImportJobProvider({ children }: { children: ReactNode }) {
         while (loopJobRef.current === jobId) {
           const result = await processDriverImportChunk(jobId);
           if ("error" in result) {
-            toast.error(t("importFailed"));
+            if (result.error !== "not_authorized") toast.error(t("importFailed"));
             break;
           }
           await refreshJobs(jobId);
@@ -154,11 +154,13 @@ export function DriverImportJobProvider({ children }: { children: ReactNode }) {
         if (i === 0) {
           const result = await startDriverImportJob({ ...payload, rows: slice, seal });
           if ("error" in result) {
-            toast.error(
-              result.error === "import_already_running"
-                ? t("alreadyRunning")
-                : t("importFailed"),
-            );
+            if (result.error !== "not_authorized") {
+              toast.error(
+                result.error === "import_already_running"
+                  ? t("alreadyRunning")
+                  : t("importFailed"),
+              );
+            }
             return null;
           }
           job = result.job;
@@ -170,7 +172,7 @@ export function DriverImportJobProvider({ children }: { children: ReactNode }) {
             seal,
           });
           if ("error" in result) {
-            toast.error(t("importFailed"));
+            if (result.error !== "not_authorized") toast.error(t("importFailed"));
             return null;
           }
         }
@@ -189,7 +191,7 @@ export function DriverImportJobProvider({ children }: { children: ReactNode }) {
       loopJobRef.current = null;
       const result = await setDriverImportJobStatus(jobId, "pause");
       if ("error" in result) {
-        toast.error(t("importFailed"));
+        if (result.error !== "not_authorized") toast.error(t("importFailed"));
         return;
       }
       await refreshJobs(jobId);
@@ -201,11 +203,13 @@ export function DriverImportJobProvider({ children }: { children: ReactNode }) {
     async (jobId: string) => {
       const result = await setDriverImportJobStatus(jobId, "resume");
       if ("error" in result) {
-        toast.error(
-          result.error === "import_already_running"
-            ? t("alreadyRunning")
-            : t("importFailed"),
-        );
+        if (result.error !== "not_authorized") {
+          toast.error(
+            result.error === "import_already_running"
+              ? t("alreadyRunning")
+              : t("importFailed"),
+          );
+        }
         return;
       }
       await refreshJobs(jobId);
@@ -219,7 +223,7 @@ export function DriverImportJobProvider({ children }: { children: ReactNode }) {
       loopJobRef.current = null;
       const result = await setDriverImportJobStatus(jobId, "cancel");
       if ("error" in result) {
-        toast.error(t("importFailed"));
+        if (result.error !== "not_authorized") toast.error(t("importFailed"));
         return;
       }
       await refreshJobs(jobId);

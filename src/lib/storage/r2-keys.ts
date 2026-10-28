@@ -10,6 +10,7 @@ const ALLOWED_PREFIXES = [
   "releases/",
   "vehicles/",
   "source_companies/",
+  "sponsorships/",
 ] as const;
 
 export function isAllowedStorageKey(key: string): boolean {
@@ -31,7 +32,8 @@ export function isR2ObjectKey(value: string | null | undefined): boolean {
     v.startsWith("assets/") ||
     v.startsWith("releases/") ||
     v.startsWith("vehicles/") ||
-    v.startsWith("source_companies/")
+    v.startsWith("source_companies/") ||
+    v.startsWith("sponsorships/")
   );
 }
 
@@ -52,6 +54,26 @@ export function buildSourceCompanyLogoKey(companyKey: string, ext: string): stri
 export function allSourceCompanyLogoKeys(companyKey: string): string[] {
   return ["png", "jpg", "jpeg", "webp", "svg"].map((ext) =>
     buildSourceCompanyLogoKey(companyKey, ext),
+  );
+}
+
+/** `sponsorships/{key}/logo.{ext}` — printed on that sponsor's workforce sheets. */
+export const SPONSORSHIP_LOGO_PREFIX = "sponsorships/";
+
+export function isSponsorshipLogoKey(key: string | null | undefined): boolean {
+  if (!key) return false;
+  const normalized = key.trim().replace(/^\/+/, "");
+  if (normalized.includes("..")) return false;
+  return normalized.startsWith(SPONSORSHIP_LOGO_PREFIX);
+}
+
+export function buildSponsorshipLogoKey(sponsorshipKey: string, ext: string): string {
+  return `${SPONSORSHIP_LOGO_PREFIX}${sponsorshipKey}/logo.${ext}`;
+}
+
+export function allSponsorshipLogoKeys(sponsorshipKey: string): string[] {
+  return ["png", "jpg", "jpeg", "webp", "svg"].map((ext) =>
+    buildSponsorshipLogoKey(sponsorshipKey, ext),
   );
 }
 
