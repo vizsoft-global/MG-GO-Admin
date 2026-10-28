@@ -28,6 +28,7 @@ import {
   PERFORMANCE_RANGE_PRESETS,
   type PerformanceRangePreset,
 } from "@/features/performance/performance-formulas";
+import type { PerformanceComponentKey } from "@/features/performance/performance-types";
 import {
   useDriverPerformanceDaily,
   useDriverPerformanceList,
@@ -296,7 +297,7 @@ export function DriverPerformanceTab({
                       </TableCell>
                     );
                   }
-                  const value = componentPct(day.component_scores, column.id);
+                  const value = componentPct(day.component_scores, column.id as PerformanceComponentKey);
                   return (
                     <TableCell
                       key={column.id}

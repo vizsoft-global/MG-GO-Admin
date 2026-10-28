@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { formatPct } from "@/lib/format/percent";
 import { componentPct } from "@/features/performance/performance-formulas";
+import type { PerformanceComponentKey } from "@/features/performance/performance-types";
 import { componentLabel } from "@/features/performance/performance-component-breakdown";
 import {
   useDriverPerformanceDaily,
@@ -139,7 +140,7 @@ function AttendanceComplianceBreakdown({
                   </TableCell>
                 );
               }
-              const value = componentPct(row.component_scores, column.id);
+              const value = componentPct(row.component_scores, column.id as PerformanceComponentKey);
               return (
                 <TableCell
                   key={column.id}
