@@ -639,7 +639,7 @@ function AssetsTab({ vehicle }: { vehicle: VehicleListRow }) {
           id: row.id,
           search: [row.name, row.code, row.quantity, row.assigned_at].filter(Boolean).join(" "),
           cells: {
-            asset: row.code ? `${row.name} · ${row.code}` : row.name,
+            asset: <TableNameCell name={row.code ? `${row.name} · ${row.code}` : row.name} />,
             qty: String(row.quantity),
             when: row.assigned_at?.slice(0, 10) || <EmptyCell />,
           },
@@ -671,7 +671,7 @@ function TabTable({
   tableId: string;
   entity: string;
   columns: TableToolbarColumn[];
-  rows: Array<{ id: string; search: string; cells: Record<string, ReactNode> }>;
+  rows: Array<{ id: string; search: string; cells: Record<string, ReactNode>; group?: Record<string, string> }>;
   onAdd?: () => void;
   addLabel?: string;
   empty?: ReactNode;
@@ -682,6 +682,25 @@ function TabTable({
     if (!query) return rows;
     return rows.filter((row) => row.search.toLowerCase().includes(query));
   }, [prefs.appliedQuery, rows]);
+  const accessors = useMemo(() => {
+    const map: Record<string, (row: (typeof rows)[number]) => string> = {};
+    for (const column of columns) {
+      if (!column.categorical) continue;
+      map[column.id] = (row) => {
+        const named = row.group?.[column.id];
+        if (named != null) return named;
+        const cell = row.cells[column.id];
+        return typeof cell === "string" || typeof cell === "number" ? String(cell) : "";
+      };
+    }
+    return map;
+  }, [columns]);
+  const grouped = prefs.groupBy !== "none" && Boolean(accessors[prefs.groupBy]);
+  const sections = useMemo(
+    () => groupRows(filtered, grouped ? prefs.groupBy : "none", accessors),
+    [accessors, filtered, grouped, prefs.groupBy],
+  );
+  const view = useGroupedListView(sections, grouped, prefs.groupBy);
   const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
   return (
     <AppDataTable
@@ -700,13 +719,25 @@ function TabTable({
       columns={shown.map((column) => ({ id: column.id, label: column.label }))}
       empty={filtered.length === 0 ? empty : undefined}
     >
-      {filtered.map((row) => (
-        <AppDataTableRow key={row.id}>
-          {shown.map((column) => (
-            <TableCell key={column.id}>{row.cells[column.id] ?? <EmptyCell />}</TableCell>
-          ))}
-        </AppDataTableRow>
-      ))}
+      {view.sections.flatMap((section) => {
+        const header = grouped ? (
+          <GroupTableHeaderRow
+            key={`${section.key}-header`}
+            colSpan={Math.max(shown.length, 1)}
+            {...groupHeaderProps(section)}
+            onToggle={() => view.toggle(section.key)}
+            onStep={(dir) => view.step(section.key, dir)}
+          />
+        ) : null;
+        const body = section.visibleRows.map((row) => (
+          <AppDataTableRow key={row.id}>
+            {shown.map((column) => (
+              <TableCell key={column.id}>{row.cells[column.id] ?? <EmptyCell />}</TableCell>
+            ))}
+          </AppDataTableRow>
+        ));
+        return header ? [header, ...body] : body;
+      })}
     </AppDataTable>
   );
 }
