@@ -5,7 +5,17 @@ import { useLocale, useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { AppEmptyState } from "@/components/app";
-import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  AppDataTable,
+  AppDataTableRow,
+  TableCell,
+} from "@/components/app/app-data-table";
+import {
+  EmptyCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { Input } from "@/components/ui/input";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { formatPct } from "@/lib/format/percent";
@@ -58,6 +68,27 @@ function AttendanceComplianceBreakdown({
     ? catalog.components
     : (data?.components ?? []);
   const rows = data?.rows ?? [];
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "date", label: t("colDate"), locked: true },
+      { id: "compliance", label: t("kpiCompliance") },
+      ...components.map((component) => ({
+        id: component.key,
+        label:
+          component.is_active && component.weight > 0
+            ? componentLabel(component, locale)
+            : `${componentLabel(component, locale)} (${tc("notCounted")})`,
+      })),
+    ],
+    [components, locale, t, tc],
+  );
+  const prefs = useTablePrefs(`attendance-explore-${driverId}`, columns);
+  const filtered = useMemo(() => {
+    const query = prefs.appliedQuery.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) => row.log_date.toLowerCase().includes(query));
+  }, [prefs.appliedQuery, rows]);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
 
   if (isLoading) {
     return (
@@ -74,56 +105,56 @@ function AttendanceComplianceBreakdown({
       <h3 className="mb-2 text-sm font-semibold">
         {t("complianceBreakdownTitle")}
       </h3>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-border">
-              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-1.5 text-start")}>
-                {t("colDate")}
-              </th>
-              <th className={cn(TABLE_HEAD_CLASS, "px-2 py-1.5 text-end")}>
-                {t("kpiCompliance")}
-              </th>
-              {components.map((c) => (
-                <th
-                  key={c.key}
-                  className={cn(TABLE_HEAD_CLASS, "px-2 py-1.5 text-end")}
+      <AppDataTable
+        toolbar={
+          <TableToolbar
+            prefs={prefs}
+            entity={t("colDate")}
+            columns={columns}
+            rowKind="aggregate"
+            filteredCount={filtered.length}
+            totalCount={rows.length}
+          />
+        }
+        columns={shown.map((column) => ({
+          id: column.id,
+          label: column.label,
+          className: column.id === "date" ? "text-start" : "text-end",
+        }))}
+      >
+        {filtered.map((row) => (
+          <AppDataTableRow key={row.log_date}>
+            {shown.map((column) => {
+              if (column.id === "date") {
+                return (
+                  <TableCell key={column.id} className="text-xs tabular-nums">
+                    {row.log_date}
+                  </TableCell>
+                );
+              }
+              if (column.id === "compliance") {
+                return (
+                  <TableCell key={column.id} className="text-end text-xs font-semibold tabular-nums">
+                    {row.compliance_score == null ? <EmptyCell /> : formatPct(row.compliance_score)}
+                  </TableCell>
+                );
+              }
+              const value = componentPct(row.component_scores, column.id);
+              return (
+                <TableCell
+                  key={column.id}
+                  className={cn(
+                    "text-end text-xs tabular-nums",
+                    value == null ? "text-muted-foreground" : undefined,
+                  )}
                 >
-                  {c.is_active && c.weight > 0
-                    ? componentLabel(c, locale)
-                    : `${componentLabel(c, locale)} (${tc("notCounted")})`}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.log_date} className="border-b border-border/60">
-                <td className="px-2 py-1.5 tabular-nums">{row.log_date}</td>
-                <td className="px-2 py-1.5 text-end font-semibold tabular-nums">
-                  {row.compliance_score == null
-                    ? "—"
-                    : formatPct(row.compliance_score)}
-                </td>
-                {components.map((c) => {
-                  const value = componentPct(row.component_scores, c.key);
-                  return (
-                    <td
-                      key={c.key}
-                      className={cn(
-                        "px-2 py-1.5 text-end tabular-nums",
-                        value == null ? "text-muted-foreground" : undefined,
-                      )}
-                    >
-                      {value == null ? "—" : formatPct(value)}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  {value == null ? <EmptyCell /> : formatPct(value)}
+                </TableCell>
+              );
+            })}
+          </AppDataTableRow>
+        ))}
+      </AppDataTable>
       <p className="mt-2 text-xs text-muted-foreground">
         {t("complianceBreakdownHint")}
       </p>

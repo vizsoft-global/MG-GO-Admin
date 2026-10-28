@@ -1,11 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Eye, Loader2, Pencil, Plus, Send, ShieldCheck, Users } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
-import { SearchField } from "@/components/app/search-field";
+import { groupRows } from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -238,6 +246,22 @@ export function RolesSettingsPanel() {
     return counts;
   }, [staffRows]);
 
+  const roleColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: t("colName"), locked: true },
+      { id: "department", label: t("colDepartment"), categorical: true },
+      { id: "sender", label: t("colSenderFor") },
+      { id: "view", label: t("colReceiverViewFor") },
+      { id: "decide", label: t("colReceiverDecideFor") },
+      { id: "edit", label: t("assignStaff"), locked: true },
+    ],
+    [t],
+  );
+  const tablePrefs = useTablePrefs("requests.roles", roleColumns);
+  useEffect(() => {
+    setSearch(tablePrefs.appliedQuery);
+  }, [tablePrefs.appliedQuery]);
+  const shownColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return staffRows.filter((row) => {
@@ -320,6 +344,17 @@ export function RolesSettingsPanel() {
     );
   }
 
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filteredRows,
+        tablePrefs.groupBy,
+        { department: (row) => departments[row.profile_id] },
+        {},
+        "—",
+      ),
+    [departments, filteredRows, tablePrefs.groupBy],
+  );
   const filtersActive =
     search.trim() !== "" || roleFilter !== "all" || typeFilter !== "all";
 
@@ -333,12 +368,7 @@ export function RolesSettingsPanel() {
           { label: t("hub"), href: "/employeedesk/settings" },
           { label: t("title") },
         ]}
-        actions={
-          <Button size="sm" className="h-9" onClick={() => setDrawerTarget("assign")}>
-            <Plus className="me-1.5 h-3.5 w-3.5" />
-            {t("assignStaff")}
-          </Button>
-        }
+        actions={null}
       />
 
       <div className="grid gap-2 lg:grid-cols-3">
@@ -368,13 +398,6 @@ export function RolesSettingsPanel() {
           <p className="text-xs text-muted-foreground">{t("staffAccessSubtitle")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <SearchField
-            value={search}
-            onChange={setSearch}
-            placeholder={t("searchPlaceholder")}
-            clearLabel={t("clearSearch")}
-            className="w-56 flex-none"
-          />
           <div className="flex flex-wrap items-center gap-1">
             {ROLE_FILTERS.map((filter) => (
               <ToggleChip
@@ -424,6 +447,17 @@ export function RolesSettingsPanel() {
       </div>
 
       <AppListCard className="p-0">
+        <TableToolbar
+          prefs={tablePrefs}
+          entity={t("staffAccessTitle")}
+          columns={roleColumns}
+          rowKind="dynamic"
+          entityList
+          filteredCount={filteredRows.length}
+          totalCount={staffRows.length}
+          onAdd={() => setDrawerTarget("assign")}
+          addLabel={t("assignStaff")}
+        />
         {loading ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground">
             <Loader2 className="me-2 h-4 w-4 animate-spin" />
@@ -433,68 +467,79 @@ export function RolesSettingsPanel() {
             {filtersActive ? t("emptyFiltered") : t("empty")}
           </p>
         ) : (
+          tablePrefs.view === "grid" ? (
+            <TableGridCards
+              rows={filteredRows.map((row) => ({
+                id: row.profile_id,
+                name: row.profile_name,
+                fields: [
+                  { label: t("colDepartment"), value: departments[row.profile_id] ?? "—" },
+                  { label: t("colSenderFor"), value: typesFor(row, "sender").length },
+                ],
+                onOpen: () => setDrawerTarget(row),
+              }))}
+            />
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colName")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colDepartment")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colSenderFor")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colReceiverViewFor")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colReceiverDecideFor")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS} />
+                {shownColumns.map((column) => (
+                  <TableHead key={column.id} className={TABLE_HEAD_CLASS}>
+                    {column.id === "edit" ? null : column.label}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredRows.map((row) => (
-                <TableRow key={row.profile_id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2.5">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback
-                          className={cn(
-                            "text-xs font-semibold",
-                            avatarTintFromName(row.profile_name),
-                          )}
-                        >
-                          {initialsOf(row.profile_name)}
-                        </AvatarFallback>
-                      </Avatar>
+              {grouped.flatMap((group) => [
+                ...(tablePrefs.groupBy !== "none"
+                  ? [
+                      <TableRow key={`g-${group.key}`}>
+                        <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                          {group.label} · {group.rows.length}
+                        </TableCell>
+                      </TableRow>,
+                    ]
+                  : []),
+                ...group.rows.map((row) => {
+                  const cells: Record<string, ReactNode> = {
+                    name: (
                       <div className="min-w-0">
-                        <p className="text-sm font-medium">{row.profile_name}</p>
+                        <TableNameCell name={row.profile_name} />
                         <p className="text-xs text-muted-foreground">
-                          {row.profile_email ?? "—"}
+                          {row.profile_email ? row.profile_email : <EmptyCell />}
                         </p>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {departments[row.profile_id] ?? "—"}
-                  </TableCell>
-                  <TableCell className="max-w-[220px]">
-                    {renderChips(typesFor(row, "sender"), "muted", t("allTemplates"))}
-                  </TableCell>
-                  <TableCell className="max-w-[220px]">
-                    {renderChips(typesFor(row, "view_only"), "muted", t("allTypes"))}
-                  </TableCell>
-                  <TableCell className="max-w-[220px]">
-                    {renderChips(typesFor(row, "approver"), "decide", t("allTypes"))}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-9"
-                      onClick={() => setDrawerTarget(row)}
-                    >
-                      <Pencil className="me-1 h-3.5 w-3.5" />
-                      {t("edit")}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    ),
+                    department: departments[row.profile_id] ? departments[row.profile_id] : <EmptyCell />,
+                    sender: renderChips(typesFor(row, "sender"), "muted", t("allTemplates")),
+                    view: renderChips(typesFor(row, "view_only"), "muted", t("allTypes")),
+                    decide: renderChips(typesFor(row, "approver"), "decide", t("allTypes")),
+                    edit: (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => setDrawerTarget(row)}
+                      >
+                        <Pencil className="me-1 h-3.5 w-3.5" />
+                        {t("edit")}
+                      </Button>
+                    ),
+                  };
+                  return (
+                    <TableRow key={row.profile_id}>
+                      {shownColumns.map((column) => (
+                        <TableCell key={column.id}>{cells[column.id] ?? <EmptyCell />}</TableCell>
+                      ))}
+                    </TableRow>
+                  );
+                }),
+              ])}
             </TableBody>
           </Table>
+          )
         )}
       </AppListCard>
 

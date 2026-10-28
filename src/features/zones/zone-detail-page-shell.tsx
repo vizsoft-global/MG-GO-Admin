@@ -18,6 +18,13 @@ import {
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { formatZoneArea, zoneAreaSqKm } from "@/lib/geo/zone-area";
+import {
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { cn } from "@/lib/utils";
 import { ZoneMapPanel } from "./zone-map-panel";
 import { useZoneDrivers, useZonesList } from "./use-zones";
@@ -58,6 +65,17 @@ export function ZoneDetailPageShell({ id }: { id: string }) {
   const { data: zones = [], isLoading } = useZonesList();
   const zone = useMemo(() => zones.find((item) => item.id === id) ?? null, [id, zones]);
   const { data: drivers = [], isLoading: driversLoading } = useZoneDrivers(id, Boolean(zone));
+  const driverColumns = useMemo((): TableToolbarColumn[] => [
+    { id: "name", label: t("detailDriverName"), locked: true },
+    { id: "code", label: t("detailDriverCode") },
+  ], [t]);
+  const driverPrefs = useTablePrefs("zone-drivers", driverColumns);
+  const driverQuery = driverPrefs.appliedQuery.trim().toLowerCase();
+  const shownDrivers = driverQuery
+    ? drivers.filter((driver) =>
+        `${driver.full_name ?? ""} ${driver.driver_code}`.toLowerCase().includes(driverQuery),
+      )
+    : drivers;
 
   if (isLoading) {
     return <DetailSkeleton />;
@@ -202,28 +220,58 @@ export function ZoneDetailPageShell({ id }: { id: string }) {
             ) : drivers.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("noDrivers")}</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("detailDriverName")}</TableHead>
-                    <TableHead className={cn("text-end", TABLE_HEAD_CLASS)}>
-                      {t("detailDriverCode")}
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {drivers.map((driver) => (
-                    <TableRow key={driver.id}>
-                      <TableCell className="text-sm">
-                        {driver.full_name ?? t("unknownDriver")}
-                      </TableCell>
-                      <TableCell className="text-end font-mono text-sm tabular-nums">
-                        #{driver.driver_code}
-                      </TableCell>
+              <>
+                <TableToolbar
+                  prefs={driverPrefs}
+                  entity={t("detailDriversTitle")}
+                  columns={driverColumns}
+                  rowKind="dynamic"
+                  entityList
+                  filteredCount={shownDrivers.length}
+                  totalCount={drivers.length}
+                />
+                {driverPrefs.view === "grid" ? (
+                  <TableGridCards
+                    rows={shownDrivers.map((driver) => ({
+                      id: driver.driver_code,
+                      name: driver.full_name ?? t("unknownDriver"),
+                      fields: [{ label: t("detailDriverCode"), value: `#${driver.driver_code}` }],
+                    }))}
+                  />
+                ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {driverPrefs.orderedColumns.filter((column) => driverPrefs.isVisible(column.id)).map((column) => (
+                        <TableHead
+                          key={column.id}
+                          className={cn(TABLE_HEAD_CLASS, column.id === "code" && "text-end")}
+                        >
+                          {column.label}
+                        </TableHead>
+                      ))}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {shownDrivers.map((driver) => (
+                      <TableRow key={driver.id}>
+                        {driverPrefs.orderedColumns.filter((column) => driverPrefs.isVisible(column.id)).map((column) =>
+                          column.id === "name" ? (
+                            <TableCell key={column.id} className="text-sm">
+                              <TableNameCell name={driver.full_name ?? t("unknownDriver")} />
+                            </TableCell>
+                          ) : (
+                            <TableCell key={column.id} className="text-end font-mono text-sm tabular-nums">
+                              #{driver.driver_code}
+                            </TableCell>
+                          ),
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                )}
+              </>
             )}
           </div>
         </div>

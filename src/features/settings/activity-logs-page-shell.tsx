@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Download, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
@@ -11,6 +11,8 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
+import { EmptyCell, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { groupBanner, groupRows, ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,7 +60,17 @@ export function ActivityLogsPageShell() {
   const [entityType, setEntityType] = useState<string>("all");
   const [adminUserId, setAdminUserId] = useState<string>("all");
   const [facets, setFacets] = useState<AdminActivityFacets>({ entityTypes: [], admins: [] });
-  const [search, setSearch] = useState("");
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "time", label: t("colTime") },
+      { id: "user", label: t("colUser"), locked: true },
+      { id: "action", label: t("colAction"), categorical: true },
+      { id: "entity", label: t("colEntity"), categorical: true },
+      { id: "route", label: t("colRoute") },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("settings.activityLogs", columns);
   const [rows, setRows] = useState<AdminActivityLogRow[]>([]);
   const [selected, setSelected] = useState<AdminActivityLogRow | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -102,7 +114,7 @@ export function ActivityLogsPageShell() {
         action: action === "all" ? undefined : (action as AdminActivityAction),
         entityType: entityType === "all" ? undefined : entityType,
         adminUserId: adminUserId === "all" ? undefined : adminUserId,
-        search: search.trim() || undefined,
+        search: prefs.appliedQuery.trim() || undefined,
         limit: 100,
       });
       if ("error" in result) {
@@ -111,7 +123,7 @@ export function ActivityLogsPageShell() {
       }
       setRows(result.rows);
     });
-  }, [startDate, endDate, action, entityType, adminUserId, search, t]);
+  }, [startDate, endDate, action, entityType, adminUserId, prefs.appliedQuery, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,11 +136,11 @@ export function ActivityLogsPageShell() {
     };
   }, []);
 
+  const loadRef = useRef(loadLogs);
+  loadRef.current = loadLogs;
   useEffect(() => {
-    loadLogs();
-    // Load the newest page once on mount; later refreshes use the Load button.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    loadRef.current();
+  }, [prefs.appliedQuery]);
 
   const handleExport = () => {
     startTransition(async () => {
@@ -138,7 +150,7 @@ export function ActivityLogsPageShell() {
         action: action === "all" ? undefined : (action as AdminActivityAction),
         entityType: entityType === "all" ? undefined : entityType,
         adminUserId: adminUserId === "all" ? undefined : adminUserId,
-        search: search.trim() || undefined,
+        search: prefs.appliedQuery.trim() || undefined,
       });
       if ("error" in result) {
         toast.error(t("exportFailed"));
@@ -167,16 +179,6 @@ export function ActivityLogsPageShell() {
         description={t("subtitle")}
         actions={
           <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="cursor-pointer rounded-lg"
-              onClick={handleExport}
-              disabled={isPending}
-            >
-              <Download className="me-1.5 size-4" />
-              {t("export")}
-            </Button>
             <Button
               type="button"
               className="cursor-pointer rounded-lg"
@@ -269,53 +271,16 @@ export function ActivityLogsPageShell() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="min-w-[12rem] flex-1 space-y-1.5">
-              <Label>{t("search")}</Label>
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t("searchPlaceholder")}
-                className="rounded-lg"
-              />
-            </div>
           </div>
 
-          <AppDataTable
-            columns={[
-              { id: "time", label: t("colTime") },
-              { id: "user", label: t("colUser") },
-              { id: "action", label: t("colAction") },
-              { id: "entity", label: t("colEntity") },
-              { id: "route", label: t("colRoute") },
-            ]}
-            empty={
-              rows.length === 0 ? (
-                <AppDataTableEmpty>{t("empty")}</AppDataTableEmpty>
-              ) : undefined
-            }
-          >
-            {rows.map((row) => (
-              <AppDataTableRow
-                key={row.id}
-                className="cursor-pointer"
-                onClick={() => openRow(row)}
-              >
-                <TableCell className="text-xs tabular-nums">
-                  {new Date(row.created_at).toLocaleString()}
-                </TableCell>
-                <TableCell className="text-sm">
-                  {row.admin_name ?? row.admin_user_id?.slice(0, 8) ?? "—"}
-                </TableCell>
-                <TableCell className="font-mono text-xs">{row.action}</TableCell>
-                <TableCell className="text-xs">
-                  {[row.entity_type, row.entity_id?.slice(0, 8)].filter(Boolean).join(" · ") || "—"}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {row.route_name ?? row.page_path ?? "—"}
-                </TableCell>
-              </AppDataTableRow>
-            ))}
-          </AppDataTable>
+          <ActivityLogTable
+            columns={columns}
+            prefs={prefs}
+            rows={rows}
+            emptyLabel={t("empty")}
+            onExport={handleExport}
+            onOpen={openRow}
+          />
         </div>
       </AppListCard>
 
@@ -370,5 +335,105 @@ export function ActivityLogsPageShell() {
         </SheetContent>
       </Sheet>
     </AppPage>
+  );
+}
+
+function ActivityLogTable({
+  columns,
+  prefs,
+  rows,
+  emptyLabel,
+  onExport,
+  onOpen,
+}: {
+  columns: TableToolbarColumn[];
+  prefs: ReturnType<typeof useTablePrefs>;
+  rows: AdminActivityLogRow[];
+  emptyLabel: string;
+  onExport: () => void;
+  onOpen: (row: AdminActivityLogRow) => void;
+}) {
+  const matched = useMemo(
+    () =>
+      rows.filter((row) =>
+        rowMatches(prefs.appliedQuery, [
+          row.admin_name,
+          row.action,
+          row.entity_type,
+          row.entity_id,
+          row.route_name,
+          row.page_path,
+        ]),
+      ),
+    [prefs.appliedQuery, rows],
+  );
+  const groups = useMemo(
+    () =>
+      groupRows(matched, prefs.groupBy, (row) => {
+        if (prefs.groupBy === "action") return row.action;
+        if (prefs.groupBy === "entity") return row.entity_type ?? "";
+        return "";
+      }),
+    [matched, prefs.groupBy],
+  );
+  const ids = visibleColumnIds(prefs);
+  const heads = ids.map((id) => ({ id, label: columns.find((column) => column.id === id)?.label ?? id }));
+
+  function cell(id: string, row: AdminActivityLogRow) {
+    switch (id) {
+      case "time":
+        return new Date(row.created_at).toLocaleString();
+      case "user":
+        return <TableNameCell name={row.admin_name ?? row.admin_user_id?.slice(0, 8)} />;
+      case "action":
+        return row.action;
+      case "entity": {
+        const text = [row.entity_type, row.entity_id?.slice(0, 8)].filter(Boolean).join(" · ");
+        return text ? text : <EmptyCell />;
+      }
+      case "route":
+        return row.route_name ?? row.page_path ? (row.route_name ?? row.page_path) : <EmptyCell />;
+      default:
+        return <EmptyCell />;
+    }
+  }
+
+  return (
+    <AppDataTable
+      toolbar={
+        <ListToolbar
+          prefs={prefs}
+          entity="logs"
+          columns={columns}
+          rowKind="dynamic"
+          filteredCount={matched.length}
+          totalCount={rows.length}
+          onExport={onExport}
+        />
+      }
+      columns={heads}
+      empty={matched.length === 0 ? <AppDataTableEmpty>{emptyLabel}</AppDataTableEmpty> : undefined}
+    >
+      {groups.map((group) => (
+        <Fragment key={group.key}>
+          {group.label ? (
+            <AppDataTableRow>
+              <TableCell colSpan={ids.length} className="bg-muted/40 text-xs font-semibold">
+                {groupBanner(group.label, group.rows.length)}
+              </TableCell>
+            </AppDataTableRow>
+          ) : null}
+          {group.rows.map((row) => (
+            <AppDataTableRow key={row.id} className="cursor-pointer" onClick={() => onOpen(row)}>
+              {ids.map((id) => (
+                <TableCell key={id} className="text-xs">
+                  {cell(id, row)}
+                </TableCell>
+              ))}
+            </AppDataTableRow>
+          ))}
+        </Fragment>
+      ))}
+    </AppDataTable>
   );
 }

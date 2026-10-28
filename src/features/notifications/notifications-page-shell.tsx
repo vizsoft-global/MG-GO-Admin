@@ -10,26 +10,28 @@ import {
   CalendarClock,
   CircleAlert,
   Copy,
-  Download,
   FileEdit,
   List,
   Loader2,
-  Plus,
   RefreshCw,
   Send,
   ShieldOff,
 } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
 import {
-  AppListControls,
   FlatListPager,
   GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
   useGroupedListView,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import {
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -106,15 +108,20 @@ export function NotificationsPageShell() {
   const canExport = auth.can("notifications.export");
   const router = useRouter();
 
-  const tCommon = useTranslations("common");
-  const labels = useListControlLabels();
-  const { prefs, update } = useListViewPrefs("notifications");
-  const [search, setSearch] = useState("");
+  const toolbarColumns = useMemo((): TableToolbarColumn[] => [
+    { id: "title", label: t("colTitle"), locked: true },
+    { id: "category", label: t("colCategory"), categorical: true },
+    { id: "audience", label: t("colAudience") },
+    { id: "status", label: t("colStatus"), categorical: true },
+    { id: "sent", label: t("colSent") },
+    { id: "actions", label: t("colActions") },
+  ], [t]);
+  const tablePrefs = useTablePrefs("notifications", toolbarColumns);
   const [bucket, setBucket] = useState<NotificationListBucket>("all");
   const [category, setCategory] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [exporting, startExport] = useTransition();
+  const [, startExport] = useTransition();
   const listFilters = useMemo(() => {
     const filters: NotificationListFilters = {};
     if (bucket !== "all") filters.bucket = bucket;
@@ -140,47 +147,64 @@ export function NotificationsPageShell() {
   const filteredCampaigns = useMemo(
     () =>
       campaigns.filter((row) =>
-        fieldSearchMatch(row, search, {
+        fieldSearchMatch(row, tablePrefs.appliedQuery, {
           name: (item) => item.title,
           body: (item) => item.body,
           status: (item) => item.status,
         }),
       ),
-    [campaigns, search],
+    [campaigns, tablePrefs.appliedQuery],
   );
   const groupedCampaigns = useMemo(
     () =>
       groupRows(
         filteredCampaigns,
-        prefs.groupBy,
+        tablePrefs.groupBy,
         {
           status: (row) => row.status,
         },
         {},
         "—",
       ),
-    [filteredCampaigns, prefs.groupBy],
+    [filteredCampaigns, tablePrefs.groupBy],
   );
   const listView = useGroupedListView(
     groupedCampaigns,
-    prefs.groupBy !== "none",
-    `${prefs.groupBy}\u0001${search}`,
+    tablePrefs.groupBy !== "none",
+    `${tablePrefs.groupBy}\u0001${tablePrefs.appliedQuery}`,
   );
   useEffect(() => {
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
   const totalCount = campaignPages?.pages[0]?.totalCount ?? campaigns.length;
 
-  const tableColumns = useMemo(
-    () => [
-      { id: "title", label: t("colTitle") },
-      { id: "category", label: t("colCategory") },
-      { id: "audience", label: t("colAudience") },
-      { id: "status", label: t("colStatus") },
-      { id: "sent", label: t("colSent") },
-      { id: "actions", label: t("colActions") },
-    ],
-    [t],
+  const tableColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
+  const runExport = () => {
+    startExport(async () => {
+      const result = await exportNotificationCampaignsCsv({
+        ...listFilters,
+        search: tablePrefs.appliedQuery,
+      });
+      if ("error" in result) {
+        toast.error(t(`errors.${result.error}`));
+        return;
+      }
+      downloadCsv(`notifications-${bucket}.csv`, result.csv);
+    });
+  };
+  const toolbar = (
+    <TableToolbar
+      prefs={tablePrefs}
+      entity={t("title")}
+      columns={toolbarColumns}
+      rowKind="dynamic"
+      entityList
+      filteredCount={filteredCampaigns.length}
+      totalCount={totalCount}
+      onExport={canExport ? runExport : undefined}
+      onAdd={canManage ? () => router.push(`/${locale}/notifications/new`) : undefined}
+      addLabel={t("createNotification")}
+    />
   );
 
   return (
@@ -191,12 +215,6 @@ export function NotificationsPageShell() {
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <ClearAllModuleButton entity="notifications" />
-            {canManage ? (
-              <Button render={<Link href={`/${locale}/notifications/new`} />} className="h-9 cursor-pointer rounded-lg">
-                <Plus className="size-4" />
-                {t("createNotification")}
-              </Button>
-            ) : null}
           </div>
         }
       />
@@ -299,45 +317,7 @@ export function NotificationsPageShell() {
                 onChange={(event) => setToDate(event.target.value)}
                 className="h-9 rounded-lg border border-input bg-transparent px-2 text-sm"
               />
-              {canExport ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9"
-                  disabled={exporting}
-                  onClick={() => {
-                    startExport(async () => {
-                      const result = await exportNotificationCampaignsCsv({
-                        ...listFilters,
-                        search,
-                      });
-                      if ("error" in result) {
-                        toast.error(t(`errors.${result.error}`));
-                        return;
-                      }
-                      downloadCsv(`notifications-${bucket}.csv`, result.csv);
-                    });
-                  }}
-                >
-                  {exporting ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Download className="size-4" />
-                  )}
-                  {t("exportList")}
-                </Button>
-              ) : null}
             </div>
-            <AppListControls
-              searchValue={search}
-              onSearchChange={setSearch}
-              searchPlaceholder={tCommon("search")}
-              clearSearchLabel={labels.clearSearch}
-              groupByOptions={[labels.group.none, labels.group.status]}
-              groupBy={prefs.groupBy}
-              onGroupByChange={(value) => update({ groupBy: value })}
-              groupByLabel={labels.groupBy}
-            />
           </div>
         }
       >
@@ -350,13 +330,33 @@ export function NotificationsPageShell() {
             <AppEmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
           ) : (
             <>
+              {tablePrefs.view === "grid" ? (
+                <>
+                  {toolbar}
+                  <TableGridCards
+                    rows={filteredCampaigns.map((row) => ({
+                      id: row.id,
+                      name: row.title,
+                      status: { status: "neutral", label: row.status.replaceAll("_", " ") },
+                      fields: [
+                        { label: t("colCategory"), value: row.category.replaceAll("_", " ") },
+                        { label: t("colAudience"), value: String(row.recipient_count || row.estimated_audience_count || 0) },
+                      ],
+                      onOpen: () => router.push(`/${locale}/notifications/${row.id}`),
+                    }))}
+                  />
+                </>
+              ) : null}
+              {tablePrefs.view === "list" ? (
               <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
-              <AppDataTable columns={tableColumns}>
+              ) : null}
+              {tablePrefs.view === "list" ? (
+              <AppDataTable toolbar={toolbar} columns={tableColumns}>
                 {listView.sections.flatMap((section) => [
                   section.showHeader ? (
                     <GroupTableHeaderRow
                       key={`g-${section.key}`}
-                      colSpan={6}
+                      colSpan={tableColumns.length}
                       label={section.label}
                       total={section.total}
                       open={section.open}
@@ -377,7 +377,7 @@ export function NotificationsPageShell() {
                           href={`/${locale}/notifications/${row.id}`}
                           className="font-medium text-primary hover:underline"
                         >
-                          {row.title}
+                          <TableNameCell name={row.title} />
                         </Link>
                         {row.screenshot_restricted ? (
                           <span className="inline-flex items-center gap-0.5 rounded-md border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800">
@@ -429,6 +429,7 @@ export function NotificationsPageShell() {
                   )),
                 ])}
               </AppDataTable>
+              ) : null}
               <div className="flex flex-col items-center gap-2 border-t border-border py-4">
                 <p className="text-xs text-muted-foreground">
                   {t("showingCount", { visible: filteredCampaigns.length, total: totalCount })}

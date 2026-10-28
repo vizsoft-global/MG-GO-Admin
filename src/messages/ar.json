@@ -80,6 +80,22 @@
       "clearSearch": "مسح البحث",
       "pagerPrevious": "السابق",
       "pagerNext": "التالي"
+    },
+    "tableToolbar": {
+      "searchEntity": "بحث في {entity}…",
+      "groupBy": "تجميع حسب",
+      "groupNone": "بدون",
+      "showing": "عرض {filtered} من {total}",
+      "list": "قائمة",
+      "grid": "شبكة",
+      "columns": "الأعمدة",
+      "reset": "إعادة تعيين",
+      "clearAll": "مسح الكل",
+      "clearSearch": "مسح البحث",
+      "nameMissing": "الاسم مفقود",
+      "select": "اختر …",
+      "export": "تصدير",
+      "add": "إضافة"
     }
   },
   "nav": {

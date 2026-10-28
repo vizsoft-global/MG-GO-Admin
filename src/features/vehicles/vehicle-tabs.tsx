@@ -1,13 +1,25 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
-import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { groupHeaderProps, groupRows, GroupTableHeaderRow, useGroupedListView } from "@/components/app/app-list-controls";
 import { AppEmptyState } from "@/components/app/app-empty-state";
+import {
+  AppDataTable,
+  AppDataTableRow,
+  TableCell,
+} from "@/components/app/app-data-table";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -19,14 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
 import { getSignedStorageUrl } from "@/lib/storage/storage-actions";
@@ -77,17 +81,6 @@ export function VehicleDetailTabs({
   return <AssetsTab vehicle={vehicle} />;
 }
 
-function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
-  return (
-    <div className="flex justify-end">
-      <Button type="button" className="h-9" onClick={onClick}>
-        <Plus className="me-2 size-3.5" />
-        {label}
-      </Button>
-    </div>
-  );
-}
-
 function FileLink({ storageKey }: { storageKey: string | null }) {
   const t = useTranslations("pages.vehicleDetail");
   if (!storageKey) return <span>—</span>;
@@ -116,23 +109,37 @@ function HandoverTab({ vehicleId, canManage }: { vehicleId: string; canManage: b
   });
   const drivers = useQuery({ queryKey: [...queryKeys.vehicles.all(), "tab-drivers"], queryFn: listVehicleTabDrivers });
   const rows = list.data ?? [];
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "when", label: t("colWhen") },
+      { id: "from", label: t("colFrom") },
+      { id: "to", label: t("colTo") },
+      { id: "notes", label: t("colNotes") },
+      { id: "file", label: t("colFile") },
+    ],
+    [t],
+  );
   return (
     <div className="space-y-3">
-      {canManage ? <AddButton onClick={() => setOpen(true)} label={t("addHandover")} /> : null}
-      {rows.length === 0 ? (
-        <AppEmptyState title={t("emptyHandover")} />
-      ) : (
-        <TabTable
-          heads={[t("colWhen"), t("colFrom"), t("colTo"), t("colNotes"), t("colFile")]}
-          rows={rows.map((row) => [
-            row.handed_at.slice(0, 10),
-            row.from_name ?? "—",
-            row.to_name ?? "—",
-            row.notes ?? "—",
-            <FileLink key={row.id} storageKey={row.storage_key} />,
-          ])}
-        />
-      )}
+      <TabTable
+        tableId={`vehicle-handover-${vehicleId}`}
+        entity={t("addHandover")}
+        columns={columns}
+        onAdd={canManage ? () => setOpen(true) : undefined}
+        addLabel={t("addHandover")}
+        empty={<AppEmptyState title={t("emptyHandover")} />}
+        rows={rows.map((row) => ({
+          id: row.id,
+          search: [row.handed_at, row.from_name, row.to_name, row.notes].filter(Boolean).join(" "),
+          cells: {
+            when: row.handed_at.slice(0, 10),
+            from: row.from_name ? <TableNameCell name={row.from_name} /> : <EmptyCell />,
+            to: row.to_name ? <TableNameCell name={row.to_name} /> : <EmptyCell />,
+            notes: row.notes || <EmptyCell />,
+            file: <FileLink storageKey={row.storage_key} />,
+          },
+        }))}
+      />
       <LedgerDialog
         open={open}
         title={t("addHandover")}
@@ -180,23 +187,38 @@ function AccidentTab({ vehicleId, canManage }: { vehicleId: string; canManage: b
     queryFn: () => listVehicleAccidents(vehicleId),
   });
   const rows = list.data ?? [];
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "when", label: t("colWhen") },
+      { id: "location", label: t("colLocation") },
+      { id: "severity", label: t("colSeverity"), categorical: true },
+      { id: "notes", label: t("colNotes") },
+      { id: "file", label: t("colFile") },
+    ],
+    [t],
+  );
   return (
     <div className="space-y-3">
-      {canManage ? <AddButton onClick={() => setOpen(true)} label={t("addAccident")} /> : null}
-      {rows.length === 0 ? (
-        <AppEmptyState title={t("emptyAccident")} />
-      ) : (
-        <TabTable
-          heads={[t("colWhen"), t("colLocation"), t("colSeverity"), t("colNotes"), t("colFile")]}
-          rows={rows.map((row) => [
-            row.occurred_at.slice(0, 10),
-            row.location_text ?? "—",
-            t(`severity.${row.severity}` as "severity.medium"),
-            row.notes ?? "—",
-            <FileLink key={row.id} storageKey={row.storage_key} />,
-          ])}
-        />
-      )}
+      <TabTable
+        tableId={`vehicle-accident-${vehicleId}`}
+        entity={t("addAccident")}
+        columns={columns}
+        onAdd={canManage ? () => setOpen(true) : undefined}
+        addLabel={t("addAccident")}
+        empty={<AppEmptyState title={t("emptyAccident")} />}
+        rows={rows.map((row) => ({
+          id: row.id,
+          search: [row.occurred_at, row.location_text, row.severity, row.notes].filter(Boolean).join(" "),
+          group: { severity: t(`severity.${row.severity}` as "severity.medium") },
+          cells: {
+            when: row.occurred_at.slice(0, 10),
+            location: row.location_text || <EmptyCell />,
+            severity: t(`severity.${row.severity}` as "severity.medium"),
+            notes: row.notes || <EmptyCell />,
+            file: <FileLink storageKey={row.storage_key} />,
+          },
+        }))}
+      />
       <LedgerDialog
         open={open}
         title={t("addAccident")}
@@ -302,6 +324,14 @@ function DocumentsTab({ vehicle, canManage }: { vehicle: VehicleListRow; canMana
     return value;
   };
   const hasLegacyRows = rows.some((row) => isLegacyVehicleDocType(row.doc_type));
+  const docColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "type", label: t("colDocType"), locked: true, categorical: true },
+      { id: "expires", label: t("colExpires") },
+      { id: "file", label: t("colFile") },
+    ],
+    [t],
+  );
   return (
     <div className="space-y-3">
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -321,26 +351,33 @@ function DocumentsTab({ vehicle, canManage }: { vehicle: VehicleListRow; canMana
         ))}
       </div>
       <p className="text-xs text-muted-foreground">{t("docsOnRecordHint")}</p>
-      {canManage ? <AddButton onClick={() => setOpen(true)} label={t("addDocument")} /> : null}
-      {rows.length === 0 ? (
-        <AppEmptyState title={t("emptyDocuments")} />
-      ) : (
-        <TabTable
-          heads={[t("colDocType"), t("colExpires"), t("colFile")]}
-          rows={rows.map((row) => [
-            <span key={`${row.id}-type`} className="inline-flex items-center gap-1.5">
-              {docTypeLabel(row.doc_type)}
-              {isLegacyVehicleDocType(row.doc_type) ? (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                  {t("docType.legacy")}
-                </span>
-              ) : null}
-            </span>,
-            row.expires_at ?? "—",
-            <FileLink key={row.id} storageKey={row.storage_key} />,
-          ])}
-        />
-      )}
+      <TabTable
+        tableId={`vehicle-documents-${vehicleId}`}
+        entity={t("addDocument")}
+        columns={docColumns}
+        onAdd={canManage ? () => setOpen(true) : undefined}
+        addLabel={t("addDocument")}
+        empty={<AppEmptyState title={t("emptyDocuments")} />}
+        rows={rows.map((row) => ({
+          id: row.id,
+          search: [docTypeLabel(row.doc_type), row.expires_at].filter(Boolean).join(" "),
+          group: { type: docTypeLabel(row.doc_type) },
+          cells: {
+            type: (
+              <span className="inline-flex items-center gap-1.5">
+                {docTypeLabel(row.doc_type)}
+                {isLegacyVehicleDocType(row.doc_type) ? (
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                    {t("docType.legacy")}
+                  </span>
+                ) : null}
+              </span>
+            ),
+            expires: row.expires_at || <EmptyCell />,
+            file: <FileLink storageKey={row.storage_key} />,
+          },
+        }))}
+      />
       {hasLegacyRows ? (
         <p className="text-xs text-muted-foreground">{t("docType.legacyDocHint")}</p>
       ) : null}
@@ -396,24 +433,42 @@ function ServiceTab({ vehicleId, canManage }: { vehicleId: string; canManage: bo
     queryFn: () => listVehicleServices(vehicleId),
   });
   const rows = list.data ?? [];
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "when", label: t("colWhen") },
+      { id: "kind", label: t("colKind"), categorical: true },
+      { id: "odometer", label: t("colOdometer") },
+      { id: "vendor", label: t("colVendor") },
+      { id: "cost", label: t("colCost") },
+      { id: "notes", label: t("colNotes") },
+    ],
+    [t],
+  );
   return (
     <div className="space-y-3">
-      {canManage ? <AddButton onClick={() => setOpen(true)} label={t("addService")} /> : null}
-      {rows.length === 0 ? (
-        <AppEmptyState title={t("emptyService")} />
-      ) : (
-        <TabTable
-          heads={[t("colWhen"), t("colKind"), t("colOdometer"), t("colVendor"), t("colCost"), t("colNotes")]}
-          rows={rows.map((row) => [
-            row.serviced_at.slice(0, 10),
-            row.kind,
-            row.odometer ?? "—",
-            row.vendor ?? "—",
-            row.cost_kwd ?? "—",
-            row.notes ?? "—",
-          ])}
-        />
-      )}
+      <TabTable
+        tableId={`vehicle-service-${vehicleId}`}
+        entity={t("addService")}
+        columns={columns}
+        onAdd={canManage ? () => setOpen(true) : undefined}
+        addLabel={t("addService")}
+        empty={<AppEmptyState title={t("emptyService")} />}
+        rows={rows.map((row) => ({
+          id: row.id,
+          search: [row.serviced_at, row.kind, row.odometer, row.vendor, row.cost_kwd, row.notes]
+            .filter((value) => value != null && value !== "")
+            .join(" "),
+          group: { kind: row.kind || "" },
+          cells: {
+            when: row.serviced_at.slice(0, 10),
+            kind: row.kind || <EmptyCell />,
+            odometer: row.odometer == null || row.odometer === "" ? <EmptyCell /> : String(row.odometer),
+            vendor: row.vendor || <EmptyCell />,
+            cost: row.cost_kwd == null || row.cost_kwd === "" ? <EmptyCell /> : String(row.cost_kwd),
+            notes: row.notes || <EmptyCell />,
+          },
+        }))}
+      />
       <LedgerDialog
         open={open}
         title={t("addService")}
@@ -485,6 +540,14 @@ function AssetsTab({ vehicle }: { vehicle: VehicleListRow }) {
     enabled: canAssign,
   });
   const rows = list.data ?? [];
+  const assetColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "asset", label: t("colAsset"), locked: true },
+      { id: "qty", label: t("colQty") },
+      { id: "when", label: t("colWhen") },
+    ],
+    [t],
+  );
 
   const assign = () => {
     if (!driverId || !catalogId) return;
@@ -564,25 +627,24 @@ function AssetsTab({ vehicle }: { vehicle: VehicleListRow }) {
             </Button>
           </>
         ) : null}
-        {canCreate ? (
-          <Button type="button" variant="outline" className="h-9" onClick={() => setAddOpen(true)}>
-            <Plus className="me-2 size-3.5" />
-            {t("addAsset")}
-          </Button>
-        ) : null}
       </div>
-      {rows.length === 0 ? (
-        <AppEmptyState title={t("emptyAssets")} />
-      ) : (
-        <TabTable
-          heads={[t("colAsset"), t("colQty"), t("colWhen")]}
-          rows={rows.map((row) => [
-            row.code ? `${row.name} · ${row.code}` : row.name,
-            String(row.quantity),
-            row.assigned_at?.slice(0, 10) ?? "—",
-          ])}
-        />
-      )}
+      <TabTable
+        tableId={`vehicle-assets-${vehicle.id}`}
+        entity={t("addAsset")}
+        columns={assetColumns}
+        onAdd={canCreate ? () => setAddOpen(true) : undefined}
+        addLabel={t("addAsset")}
+        empty={<AppEmptyState title={t("emptyAssets")} />}
+        rows={rows.map((row) => ({
+          id: row.id,
+          search: [row.name, row.code, row.quantity, row.assigned_at].filter(Boolean).join(" "),
+          cells: {
+            asset: row.code ? `${row.name} · ${row.code}` : row.name,
+            qty: String(row.quantity),
+            when: row.assigned_at?.slice(0, 10) || <EmptyCell />,
+          },
+        }))}
+      />
       <AssetFormSheet
         asset={null}
         open={addOpen}
@@ -597,30 +659,55 @@ function AssetsTab({ vehicle }: { vehicle: VehicleListRow }) {
   );
 }
 
-function TabTable({ heads, rows }: { heads: string[]; rows: Array<Array<ReactNode>> }) {
+function TabTable({
+  tableId,
+  entity,
+  columns,
+  rows,
+  onAdd,
+  addLabel,
+  empty,
+}: {
+  tableId: string;
+  entity: string;
+  columns: TableToolbarColumn[];
+  rows: Array<{ id: string; search: string; cells: Record<string, ReactNode> }>;
+  onAdd?: () => void;
+  addLabel?: string;
+  empty?: ReactNode;
+}) {
+  const prefs = useTablePrefs(tableId, columns);
+  const filtered = useMemo(() => {
+    const query = prefs.appliedQuery.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) => row.search.toLowerCase().includes(query));
+  }, [prefs.appliedQuery, rows]);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {heads.map((head) => (
-              <TableHead key={head} className={TABLE_HEAD_CLASS}>
-                {head}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((cells, index) => (
-            <TableRow key={index}>
-              {cells.map((cell, cellIndex) => (
-                <TableCell key={cellIndex}>{cell}</TableCell>
-              ))}
-            </TableRow>
+    <AppDataTable
+      toolbar={
+        <TableToolbar
+          prefs={prefs}
+          entity={entity}
+          columns={columns}
+          rowKind="dynamic"
+          filteredCount={filtered.length}
+          totalCount={rows.length}
+          onAdd={onAdd}
+          addLabel={addLabel}
+        />
+      }
+      columns={shown.map((column) => ({ id: column.id, label: column.label }))}
+      empty={filtered.length === 0 ? empty : undefined}
+    >
+      {filtered.map((row) => (
+        <AppDataTableRow key={row.id}>
+          {shown.map((column) => (
+            <TableCell key={column.id}>{row.cells[column.id] ?? <EmptyCell />}</TableCell>
           ))}
-        </TableBody>
-      </Table>
-    </div>
+        </AppDataTableRow>
+      ))}
+    </AppDataTable>
   );
 }
 

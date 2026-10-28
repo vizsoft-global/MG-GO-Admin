@@ -1,11 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Copy, Loader2, Pencil, Plus, RefreshCw, Star } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import {
   AppDataTable,
@@ -88,6 +97,37 @@ export function VisitsBranchesShell() {
   });
 
   const rows = data?.rows ?? [];
+  const branchColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: t("branches.colBranch"), locked: true },
+      { id: "address", label: t("branches.colAddressCity") },
+      { id: "hours", label: t("branches.colWorkingHours") },
+      { id: "desks", label: t("branches.colDesks") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "actions", label: t("colActions"), locked: true },
+    ],
+    [t],
+  );
+  const tablePrefs = useTablePrefs("visits.branches", branchColumns);
+  const shownColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
+  const filteredRows = useMemo(() => {
+    const query = tablePrefs.appliedQuery.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) =>
+      [row.name, row.address, row.city].join(" ").toLowerCase().includes(query),
+    );
+  }, [rows, tablePrefs.appliedQuery]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filteredRows,
+        tablePrefs.groupBy,
+        { status: (row) => (row.is_active ? t("catalog.active") : t("slots.inactive")) },
+        {},
+        "—",
+      ),
+    [filteredRows, t, tablePrefs.groupBy],
+  );
 
   const openCreate = () => {
     setDraft(emptyDraft());
@@ -203,10 +243,6 @@ export function VisitsBranchesShell() {
                   <Copy className="me-1.5 h-3.5 w-3.5" />
                   {t("branches.copySlots")}
                 </Button>
-                <Button type="button" size="sm" className="h-9" onClick={openCreate}>
-                  <Plus className="me-1.5 h-3.5 w-3.5" />
-                  {t("branches.add")}
-                </Button>
               </>
             ) : null}
             <Button
@@ -226,55 +262,77 @@ export function VisitsBranchesShell() {
         }
       />
 
-      <AppListCard className="mt-2">
+      <AppListCard className="mt-2 p-0">
+        <TableToolbar
+          prefs={tablePrefs}
+          entity={t("branches.title")}
+          columns={branchColumns}
+          rowKind="dynamic"
+          entityList
+          filteredCount={filteredRows.length}
+          totalCount={rows.length}
+          onAdd={canManage ? openCreate : undefined}
+          addLabel={t("branches.add")}
+        />
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <AppEmptyState
             title={t("branches.emptyTitle")}
             description={t("branches.emptyDescription")}
           />
         ) : (
+          tablePrefs.view === "grid" ? (
+            <TableGridCards
+              rows={filteredRows.map((row) => ({
+                id: row.id,
+                name: row.name,
+                fields: [
+                  { label: t("branches.colAddressCity"), value: [row.address, row.city].filter(Boolean).join(", ") || "—" },
+                  { label: t("branches.colDesks"), value: row.desks_count },
+                  { label: t("colStatus"), value: row.is_active ? t("catalog.active") : t("slots.inactive") },
+                ],
+                onOpen: canManage ? () => openEdit(row) : undefined,
+              }))}
+            />
+          ) : (
           <AppDataTable
-            columns={[
-              { id: "name", label: t("branches.colBranch") },
-              { id: "address", label: t("branches.colAddressCity") },
-              { id: "hours", label: t("branches.colWorkingHours") },
-              { id: "desks", label: t("branches.colDesks") },
-              { id: "status", label: t("colStatus") },
-              { id: "actions", label: t("colActions") },
-            ]}
+            columns={shownColumns.map((column) => ({ id: column.id, label: column.label }))}
           >
-            {rows.map((row) => (
-              <AppDataTableRow key={row.id}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold">{row.name}</span>
-                    {row.is_default ? (
-                      <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                        {t("branches.default")}
-                      </span>
-                    ) : null}
-                  </div>
-                </TableCell>
-                <TableCell className="max-w-[220px] truncate text-sm text-muted-foreground">
-                  {[row.address, row.city].filter(Boolean).join(", ") || "—"}
-                </TableCell>
-                <TableCell className="text-sm tabular-nums text-muted-foreground">
-                  {formatWorkingHours(row)}
-                </TableCell>
-                <TableCell className="tabular-nums">
-                  {t("branches.desksValue", { count: row.desks_count })}
-                </TableCell>
-                <TableCell>
-                  <StatusPill variant={row.is_active ? "success" : "neutral"}>
-                    {row.is_active ? t("catalog.active") : t("slots.inactive")}
-                  </StatusPill>
-                </TableCell>
-                <TableCell>
-                  {canManage ? (
+            {grouped.flatMap((group) => [
+              ...(tablePrefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => {
+                const address = [row.address, row.city].filter(Boolean).join(", ");
+                const cells: Record<string, ReactNode> = {
+                  name: (
+                    <div className="flex items-center gap-2">
+                      <TableNameCell name={row.name} />
+                      {row.is_default ? (
+                        <span className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                          {t("branches.default")}
+                        </span>
+                      ) : null}
+                    </div>
+                  ),
+                  address: address ? address : <EmptyCell />,
+                  hours: formatWorkingHours(row) || <EmptyCell />,
+                  desks: t("branches.desksValue", { count: row.desks_count }),
+                  status: (
+                    <StatusPill variant={row.is_active ? "success" : "neutral"}>
+                      {row.is_active ? t("catalog.active") : t("slots.inactive")}
+                    </StatusPill>
+                  ),
+                  actions: canManage ? (
                     <div className="flex flex-wrap items-center gap-1">
                       {!row.is_default ? (
                         <Button
@@ -302,12 +360,20 @@ export function VisitsBranchesShell() {
                       </Button>
                     </div>
                   ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </TableCell>
+                    <EmptyCell />
+                  ),
+                };
+                return (
+              <AppDataTableRow key={row.id}>
+                {shownColumns.map((column) => (
+                  <TableCell key={column.id}>{cells[column.id] ?? <EmptyCell />}</TableCell>
+                ))}
               </AppDataTableRow>
-            ))}
+                );
+              }),
+            ])}
           </AppDataTable>
+          )
         )}
       </AppListCard>
 

@@ -4,14 +4,6 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-## Language (mandatory)
-
-Always respond to the user in **Kannada (ಕನ್ನಡ)**.
-
-Keep code, file paths, commands, identifiers, and error messages in their original form (usually English). Explanations, summaries, and UI-facing guidance go in Kannada.
-
-Applies to every agent and subagent working in this repo — this file is the global ruleset; `.cursor/rules/KA.mdc` mirrors it for Cursor.
-
 ## Stack — production only
 
 Do not use the retired testing stack. Local `.env.local`, migrations, and Vercel deploys all target production.
@@ -35,6 +27,7 @@ Key patterns: footer-first modals via `AppModalFooter` (title in footer, Close t
 
 ## Change log
 
+- **2026-10-28 — [admin only] Page tables share one TableToolbar.** Search, Group by, List/Grid, and Columns sit in the table card. Search, group, and view stay in the URL. Column order and the last group and view are saved per user in `admin_ui_preferences`. Search hides under 10 fixed rows, Group by hides without a category or on an aggregate, Columns hides at 4 or fewer columns, and a toolbar with nothing to show is omitted. Payroll Hub sheets, dialogs, and dashboard widgets stay out. `resolve-controls.test.ts` 6/6. No Cloud Functions deploy.
 - **2026-10-28 — [admin only] App chrome follows Figma frame 7159:14456.** `themes.css` maps the page canvas, cards, borders, and text onto the frame tokens, and the old `--portal-*` names alias them. Shared FilterBar, StatusBadge, SectionCard, StatTile, charts, and date helpers are in `src/components/app` and `src/lib/format/display.ts`. Rider Operations keeps Other, and Supervisor is a disabled Coming soon control. The launcher, EmployeeDesk, and Live Tracking V2 keep their own layout. List and detail shells drop uppercase eyebrows. `display.test.ts` 6/6. No Cloud Functions deploy. Not deployed. Signed-in browser QA was not run.
 
 - **2026-10-28 — [admin only] Rider Operations and Client Portal follow the Figma section.** Shared Button, Badge, Switch, Checkbox, and KPI Card use `--portal-*` tokens. Rider Operations keeps Other and Accident. Not marked yet, Contract fill, the extra Clients tabs, Documents needing attention, and joiner document badges are omitted. `/client-portal` is the partner dashboard. Super admin opens `/client-portal/clients`, `/client-portal/new`, and `/client-portal/preview/[projectKey]`. A partner stays on `partner_project_key`. Clients KPIs and Create portal are TODO mocks. `adminClientPortalDashboard` source refuses a non-partner project unless the caller is a super admin. No Cloud Functions deploy. Not deployed. Signed-in browser QA was not run.

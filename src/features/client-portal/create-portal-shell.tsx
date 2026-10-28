@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { EmptyCell, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
 import { EmptyState } from "@/components/app/empty-state";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -68,6 +70,17 @@ export function CreatePortalShell() {
   const [users, setUsers] = useState<DraftUser[]>([]);
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
+  const userColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: "Name", locked: true },
+      { id: "email", label: "Email" },
+      { id: "actions", label: "Actions", locked: true },
+    ],
+    [],
+  );
+  const userPrefs = useTablePrefs("clientPortal.draftUsers", userColumns);
+  const shownUsers = users.filter((user) => rowMatches(userPrefs.appliedQuery, [user.name, user.email]));
+  const userIds = visibleColumnIds(userPrefs);
 
   function addUser() {
     const name = userName.trim();
@@ -189,34 +202,50 @@ export function CreatePortalShell() {
         {users.length === 0 ? (
           <EmptyState title="No client users yet." />
         ) : (
-          <Table className="text-sm">
-            <TableHeader>
-              <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>Name</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>Email</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium text-[var(--portal-ink)]">{user.name}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="portal-neutral"
-                      className="h-9 cursor-pointer text-[var(--portal-badge-red-fg)]"
-                      onClick={() => setUsers((prev) => prev.filter((row) => row.id !== user.id))}
-                    >
-                      <Trash2 className="size-4" />
-                      Remove
-                    </Button>
-                  </TableCell>
+          <div>
+            <ListToolbar
+              prefs={userPrefs}
+              entity="users"
+              columns={userColumns}
+              rowKind="dynamic"
+              filteredCount={shownUsers.length}
+              totalCount={users.length}
+            />
+            <Table className="text-sm">
+              <TableHeader>
+                <TableRow>
+                  {userIds.map((id) => (
+                    <TableHead key={id} className={TABLE_HEAD_CLASS}>
+                      {userColumns.find((column) => column.id === id)?.label}
+                    </TableHead>
+                  ))}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {shownUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    {userIds.map((id) => (
+                      <TableCell key={id}>
+                        {id === "name" ? <TableNameCell name={user.name} /> : null}
+                        {id === "email" ? (user.email ? user.email : <EmptyCell />) : null}
+                        {id === "actions" ? (
+                          <Button
+                            type="button"
+                            variant="portal-neutral"
+                            className="h-9 cursor-pointer text-[var(--portal-badge-red-fg)]"
+                            onClick={() => setUsers((prev) => prev.filter((row) => row.id !== user.id))}
+                          >
+                            <Trash2 className="size-4" />
+                            Remove
+                          </Button>
+                        ) : null}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </Section>
 

@@ -5,6 +5,8 @@ import { useTranslations } from "next-intl";
 import { summarizeHr } from "../../hr-payroll-formulas";
 import type { HrPayrollRow, HrSummaryBy, HrSummaryLine } from "../../hr-payroll-types";
 import { moneyGrouped } from "./hr-payroll-ui";
+import { useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
 
 type SortKey = Exclude<keyof HrSummaryLine, "key">;
 type SortDir = "asc" | "desc";
@@ -413,6 +415,19 @@ export function HrPayrollSummary(props: {
     { key: "contribution", title: labels.contribution },
     { key: "riders", title: labels.riders },
   ];
+  const columnSignature = columns.map((column) => `${column.key}:${column.title}`).join("|");
+  const summaryColumns = useMemo<TableToolbarColumn[]>(
+    () => columns.map((column) => ({ id: column.key, label: column.title, locked: column.key === "label" })),
+    [columnSignature],
+  );
+  const summaryPrefs = useTablePrefs("payroll.hrSummary", summaryColumns);
+  const shownLines = sortedLines.filter((line) =>
+    rowMatches(summaryPrefs.appliedQuery, [cellText(line, "label"), cellText(line, "vehicleType"), cellText(line, "rateLabel")]),
+  );
+  const shownIds = visibleColumnIds(summaryPrefs);
+  const shownColumns = shownIds
+    .map((id) => columns.find((column) => column.key === id))
+    .filter((column): column is { key: SortKey; title: string } => column != null);
   const chartOn = months.includes(loadedMonth) && years.includes(loadedYear);
   const chart = chartOn
     ? { label: props.monthLabel, revenue: kpis.revenue, payment: kpis.payment, contribution: kpis.contribution }
@@ -498,9 +513,6 @@ export function HrPayrollSummary(props: {
             ))}
           </select>
         </label>
-        <button type="button" className="hrpay-btn" onClick={() => onExport(by, sortedLines)}>
-          {copy("exportSummary")}
-        </button>
       </div>
       <p className="hrpay-sub">{chart ? props.monthLabel : copy("noChart")}</p>
       <div className="hrpay-kpis hrpay-kpis-wrap">
@@ -602,11 +614,20 @@ export function HrPayrollSummary(props: {
         <strong>{copy("title")}</strong>
         <span className="hrpay-muted">{copy("sortHint")}</span>
       </div>
+      <ListToolbar
+        prefs={summaryPrefs}
+        entity={copy("title")}
+        columns={summaryColumns}
+        rowKind="aggregate"
+        filteredCount={shownLines.length}
+        totalCount={sortedLines.length}
+        onExport={() => onExport(by, shownLines)}
+      />
       <div className="hrpay-scroll">
         <table className="hrpay-table">
           <thead>
             <tr>
-              {columns.map((column) => (
+              {shownColumns.map((column) => (
                 <th key={column.key} className="hrpay-sumhead">
                   <button type="button" style={headerButtonStyle} onClick={() => onHeader(column.key)}>
                     {column.title}
@@ -617,9 +638,9 @@ export function HrPayrollSummary(props: {
             </tr>
           </thead>
           <tbody>
-            {sortedLines.map((line) => (
+            {shownLines.map((line) => (
               <tr key={line.key}>
-                {columns.map((column) => (
+                {shownColumns.map((column) => (
                   <td key={column.key} className={cellMuted(line, column.key) ? "hrpay-muted" : undefined}>
                     {cellText(line, column.key)}
                   </td>
@@ -629,14 +650,14 @@ export function HrPayrollSummary(props: {
           </tbody>
           <tfoot className="hrpay-foot">
             <tr>
-              {columns.map((column) => {
+              {shownColumns.map((column) => {
                 if (column.key === "label" || column.key === "vehicleType" || column.key === "rateLabel") {
                   return <td key={column.key}>{column.key === "label" ? labels.grand : ""}</td>;
                 }
-                const sum = totalOf(sortedLines, column.key);
+                const sum = totalOf(shownLines, column.key);
                 return (
                   <td key={column.key} className={sum === 0 ? "hrpay-muted" : undefined}>
-                    {footerText(sortedLines, column.key)}
+                    {footerText(shownLines, column.key)}
                   </td>
                 );
               })}

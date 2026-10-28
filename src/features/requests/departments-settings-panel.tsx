@@ -1,13 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableToolbar,
+  useTablePrefs,
+  TableNameCell,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { SimpleConfirmDialog } from "@/components/simple-confirm-dialog";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,16 +50,20 @@ import {
 } from "./requests-settings-actions";
 import type { DepartmentMemberRow, DepartmentRoleTitle, DepartmentRow } from "./settings-types";
 
-function initialsOf(name: string): string {
-  return (
-    name
-      .split(" ")
-      .map((part) => part[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join("")
-      .toUpperCase() || "?"
-  );
+function memberRoleLabel(
+  role: DepartmentRoleTitle,
+  labels: { agent: string; manager: string },
+): string {
+  switch (role) {
+    case "agent":
+      return labels.agent;
+    case "manager":
+      return labels.manager;
+    default: {
+      const _exhaustive: never = role;
+      return _exhaustive;
+    }
+  }
 }
 
 export function DepartmentsSettingsPanel() {
@@ -67,6 +78,50 @@ export function DepartmentsSettingsPanel() {
   const [loading, setLoading] = useState(true);
   const [membersLoading, setMembersLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: t("name"), locked: true },
+      { id: "role", label: t("role"), categorical: true },
+      { id: "status", label: t("status"), categorical: true },
+      { id: "remove", label: t("remove"), locked: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("request-departments", columns);
+  const shownColumns = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+  const filteredMembers = useMemo(() => {
+    const query = prefs.appliedQuery.trim().toLowerCase();
+    if (!query) return members;
+    return members.filter((member) => {
+      const role = memberRoleLabel(member.role_title, {
+        agent: t("roleAgent"),
+        manager: t("roleManager"),
+      });
+      const status = member.is_active ? t("active") : t("inactive");
+      return [member.profile_name, member.profile_email ?? "", role, status]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [members, prefs.appliedQuery, t]);
+  const groupedMembers = useMemo(
+    () =>
+      groupRows(
+        filteredMembers,
+        prefs.groupBy,
+        {
+          role: (member) =>
+            memberRoleLabel(member.role_title, {
+              agent: t("roleAgent"),
+              manager: t("roleManager"),
+            }),
+          status: (member) => (member.is_active ? t("active") : t("inactive")),
+        },
+        {},
+        "—",
+      ),
+    [filteredMembers, prefs.groupBy, t],
+  );
 
   const [showAddDept, setShowAddDept] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -399,6 +454,14 @@ export function DepartmentsSettingsPanel() {
                 </div>
                 ) : null}
 
+                <TableToolbar
+                  prefs={prefs}
+                  entity={t("title")}
+                  columns={columns}
+                  rowKind="dynamic"
+                  filteredCount={filteredMembers.length}
+                  totalCount={members.length}
+                />
                 {membersLoading ? (
                   <div className="flex items-center justify-center py-8 text-muted-foreground">
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -407,43 +470,45 @@ export function DepartmentsSettingsPanel() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className={TABLE_HEAD_CLASS}>{t("name")}</TableHead>
-                        <TableHead className={TABLE_HEAD_CLASS}>{t("role")}</TableHead>
-                        <TableHead className={TABLE_HEAD_CLASS}>{t("status")}</TableHead>
-                        <TableHead className={TABLE_HEAD_CLASS} />
+                        {shownColumns.map((column) => (
+                          <TableHead key={column.id} className={TABLE_HEAD_CLASS}>
+                            {column.id === "remove" ? null : column.label}
+                          </TableHead>
+                        ))}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {members.length === 0 ? (
+                      {filteredMembers.length === 0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={4}
+                            colSpan={shownColumns.length}
                             className="py-6 text-center text-sm text-muted-foreground"
                           >
                             {t("emptyMembers")}
                           </TableCell>
                         </TableRow>
                       ) : null}
-                      {members.map((member) => (
-                        <TableRow key={member.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-2.5">
-                              <Avatar className="h-8 w-8">
-                                <AvatarFallback className="text-xs">
-                                  {initialsOf(member.profile_name)}
-                                </AvatarFallback>
-                              </Avatar>
+                      {groupedMembers.flatMap((group) => [
+                        ...(prefs.groupBy !== "none"
+                          ? [
+                              <TableRow key={`g-${group.key}`}>
+                                <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                                  {group.label} · {group.rows.length}
+                                </TableCell>
+                              </TableRow>,
+                            ]
+                          : []),
+                        ...group.rows.map((member) => {
+                          const cells: Record<string, ReactNode> = {
+                            name: (
                               <div className="min-w-0">
-                                <div className="text-sm font-medium">{member.profile_name}</div>
+                                <TableNameCell name={member.profile_name} />
                                 {member.profile_email ? (
-                                  <div className="text-xs text-muted-foreground">
-                                    {member.profile_email}
-                                  </div>
+                                  <div className="text-xs text-muted-foreground">{member.profile_email}</div>
                                 ) : null}
                               </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
+                            ),
+                            role: (
                             <Select
                               value={member.role_title}
                               onValueChange={(v) =>
@@ -459,16 +524,16 @@ export function DepartmentsSettingsPanel() {
                                 <SelectItem value="manager">{t("roleManager")}</SelectItem>
                               </SelectContent>
                             </Select>
-                          </TableCell>
-                          <TableCell>
+                            ),
+                            status: (
                             <ToggleChip
                               selected={member.is_active}
                               onClick={() => toggleMemberStatus(member)}
                             >
                               {member.is_active ? t("active") : t("inactive")}
                             </ToggleChip>
-                          </TableCell>
-                          <TableCell>
+                            ),
+                            remove: (
                             <Button
                               type="button"
                               variant="ghost"
@@ -479,9 +544,17 @@ export function DepartmentsSettingsPanel() {
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
-                          </TableCell>
+                            ),
+                          };
+                          return (
+                        <TableRow key={member.id}>
+                          {shownColumns.map((column) => (
+                            <TableCell key={column.id}>{cells[column.id] ?? <EmptyCell />}</TableCell>
+                          ))}
                         </TableRow>
-                      ))}
+                          );
+                        }),
+                      ])}
                     </TableBody>
                   </Table>
                 )}

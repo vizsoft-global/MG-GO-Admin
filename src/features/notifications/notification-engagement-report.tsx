@@ -2,11 +2,17 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Download } from "lucide-react";
 import { toast } from "sonner";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import {
   Table,
   TableBody,
@@ -107,6 +113,22 @@ export function NotificationEngagementReport({
     }
   }, [items, tab, trackEngagement]);
 
+  const columns = useMemo((): TableToolbarColumn[] => [
+    { id: "driver", label: t("colDriver"), locked: true },
+    { id: "employee", label: t("colEmployeeId") },
+    { id: "title", label: t("colSentTitle") },
+    { id: "body", label: t("colSentBody") },
+    { id: "seen", label: t("engagementColSeen") },
+    { id: "tapped", label: t("engagementColTapped") },
+    { id: "delivery", label: t("engagementColDelivery") },
+  ], [t]);
+  const prefs = useTablePrefs(`notification-engagement-${campaignId}`, columns);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+  const needle = prefs.appliedQuery.trim().toLowerCase();
+  const visibleItems = filtered.filter((item) =>
+    !needle || `${item.driver_label} ${item.employee_id ?? ""} ${item.resolved_title ?? ""} ${item.resolved_body ?? ""}`.toLowerCase().includes(needle),
+  );
+
   const seenRate =
     trackEngagement && stats.sent > 0 && stats.seen != null
       ? Math.round((stats.seen / stats.sent) * 100)
@@ -135,10 +157,7 @@ export function NotificationEngagementReport({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold text-muted-foreground">{t("engagementReportTitle")}</p>
-        <Button variant="outline" size="sm" className="h-9 cursor-pointer" disabled={pending} onClick={handleExport}>
-          <Download className="size-4" />
-          {t("exportRecipients")}
-        </Button>
+        {pending ? <span className="text-xs text-muted-foreground">{t("exportRecipients")}</span> : null}
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         {[
@@ -206,57 +225,76 @@ export function NotificationEngagementReport({
         ))}
       </div>
       <div className="overflow-x-auto rounded-lg border border-border">
+        <TableToolbar
+          prefs={prefs}
+          entity={t("engagementReportTitle")}
+          columns={columns}
+          rowKind="dynamic"
+          filteredCount={visibleItems.length}
+          totalCount={filtered.length}
+          onExport={handleExport}
+        />
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colDriver")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colSentTitle")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colSentBody")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("engagementColSeen")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("engagementColTapped")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("engagementColDelivery")}</TableHead>
+              {shown.map((column) => (
+                <TableHead key={column.id} className={TABLE_HEAD_CLASS}>{column.label}</TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((item) => (
+            {visibleItems.map((item) => (
               <TableRow key={item.id}>
-                <TableCell>{item.driver_label}</TableCell>
-                <TableCell>{item.employee_id ?? "—"}</TableCell>
-                <TableCell className="max-w-[240px] whitespace-normal">
-                  {item.resolved_title?.trim() || campaignTitle || "—"}
-                </TableCell>
-                <TableCell className="max-w-[360px] whitespace-normal">
-                  {item.resolved_body?.trim() || campaignBody || "—"}
-                </TableCell>
-                <TableCell>
-                  {trackEngagement ? (
-                    <>
-                      <StatusPill variant={item.engagement_seen ? "success" : "neutral"}>
-                        {item.engagement_seen ? t("engagementYes") : t("engagementNo")}
-                      </StatusPill>
-                      {item.opened_at ? (
-                        <span className="mt-0.5 block text-xs text-muted-foreground">
-                          {new Date(item.opened_at).toLocaleString()}
-                        </span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <StatusPill variant="neutral">{t("engagementNotTracked")}</StatusPill>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {trackEngagement ? (
-                    <StatusPill variant={item.engagement_tapped ? "success" : "neutral"}>
-                      {item.engagement_tapped ? t("engagementYes") : t("engagementNo")}
-                    </StatusPill>
-                  ) : (
-                    <StatusPill variant="neutral">{t("engagementNotTracked")}</StatusPill>
-                  )}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {friendlyDeliveryStatus(item, t)}
-                </TableCell>
+                {shown.map((column) => {
+                  if (column.id === "driver") {
+                    return <TableCell key={column.id}><TableNameCell name={item.driver_label} /></TableCell>;
+                  }
+                  if (column.id === "employee") {
+                    return <TableCell key={column.id}>{item.employee_id ? item.employee_id : <EmptyCell />}</TableCell>;
+                  }
+                  if (column.id === "title") {
+                    const title = item.resolved_title?.trim() || campaignTitle;
+                    return <TableCell key={column.id} className="max-w-[240px] whitespace-normal">{title ? title : <EmptyCell />}</TableCell>;
+                  }
+                  if (column.id === "body") {
+                    const body = item.resolved_body?.trim() || campaignBody;
+                    return <TableCell key={column.id} className="max-w-[360px] whitespace-normal">{body ? body : <EmptyCell />}</TableCell>;
+                  }
+                  if (column.id === "seen") {
+                    return (
+                      <TableCell key={column.id}>
+                        {trackEngagement ? (
+                          <>
+                            <StatusPill variant={item.engagement_seen ? "success" : "neutral"}>
+                              {item.engagement_seen ? t("engagementYes") : t("engagementNo")}
+                            </StatusPill>
+                            {item.opened_at ? (
+                              <span className="mt-0.5 block text-xs text-muted-foreground">
+                                {new Date(item.opened_at).toLocaleString()}
+                              </span>
+                            ) : null}
+                          </>
+                        ) : (
+                          <StatusPill variant="neutral">{t("engagementNotTracked")}</StatusPill>
+                        )}
+                      </TableCell>
+                    );
+                  }
+                  if (column.id === "tapped") {
+                    return (
+                      <TableCell key={column.id}>
+                        {trackEngagement ? (
+                          <StatusPill variant={item.engagement_tapped ? "success" : "neutral"}>
+                            {item.engagement_tapped ? t("engagementYes") : t("engagementNo")}
+                          </StatusPill>
+                        ) : (
+                          <StatusPill variant="neutral">{t("engagementNotTracked")}</StatusPill>
+                        )}
+                      </TableCell>
+                    );
+                  }
+                  return <TableCell key={column.id} className="text-muted-foreground">{friendlyDeliveryStatus(item, t)}</TableCell>;
+                })}
               </TableRow>
             ))}
           </TableBody>

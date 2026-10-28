@@ -17,6 +17,14 @@ import {
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 import { AppEmptyState } from "@/components/app/app-empty-state";
+import { groupRows } from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppListCard } from "@/components/app/app-list-card";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { AppPage } from "@/components/app/app-page";
@@ -561,6 +569,27 @@ export function BulkImportShell({
   const sheetValueFields = useMemo(
     () => columns.sheetFields.filter((field) => !isEmployeeRowKey(field.field_key)),
     [columns.sheetFields],
+  );
+  const reviewColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "pick", label: t("selectRow"), locked: true },
+      { id: "emp", label: t("colEmployeeId"), locked: true },
+      { id: "name", label: t("colEmployee"), locked: true },
+      { id: "position", label: t("colPosition") },
+      ...sheetValueFields.slice(0, 3).map((field) => ({
+        id: field.id,
+        label: templateFieldLabel(field, labelLocale),
+      })),
+      { id: "status", label: t("colStatus"), categorical: true },
+    ],
+    [labelLocale, sheetValueFields, t],
+  );
+  const reviewPrefs = useTablePrefs("esign.bulkReview", reviewColumns);
+  useEffect(() => {
+    setReviewQuery(reviewPrefs.appliedQuery);
+  }, [reviewPrefs.appliedQuery]);
+  const shownReviewColumns = reviewPrefs.orderedColumns.filter((column) =>
+    reviewPrefs.isVisible(column.id),
   );
 
   const keysKey = requiredKeys.join("|");

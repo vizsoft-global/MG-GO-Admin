@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type JSX } from "react";
+import { INLINE_EDIT_CELL_CLASS } from "@/components/app/constants";
 import { HR_FOOTER_KEYS, HR_GROUP_FILL, hrColumnIsNumeric, hrGroupSpans, stickyOffsets } from "../../hr-payroll-columns";
 import type { HrColumn } from "../../hr-payroll-columns";
 import { HR_AWAITING, hrFooterTotals } from "../../hr-payroll-formulas";
@@ -244,6 +245,7 @@ function HrAmountEditor(props: { display: string; current: number; onCommit: (va
   const [draft, setDraft] = useState<string | null>(null);
   return (
     <input
+      className={INLINE_EDIT_CELL_CLASS}
       value={draft ?? props.display}
       onFocus={(event) => {
         const next = String(props.current);
@@ -288,6 +290,7 @@ function renderHrCell(
     const selected = editKey;
     return (
       <select
+        className={INLINE_EDIT_CELL_CLASS}
         value={String(row.edit[selected])}
         onChange={(event) => onSelect(row.driverId, selected, Number(event.target.value))}
       >

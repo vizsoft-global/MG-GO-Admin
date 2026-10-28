@@ -2,9 +2,11 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
+import { EmptyCell, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { groupBanner, groupRows, ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
 import { SearchSelect } from "@/components/ui/search-select";
 import { formatKuwaitDateTime, formatKuwaitTime } from "@/features/driver-tracking/shift-adherence-display";
 import { kuwaitToday } from "@/features/driver-tracking/kuwait-time";
@@ -34,6 +36,18 @@ function kindTone(kind: string) {
 
 export function RosterAlertsShell() {
   const t = useTranslations("pages.roster");
+  const alertColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "time", label: t("time") },
+      { id: "alert", label: t("alertCol"), categorical: true },
+      { id: "rider", label: t("rider"), locked: true },
+      { id: "restaurant", label: t("restaurant"), categorical: true },
+      { id: "details", label: t("details") },
+      { id: "status", label: t("status"), categorical: true },
+    ],
+    [t],
+  );
+  const alertPrefs = useTablePrefs("roster.alerts", alertColumns);
   const client = useQueryClient();
   const today = kuwaitToday();
   const [preset, setPreset] = useState<AlertPreset>("today");
@@ -62,7 +76,7 @@ export function RosterAlertsShell() {
     if (tab === "attendance") return ATTENDANCE.has(row.kind);
     if (tab === "early") return row.kind === "early_drop";
     return true;
-  });
+  }).filter((row) => rowMatches(alertPrefs.appliedQuery, [row.driverName, row.employeeId, row.restaurantName, row.kind]));
   const current = rows.find((row) => row.id === selected) ?? null;
   const detailRow = detail.data && "reasons" in detail.data && Array.isArray(detail.data.reasons) ? detail.data : null;
   const thresholds = detailRow && "thresholds" in detailRow ? detailRow.thresholds : null;
@@ -159,45 +173,73 @@ export function RosterAlertsShell() {
       </div>
       <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className={cn(rosterCard, "overflow-x-auto")}>
+          <ListToolbar
+            prefs={alertPrefs}
+            entity={t("rider")}
+            columns={alertColumns}
+            rowKind="dynamic"
+            filteredCount={shown.length}
+            totalCount={rows.length}
+          />
           <table className="w-full">
             <thead>
               <tr className="border-b border-[#E2DCD8]">
-                {[t("time"), t("alertCol"), t("rider"), t("restaurant"), t("details"), t("status")].map((label) => (
-                  <th key={label} className={rosterTh}>{label}</th>
+                {visibleColumnIds(alertPrefs).map((id) => (
+                  <th key={id} className={rosterTh}>{alertColumns.find((column) => column.id === id)?.label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {shown.slice(0, 200).map((row) => (
+              {groupRows(shown.slice(0, 200), alertPrefs.groupBy, (row) => {
+                if (alertPrefs.groupBy === "alert") return row.kind;
+                if (alertPrefs.groupBy === "restaurant") return row.restaurantName || "";
+                if (alertPrefs.groupBy === "status") return row.acknowledged ? t("acknowledged") : t("new");
+                return "";
+              }).map((group) => (
+                <Fragment key={group.key}>
+                  {group.label ? (
+                    <tr>
+                      <td colSpan={visibleColumnIds(alertPrefs).length} className="bg-muted/40 px-2 py-1 text-xs font-semibold">{groupBanner(group.label, group.rows.length)}</td>
+                    </tr>
+                  ) : null}
+              {group.rows.map((row) => (
                 <tr
                   key={row.id}
                   className={cn("cursor-pointer border-b border-[#E2DCD8]", selected === row.id && row.kind === "early_drop" && "bg-[#FFF8F7]", selected === row.id && row.kind !== "early_drop" && "bg-[#F6E9E5]")}
                   onClick={() => setSelected(row.id)}
                 >
-                  <td className={rosterTd}>{formatKuwaitTime(row.at)}</td>
-                  <td className={rosterTd}>
-                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", kindTone(row.kind))}>
-                      {t(`statuses.${row.kind === "early_drop" ? "early_drop" : row.kind}` as "statuses.late")}
-                    </span>
-                  </td>
-                  <td className={rosterTd}>
-                    <span className="block font-semibold">{row.driverName || row.driverId}</span>
-                    <span className="text-[11px] text-[#5E5754]">{row.employeeId ? `#${row.employeeId}` : row.day}</span>
-                  </td>
-                  <td className={rosterTd}>{row.restaurantName || "—"}</td>
-                  <td className={rosterTd}>
-                    {row.kind === "early_drop" ? row.restaurantName || "—" : `${t("minutesLate")} ${row.minutesLate} · ${t("minutesEarly")} ${row.minutesEarly}`}
-                  </td>
-                  <td className={rosterTd}>
-                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", row.acknowledged ? "bg-[#E7F6EE] text-[#146C43]" : "bg-[#FDE7E5] text-[#A3221A]")}>
-                      {row.acknowledged ? t("acknowledged") : t("new")}
-                    </span>
-                    {row.outcome ? <span className="mt-1 block text-[11px] text-[#5E5754]">{outcomeText(row.outcome)}</span> : null}
-                    <button type="button" className={cn(rosterBtnSoft, "mt-1 h-8 px-2 text-xs")} onClick={() => setSelected(row.id)}>
-                      {t("acknowledge")}
-                    </button>
-                  </td>
+                  {visibleColumnIds(alertPrefs).map((id) => (
+                    <td key={id} className={rosterTd}>
+                      {id === "time" ? formatKuwaitTime(row.at) : null}
+                      {id === "alert" ? (
+                        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", kindTone(row.kind))}>
+                          {t(`statuses.${row.kind === "early_drop" ? "early_drop" : row.kind}` as "statuses.late")}
+                        </span>
+                      ) : null}
+                      {id === "rider" ? (
+                        <>
+                          <TableNameCell name={row.driverName || row.driverId} />
+                          <span className="text-[11px] text-[#5E5754]">{row.employeeId ? `#${row.employeeId}` : row.day}</span>
+                        </>
+                      ) : null}
+                      {id === "restaurant" ? (row.restaurantName ? row.restaurantName : <EmptyCell />) : null}
+                      {id === "details" ? (row.kind === "early_drop" ? row.restaurantName || "—" : `${t("minutesLate")} ${row.minutesLate} · ${t("minutesEarly")} ${row.minutesEarly}`) : null}
+                      {id === "status" ? (
+                        <>
+                          <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", row.acknowledged ? "bg-[#E7F6EE] text-[#146C43]" : "bg-[#FDE7E5] text-[#A3221A]")}>
+                            {row.acknowledged ? t("acknowledged") : t("new")}
+                          </span>
+                          {row.outcome ? <span className="mt-1 block text-[11px] text-[#5E5754]">{outcomeText(row.outcome)}</span> : null}
+                          <button type="button" className={cn(rosterBtnSoft, "mt-1 h-8 px-2 text-xs")} onClick={() => setSelected(row.id)}>
+                            {t("acknowledge")}
+                          </button>
+                        </>
+                      ) : null}
+                    </td>
+                  ))}
                 </tr>
+              ))}
+                </Fragment>
               ))}
             </tbody>
           </table>

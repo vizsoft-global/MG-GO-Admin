@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { ArrowLeft, Loader2, Pencil, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -16,6 +16,14 @@ import { DriverGroupImportDialog } from "./driver-group-import-dialog";
 import { DriverGroupIconBadge, DriverGroupMemberPicker } from "./driver-group-member-picker";
 import { useDriverGroup } from "./use-driver-groups";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import {
   Table,
   TableBody,
@@ -36,6 +44,12 @@ export function DriverGroupDetailPageShell({ groupId }: { groupId: string }) {
   const [importOpen, setImportOpen] = useState(false);
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
+  const memberColumns = useMemo((): TableToolbarColumn[] => [
+    { id: "driver", label: t("colDriver"), locked: true },
+    { id: "employee", label: t("colEmployeeId") },
+    { id: "code", label: t("colDriverCode") },
+  ], [t]);
+  const memberPrefs = useTablePrefs(`driver-group-members-${groupId}`, memberColumns);
 
   useEffect(() => {
     if (!group) return;
@@ -136,12 +150,39 @@ export function DriverGroupDetailPageShell({ groupId }: { groupId: string }) {
             </>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-border">
+              <TableToolbar
+                prefs={memberPrefs}
+                entity={t("colDriver")}
+                columns={memberColumns}
+                rowKind="dynamic"
+                entityList
+                filteredCount={group.members.filter((m) => {
+                  const needle = memberPrefs.appliedQuery.trim().toLowerCase();
+                  return !needle || `${m.full_name} ${m.employee_id} ${m.driver_code}`.toLowerCase().includes(needle);
+                }).length}
+                totalCount={group.members.length}
+              />
+              {memberPrefs.view === "grid" ? (
+                <TableGridCards
+                  rows={group.members.filter((m) => {
+                    const needle = memberPrefs.appliedQuery.trim().toLowerCase();
+                    return !needle || `${m.full_name} ${m.employee_id} ${m.driver_code}`.toLowerCase().includes(needle);
+                  }).map((m) => ({
+                    id: m.driver_code || m.id,
+                    name: m.full_name,
+                    fields: [
+                      { label: t("colEmployeeId"), value: m.employee_id || "—" },
+                      { label: t("colDriverCode"), value: m.driver_code },
+                    ],
+                  }))}
+                />
+              ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colDriver")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("colDriverCode")}</TableHead>
+                    {memberPrefs.orderedColumns.filter((column) => memberPrefs.isVisible(column.id)).map((column) => (
+                      <TableHead key={column.id} className={TABLE_HEAD_CLASS}>{column.label}</TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -152,16 +193,22 @@ export function DriverGroupDetailPageShell({ groupId }: { groupId: string }) {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    group.members.map((m) => (
+                    group.members.filter((m) => {
+                      const needle = memberPrefs.appliedQuery.trim().toLowerCase();
+                      return !needle || `${m.full_name} ${m.employee_id} ${m.driver_code}`.toLowerCase().includes(needle);
+                    }).map((m) => (
                       <TableRow key={m.id}>
-                        <TableCell className="font-medium">{m.full_name}</TableCell>
-                        <TableCell>{m.employee_id || "—"}</TableCell>
-                        <TableCell>{m.driver_code}</TableCell>
+                        {memberPrefs.orderedColumns.filter((column) => memberPrefs.isVisible(column.id)).map((column) => {
+                          if (column.id === "driver") return <TableCell key={column.id} className="font-medium"><TableNameCell name={m.full_name} /></TableCell>;
+                          if (column.id === "employee") return <TableCell key={column.id}>{m.employee_id ? m.employee_id : <EmptyCell />}</TableCell>;
+                          return <TableCell key={column.id}>{m.driver_code ? m.driver_code : <EmptyCell />}</TableCell>;
+                        })}
                       </TableRow>
                     ))
                   )}
                 </TableBody>
               </Table>
+              )}
             </div>
           )}
           <Button render={<Link href="/drivers/groups" />} variant="outline" className="h-9 cursor-pointer">

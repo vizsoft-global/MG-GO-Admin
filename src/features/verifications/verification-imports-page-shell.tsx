@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { ArrowLeft, Loader2, Undo2 } from "lucide-react";
@@ -18,6 +18,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { useAuth } from "@/contexts/auth-context";
 import { useImportBatches, useRevertImportBatch } from "./use-verifications";
 
@@ -53,6 +61,18 @@ export function VerificationImportsPageShell() {
   const [revertId, setRevertId] = useState<string | null>(null);
   const [revertName, setRevertName] = useState("");
   const [isPending, startTransition] = useTransition();
+  const columns = useMemo((): TableToolbarColumn[] => [
+    { id: "file", label: t("colFile"), locked: true },
+    { id: "status", label: t("colStatus") },
+    { id: "rows", label: t("colRows") },
+    { id: "applied", label: t("colApplied") },
+    { id: "uploaded", label: t("colUploaded") },
+    { id: "actions", label: t("colActions") },
+  ], [t]);
+  const prefs = useTablePrefs("verification-imports", columns);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+  const needle = prefs.appliedQuery.trim().toLowerCase();
+  const rows = batches.filter((b) => !needle || `${b.file_name} ${b.status}`.toLowerCase().includes(needle));
 
   const handleRevert = () => {
     if (!revertId) return;
@@ -93,62 +113,52 @@ export function VerificationImportsPageShell() {
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-card">
+          <TableToolbar
+            prefs={prefs}
+            entity={t("title")}
+            columns={columns}
+            rowKind="dynamic"
+            entityList
+            filteredCount={rows.length}
+            totalCount={batches.length}
+          />
+          {prefs.view === "grid" ? (
+            <TableGridCards
+              rows={rows.map((b) => ({
+                id: b.id,
+                name: b.file_name,
+                status: { status: "neutral", label: b.status },
+                fields: [
+                  { label: t("colRows"), value: String(b.row_count) },
+                  { label: t("colApplied"), value: String(b.applied_count) },
+                ],
+              }))}
+            />
+          ) : (
           <Table>
             <TableHeader>
               <TableRow className="bg-primary/5 hover:bg-primary/5">
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colFile")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colRows")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colApplied")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colUploaded")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colActions")}</TableHead>
+                {shown.map((column) => (
+                  <TableHead key={column.id} className={TABLE_HEAD_CLASS}>{column.label}</TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {batches.map((b) => (
+              {rows.map((b) => (
                 <TableRow key={b.id}>
-                  <TableCell className="font-medium">{b.file_name}</TableCell>
-                  <TableCell>
-                    <StatusPill variant={batchVariant(b.status)} dot={false}>
-                      {b.status}
-                    </StatusPill>
-                  </TableCell>
-                  <TableCell className="tabular-nums">{b.row_count}</TableCell>
-                  <TableCell className="tabular-nums">
-                    {b.applied_count}
-                    {b.skipped_count > 0 ? (
-                      <span className="text-muted-foreground">
-                        {" "}
-                        ({t("skipped", { count: b.skipped_count })})
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {formatDateTime(b.uploaded_at)}
-                  </TableCell>
-                  <TableCell>
-                    {isSuperAdmin && b.status === "applied" ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="cursor-pointer rounded-lg"
-                        onClick={() => {
-                          setRevertId(b.id);
-                          setRevertName(b.file_name);
-                        }}
-                      >
-                        <Undo2 className="me-1 h-3.5 w-3.5" />
-                        {t("revert")}
-                      </Button>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
+                  {shown.map((column) => {
+                    if (column.id === "file") return <TableCell key={column.id} className="font-medium"><TableNameCell name={b.file_name} /></TableCell>;
+                    if (column.id === "status") return <TableCell key={column.id}><StatusPill variant={batchVariant(b.status)} dot={false}>{b.status}</StatusPill></TableCell>;
+                    if (column.id === "rows") return <TableCell key={column.id} className="tabular-nums">{b.row_count}</TableCell>;
+                    if (column.id === "applied") return <TableCell key={column.id} className="tabular-nums">{b.applied_count}{b.skipped_count > 0 ? <span className="text-muted-foreground"> ({t("skipped", { count: b.skipped_count })})</span> : null}</TableCell>;
+                    if (column.id === "uploaded") return <TableCell key={column.id} className="text-sm text-muted-foreground">{formatDateTime(b.uploaded_at)}</TableCell>;
+                    return <TableCell key={column.id}>{isSuperAdmin && b.status === "applied" ? <Button type="button" variant="outline" size="sm" className="cursor-pointer rounded-lg" onClick={() => { setRevertId(b.id); setRevertName(b.file_name); }}><Undo2 className="me-1 h-3.5 w-3.5" />{t("revert")}</Button> : <EmptyCell />}</TableCell>;
+                  })}
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          )}
         </div>
       )}
 

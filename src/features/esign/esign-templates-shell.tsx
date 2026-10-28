@@ -1,12 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { ExternalLink, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import {
   AppDataTable,
@@ -50,6 +59,51 @@ export function EsignTemplatesShell() {
     [categoriesData?.rows],
   );
   const rows = data?.rows ?? [];
+  const templateColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: t("colName"), locked: true },
+      { id: "category", label: t("colCategory"), categorical: true },
+      { id: "fields", label: t("colFields") },
+      { id: "status", label: t("colStatus"), categorical: true },
+    ],
+    [t],
+  );
+  const tablePrefs = useTablePrefs("esign.templates", templateColumns);
+  const shownColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
+  const filteredRows = useMemo(() => {
+    const query = tablePrefs.appliedQuery.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) =>
+      [row.name_en, row.name_ar, row.category_key].join(" ").toLowerCase().includes(query),
+    );
+  }, [rows, tablePrefs.appliedQuery]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filteredRows,
+        tablePrefs.groupBy,
+        {
+          category: (row) => row.category_key,
+          status: (row) => (row.is_active ? t("active") : t("inactive")),
+        },
+        {},
+        "—",
+      ),
+    [filteredRows, t, tablePrefs.groupBy],
+  );
+  const templateToolbar = (
+    <TableToolbar
+      prefs={tablePrefs}
+      entity={t("title")}
+      columns={templateColumns}
+      rowKind="dynamic"
+      entityList
+      filteredCount={filteredRows.length}
+      totalCount={rows.length}
+      onAdd={() => setOpen(true)}
+      addLabel={t("add")}
+    />
+  );
 
   useEffect(() => {
     if (searchParams.get("add") === "1") {
@@ -93,62 +147,86 @@ export function EsignTemplatesShell() {
           { label: tHub("title"), href: "/requests/esign" },
           { label: t("title") },
         ]}
-        actions={
-          <Button size="sm" className="h-9" onClick={() => setOpen(true)}>
-            <Plus className="me-1.5 h-3.5 w-3.5" />
-            {t("add")}
-          </Button>
-        }
+        actions={null}
       />
 
       <AppListCard className="p-0">
+        {templateToolbar}
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : data?.error ? (
           <AppEmptyState title={t("emptyTitle")} description={data.error} />
-        ) : rows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
         ) : (
+          tablePrefs.view === "grid" ? (
+            <TableGridCards
+              rows={filteredRows.map((row) => ({
+                id: row.id,
+                name: row.name_en,
+                fields: [
+                  { label: t("colCategory"), value: row.category_key },
+                  { label: t("colFields"), value: row.field_count },
+                  { label: t("colStatus"), value: row.is_active ? t("active") : t("inactive") },
+                ],
+                onOpen: () => router.push(`/requests/esign/templates/${row.id}`),
+              }))}
+            />
+          ) : (
           <AppDataTable
-            columns={[
-              { id: "name", label: t("colName") },
-              { id: "category", label: t("colCategory") },
-              { id: "fields", label: t("colFields") },
-              { id: "status", label: t("colStatus") },
-            ]}
+            columns={shownColumns.map((column) => ({ id: column.id, label: column.label }))}
           >
-            {rows.map((row) => (
+            {grouped.flatMap((group) => [
+              ...(tablePrefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => {
+                const cells: Record<string, ReactNode> = {
+                  name: (
+                    <>
+                      <TableNameCell name={row.name_en} />
+                      {row.name_ar ? <div className="text-xs text-muted-foreground">{row.name_ar}</div> : null}
+                      <Link
+                        href={`/requests/esign/templates/${row.id}`}
+                        className="mt-0.5 flex items-center gap-1 text-xs text-primary hover:underline"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        {t("viewDetails")}
+                      </Link>
+                    </>
+                  ),
+                  category: row.category_key || <EmptyCell />,
+                  fields: row.field_count,
+                  status: (
+                    <StatusPill variant={row.is_active ? "success" : "neutral"}>
+                      {row.is_active ? t("active") : t("inactive")}
+                    </StatusPill>
+                  ),
+                };
+                return (
               <AppDataTableRow
                 key={row.id}
                 className="cursor-pointer"
                 onClick={() => router.push(`/requests/esign/templates/${row.id}`)}
               >
-                <TableCell className="text-sm font-medium">
-                  {row.name_en}
-                  {row.name_ar ? (
-                    <div className="text-xs text-muted-foreground">{row.name_ar}</div>
-                  ) : null}
-                  <Link
-                    href={`/requests/esign/templates/${row.id}`}
-                    className="mt-0.5 flex items-center gap-1 text-xs text-primary hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    {t("viewDetails")}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-sm">{row.category_key}</TableCell>
-                <TableCell className="text-sm tabular-nums">{row.field_count}</TableCell>
-                <TableCell>
-                  <StatusPill variant={row.is_active ? "success" : "neutral"}>
-                    {row.is_active ? t("active") : t("inactive")}
-                  </StatusPill>
-                </TableCell>
+                {shownColumns.map((column) => (
+                  <TableCell key={column.id}>{cells[column.id] ?? <EmptyCell />}</TableCell>
+                ))}
               </AppDataTableRow>
-            ))}
+                );
+              }),
+            ])}
           </AppDataTable>
+          )
         )}
       </AppListCard>
 

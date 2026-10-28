@@ -14,13 +14,16 @@ import {
 } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
 import {
-  AppListControls,
   GroupedSections,
   fieldSearchMatch,
   groupRows,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -173,10 +176,22 @@ const SORT_KEYS: VerificationSortKey[] = [
 
 export function VerificationsPageShell() {
   const t = useTranslations("pages.verifications");
-  const labels = useListControlLabels();
-  const { prefs, update } = useListViewPrefs("verifications");
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "date", label: t("colDate"), categorical: true },
+      { id: "driver", label: t("colDriver"), locked: true },
+      { id: "employee", label: t("colEmployeeId") },
+      { id: "restaurant", label: t("colRestaurant") },
+      { id: "partner", label: t("colPartner"), categorical: true },
+      { id: "counts", label: t("colCounts") },
+      { id: "shortfall", label: t("colShortfall") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "source", label: t("colSource") },
+      { id: "actions", label: t("colActions") },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("verifications", columns);
   const [tabFilter, setTabFilter] = useState<VerificationTabFilter>("all");
   const [statusFilter, setStatusFilter] = useState<VerificationStatus | "all">("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -193,15 +208,11 @@ export function VerificationsPageShell() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
-    return () => clearTimeout(timer);
-  }, [search]);
+  const appliedSearch = prefs.appliedQuery.trim();
 
   const filters = useMemo(
     () => ({
-      search: debouncedSearch || undefined,
+      search: appliedSearch || undefined,
       status: statusFilter,
       tab: statusFilter === "all" ? tabFilter : undefined,
       dateFrom: dateFrom || undefined,
@@ -214,7 +225,7 @@ export function VerificationsPageShell() {
       sortDir,
     }),
     [
-      debouncedSearch,
+      appliedSearch,
       statusFilter,
       tabFilter,
       dateFrom,
@@ -255,7 +266,7 @@ export function VerificationsPageShell() {
   );
   const rows = useMemo(() => {
     return loadedRows.filter((row) =>
-      fieldSearchMatch(row, search, {
+      fieldSearchMatch(row, prefs.appliedQuery, {
         name: (item) => item.driver_name,
         employee_id: (item) => item.employee_id ?? item.driver_code,
         status: (item) => item.status,
@@ -264,7 +275,7 @@ export function VerificationsPageShell() {
         driver_code: (item) => item.driver_code,
       }),
     );
-  }, [loadedRows, search]);
+  }, [loadedRows, prefs.appliedQuery]);
   const grouped = useMemo(
     () =>
       groupRows(
@@ -407,7 +418,7 @@ export function VerificationsPageShell() {
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, [hasNextPage, fetchNextPage, prefs.viewMode]);
+  }, [hasNextPage, fetchNextPage, prefs.view]);
 
   const handleExport = async (target: ExportTarget) => {
     setIsExporting(true);
@@ -452,7 +463,7 @@ export function VerificationsPageShell() {
   };
 
   const hasActiveFilters =
-    Boolean(debouncedSearch) ||
+    Boolean(appliedSearch) ||
     statusFilter !== "all" ||
     tabFilter !== "all" ||
     Boolean(dateFrom) ||
@@ -463,8 +474,7 @@ export function VerificationsPageShell() {
     sourceFilter !== "all";
 
   const clearFilters = () => {
-    setSearch("");
-    setDebouncedSearch("");
+    prefs.setQuery("");
     setTabFilter("all");
     setStatusFilter("all");
     setDateFrom("");
@@ -590,31 +600,28 @@ export function VerificationsPageShell() {
 
       <AppListCard
         toolbar={
-          <div className="flex flex-col gap-3 p-4">
-            <TabBar
-              items={tabItems}
-              activeId={tabFilter}
-              onSelect={(id) => {
-                setTabFilter(id as VerificationTabFilter);
-                setStatusFilter("all");
-              }}
-              className="border-b-0 pb-0"
+          <div className="flex flex-col gap-2">
+            <div className="px-4 pt-4">
+              <TabBar
+                items={tabItems}
+                activeId={tabFilter}
+                onSelect={(id) => {
+                  setTabFilter(id as VerificationTabFilter);
+                  setStatusFilter("all");
+                }}
+                className="border-b-0 pb-0"
+              />
+            </div>
+            <TableToolbar
+              prefs={prefs}
+              entity={t("title")}
+              columns={columns}
+              rowKind="dynamic"
+              entityList
+              filteredCount={rows.length}
+              totalCount={totalCount}
             />
-            <AppListControls
-              searchValue={search}
-              onSearchChange={setSearch}
-              searchPlaceholder={t("searchPlaceholder")}
-              clearSearchLabel={labels.clearSearch}
-              groupByOptions={[labels.group.none, labels.group.status, labels.group.partner, labels.group.date]}
-              groupBy={prefs.groupBy}
-              onGroupByChange={(value) => update({ groupBy: value })}
-              groupByLabel={labels.groupBy}
-              viewMode={prefs.viewMode}
-              onViewModeChange={(value) => update({ viewMode: value })}
-              tableViewLabel={labels.viewTable}
-              cardsViewLabel={labels.viewCards}
-              filterSlot={
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 px-4 pb-4">
               <Select
                 items={statusItems}
                 value={statusFilter}
@@ -733,11 +740,6 @@ export function VerificationsPageShell() {
                 </Button>
               ) : null}
             </div>
-              }
-            />
-            <p className="text-xs text-muted-foreground">
-              {t("resultCount", { shown: rows.length, total: totalCount })}
-            </p>
           </div>
         }
       >
@@ -754,7 +756,7 @@ export function VerificationsPageShell() {
               }
             />
           </div>
-        ) : prefs.viewMode === "cards" ? (
+        ) : prefs.view === "grid" ? (
           <CardContent className="p-4">
             <GroupedSections groups={grouped}>
               {(groupRowsList) => (
@@ -766,7 +768,7 @@ export function VerificationsPageShell() {
                       className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
                       onClick={() => openDetail(row)}
                     >
-                      <p className="text-sm font-semibold">{row.driver_name}</p>
+                      <TableNameCell name={row.driver_name} />
                       <p className="mt-1 text-xs text-muted-foreground">
                         #{row.driver_code} · {row.restaurant_name}
                       </p>
@@ -822,7 +824,7 @@ export function VerificationsPageShell() {
                   </TableCell>
                   <TableCell>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{row.driver_name}</p>
+                      <TableNameCell name={row.driver_name} />
                       <p className="text-xs text-muted-foreground">#{row.driver_code}</p>
                     </div>
                   </TableCell>

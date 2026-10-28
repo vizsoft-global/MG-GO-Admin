@@ -1,10 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { SimpleConfirmDialog } from "@/components/simple-confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -101,6 +108,22 @@ export function TenureSettingsPanel() {
 
   const monthsValue = Number(months);
   const canAdd = Number.isInteger(monthsValue) && monthsValue > 0;
+  const tenureColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "months", label: t("months"), locked: true },
+      { id: "label", label: t("label"), locked: true },
+      { id: "active", label: t("active") },
+      { id: "remove", label: t("remove"), locked: true },
+    ],
+    [t],
+  );
+  const tablePrefs = useTablePrefs("requests.tenure", tenureColumns);
+  const shownColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
+  const filteredRows = useMemo(() => {
+    const query = tablePrefs.appliedQuery.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) => `${row.months} ${row.label ?? ""}`.toLowerCase().includes(query));
+  }, [rows, tablePrefs.appliedQuery]);
 
   return (
     <AppPage>
@@ -153,6 +176,15 @@ export function TenureSettingsPanel() {
           </div>
         </div>
 
+        <TableToolbar
+          prefs={tablePrefs}
+          entity={t("title")}
+          columns={tenureColumns}
+          rowKind="fixed"
+          fixedRows={rows.length}
+          filteredCount={filteredRows.length}
+          totalCount={rows.length}
+        />
         {loading ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -163,23 +195,24 @@ export function TenureSettingsPanel() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("months")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("label")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("active")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS} />
+                {shownColumns.map((column) => (
+                  <TableHead key={column.id} className={TABLE_HEAD_CLASS}>
+                    {column.id === "remove" ? null : column.label}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="font-mono text-xs">{row.months}</TableCell>
-                  <TableCell>{row.label ?? "—"}</TableCell>
-                  <TableCell>
+              {filteredRows.map((row) => {
+                const cells: Record<string, ReactNode> = {
+                  months: <span className="font-mono text-xs">{row.months}</span>,
+                  label: row.label ? <TableNameCell name={row.label} /> : <EmptyCell />,
+                  active: (
                     <ToggleChip selected={row.is_active} onClick={() => toggleActive(row)}>
                       {row.is_active ? t("activeOn") : t("activeOff")}
                     </ToggleChip>
-                  </TableCell>
-                  <TableCell>
+                  ),
+                  remove: (
                     <Button
                       type="button"
                       variant="ghost"
@@ -190,9 +223,16 @@ export function TenureSettingsPanel() {
                       <Trash2 className="mr-1 h-3.5 w-3.5" />
                       {t("remove")}
                     </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                  ),
+                };
+                return (
+                  <TableRow key={row.id}>
+                    {shownColumns.map((column) => (
+                      <TableCell key={column.id}>{cells[column.id] ?? <EmptyCell />}</TableCell>
+                    ))}
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}

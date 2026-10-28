@@ -1,12 +1,19 @@
 "use client";
 
-import { useTransition } from "react";
+import { useMemo, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Copy, Send, ShieldCheck, ShieldOff, ShieldX, XCircle } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppListCard } from "@/components/app/app-list-card";
@@ -69,6 +76,12 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
   const { data: campaign, isLoading, refetch } = useNotificationCampaign(campaignId);
   const { data: dispatchItems, refetch: refetchDispatch } = useNotificationDispatchItems(campaignId);
   const { data: screenshotEvents } = useCampaignScreenshotEvents(campaignId);
+  const shotColumns = useMemo((): TableToolbarColumn[] => [
+    { id: "driver", label: t("screenshotColDriver"), locked: true },
+    { id: "platform", label: t("screenshotColPlatform") },
+    { id: "time", label: t("screenshotColTime") },
+  ], [t]);
+  const shotPrefs = useTablePrefs("notification-screenshot-attempts", shotColumns);
 
   const canSend = auth.can("notifications.send");
   const canApprove = auth.can("notifications.approve");
@@ -329,37 +342,68 @@ export function NotificationDetailPageShell({ campaignId }: { campaignId: string
             {!screenshotEvents?.length ? (
               <p className="text-xs text-muted-foreground">{t("screenshotAttemptsEmpty")}</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("screenshotColDriver")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("screenshotColPlatform")}</TableHead>
-                    <TableHead className={TABLE_HEAD_CLASS}>{t("screenshotColTime")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {screenshotEvents.map((event) => {
-                    const platform =
-                      typeof event.metadata?.platform === "string"
-                        ? event.metadata.platform
-                        : "—";
-                    return (
-                      <TableRow key={event.id}>
-                        <TableCell className="text-sm">
-                          {event.driver_code ?? "—"}
-                          {event.driver_name ? (
-                            <span className="block text-xs text-muted-foreground">
-                              {event.driver_name}
-                            </span>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="text-sm capitalize">{platform}</TableCell>
-                        <TableCell className="text-sm">{formatEventTime(event.occurred_at)}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              <div className="overflow-hidden rounded-lg border border-border">
+                <TableToolbar
+                  prefs={shotPrefs}
+                  entity={t("screenshotAttemptsTitle")}
+                  columns={shotColumns}
+                  rowKind="dynamic"
+                  filteredCount={(screenshotEvents ?? []).filter((event) => {
+                    const needle = shotPrefs.appliedQuery.trim().toLowerCase();
+                    if (!needle) return true;
+                    const platform = typeof event.metadata?.platform === "string" ? event.metadata.platform : "";
+                    return `${event.driver_code ?? ""} ${event.driver_name ?? ""} ${platform}`.toLowerCase().includes(needle);
+                  }).length}
+                  totalCount={screenshotEvents.length}
+                />
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {shotPrefs.orderedColumns.filter((column) => shotPrefs.isVisible(column.id)).map((column) => (
+                        <TableHead key={column.id} className={TABLE_HEAD_CLASS}>{column.label}</TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {screenshotEvents.filter((event) => {
+                      const needle = shotPrefs.appliedQuery.trim().toLowerCase();
+                      if (!needle) return true;
+                      const platform = typeof event.metadata?.platform === "string" ? event.metadata.platform : "";
+                      return `${event.driver_code ?? ""} ${event.driver_name ?? ""} ${platform}`.toLowerCase().includes(needle);
+                    }).map((event) => {
+                      const platform =
+                        typeof event.metadata?.platform === "string"
+                          ? event.metadata.platform
+                          : "";
+                      const shown = shotPrefs.orderedColumns.filter((column) => shotPrefs.isVisible(column.id));
+                      return (
+                        <TableRow key={event.id}>
+                          {shown.map((column) => {
+                            if (column.id === "driver") {
+                              return (
+                                <TableCell key={column.id} className="text-sm">
+                                  {event.driver_code ? event.driver_code : <EmptyCell />}
+                                  <span className="block text-xs text-muted-foreground">
+                                    <TableNameCell name={event.driver_name} />
+                                  </span>
+                                </TableCell>
+                              );
+                            }
+                            if (column.id === "platform") {
+                              return (
+                                <TableCell key={column.id} className="text-sm capitalize">
+                                  {platform ? platform : <EmptyCell />}
+                                </TableCell>
+                              );
+                            }
+                            return <TableCell key={column.id} className="text-sm">{formatEventTime(event.occurred_at)}</TableCell>;
+                          })}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </div>
           <NotificationMobilePreview

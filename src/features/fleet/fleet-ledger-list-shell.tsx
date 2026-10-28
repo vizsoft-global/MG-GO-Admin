@@ -1,19 +1,16 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
-  AppListControls,
   FlatListPager,
   GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
   useGroupedListView,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
 import {
   AppDataTable,
@@ -21,6 +18,14 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Link, useRouter } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -38,6 +43,64 @@ type FleetLedgerRow = FleetVehicleServiceRow | FleetVehicleHandoverRow | FleetVe
 
 function dayLabel(iso: string): string {
   return iso ? iso.slice(0, 10) : "—";
+}
+
+function ledgerHref(kind: FleetLedgerKind, vehicleId: string): string {
+  const tab = kind === "service" ? "service" : kind === "handover" ? "handover" : "accident";
+  return `/vehicles/${vehicleId}?tab=${tab}`;
+}
+
+function ledgerCell(
+  kind: FleetLedgerKind,
+  columnId: string,
+  row: FleetLedgerRow,
+  tDetail: (key: "severity.low" | "severity.medium" | "severity.high") => string,
+): ReactNode {
+  if (kind === "service" && "serviced_at" in row) {
+    switch (columnId) {
+      case "when":
+        return dayLabel(row.serviced_at);
+      case "kind":
+        return row.kind ? row.kind : <EmptyCell />;
+      case "vendor":
+        return row.vendor ? row.vendor : <EmptyCell />;
+      case "odometer":
+        return row.odometer == null ? <EmptyCell /> : String(row.odometer);
+      case "cost":
+        return row.cost_kwd == null ? <EmptyCell /> : String(row.cost_kwd);
+      default:
+        return null;
+    }
+  }
+  if (kind === "handover" && "handed_at" in row) {
+    switch (columnId) {
+      case "when":
+        return dayLabel(row.handed_at);
+      case "from":
+        return row.from_name ? row.from_name : <EmptyCell />;
+      case "to":
+        return row.to_name ? row.to_name : <EmptyCell />;
+      case "notes":
+        return row.notes ? row.notes : <EmptyCell />;
+      default:
+        return null;
+    }
+  }
+  if (kind === "accident" && "occurred_at" in row) {
+    switch (columnId) {
+      case "when":
+        return dayLabel(row.occurred_at);
+      case "location":
+        return row.location_text ? row.location_text : <EmptyCell />;
+      case "severity":
+        return severityLabel(row.severity, tDetail);
+      case "notes":
+        return row.notes ? row.notes : <EmptyCell />;
+      default:
+        return null;
+    }
+  }
+  return null;
 }
 
 function severityLabel(
@@ -64,10 +127,35 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
   const tDetail = useTranslations("pages.vehicleDetail");
   const t =
     kind === "service" ? tService : kind === "handover" ? tHandover : tAccident;
-  const tCommon = useTranslations("common");
-  const labels = useListControlLabels();
-  const { prefs, update } = useListViewPrefs(`fleet-${kind}`);
-  const [search, setSearch] = useState("");
+  const columns = useMemo<TableToolbarColumn[]>(() => {
+    if (kind === "service") {
+      return [
+        { id: "plate", label: t("colPlate"), locked: true },
+        { id: "when", label: tDetail("colWhen"), categorical: true },
+        { id: "kind", label: tDetail("colKind"), categorical: true },
+        { id: "vendor", label: tDetail("colVendor") },
+        { id: "odometer", label: tDetail("colOdometer") },
+        { id: "cost", label: tDetail("colCost") },
+      ];
+    }
+    if (kind === "handover") {
+      return [
+        { id: "plate", label: t("colPlate"), locked: true },
+        { id: "when", label: tDetail("colWhen"), categorical: true },
+        { id: "from", label: tDetail("colFrom") },
+        { id: "to", label: tDetail("colTo") },
+        { id: "notes", label: tDetail("colNotes") },
+      ];
+    }
+    return [
+      { id: "plate", label: t("colPlate"), locked: true },
+      { id: "when", label: tDetail("colWhen"), categorical: true },
+      { id: "location", label: tDetail("colLocation") },
+      { id: "severity", label: tDetail("colSeverity"), categorical: true },
+      { id: "notes", label: tDetail("colNotes") },
+    ];
+  }, [kind, t, tDetail]);
+  const prefs = useTablePrefs(`fleet-${kind}`, columns);
   const list = useQuery<FleetLedgerRow[]>({
     queryKey: queryKeys.vehicles.fleetLedger(kind),
     queryFn: async (): Promise<FleetLedgerRow[]> => {
@@ -89,7 +177,7 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
   const filtered = useMemo(
     () =>
       rows.filter((row) =>
-        fieldSearchMatch<FleetLedgerRow>(row, search, {
+        fieldSearchMatch<FleetLedgerRow>(row, prefs.appliedQuery, {
           plate: (item) => item.plate,
           name: (item) => {
             if ("from_name" in item) return item.from_name;
@@ -100,7 +188,7 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
           status: (item) => ("severity" in item ? item.severity : "kind" in item ? item.kind : null),
         }),
       ),
-    [rows, search],
+    [prefs.appliedQuery, rows],
   );
   const grouped = useMemo(
     () =>
@@ -108,7 +196,7 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
         filtered,
         prefs.groupBy,
         {
-          date: (row) =>
+          when: (row) =>
             dayLabel(
               "serviced_at" in row
                 ? row.serviced_at
@@ -116,39 +204,21 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
                   ? row.handed_at
                   : row.occurred_at,
             ),
-          status: (row) => ("severity" in row ? row.severity : "kind" in row ? row.kind : null),
+          kind: (row) => ("kind" in row ? row.kind : null),
+          severity: (row) => ("severity" in row ? row.severity : null),
         },
         {},
         "—",
       ),
     [filtered, prefs.groupBy],
   );
-  const listView = useGroupedListView(grouped, prefs.groupBy !== "none", `${prefs.groupBy}\u0001${search}`);
-  const columns =
-    kind === "service"
-      ? [
-          { id: "plate", label: t("colPlate") },
-          { id: "when", label: tDetail("colWhen") },
-          { id: "kind", label: tDetail("colKind") },
-          { id: "vendor", label: tDetail("colVendor") },
-          { id: "odometer", label: tDetail("colOdometer") },
-          { id: "cost", label: tDetail("colCost") },
-        ]
-      : kind === "handover"
-        ? [
-            { id: "plate", label: t("colPlate") },
-            { id: "when", label: tDetail("colWhen") },
-            { id: "from", label: tDetail("colFrom") },
-            { id: "to", label: tDetail("colTo") },
-            { id: "notes", label: tDetail("colNotes") },
-          ]
-        : [
-            { id: "plate", label: t("colPlate") },
-            { id: "when", label: tDetail("colWhen") },
-            { id: "location", label: tDetail("colLocation") },
-            { id: "severity", label: tDetail("colSeverity") },
-            { id: "notes", label: tDetail("colNotes") },
-          ];
+  const listView = useGroupedListView(
+    grouped,
+    prefs.groupBy !== "none",
+    `${prefs.groupBy}\u0001${prefs.appliedQuery}`,
+  );
+  const shownColumns = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+  const router = useRouter();
 
   return (
     <AppPage>
@@ -157,38 +227,62 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
         title={t("title")}
         description={t("subtitle")}
       />
-      <AppListCard
-        toolbar={
-          <AppListControls
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder={tCommon("search")}
-            clearSearchLabel={labels.clearSearch}
-            groupByOptions={[labels.group.none, labels.group.date, labels.group.status]}
-            groupBy={prefs.groupBy}
-            onGroupByChange={(value) => update({ groupBy: value })}
-            groupByLabel={labels.groupBy}
-          />
-        }
-      >
+      <AppListCard>
         {list.isPending ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : rows.length === 0 ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyHint")} />
+        ) : prefs.view === "grid" ? (
+          <div>
+            <TableToolbar
+              prefs={prefs}
+              entity={t("title")}
+              columns={columns}
+              rowKind="dynamic"
+              entityList
+              filteredCount={filtered.length}
+              totalCount={rows.length}
+            />
+            <TableGridCards
+              rows={filtered.map((row) => ({
+                id: row.id,
+                name: row.plate?.trim() ? row.plate : "",
+                fields: shownColumns
+                  .filter((column) => column.id !== "plate")
+                  .slice(0, 4)
+                  .map((column) => ({
+                    label: column.label,
+                    value: ledgerCell(kind, column.id, row, tDetail),
+                  })),
+                onOpen: () => router.push(ledgerHref(kind, row.vehicle_id)),
+              }))}
+            />
+          </div>
         ) : (
           <>
           <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
           <AppDataTable
-            columns={columns}
+            toolbar={
+              <TableToolbar
+                prefs={prefs}
+                entity={t("title")}
+                columns={columns}
+                rowKind="dynamic"
+                entityList
+                filteredCount={filtered.length}
+                totalCount={rows.length}
+              />
+            }
+            columns={shownColumns.map((column) => ({ id: column.id, label: column.label }))}
             empty={filtered.length === 0 ? <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty> : null}
           >
             {listView.sections.flatMap((section) => [
               section.showHeader ? (
                 <GroupTableHeaderRow
                   key={`g-${section.key}`}
-                  colSpan={columns.length}
+                  colSpan={shownColumns.length}
                   label={section.label}
                   total={section.total}
                   open={section.open}
@@ -198,56 +292,23 @@ export function FleetLedgerListShell({ kind }: { kind: FleetLedgerKind }) {
                   onStep={(dir) => listView.step(section.key, dir)}
                 />
               ) : null,
-              ...section.visibleRows.map((row) =>
-                kind === "service" ? (
-                  <LedgerRow
-                    key={row.id}
-                    href={`/vehicles/${row.vehicle_id}?tab=service`}
-                    plate={row.plate}
-                    viewLabel={t("viewVehicle")}
-                  >
-                    <TableCell className="whitespace-nowrap">
-                      {dayLabel((row as FleetVehicleServiceRow).serviced_at)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">{(row as FleetVehicleServiceRow).kind || "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap">{(row as FleetVehicleServiceRow).vendor ?? "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap">{(row as FleetVehicleServiceRow).odometer ?? "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap">{(row as FleetVehicleServiceRow).cost_kwd ?? "—"}</TableCell>
-                  </LedgerRow>
-                ) : kind === "handover" ? (
-                  <LedgerRow
-                    key={row.id}
-                    href={`/vehicles/${row.vehicle_id}?tab=handover`}
-                    plate={row.plate}
-                    viewLabel={t("viewVehicle")}
-                  >
-                    <TableCell className="whitespace-nowrap">
-                      {dayLabel((row as FleetVehicleHandoverRow).handed_at)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">{(row as FleetVehicleHandoverRow).from_name ?? "—"}</TableCell>
-                    <TableCell className="whitespace-nowrap">{(row as FleetVehicleHandoverRow).to_name ?? "—"}</TableCell>
-                    <TableCell className="min-w-[160px]">{(row as FleetVehicleHandoverRow).notes ?? "—"}</TableCell>
-                  </LedgerRow>
-                ) : (
-                  <LedgerRow
-                    key={row.id}
-                    href={`/vehicles/${row.vehicle_id}?tab=accident`}
-                    plate={row.plate}
-                    viewLabel={t("viewVehicle")}
-                  >
-                    <TableCell className="whitespace-nowrap">
-                      {dayLabel((row as FleetVehicleAccidentRow).occurred_at)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {(row as FleetVehicleAccidentRow).location_text ?? "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {severityLabel((row as FleetVehicleAccidentRow).severity, tDetail)}
-                    </TableCell>
-                    <TableCell className="min-w-[160px]">{(row as FleetVehicleAccidentRow).notes ?? "—"}</TableCell>
-                  </LedgerRow>
-                ),
-              ),
+              ...section.visibleRows.map((row) => (
+                <LedgerRow
+                  key={row.id}
+                  href={ledgerHref(kind, row.vehicle_id)}
+                  plate={row.plate}
+                  viewLabel={t("viewVehicle")}
+                  showPlate={prefs.isVisible("plate")}
+                >
+                  {shownColumns
+                    .filter((column) => column.id !== "plate")
+                    .map((column) => (
+                      <TableCell key={column.id} className="whitespace-nowrap">
+                        {ledgerCell(kind, column.id, row, tDetail)}
+                      </TableCell>
+                    ))}
+                </LedgerRow>
+              )),
             ])}
           </AppDataTable>
           </>
@@ -261,27 +322,31 @@ function LedgerRow({
   href,
   plate,
   viewLabel,
+  showPlate,
   children,
 }: {
   href: string;
   plate: string | null;
   viewLabel: string;
+  showPlate: boolean;
   children: ReactNode;
 }) {
   const router = useRouter();
   return (
     <AppDataTableRow className="cursor-pointer" onClick={() => router.push(href)}>
-      <TableCell className="whitespace-nowrap">
-        <p className="font-medium">{plate ?? "—"}</p>
-        <Link
-          href={href}
-          className="inline-flex items-center gap-1 text-xs text-primary hover:bg-primary/10"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <ExternalLink className="h-3 w-3" />
-          {viewLabel}
-        </Link>
-      </TableCell>
+      {showPlate ? (
+        <TableCell className="whitespace-nowrap">
+          <TableNameCell name={plate} />
+          <Link
+            href={href}
+            className="inline-flex items-center gap-1 text-xs text-primary hover:bg-primary/10"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <ExternalLink className="h-3 w-3" />
+            {viewLabel}
+          </Link>
+        </TableCell>
+      ) : null}
       {children}
     </AppDataTableRow>
   );

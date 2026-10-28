@@ -1,11 +1,13 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import * as XLSX from "xlsx";
 import { SlidersHorizontal } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EmptyCell, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { groupBanner, groupRows, ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
 import { SearchSelect } from "@/components/ui/search-select";
 import { useAuth } from "@/contexts/auth-context";
 import { downloadWorkbookXlsx } from "@/features/drivers/import/export-xlsx";
@@ -109,6 +111,16 @@ function alertFromSaved(saved: SavedAlerts | null): AlertDraft {
 
 export function RosterPageShell() {
   const t = useTranslations("pages.roster");
+  const placeColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "cc", label: t("storeCc"), locked: true },
+      { id: "name", label: t("storeName"), locked: true },
+      { id: "riders", label: t("ridersThisWeek") },
+      { id: "zone", label: t("zone"), categorical: true },
+    ],
+    [t],
+  );
+  const placePrefs = useTablePrefs("roster.places", placeColumns);
   const client = useQueryClient();
   const { can } = useAuth();
   const canManage = can("attendance.manage");
@@ -154,7 +166,7 @@ export function RosterPageShell() {
     if (placeFilter === "all") return true;
     if (placeFilter === "unassigned") return !place.zoneId;
     return place.zoneId === placeFilter;
-  });
+  }).filter((place) => rowMatches(placePrefs.appliedQuery, [place.storeCc, place.name, place.zoneName]));
   const zoneItems = useMemo(
     () => [
       { value: "unassigned", label: t("unassigned"), keywords: [t("unassigned")] },
@@ -443,26 +455,40 @@ export function RosterPageShell() {
               );
             })}
           </div>
+          <ListToolbar
+            prefs={placePrefs}
+            entity={t("storeName")}
+            columns={placeColumns}
+            rowKind="dynamic"
+            filteredCount={shown.length}
+            totalCount={places.length}
+          />
           <div className="mt-2 min-h-0 flex-1 overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-[#E2DCD8]">
-                  <th className={rosterTh}>{t("storeCc")}</th>
-                  <th className={rosterTh}>{t("storeName")}</th>
-                  <th className={rosterTh}>{t("ridersThisWeek")}</th>
-                  <th className={rosterTh}>{t("zone")}</th>
+                  {visibleColumnIds(placePrefs).map((id) => (
+                    <th key={id} className={rosterTh}>{placeColumns.find((column) => column.id === id)?.label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {shown.slice(0, 200).map((place) => (
+                {groupRows(shown.slice(0, 200), placePrefs.groupBy, (place) => (placePrefs.groupBy === "zone" ? place.zoneName || t("unassigned") : "")).map((group) => (
+                  <Fragment key={group.key}>
+                    {group.label ? (
+                      <tr>
+                        <td colSpan={visibleColumnIds(placePrefs).length} className="bg-muted/40 px-2 py-1 text-xs font-semibold">{groupBanner(group.label, group.rows.length)}</td>
+                      </tr>
+                    ) : null}
+                    {group.rows.map((place) => (
                   <tr key={place.id} className={cn("border-b border-[#E2DCD8]", !place.zoneId && "bg-[#F8F1EA]")}>
-                    <td className={rosterTd}>{place.storeCc || "—"}</td>
-                    <td className={rosterTd}>{place.name}</td>
-                    <td className={rosterTd}>
-                      {place.zoneId ? riders.filter((rider) => rider.zoneId === place.zoneId).length : 0}
-                    </td>
-                    <td className={rosterTd}>
-                      {canZones ? (
+                    {visibleColumnIds(placePrefs).map((id) => (
+                      <td key={id} className={rosterTd}>
+                        {id === "cc" ? (place.storeCc ? place.storeCc : <EmptyCell />) : null}
+                        {id === "name" ? <TableNameCell name={place.name} /> : null}
+                        {id === "riders" ? (place.zoneId ? riders.filter((rider) => rider.zoneId === place.zoneId).length : 0) : null}
+                        {id === "zone" ? (
+                      canZones ? (
                         <SearchSelect
                           className="h-9 min-w-[160px]"
                           items={zoneItems}
@@ -474,9 +500,13 @@ export function RosterPageShell() {
                         />
                       ) : (
                         place.zoneName || t("unassigned")
-                      )}
-                    </td>
+                      )
+                        ) : null}
+                      </td>
+                    ))}
                   </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

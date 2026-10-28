@@ -21,6 +21,8 @@ import {
   uploadDriverAppSplash,
 } from "@/features/settings/driver-app-settings-actions";
 import { Button } from "@/components/ui/button";
+import { useTablePrefs } from "@/components/app/table-toolbar";
+import { ListToolbar, rowMatches } from "@/features/roster/table-kit";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
@@ -180,6 +182,17 @@ export function DriverAppSettingsPanel({
   installStats,
 }: DriverAppSettingsPanelProps) {
   const t = useTranslations("pages.settings.driverApp");
+  const buildColumns = useMemo(
+    () => [
+      { id: "build", label: t("buildsColBuild"), locked: true as const },
+      { id: "installs", label: t("buildsColInstalls") },
+      { id: "recent", label: t("buildsColRecent") },
+      { id: "seen", label: t("buildsColLastSeen") },
+      { id: "sentry", label: t("buildsColSentry") },
+    ],
+    [t],
+  );
+  const buildPrefs = useTablePrefs("settings.appBuilds", buildColumns);
   const locale = useLocale();
   const router = useRouter();
   const logoRef = useRef<HTMLInputElement>(null);
@@ -921,6 +934,14 @@ export function DriverAppSettingsPanel({
                   </div>
                   {installStats.versions.length > 0 ? (
                     <div className="mt-2 overflow-hidden rounded-lg border border-border">
+                      <ListToolbar
+                        prefs={buildPrefs}
+                        entity={t("buildsColBuild")}
+                        columns={buildColumns}
+                        rowKind="dynamic"
+                        filteredCount={installStats.versions.filter((version) => rowMatches(buildPrefs.appliedQuery, [version.versionCode, version.versionName])).length}
+                        totalCount={installStats.versions.length}
+                      />
                       <table className="w-full text-xs tabular-nums">
                         <thead>
                           <tr className="border-b border-border bg-muted/30 text-xs font-semibold text-muted-foreground">
@@ -932,7 +953,7 @@ export function DriverAppSettingsPanel({
                           </tr>
                         </thead>
                         <tbody>
-                          {installStats.versions.map((v) => {
+                          {installStats.versions.filter((version) => rowMatches(buildPrefs.appliedQuery, [version.versionCode, version.versionName])).map((v) => {
                             const outdated =
                               thresholdCode != null &&
                               (v.versionCode == null || v.versionCode < thresholdCode);

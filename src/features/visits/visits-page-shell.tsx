@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import {
@@ -10,7 +10,6 @@ import {
   Check,
   CheckCheck,
   Clock,
-  Download,
   ExternalLink,
   FileText,
   Loader2,
@@ -26,13 +25,18 @@ import {
   TableCell,
 } from "@/components/app/app-data-table";
 import {
-  AppListControls,
   GroupedSections,
   fieldSearchMatch,
   groupRows,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import { StatusBadge, type FrameStatus } from "@/components/app/status-badge";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -69,12 +73,7 @@ import {
 } from "./visits-actions";
 import { departmentLabel, kpiListQuery, type VisitKpiCard } from "./visit-board";
 import { upcomingVisitCount } from "./visit-upcoming";
-import {
-  avatarTintClass,
-  departmentBadgeClass,
-  initialsOf,
-  visitStatusVariant,
-} from "./visit-status-utils";
+import { departmentBadgeClass, visitStatusVariant } from "./visit-status-utils";
 
 type DataTab = "all" | "today" | "upcoming" | "past";
 
@@ -145,10 +144,25 @@ function toCsv(rows: VisitListRow[]): string {
   return [header.join(","), ...lines].join("\n");
 }
 
+function visitFrameStatus(status: string): FrameStatus | null {
+  switch (status) {
+    case "working":
+    case "leave":
+    case "sick":
+    case "pending":
+    case "absent":
+    case "overdue":
+    case "neutral":
+    case "accident":
+    case "other":
+      return status;
+    default:
+      return null;
+  }
+}
+
 export function VisitsPageShell() {
   const t = useTranslations("pages.visitBookings");
-  const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs("visits");
   const locale = useLocale();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -165,6 +179,25 @@ export function VisitsPageShell() {
   const [codeQuery, setCodeQuery] = useState("");
   const [driverQuery, setDriverQuery] = useState("");
   const [search, setSearch] = useState("");
+  const visitColumns = useMemo<TableToolbarColumn[]>(() => {
+    const cols: TableToolbarColumn[] = [];
+    if (canOperate) cols.push({ id: "select", label: t("bulk.selectAll"), locked: true });
+    cols.push(
+      { id: "code", label: t("allVisits.colVisId"), locked: true },
+      { id: "driver", label: t("colDriver"), locked: true },
+      { id: "branch", label: t("colBranch"), categorical: true },
+      { id: "dept", label: t("colDepartment"), categorical: true },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "time", label: t("allVisits.colSlot") },
+      { id: "date", label: t("colDate"), categorical: true },
+      { id: "actions", label: t("colActions"), locked: true },
+    );
+    return cols;
+  }, [canOperate, t]);
+  const tablePrefs = useTablePrefs("visits.list", visitColumns);
+  useEffect(() => {
+    setSearch(tablePrefs.appliedQuery);
+  }, [tablePrefs.appliedQuery]);
   const [sortKey, setSortKey] = useState<"code" | "date" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc" | false>(false);
   const [kpiCard, setKpiCard] = useState<VisitKpiCard | null>(null);
@@ -360,19 +393,23 @@ export function VisitsPageShell() {
     () =>
       groupRows(
         visibleRows,
-        prefs.groupBy,
+        tablePrefs.groupBy,
         {
           status: (row) => row.status,
           date: (row) => row.scheduled_date,
+          branch: (row) => row.branch_name,
+          dept: (row) => row.department_label,
         },
         Object.fromEntries(
           STATUS_KEYS.map((status) => [status, t(`status.${status}` as "status.confirmed")]),
         ),
         "—",
       ),
-    [prefs.groupBy, t, visibleRows],
+    [tablePrefs.groupBy, t, visibleRows],
   );
-  const visitColCount = canOperate ? 9 : 8;
+  const shownVisitColumns = tablePrefs.orderedColumns.filter((column) =>
+    tablePrefs.isVisible(column.id),
+  );
 
   const setStatus = async (
     bookingId: string,
@@ -527,16 +564,6 @@ export function VisitsPageShell() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <ClearAllModuleButton entity="visits" />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9"
-              onClick={exportCsv}
-            >
-              <Download className="me-1.5 h-3.5 w-3.5" />
-              {t("allVisits.export")}
-            </Button>
             <Button variant="outline" size="sm" className="h-9" render={<Link href="/visit-bookings/calendar" />}>
               <CalendarDays className="me-1.5 h-3.5 w-3.5" />
               {t("nav.calendar")}
@@ -642,29 +669,6 @@ export function VisitsPageShell() {
         ))}
       </div>
 
-      <AppListControls
-        searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder={t("allVisits.searchPlaceholder")}
-        clearSearchLabel={labels.clearSearch}
-        groupByOptions={[labels.group.none, labels.group.status, labels.group.date]}
-        groupBy={prefs.groupBy}
-        onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
-        groupByLabel={labels.groupBy}
-        viewMode={prefs.viewMode}
-        onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
-        tableViewLabel={labels.viewTable}
-        cardsViewLabel={labels.viewCards}
-        trailing={
-          <p className="text-xs text-muted-foreground">
-            {t("allVisits.countLabel", {
-              shown: visibleRows.length,
-              total: rows.length,
-            })}
-          </p>
-        }
-      />
-
       {canOperate && selected.size > 0 ? (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
           <p className="text-xs font-medium text-foreground">
@@ -708,6 +712,19 @@ export function VisitsPageShell() {
       ) : null}
 
       <AppListCard className="mt-2 p-0">
+        {isLoading || visibleRows.length === 0 || tablePrefs.view === "grid" ? (
+          <TableToolbar
+            prefs={tablePrefs}
+            entity={t("allVisits.title")}
+            columns={visitColumns}
+            rowKind="dynamic"
+            entityList
+            filteredCount={visibleRows.length}
+            totalCount={rows.length}
+            onExport={exportCsv}
+          />
+        ) : null}
+
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -719,7 +736,7 @@ export function VisitsPageShell() {
               description={t("emptyDescription")}
             />
           </div>
-        ) : prefs.viewMode === "cards" ? (
+        ) : tablePrefs.view === "grid" ? (
           <div className="p-4">
             <GroupedSections groups={grouped}>
               {(groupRowsList) => (
@@ -748,7 +765,20 @@ export function VisitsPageShell() {
           </div>
         ) : (
           <AppDataTable
-            columns={[
+            toolbar={
+              <TableToolbar
+                prefs={tablePrefs}
+                entity={t("allVisits.title")}
+                columns={visitColumns}
+                rowKind="dynamic"
+                entityList
+                filteredCount={visibleRows.length}
+                totalCount={rows.length}
+                onExport={exportCsv}
+              />
+            }
+            columns={shownVisitColumns.flatMap((column) => {
+              const full = [
               ...(canOperate
                 ? [
                     {
@@ -866,14 +896,17 @@ export function VisitsPageShell() {
                 ),
               },
               { id: "actions", label: t("colActions") },
-            ]}
+            ];
+              const match = full.find((item) => item.id === column.id);
+              return match ? [match] : [];
+            })}
           >
             {grouped.flatMap((group) => [
-              ...(prefs.groupBy !== "none"
+              ...(tablePrefs.groupBy !== "none"
                 ? [
                     <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
                       <TableCell
-                        colSpan={visitColCount}
+                        colSpan={shownVisitColumns.length}
                         className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
                       >
                         {group.label}
@@ -888,72 +921,61 @@ export function VisitsPageShell() {
               const variant = visitStatusVariant(row.status);
               return (
                 <AppDataTableRow key={row.id}>
-                  {canOperate ? (
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      {BULK_OPEN_STATUSES.has(row.status) ? (
+                  {shownVisitColumns.map((column) => {
+                    const statusLabel = t(`status.${row.status}` as "status.confirmed");
+                    const framed = visitFrameStatus(row.status);
+                    const cells: Record<string, ReactNode> = {
+                      select: BULK_OPEN_STATUSES.has(row.status) ? (
                         <Checkbox
                           aria-label={row.booking_code}
                           checked={selected.has(row.id)}
                           onCheckedChange={() => toggleRow(row.id)}
                         />
-                      ) : null}
-                    </TableCell>
-                  ) : null}
-                  <TableCell className="font-medium tabular-nums">
-                    <Link
-                      href={`/visit-bookings/${row.id}`}
-                      className="text-primary hover:underline"
-                    >
-                      {row.booking_code}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                          avatarTintClass(row.driver_name),
-                        )}
-                      >
-                        {initialsOf(row.driver_name)}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{row.driver_name}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {row.driver_phone ?? row.driver_code}
-                        </p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {row.branch_name ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={cn(
-                        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-                        departmentBadgeClass(row.department_key),
-                      )}
-                    >
-                      {row.department_label}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <StatusPill variant={variant} dot>
-                      {t(`status.${row.status}` as "status.confirmed")}
-                    </StatusPill>
-                  </TableCell>
-                  <TableCell className="text-sm tabular-nums text-muted-foreground">
-                    {row.slot_start ? row.slot_start.slice(0, 5) : "—"}
-                    {row.slot_end ? `–${row.slot_end.slice(0, 5)}` : ""}
-                  </TableCell>
-                  <TableCell
-                    className="text-sm tabular-nums"
-                    title={row.scheduled_date}
-                  >
-                    {shortDate(row.scheduled_date, locale)}
-                  </TableCell>
-                  <TableCell>
+                      ) : null,
+                      code: (
+                        <Link href={`/visit-bookings/${row.id}`} className="font-medium text-primary hover:underline">
+                          {row.booking_code}
+                        </Link>
+                      ),
+                      driver: (
+                        <div className="min-w-0">
+                          <TableNameCell name={row.driver_name} />
+                          <p className="truncate text-xs text-muted-foreground">
+                            {row.driver_phone ?? row.driver_code ?? <EmptyCell />}
+                          </p>
+                        </div>
+                      ),
+                      branch: row.branch_name ? row.branch_name : <EmptyCell />,
+                      dept: row.department_label ? (
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+                            departmentBadgeClass(row.department_key),
+                          )}
+                        >
+                          {row.department_label}
+                        </span>
+                      ) : (
+                        <EmptyCell />
+                      ),
+                      status: framed ? (
+                        <StatusBadge status={framed} label={statusLabel} />
+                      ) : (
+                        <StatusPill variant={variant} dot>
+                          {statusLabel}
+                        </StatusPill>
+                      ),
+                      time:
+                        row.slot_start || row.slot_end ? (
+                          <>
+                            {row.slot_start ? row.slot_start.slice(0, 5) : ""}
+                            {row.slot_end ? `–${row.slot_end.slice(0, 5)}` : ""}
+                          </>
+                        ) : (
+                          <EmptyCell />
+                        ),
+                      date: shortDate(row.scheduled_date, locale),
+                      actions: (
                     <div className="flex items-center gap-1">
                       <Link
                         href={`/visit-bookings/${row.id}`}
@@ -1003,7 +1025,22 @@ export function VisitsPageShell() {
                         </Button>
                       ) : null}
                     </div>
-                  </TableCell>
+                      ),
+                    };
+                    return (
+                      <TableCell
+                        key={column.id}
+                        onClick={
+                          column.id === "select" || column.id === "actions"
+                            ? (event) => event.stopPropagation()
+                            : undefined
+                        }
+                        title={column.id === "date" ? row.scheduled_date : undefined}
+                      >
+                        {cells[column.id] ?? <EmptyCell />}
+                      </TableCell>
+                    );
+                  })}
                 </AppDataTableRow>
               );
             }),

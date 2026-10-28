@@ -1,10 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Download, FileClock, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -270,10 +278,37 @@ export function EsignBulkShell({
   }
 
   const okRows = resolved.filter((r) => r.ok);
+  const previewColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "emp", label: t("colEmployee"), locked: true },
+      { id: "name", label: t("colName"), locked: true },
+      { id: "company", label: t("colCompany") },
+      { id: "status", label: t("colStatus"), categorical: true },
+    ],
+    [t],
+  );
+  const tablePrefs = useTablePrefs("esign.bulkPreview", previewColumns);
+  const shownColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
   const preview = drafts.map((draft, i) => ({
     draft,
     resolve: resolved[i],
   }));
+  const previewQuery = tablePrefs.appliedQuery.trim().toLowerCase();
+  const filteredPreview = previewQuery
+    ? preview.filter(({ draft, resolve }) =>
+        [draft.employee_id, resolve?.snapshot?.employee_name, resolve?.snapshot?.company_name]
+          .join(" ")
+          .toLowerCase()
+          .includes(previewQuery),
+      )
+    : preview;
+  const groupedPreview = groupRows(
+    filteredPreview,
+    tablePrefs.groupBy,
+    { status: (row) => row.resolve?.status ?? "invalid" },
+    {},
+    "—",
+  );
 
   /**
    * Save the mapping as a draft.
@@ -501,33 +536,62 @@ export function EsignBulkShell({
       </AppListCard>
 
       <AppListCard className="p-0">
+        <TableToolbar
+          prefs={tablePrefs}
+          entity={t("title")}
+          columns={previewColumns}
+          rowKind="dynamic"
+          filteredCount={filteredPreview.length}
+          totalCount={preview.length}
+        />
         {busy && drafts.length === 0 ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : preview.length === 0 ? (
+        ) : filteredPreview.length === 0 ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
         ) : (
           <AppDataTable
-            columns={[
-              { id: "emp", label: t("colEmployee") },
-              { id: "name", label: t("colName") },
-              { id: "company", label: t("colCompany") },
-              { id: "status", label: t("colStatus") },
-            ]}
+            columns={shownColumns.map((column) => ({ id: column.id, label: column.label }))}
           >
-            {preview.map(({ draft, resolve }) => (
+            {groupedPreview.flatMap((group) => [
+              ...(tablePrefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map(({ draft, resolve }) => {
+                const cells: Record<string, ReactNode> = {
+                  emp: draft.employee_id ? (
+                    <span className="font-mono text-xs">{draft.employee_id}</span>
+                  ) : (
+                    <EmptyCell />
+                  ),
+                  name: resolve?.snapshot?.employee_name ? (
+                    <TableNameCell name={resolve.snapshot.employee_name} />
+                  ) : (
+                    <EmptyCell />
+                  ),
+                  company: resolve?.snapshot?.company_name ? resolve.snapshot.company_name : <EmptyCell />,
+                  status: (
+                    <StatusPill variant={statusVariant(resolve?.status ?? "invalid")}>
+                      {t(`status.${resolve?.status ?? "invalid"}`)}
+                    </StatusPill>
+                  ),
+                };
+                return (
               <AppDataTableRow key={draft.row_index}>
-                <TableCell className="font-mono text-xs">{draft.employee_id || "—"}</TableCell>
-                <TableCell className="text-sm">{resolve?.snapshot?.employee_name ?? "—"}</TableCell>
-                <TableCell className="text-sm">{resolve?.snapshot?.company_name ?? "—"}</TableCell>
-                <TableCell>
-                  <StatusPill variant={statusVariant(resolve?.status ?? "invalid")}>
-                    {t(`status.${resolve?.status ?? "invalid"}`)}
-                  </StatusPill>
-                </TableCell>
+                {shownColumns.map((column) => (
+                  <TableCell key={column.id}>{cells[column.id] ?? <EmptyCell />}</TableCell>
+                ))}
               </AppDataTableRow>
-            ))}
+                );
+              }),
+            ])}
           </AppDataTable>
         )}
       </AppListCard>

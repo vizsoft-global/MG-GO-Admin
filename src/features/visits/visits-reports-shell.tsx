@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
   Activity,
   CheckCircle2,
-  Download,
   FileText,
   Loader2,
   RefreshCw,
@@ -24,6 +23,7 @@ import {
   DateRangeFilter,
   type DateRangeValue,
 } from "@/components/app/date-range-filter";
+import { EmptyCell, TableNameCell, TableToolbar, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -37,8 +37,6 @@ import { queryKeys } from "@/lib/query/query-keys";
 import { selectOptionsFrom } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
 import { fetchAdminVisitsList, fetchVisitBranches, type VisitListRow } from "./visits-actions";
-import { departmentBadgeClass } from "./visit-status-utils";
-
 const SLOT_BAR_CLASSES = ["bg-blue-500", "bg-orange-500", "bg-emerald-500"];
 
 function isoDate(d: string | null): string {
@@ -341,6 +339,24 @@ export function VisitsReportsShell() {
       }))
       .sort((a, b) => b.visits - a.visits);
   }, [rows]);
+  const reportColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "dept", label: t("colDepartment"), locked: true },
+      { id: "visits", label: t("reports.colVisits") },
+      { id: "completed", label: t("reports.colCompleted") },
+      { id: "noShows", label: t("reports.colNoShows") },
+      { id: "rate", label: t("reports.colCompletionRate") },
+      { id: "wait", label: t("reports.colAvgWait") },
+    ],
+    [t],
+  );
+  const reportPrefs = useTablePrefs("visits.reports", reportColumns);
+  const reportShown = reportPrefs.orderedColumns.filter((column) => reportPrefs.isVisible(column.id));
+  const reportRows = useMemo(() => {
+    const query = reportPrefs.appliedQuery.trim().toLowerCase();
+    if (!query) return byDepartment;
+    return byDepartment.filter((dept) => dept.label.toLowerCase().includes(query));
+  }, [byDepartment, reportPrefs.appliedQuery]);
 
   /** Bookings by slot start time, highest volume first — matches the Figma "Busiest time slots" card. */
   const busiestSlots = useMemo(() => {
@@ -407,10 +423,6 @@ export function VisitsReportsShell() {
                 ))}
               </SelectContent>
             </Select>
-            <Button type="button" variant="outline" size="sm" className="h-9" onClick={exportCsv}>
-              <Download className="me-1.5 h-3.5 w-3.5" />
-              {t("allVisits.export")}
-            </Button>
             <Button
               type="button"
               variant="outline"
@@ -563,40 +575,43 @@ export function VisitsReportsShell() {
               {t("reports.byDepartment")}
             </h3>
             <AppDataTable
-              columns={[
-                { id: "dept", label: t("colDepartment") },
-                { id: "visits", label: t("reports.colVisits") },
-                { id: "completed", label: t("reports.colCompleted") },
-                { id: "noShows", label: t("reports.colNoShows") },
-                { id: "rate", label: t("reports.colCompletionRate") },
-                { id: "wait", label: t("reports.colAvgWait") },
-              ]}
+              toolbar={
+                <TableToolbar
+                  prefs={reportPrefs}
+                  entity={t("reports.byDepartment")}
+                  columns={reportColumns}
+                  rowKind="aggregate"
+                  filteredCount={reportRows.length}
+                  totalCount={byDepartment.length}
+                  onExport={exportCsv}
+                />
+              }
+              columns={reportShown.map((column) => ({ id: column.id, label: column.label }))}
             >
-              {byDepartment.map((dept) => (
+              {reportRows.map((dept) => {
+                const cells: Record<string, ReactNode> = {
+                  dept: <TableNameCell name={dept.label} />,
+                  visits: dept.visits,
+                  completed: dept.completed,
+                  noShows: dept.noShows,
+                  rate: dept.visits > 0 ? formatPct((dept.completed / dept.visits) * 100) : formatPct(0),
+                  wait:
+                    dept.avgWait != null ? (
+                      t("departments.minutesValue", { minutes: dept.avgWait })
+                    ) : (
+                      <EmptyCell />
+                    ),
+                };
+                return (
                 <AppDataTableRow key={dept.key}>
-                  <TableCell>
-                    <span
-                      className={cn(
-                        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-                        departmentBadgeClass(dept.key),
-                      )}
-                    >
-                      {dept.label}
-                    </span>
-                  </TableCell>
-                  <TableCell className="tabular-nums">{dept.visits}</TableCell>
-                  <TableCell className="tabular-nums">{dept.completed}</TableCell>
-                  <TableCell className="tabular-nums">{dept.noShows}</TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">
-                    {dept.visits > 0 ? formatPct((dept.completed / dept.visits) * 100) : formatPct(0)}
-                  </TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">
-                    {dept.avgWait != null
-                      ? t("departments.minutesValue", { minutes: dept.avgWait })
-                      : "—"}
-                  </TableCell>
+                  {reportShown.map((column) => (
+                    <TableCell key={column.id} className="tabular-nums">
+                      {cells[column.id] ?? <EmptyCell />}
+                    </TableCell>
+                  ))}
                 </AppDataTableRow>
-              ))}
+                );
+              })}
             </AppDataTable>
           </AppListCard>
         </>

@@ -2,9 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Download, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
-import { Button } from "@/components/ui/button";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { Input } from "@/components/ui/input";
 import { SearchSelect } from "@/components/ui/search-select";
 import {
@@ -27,6 +33,18 @@ export function IncentiveDailyPanel() {
   const [driverId, setDriverId] = useState("");
   const [restaurantId, setRestaurantId] = useState("");
   const [exporting, setExporting] = useState(false);
+  const columns = useMemo((): TableToolbarColumn[] => [
+    { id: "driver", label: t("colDriver"), locked: true },
+    { id: "employee", label: t("colEmployeeId") },
+    { id: "date", label: t("colDate") },
+    { id: "restaurant", label: t("colRestaurant") },
+    { id: "zone", label: t("colZone") },
+    { id: "deliveries", label: t("colDeliveries") },
+    { id: "rule", label: t("colAppliedRule") },
+    { id: "daily", label: t("colDailyAmount") },
+    { id: "period", label: t("colPeriodTotal") },
+  ], [t]);
+  const prefs = useTablePrefs("earnings-incentive-daily", columns);
 
   const { data: scopeOptions } = useDpdScopeOptions();
   const { data: drivers } = useIncentiveDailyDrivers();
@@ -126,16 +144,6 @@ export function IncentiveDailyPanel() {
             recentsKey="earnings-incentive-restaurant"
           />
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-9 cursor-pointer"
-          disabled={!query.data || exporting}
-          onClick={() => void handleExport()}
-        >
-          {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-          {t("incentiveDailyExport")}
-        </Button>
       </div>
 
       {query.isError ? (
@@ -145,19 +153,25 @@ export function IncentiveDailyPanel() {
           <Loader2 className="size-4 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <TableToolbar
+            prefs={prefs}
+            entity={t("incentiveDailyExport")}
+            columns={columns}
+            rowKind="dynamic"
+            filteredCount={(query.data?.rows ?? []).filter((row) => {
+              const needle = prefs.appliedQuery.trim().toLowerCase();
+              return !needle || `${row.driver_name} ${row.employee_id} ${row.restaurant_name} ${row.zone_name}`.toLowerCase().includes(needle);
+            }).length}
+            totalCount={(query.data?.rows ?? []).length}
+            onExport={() => void handleExport()}
+          />
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colDriver")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colEmployeeId")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colDate")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colRestaurant")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colZone")}</TableHead>
-                <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>{t("colDeliveries")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colAppliedRule")}</TableHead>
-                <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>{t("colDailyAmount")}</TableHead>
-                <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>{t("colPeriodTotal")}</TableHead>
+                {prefs.orderedColumns.filter((column) => prefs.isVisible(column.id)).map((column) => (
+                  <TableHead key={column.id} className={TABLE_HEAD_CLASS}>{column.label}</TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -168,24 +182,22 @@ export function IncentiveDailyPanel() {
                   </TableCell>
                 </TableRow>
               ) : (
-                (query.data?.rows ?? []).map((row) => (
+                (query.data?.rows ?? []).filter((row) => {
+                  const needle = prefs.appliedQuery.trim().toLowerCase();
+                  return !needle || `${row.driver_name} ${row.employee_id} ${row.restaurant_name} ${row.zone_name}`.toLowerCase().includes(needle);
+                }).map((row) => (
                   <TableRow key={row.id || `${row.driver_id}-${row.earn_date}`}>
-                    <TableCell>
-                      <p className="truncate text-sm font-medium">{row.driver_name}</p>
-                      <p className="font-mono text-xs text-muted-foreground">{row.driver_code}</p>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">{row.employee_id || "—"}</TableCell>
-                    <TableCell className="tabular-nums text-sm">{row.earn_date}</TableCell>
-                    <TableCell className="text-sm">{row.restaurant_name || "—"}</TableCell>
-                    <TableCell className="text-sm">{row.zone_name || "—"}</TableCell>
-                    <TableCell className="text-end tabular-nums text-sm">{row.deliveries}</TableCell>
-                    <TableCell className="text-sm">{row.applied_rule || "—"}</TableCell>
-                    <TableCell className="text-end tabular-nums text-sm">
-                      {row.daily_amount_kwd.toFixed(3)}
-                    </TableCell>
-                    <TableCell className="text-end tabular-nums text-sm font-medium">
-                      {row.period_total_kwd.toFixed(3)}
-                    </TableCell>
+                    {prefs.orderedColumns.filter((column) => prefs.isVisible(column.id)).map((column) => {
+                      if (column.id === "driver") return <TableCell key={column.id}><TableNameCell name={row.driver_name} /><p className="font-mono text-xs text-muted-foreground">{row.driver_code}</p></TableCell>;
+                      if (column.id === "employee") return <TableCell key={column.id} className="font-mono text-sm">{row.employee_id ? row.employee_id : <EmptyCell />}</TableCell>;
+                      if (column.id === "date") return <TableCell key={column.id} className="tabular-nums text-sm">{row.earn_date}</TableCell>;
+                      if (column.id === "restaurant") return <TableCell key={column.id} className="text-sm">{row.restaurant_name ? row.restaurant_name : <EmptyCell />}</TableCell>;
+                      if (column.id === "zone") return <TableCell key={column.id} className="text-sm">{row.zone_name ? row.zone_name : <EmptyCell />}</TableCell>;
+                      if (column.id === "deliveries") return <TableCell key={column.id} className="text-end tabular-nums text-sm">{row.deliveries}</TableCell>;
+                      if (column.id === "rule") return <TableCell key={column.id} className="text-sm">{row.applied_rule ? row.applied_rule : <EmptyCell />}</TableCell>;
+                      if (column.id === "daily") return <TableCell key={column.id} className="text-end tabular-nums text-sm">{row.daily_amount_kwd.toFixed(3)}</TableCell>;
+                      return <TableCell key={column.id} className="text-end tabular-nums text-sm font-medium">{row.period_total_kwd.toFixed(3)}</TableCell>;
+                    })}
                   </TableRow>
                 ))
               )}

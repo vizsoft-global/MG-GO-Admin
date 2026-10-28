@@ -1,10 +1,19 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { CircleCheck, CircleX, Loader2, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { AppDataTable, AppDataTableRow, TableCell } from "@/components/app/app-data-table";
@@ -103,7 +112,47 @@ export function EsignToSignInboxShell() {
   const [reason, setReason] = useState("");
   const [decision, setDecision] = useState<"approved" | "rejected" | null>(null);
 
-  const rows = (data?.rows ?? []).filter((row) => row.signer_status === "pending");
+  const rows = useMemo(
+    () => (data?.rows ?? []).filter((row) => row.signer_status === "pending"),
+    [data?.rows],
+  );
+  const signColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "code", label: t("colCode"), locked: true },
+      { id: "title", label: t("colTitle"), locked: true },
+      { id: "rider", label: t("colRider") },
+      { id: "role", label: t("colRole"), categorical: true },
+      { id: "open", label: t("open"), locked: true },
+    ],
+    [t],
+  );
+  const tablePrefs = useTablePrefs("esign.toSign", signColumns);
+  const shownColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
+  const filteredRows = useMemo(() => {
+    const query = tablePrefs.appliedQuery.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) =>
+      [row.request_code, row.title, row.driver_name, row.driver_code].join(" ").toLowerCase().includes(query),
+    );
+  }, [rows, tablePrefs.appliedQuery]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filteredRows,
+        tablePrefs.groupBy,
+        {
+          role: (row) =>
+            row.role === "manager"
+              ? t("roleManager")
+              : row.role === "witness"
+                ? t("roleWitness")
+                : t("roleCountersigner"),
+        },
+        {},
+        "—",
+      ),
+    [filteredRows, t, tablePrefs.groupBy],
+  );
 
   function failureMessage(error: string | undefined, fallback: string) {
     if (error === "already_signed") return t("alreadySigned");
@@ -163,57 +212,107 @@ export function EsignToSignInboxShell() {
           { label: t("title") },
         ]}
       />
-      <AppListCard className="p-4">
+      <AppListCard className="p-0">
+        <TableToolbar
+          prefs={tablePrefs}
+          entity={t("title")}
+          columns={signColumns}
+          rowKind="dynamic"
+          entityList
+          filteredCount={filteredRows.length}
+          totalCount={rows.length}
+        />
         {isLoading ? (
           <div className="flex h-40 items-center justify-center">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyBody")} />
         ) : (
+          tablePrefs.view === "grid" ? (
+            <TableGridCards
+              rows={filteredRows.map((row) => ({
+                id: row.signer_id,
+                name: row.title,
+                fields: [
+                  { label: t("colCode"), value: row.request_code },
+                  { label: t("colRider"), value: row.driver_name ?? "—" },
+                ],
+                onOpen: () => {
+                  setActive(row);
+                  setPng("");
+                  setReason("");
+                  setDecision(null);
+                },
+              }))}
+            />
+          ) : (
           <AppDataTable
-            columns={[
-              { id: "code", label: t("colCode") },
-              { id: "title", label: t("colTitle") },
-              { id: "rider", label: t("colRider") },
-              { id: "role", label: t("colRole") },
-              { id: "open", label: "" },
-            ]}
+            columns={shownColumns.map((column) => ({
+              id: column.id,
+              label: column.id === "open" ? "" : column.label,
+              className: column.id === "open" ? "text-end" : undefined,
+            }))}
           >
-            {rows.map((row) => (
-              <AppDataTableRow key={row.signer_id}>
-                <TableCell className="text-xs font-medium">{row.request_code}</TableCell>
-                <TableCell className="text-xs">{row.title}</TableCell>
-                <TableCell className="text-xs">
-                  {row.driver_name ?? "—"}
-                  {row.driver_code ? ` · ${row.driver_code}` : ""}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {row.role === "manager"
+            {grouped.flatMap((group) => [
+              ...(tablePrefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => {
+                const roleLabel =
+                  row.role === "manager"
                     ? t("roleManager")
                     : row.role === "witness"
                       ? t("roleWitness")
-                      : t("roleCountersigner")}
-                </TableCell>
-                <TableCell className="text-end">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8"
-                    onClick={() => {
-                      setActive(row);
-                      setPng("");
-                      setReason("");
-                      setDecision(null);
-                    }}
-                  >
-                    <PenLine className="me-1.5 h-3.5 w-3.5" />
-                    {t("open")}
-                  </Button>
-                </TableCell>
+                      : t("roleCountersigner");
+                const cells: Record<string, ReactNode> = {
+                  code: <span className="text-xs font-medium">{row.request_code}</span>,
+                  title: <TableNameCell name={row.title} />,
+                  rider: row.driver_name ? (
+                    <span className="text-xs">
+                      {row.driver_name}
+                      {row.driver_code ? ` · ${row.driver_code}` : ""}
+                    </span>
+                  ) : (
+                    <EmptyCell />
+                  ),
+                  role: roleLabel,
+                  open: (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8"
+                      onClick={() => {
+                        setActive(row);
+                        setPng("");
+                        setReason("");
+                        setDecision(null);
+                      }}
+                    >
+                      <PenLine className="me-1.5 h-3.5 w-3.5" />
+                      {t("open")}
+                    </Button>
+                  ),
+                };
+                return (
+              <AppDataTableRow key={row.signer_id}>
+                {shownColumns.map((column) => (
+                  <TableCell key={column.id} className={column.id === "open" ? "text-end" : undefined}>
+                    {cells[column.id] ?? <EmptyCell />}
+                  </TableCell>
+                ))}
               </AppDataTableRow>
-            ))}
+                );
+              }),
+            ])}
           </AppDataTable>
+          )
         )}
       </AppListCard>
 

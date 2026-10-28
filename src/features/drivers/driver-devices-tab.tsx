@@ -6,19 +6,27 @@ import { Loader2, LogOut, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Table,
-  TableBody,
+  AppDataTable,
+  AppDataTableEmpty,
+  AppDataTableRow,
   TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+} from "@/components/app/app-data-table";
+import {
+  GroupTableHeaderRow,
+  groupRows,
+  useGroupedListView,
+} from "@/components/app/app-list-controls";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
 import { SimpleConfirmDialog } from "@/components/simple-confirm-dialog";
@@ -136,6 +144,51 @@ export function DriverDevicesTab({
     () => [...history].sort((a, b) => b.last_seen_at.localeCompare(a.last_seen_at)),
     [history],
   );
+  const deviceColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "device", label: t("colDevice"), locked: true },
+      { id: "os", label: t("colOs") },
+      { id: "app", label: t("colAppVersion") },
+      { id: "firstSeen", label: t("colFirstSeen") },
+      { id: "lastSeen", label: t("colLastSeen") },
+      { id: "status", label: t("colStatus"), categorical: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs(`driver-devices-${driverId}`, deviceColumns);
+  const filteredHistory = useMemo(() => {
+    const query = prefs.appliedQuery.trim().toLowerCase();
+    if (!query) return sortedHistory;
+    return sortedHistory.filter((session) =>
+      [
+        formatDeviceLabel(session),
+        formatOsVersion(session),
+        formatAppVersion(session),
+        session.device_id,
+        resolveDeviceSessionStatus(session),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [prefs.appliedQuery, sortedHistory]);
+  const groupedHistory = useMemo(
+    () =>
+      groupRows(
+        filteredHistory,
+        prefs.groupBy,
+        { status: (session) => resolveDeviceSessionStatus(session) },
+        {},
+        "—",
+      ),
+    [filteredHistory, prefs.groupBy],
+  );
+  const listView = useGroupedListView(
+    groupedHistory,
+    prefs.groupBy !== "none",
+    `${prefs.groupBy}\u0001${prefs.appliedQuery}`,
+  );
+  const shownColumns = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
 
   const handleForceSignOut = async () => {
     try {
@@ -200,68 +253,111 @@ export function DriverDevicesTab({
 
         {activeDevice ? <ActiveDeviceCard session={activeDevice} /> : null}
 
-        {sortedHistory.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">{t("empty")}</p>
-        ) : (
-          <div className={cn("overflow-x-auto", activeDevice ? "mt-4" : "")}>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colDevice")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colOs")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colAppVersion")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colFirstSeen")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colLastSeen")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedHistory.map((session) => (
-                  <TableRow
-                    key={session.session_id}
-                    className={cn(
-                      session.is_active &&
-                        "border-s-primary/30 bg-primary/5 hover:bg-primary/10",
-                    )}
-                  >
-                    <TableCell>
-                      <div className="space-y-0.5">
-                        <p className="font-medium">{formatDeviceLabel(session)}</p>
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <span className="cursor-default font-mono text-xs text-muted-foreground">
-                                {truncateDeviceId(session.device_id)}
-                              </span>
-                            }
-                          />
-                          <TooltipContent>{session.device_id}</TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm">{formatOsVersion(session)}</TableCell>
-                    <TableCell className="text-sm">{formatAppVersion(session)}</TableCell>
-                    <TableCell className="text-sm">
-                      {formatSeenAt(session.first_seen_at)}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {formatSeenAt(session.last_seen_at)}
-                      {session.flush_deadline_at &&
-                      resolveDeviceSessionStatus(session) === "override_pending" ? (
-                        <p className="text-xs text-amber-700 dark:text-amber-400">
-                          {t("flushUntil", { time: formatSeenAt(session.flush_deadline_at) })}
-                        </p>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <DeviceStatusPill session={session} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+        <div className={cn(activeDevice ? "mt-4" : "")}>
+          <AppDataTable
+            toolbar={
+              <TableToolbar
+                prefs={prefs}
+                entity={t("title")}
+                columns={deviceColumns}
+                rowKind="dynamic"
+                filteredCount={filteredHistory.length}
+                totalCount={sortedHistory.length}
+              />
+            }
+            columns={shownColumns.map((column) => ({ id: column.id, label: column.label }))}
+            empty={
+              filteredHistory.length === 0 ? (
+                <AppDataTableEmpty>{t("empty")}</AppDataTableEmpty>
+              ) : undefined
+            }
+          >
+            {listView.sections.flatMap((section) => [
+              section.showHeader ? (
+                <GroupTableHeaderRow
+                  key={`g-${section.key}`}
+                  colSpan={shownColumns.length}
+                  label={section.label}
+                  total={section.total}
+                  open={section.open}
+                  page={section.page}
+                  showPager={section.showPager}
+                  onToggle={() => listView.toggle(section.key)}
+                  onStep={(dir) => listView.step(section.key, dir)}
+                />
+              ) : null,
+              ...section.visibleRows.map((session) => (
+                <AppDataTableRow
+                  key={session.session_id}
+                  className={cn(
+                    session.is_active && "border-s-primary/30 bg-primary/5 hover:bg-primary/10",
+                  )}
+                >
+                  {shownColumns.map((column) => {
+                    switch (column.id) {
+                      case "device":
+                        return (
+                          <TableCell key={column.id}>
+                            <div className="space-y-0.5">
+                              <TableNameCell name={formatDeviceLabel(session)} />
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <span className="cursor-default font-mono text-xs text-muted-foreground">
+                                      {truncateDeviceId(session.device_id)}
+                                    </span>
+                                  }
+                                />
+                                <TooltipContent>{session.device_id}</TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </TableCell>
+                        );
+                      case "os":
+                        return (
+                          <TableCell key={column.id} className="text-sm">
+                            {formatOsVersion(session)}
+                          </TableCell>
+                        );
+                      case "app":
+                        return (
+                          <TableCell key={column.id} className="text-sm">
+                            {formatAppVersion(session)}
+                          </TableCell>
+                        );
+                      case "firstSeen":
+                        return (
+                          <TableCell key={column.id} className="text-sm">
+                            {formatSeenAt(session.first_seen_at)}
+                          </TableCell>
+                        );
+                      case "lastSeen":
+                        return (
+                          <TableCell key={column.id} className="text-sm">
+                            {formatSeenAt(session.last_seen_at)}
+                            {session.flush_deadline_at &&
+                            resolveDeviceSessionStatus(session) === "override_pending" ? (
+                              <p className="text-xs text-amber-700 dark:text-amber-400">
+                                {t("flushUntil", { time: formatSeenAt(session.flush_deadline_at) })}
+                              </p>
+                            ) : null}
+                          </TableCell>
+                        );
+                      case "status":
+                        return (
+                          <TableCell key={column.id}>
+                            <DeviceStatusPill session={session} />
+                          </TableCell>
+                        );
+                      default:
+                        return null;
+                    }
+                  })}
+                </AppDataTableRow>
+              )),
+            ])}
+          </AppDataTable>
+        </div>
 
         {isFetching && !isLoading ? (
           <p className="mt-2 text-xs text-muted-foreground">{t("refreshing")}</p>

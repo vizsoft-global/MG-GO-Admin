@@ -1,39 +1,31 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useTableColumnVisibility } from "@/hooks/use-table-column-visibility";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter, Link } from "@/i18n/navigation";
-import {
-  Download,
-  Eye,
-  Loader2,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Users,
-  X,
-} from "lucide-react";
+import { Eye, Loader2, Pencil, Plus, RefreshCw, Users } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
-  AppListControls,
   FlatListPager,
   GroupedSections,
   GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
   useGroupedListView,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
 import {
   AppDataTable,
   AppDataTableEmpty,
   AppDataTableRow,
-  AppTableColumnPicker,
   TableCell,
-  VisibleTableCell,
 } from "@/components/app";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Button } from "@/components/ui/button";
@@ -145,9 +137,21 @@ function RestaurantsPageContent() {
   );
 
   const { data: restaurants = [], isLoading, isError, refetch } = useRestaurantsList();
-  const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs("restaurants");
-  const [search, setSearch] = useState("");
+  const toolbarColumns = useMemo((): TableToolbarColumn[] => {
+    const cols: TableToolbarColumn[] = [
+      { id: "restaurant", label: t("colRestaurant"), locked: true },
+      { id: "partner", label: t("colPartner"), categorical: true },
+      { id: "zone", label: t("colZone"), categorical: true },
+      { id: "externalId", label: t("colExternalId") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "drivers", label: t("colDrivers") },
+      { id: "activeDeliveries", label: t("colActiveDeliveries") },
+      { id: "created", label: t("colCreated") },
+      { id: "actions", label: t("colActions") },
+    ];
+    return cols;
+  }, [t]);
+  const tablePrefs = useTablePrefs("restaurants", toolbarColumns);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [partnerFilter, setPartnerFilter] = useState("all");
   const [zoneFilter, setZoneFilter] = useState("all");
@@ -204,17 +208,10 @@ function RestaurantsPageContent() {
     [t],
   );
 
-  const hasActiveFilters =
-    statusFilter !== "all" ||
-    partnerFilter !== "all" ||
-    zoneFilter !== "all" ||
-    hasDriversFilter !== "all" ||
-    hasLocationFilter !== "all";
-
   const visible = useMemo(() => {
     return restaurants.filter((r) => {
       if (
-        !fieldSearchMatch(r, search, {
+        !fieldSearchMatch(r, tablePrefs.appliedQuery, {
           name: (row) => row.name,
           zone: (row) => row.zone_name,
           status: (row) => row.status,
@@ -235,7 +232,8 @@ function RestaurantsPageContent() {
     });
   }, [
     restaurants,
-    search, statusFilter,
+    tablePrefs.appliedQuery,
+    statusFilter,
     partnerFilter,
     zoneFilter,
     hasDriversFilter,
@@ -245,7 +243,7 @@ function RestaurantsPageContent() {
     () =>
       groupRows(
         visible,
-        prefs.groupBy,
+        tablePrefs.groupBy,
         {
           status: (row) => row.status,
           zone: (row) => row.zone_name,
@@ -254,12 +252,12 @@ function RestaurantsPageContent() {
         {},
         "—",
       ),
-    [prefs.groupBy, visible],
+    [tablePrefs.groupBy, visible],
   );
   const listView = useGroupedListView(
     grouped,
-    prefs.groupBy !== "none",
-    `${prefs.groupBy}\u0001${search}\u0001${statusFilter}\u0001${partnerFilter}\u0001${zoneFilter}\u0001${hasDriversFilter}\u0001${hasLocationFilter}`,
+    tablePrefs.groupBy !== "none",
+    `${tablePrefs.groupBy}\u0001${tablePrefs.appliedQuery}\u0001${statusFilter}\u0001${partnerFilter}\u0001${zoneFilter}\u0001${hasDriversFilter}\u0001${hasLocationFilter}`,
   );
 
   const handleRefresh = async () => {
@@ -315,59 +313,74 @@ function RestaurantsPageContent() {
     }
   };
 
-  const countLabel =
-    visible.length !== restaurants.length
-      ? `${t("totalRestaurants", { count: visible.length })} ${t("ofTotal", { total: restaurants.length })}`
-      : t("totalRestaurants", { count: visible.length });
-
   const showEmptySearch =
     !isLoading && restaurants.length > 0 && visible.length === 0;
   const showEmptyAll = !isLoading && restaurants.length === 0;
 
-  const columnVisibilityOptions = useMemo(
-    () => [
-      { id: "restaurant", label: t("colRestaurant") },
-      { id: "partner", label: t("colPartner") },
-      { id: "zone", label: t("colZone") },
-      { id: "externalId", label: t("colExternalId") },
-      { id: "status", label: t("colStatus") },
-      { id: "drivers", label: t("colDrivers") },
-      { id: "activeDeliveries", label: t("colActiveDeliveries") },
-      { id: "created", label: t("colCreated") },
-      { id: "actions", label: t("colActions"), locked: true as const },
-    ],
-    [t],
+  const tableColumns = tablePrefs.orderedColumns
+    .filter((column) => tablePrefs.isVisible(column.id))
+    .map((column) => ({
+      id: column.id,
+      label: column.label,
+      className:
+        column.id === "actions"
+          ? cn("text-end", canManage || canAssignDrivers ? "w-28" : "w-16")
+          : undefined,
+    }));
+
+  const filterChips = [
+    ...(statusFilter !== "all"
+      ? [{ id: "status", label: `${t("filterStatus")}: ${statusFilterLabel(statusFilter)}` }]
+      : []),
+    ...(partnerFilter !== "all"
+      ? [{
+          id: "partner",
+          label: `${t("filterPartner")}: ${partnerSelectItems.find((item) => item.value === partnerFilter)?.label ?? ""}`,
+        }]
+      : []),
+    ...(zoneFilter !== "all"
+      ? [{
+          id: "zone",
+          label: `${t("filterZone")}: ${zoneSelectItems.find((item) => item.value === zoneFilter)?.label ?? ""}`,
+        }]
+      : []),
+    ...(hasDriversFilter !== "all"
+      ? [{
+          id: "drivers",
+          label: `${t("filterHasDrivers")}: ${hasDriversSelectItems.find((item) => item.value === hasDriversFilter)?.label ?? ""}`,
+        }]
+      : []),
+    ...(hasLocationFilter !== "all"
+      ? [{
+          id: "location",
+          label: `${t("filterHasLocation")}: ${hasLocationSelectItems.find((item) => item.value === hasLocationFilter)?.label ?? ""}`,
+        }]
+      : []),
+  ];
+
+  const toolbar = (
+    <TableToolbar
+      prefs={tablePrefs}
+      entity={t("title")}
+      columns={toolbarColumns}
+      rowKind="dynamic"
+      entityList
+      filteredCount={visible.length}
+      totalCount={restaurants.length}
+      onExport={() => exportRestaurantsCsv(visible, t)}
+      onAdd={canManage ? handleAdd : undefined}
+      addLabel={t("addRestaurant")}
+      chips={filterChips}
+      onRemoveChip={(id) => {
+        if (id === "status") setStatusFilter("all");
+        if (id === "partner") setPartnerFilter("all");
+        if (id === "zone") setZoneFilter("all");
+        if (id === "drivers") setHasDriversFilter("all");
+        if (id === "location") setHasLocationFilter("all");
+      }}
+      onClearChips={clearAllFilters}
+    />
   );
-
-  const {
-    isVisible: isColumnVisible,
-    toggle: toggleColumn,
-    reset: resetColumns,
-    pickerOptions: columnPickerOptions,
-    hiddenToggleableCount,
-  } = useTableColumnVisibility("dpd:restaurants:list-columns", columnVisibilityOptions);
-
-  const tableColumns = useMemo(() => {
-    const cols = [
-      { id: "restaurant", label: t("colRestaurant") },
-      { id: "partner", label: t("colPartner") },
-      { id: "zone", label: t("colZone") },
-      { id: "externalId", label: t("colExternalId") },
-      { id: "status", label: t("colStatus") },
-      { id: "drivers", label: t("colDrivers") },
-      { id: "activeDeliveries", label: t("colActiveDeliveries") },
-      { id: "created", label: t("colCreated") },
-      {
-        id: "actions",
-        label: t("colActions"),
-        className: cn(
-          "text-end",
-          canManage || canAssignDrivers ? "w-28" : "w-16",
-        ),
-      },
-    ];
-    return cols.filter((col) => isColumnVisible(col.id));
-  }, [canAssignDrivers, canManage, isColumnVisible, t]);
 
   const statusTabs = [
     { id: "all", label: t("filterStatusAll") },
@@ -396,213 +409,65 @@ function RestaurantsPageContent() {
               />
               {t("refresh")}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 cursor-pointer rounded-lg"
-              onClick={() => exportRestaurantsCsv(visible, t)}
-              disabled={visible.length === 0}
-            >
-              <Download className="me-2 h-3.5 w-3.5" />
-              {t("export")}
-            </Button>
-            {canManage ? (
-              <Button
-                type="button"
-                size="sm"
-                className="h-9 cursor-pointer rounded-lg"
-                onClick={handleAdd}
-              >
-                <Plus className="me-2 h-3.5 w-3.5" />
-                {t("addRestaurant")}
-              </Button>
-            ) : null}
           </div>
         }
       />
       <AppListCard
         toolbar={
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <TabBar
-                items={statusTabs}
-                activeId={statusFilter}
-                onSelect={(id) => setStatusFilter(id as StatusFilter)}
-                className="border-b-0"
-              />
-              <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
-                {countLabel}
-              </p>
-            </div>
-            <AppListControls
-              searchValue={search}
-              onSearchChange={setSearch}
-              searchPlaceholder={t("searchPlaceholder")}
-              searchAriaLabel={t("searchPlaceholder")}
-              clearSearchLabel={labels.clearSearch}
-              groupByOptions={[
-                labels.group.none,
-                labels.group.status,
-                labels.group.zone,
-                labels.group.partner,
-              ]}
-              groupBy={prefs.groupBy}
-              onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
-              groupByLabel={labels.groupBy}
-              viewMode={prefs.viewMode}
-              onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
-              tableViewLabel={labels.viewTable}
-              cardsViewLabel={labels.viewCards}
-              filterSlot={
-                <>
-                  <SearchSelect
-                    items={partnerSelectItems}
-                    value={partnerFilter}
-                    onChange={(v) => setPartnerFilter(v ?? "all")}
-                    placeholder={t("filterPartner")}
-                    searchPlaceholder={t("filterPartner")}
-                    defaultLimit={8}
-                    recentsKey="restaurants-partner-filter"
-                    className="w-full min-w-[140px] sm:w-[160px]"
-                    clearable={false}
-                  />
-                  <SearchSelect
-                    items={zoneSelectItems}
-                    value={zoneFilter}
-                    onChange={(v) => setZoneFilter(v ?? "all")}
-                    placeholder={t("filterZone")}
-                    searchPlaceholder={t("filterZone")}
-                    defaultLimit={8}
-                    recentsKey="restaurants-zone-filter"
-                    className="w-full min-w-[140px] sm:w-[160px]"
-                    clearable={false}
-                  />
-                  <SearchSelect
-                    items={hasDriversSelectItems}
-                    value={hasDriversFilter}
-                    onChange={(v) =>
-                      setHasDriversFilter((v as HasDriversFilter) ?? "all")
-                    }
-                    placeholder={t("filterHasDrivers")}
-                    searchPlaceholder={t("filterHasDrivers")}
-                    defaultLimit={8}
-                    recentsKey="restaurants-has-drivers-filter"
-                    className="w-full min-w-[140px] sm:w-[160px]"
-                    clearable={false}
-                  />
-                  <SearchSelect
-                    items={hasLocationSelectItems}
-                    value={hasLocationFilter}
-                    onChange={(v) =>
-                      setHasLocationFilter((v as HasLocationFilter) ?? "all")
-                    }
-                    placeholder={t("filterHasLocation")}
-                    searchPlaceholder={t("filterHasLocation")}
-                    defaultLimit={8}
-                    recentsKey="restaurants-has-location-filter"
-                    className="w-full min-w-[140px] sm:w-[160px]"
-                    clearable={false}
-                  />
-                  <AppTableColumnPicker
-                    options={columnPickerOptions}
-                    isVisible={isColumnVisible}
-                    onToggle={toggleColumn}
-                    onReset={resetColumns}
-                    hiddenCount={hiddenToggleableCount}
-                  />
-                </>
-              }
+          <div className="flex flex-col gap-2">
+            <TabBar
+              items={statusTabs}
+              activeId={statusFilter}
+              onSelect={(id) => setStatusFilter(id as StatusFilter)}
+              className="border-b-0"
             />
+            <div className="flex flex-wrap gap-2">
+              <SearchSelect
+                items={partnerSelectItems}
+                value={partnerFilter}
+                onChange={(v) => setPartnerFilter(v ?? "all")}
+                placeholder={t("filterPartner")}
+                searchPlaceholder={t("filterPartner")}
+                defaultLimit={8}
+                recentsKey="restaurants-partner-filter"
+                className="w-full min-w-[140px] sm:w-[160px]"
+                clearable={false}
+              />
+              <SearchSelect
+                items={zoneSelectItems}
+                value={zoneFilter}
+                onChange={(v) => setZoneFilter(v ?? "all")}
+                placeholder={t("filterZone")}
+                searchPlaceholder={t("filterZone")}
+                defaultLimit={8}
+                recentsKey="restaurants-zone-filter"
+                className="w-full min-w-[140px] sm:w-[160px]"
+                clearable={false}
+              />
+              <SearchSelect
+                items={hasDriversSelectItems}
+                value={hasDriversFilter}
+                onChange={(v) => setHasDriversFilter((v as HasDriversFilter) ?? "all")}
+                placeholder={t("filterHasDrivers")}
+                searchPlaceholder={t("filterHasDrivers")}
+                defaultLimit={8}
+                recentsKey="restaurants-has-drivers-filter"
+                className="w-full min-w-[140px] sm:w-[160px]"
+                clearable={false}
+              />
+              <SearchSelect
+                items={hasLocationSelectItems}
+                value={hasLocationFilter}
+                onChange={(v) => setHasLocationFilter((v as HasLocationFilter) ?? "all")}
+                placeholder={t("filterHasLocation")}
+                searchPlaceholder={t("filterHasLocation")}
+                defaultLimit={8}
+                recentsKey="restaurants-has-location-filter"
+                className="w-full min-w-[140px] sm:w-[160px]"
+                clearable={false}
+              />
+            </div>
           </div>
-        }
-        filterChips={
-          hasActiveFilters ? (
-            <>
-              {statusFilter !== "all" ? (
-                <Badge variant="secondary" className="gap-1 rounded-lg pe-1">
-                  {t("filterStatus")}: {statusFilterLabel(statusFilter)}
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded p-0.5 hover:bg-muted"
-                    onClick={() => setStatusFilter("all")}
-                    aria-label={t("clearFilters")}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ) : null}
-              {partnerFilter !== "all" ? (
-                <Badge variant="secondary" className="gap-1 rounded-lg pe-1">
-                  {t("filterPartner")}:{" "}
-                  {partnerSelectItems.find((i) => i.value === partnerFilter)?.label}
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded p-0.5 hover:bg-muted"
-                    onClick={() => setPartnerFilter("all")}
-                    aria-label={t("clearFilters")}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ) : null}
-              {zoneFilter !== "all" ? (
-                <Badge variant="secondary" className="gap-1 rounded-lg pe-1">
-                  {t("filterZone")}:{" "}
-                  {zoneSelectItems.find((i) => i.value === zoneFilter)?.label}
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded p-0.5 hover:bg-muted"
-                    onClick={() => setZoneFilter("all")}
-                    aria-label={t("clearFilters")}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ) : null}
-              {hasDriversFilter !== "all" ? (
-                <Badge variant="secondary" className="gap-1 rounded-lg pe-1">
-                  {t("filterHasDrivers")}:{" "}
-                  {
-                    hasDriversSelectItems.find((i) => i.value === hasDriversFilter)
-                      ?.label
-                  }
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded p-0.5 hover:bg-muted"
-                    onClick={() => setHasDriversFilter("all")}
-                    aria-label={t("clearFilters")}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ) : null}
-              {hasLocationFilter !== "all" ? (
-                <Badge variant="secondary" className="gap-1 rounded-lg pe-1">
-                  {t("filterHasLocation")}:{" "}
-                  {
-                    hasLocationSelectItems.find((i) => i.value === hasLocationFilter)
-                      ?.label
-                  }
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded p-0.5 hover:bg-muted"
-                    onClick={() => setHasLocationFilter("all")}
-                    aria-label={t("clearFilters")}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ) : null}
-              <button
-                type="button"
-                className="cursor-pointer text-xs text-primary hover:underline"
-                onClick={clearAllFilters}
-              >
-                {t("clearFilters")}
-              </button>
-            </>
-          ) : undefined
         }
       >
         {isLoading ? (
@@ -640,8 +505,9 @@ function RestaurantsPageContent() {
               </Button>
             ) : null}
           </div>
-        ) : prefs.viewMode === "cards" ? (
-          <CardContent className="p-4">
+        ) : tablePrefs.view === "grid" ? (
+          <CardContent className="p-0">
+            {toolbar}
             {showEmptySearch ? (
               <AppEmptyState
                 title={t("emptySearchTitle")}
@@ -651,7 +517,7 @@ function RestaurantsPageContent() {
               <GroupedSections
                 groups={grouped}
                 paged
-                resetKey={`${prefs.groupBy}\u0001${search}\u0001${statusFilter}\u0001${partnerFilter}\u0001${zoneFilter}\u0001${hasDriversFilter}\u0001${hasLocationFilter}`}
+                resetKey={`${tablePrefs.groupBy}\u0001${tablePrefs.appliedQuery}\u0001${statusFilter}\u0001${partnerFilter}\u0001${zoneFilter}\u0001${hasDriversFilter}\u0001${hasLocationFilter}`}
               >
                 {(rows) => (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -691,6 +557,7 @@ function RestaurantsPageContent() {
           <CardContent className="p-0">
             <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
             <AppDataTable
+              toolbar={toolbar}
               columns={tableColumns}
               empty={
                 showEmptySearch ? (
@@ -736,7 +603,10 @@ function RestaurantsPageContent() {
                         handleRowClick(row);
                       }}
                     >
-                      <VisibleTableCell columnId="restaurant" isVisible={isColumnVisible}>
+                      {tableColumns.map((column) => {
+                        if (column.id === "restaurant") {
+                          return (
+                      <TableCell key={column.id}>
                         <div className="flex items-center gap-2.5">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/40">
                             {row.logo_display_url ? (
@@ -753,7 +623,7 @@ function RestaurantsPageContent() {
                             )}
                           </div>
                           <div className="min-w-0">
-                            <p className="truncate font-medium text-foreground">{row.name}</p>
+                            <TableNameCell name={row.name} />
                             <Link
                               href={`/restaurants/${row.id}`}
                               className="mt-0.5 block text-xs text-primary hover:underline"
@@ -763,29 +633,33 @@ function RestaurantsPageContent() {
                             </Link>
                           </div>
                         </div>
-                      </VisibleTableCell>
-                      <VisibleTableCell
-                        columnId="partner"
-                        isVisible={isColumnVisible}
-                        className="text-sm text-muted-foreground"
-                      >
-                        {row.partner_name}
-                      </VisibleTableCell>
-                      <VisibleTableCell
-                        columnId="zone"
-                        isVisible={isColumnVisible}
-                        className="text-sm text-muted-foreground"
-                      >
-                        {row.zone_name}
-                      </VisibleTableCell>
-                      <VisibleTableCell
-                        columnId="externalId"
-                        isVisible={isColumnVisible}
-                        className="font-mono text-xs text-muted-foreground"
-                      >
-                        {row.external_merchant_id ?? "—"}
-                      </VisibleTableCell>
-                      <VisibleTableCell columnId="status" isVisible={isColumnVisible}>
+                      </TableCell>
+                          );
+                        }
+                        if (column.id === "partner") {
+                          return (
+                      <TableCell key={column.id} className="text-sm text-muted-foreground">
+                        {row.partner_name ? row.partner_name : <EmptyCell />}
+                      </TableCell>
+                          );
+                        }
+                        if (column.id === "zone") {
+                          return (
+                      <TableCell key={column.id} className="text-sm text-muted-foreground">
+                        {row.zone_name ? row.zone_name : <EmptyCell />}
+                      </TableCell>
+                          );
+                        }
+                        if (column.id === "externalId") {
+                          return (
+                      <TableCell key={column.id} className="font-mono text-xs text-muted-foreground">
+                        {row.external_merchant_id ? row.external_merchant_id : <EmptyCell />}
+                      </TableCell>
+                          );
+                        }
+                        if (column.id === "status") {
+                          return (
+                      <TableCell key={column.id}>
                         <Badge
                           variant={
                             row.status === "published"
@@ -798,31 +672,34 @@ function RestaurantsPageContent() {
                         >
                           {statusBadgeLabel(row.status)}
                         </Badge>
-                      </VisibleTableCell>
-                      <VisibleTableCell
-                        columnId="drivers"
-                        isVisible={isColumnVisible}
-                        className="text-sm text-muted-foreground"
-                      >
+                      </TableCell>
+                          );
+                        }
+                        if (column.id === "drivers") {
+                          return (
+                      <TableCell key={column.id} className="text-sm text-muted-foreground">
                         {t("driversCount", { count: row.driver_count })}
-                      </VisibleTableCell>
-                      <VisibleTableCell
-                        columnId="activeDeliveries"
-                        isVisible={isColumnVisible}
-                        className="text-sm tabular-nums text-muted-foreground"
-                      >
+                      </TableCell>
+                          );
+                        }
+                        if (column.id === "activeDeliveries") {
+                          return (
+                      <TableCell key={column.id} className="text-sm tabular-nums text-muted-foreground">
                         {row.active_deliveries}
-                      </VisibleTableCell>
-                      <VisibleTableCell
-                        columnId="created"
-                        isVisible={isColumnVisible}
-                        className="text-sm text-muted-foreground"
-                      >
+                      </TableCell>
+                          );
+                        }
+                        if (column.id === "created") {
+                          return (
+                      <TableCell key={column.id} className="text-sm text-muted-foreground">
                         {formatCreatedAt(row.created_at, locale)}
-                      </VisibleTableCell>
-                      <VisibleTableCell
-                        columnId="actions"
-                        isVisible={isColumnVisible}
+                      </TableCell>
+                          );
+                        }
+                        if (column.id === "actions") {
+                          return (
+                      <TableCell
+                        key={column.id}
                         className="text-end"
                         onClick={(e) => e.stopPropagation()}
                         onKeyDown={(e) => e.stopPropagation()}
@@ -888,7 +765,11 @@ function RestaurantsPageContent() {
                             </Tooltip>
                           ) : null}
                         </div>
-                      </VisibleTableCell>
+                      </TableCell>
+                          );
+                        }
+                        return null;
+                      })}
                     </AppDataTableRow>
                     )),
                   ])

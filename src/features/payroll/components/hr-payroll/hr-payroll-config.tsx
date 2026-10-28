@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState, type JSX } from "react";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Fragment, useMemo, useState, type JSX } from "react";
+import { Plus, Trash2 } from "lucide-react";
+import { EmptyCell, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { groupBanner, groupRows, ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
 import { SearchSelect } from "@/components/ui/search-select";
 import { HR_VEHICLES, type HrRateEvent, type HrRateLine, type HrVehicleType } from "@/features/payroll/hr-rate";
 
@@ -96,18 +98,29 @@ export function HrPayrollConfig(props: {
   const { labels } = props;
   const [lines, setLines] = useState<HrRateLine[]>(() => (props.lines.length > 0 ? props.lines.map((line) => ({ ...line, zones: [...line.zones] })) : [blankLine()]));
   const [invalid, setInvalid] = useState(false);
-  const [query, setQuery] = useState("");
+  const historyColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "when", label: labels.when },
+      { id: "by", label: labels.by, categorical: true },
+      { id: "item", label: labels.item, locked: true },
+      { id: "change", label: labels.change, categorical: true },
+      { id: "before", label: labels.before },
+      { id: "after", label: labels.after },
+    ],
+    [labels.after, labels.before, labels.by, labels.change, labels.item, labels.when],
+  );
+  const historyPrefs = useTablePrefs("payroll.hrRateHistory", historyColumns);
   const projectItems = useMemo(
     () => props.projects.map((project) => ({ value: project, label: project, keywords: [project] })),
     [props.projects],
   );
-  const history = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return props.history;
-    return props.history.filter((event) =>
-      `${event.item} ${event.field} ${event.by} ${event.from} ${event.to}`.toLowerCase().includes(needle),
-    );
-  }, [props.history, query]);
+  const history = useMemo(
+    () =>
+      props.history.filter((event) =>
+        rowMatches(historyPrefs.appliedQuery, [event.item, event.field, event.by, event.from, event.to, event.at]),
+      ),
+    [historyPrefs.appliedQuery, props.history],
+  );
 
   function patch(id: string, next: Partial<HrRateLine>) {
     setLines((current) => current.map((line) => (line.id === id ? { ...line, ...next } : line)));
@@ -268,52 +281,82 @@ export function HrPayrollConfig(props: {
           <p>{labels.historySub}</p>
         </div>
         <div className="hrpay-hist-card">
-          <div className="hrpay-hist-tools">
-            <label className="hrpay-hist-search">
-              <Search size={14} aria-hidden />
-              <input
-                className="hrpay-search"
-                value={query}
-                aria-label={labels.search}
-                placeholder={labels.searchPlaceholder}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </label>
-          </div>
-          <div className="hrpay-scroll">
-            <table className="hrpay-table">
-              <thead>
-                <tr>
-                  <th>{labels.when}</th>
-                  <th>{labels.by}</th>
-                  <th>{labels.item}</th>
-                  <th>{labels.change}</th>
-                  <th>{labels.before}</th>
-                  <th>{labels.after}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.length === 0 ? (
-                  <tr>
-                    <td colSpan={6}>{labels.empty}</td>
-                  </tr>
-                ) : (
-                  history.map((event) => (
-                    <tr key={event.id}>
-                      <td>{event.at}</td>
-                      <td>{event.by}</td>
-                      <td>{event.item}</td>
-                      <td>{fieldLabel(event.field, labels)}</td>
-                      <td className="hrpay-old">{event.from}</td>
-                      <td className="hrpay-new">{event.to}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          <ListToolbar
+            prefs={historyPrefs}
+            entity={labels.history}
+            columns={historyColumns}
+            rowKind="dynamic"
+            filteredCount={history.length}
+            totalCount={props.history.length}
+          />
+          <RateHistoryRows columns={historyColumns} prefs={historyPrefs} rows={history} labels={labels} empty={labels.empty} />
         </div>
       </section>
+    </div>
+  );
+}
+
+function RateHistoryRows({
+  columns,
+  prefs,
+  rows,
+  labels,
+  empty,
+}: {
+  columns: TableToolbarColumn[];
+  prefs: ReturnType<typeof useTablePrefs>;
+  rows: readonly HrRateEvent[];
+  labels: HrPayrollConfigLabels;
+  empty: string;
+}) {
+  const ids = visibleColumnIds(prefs);
+  const groups = groupRows(rows, prefs.groupBy, (event) => {
+    if (prefs.groupBy === "by") return event.by;
+    if (prefs.groupBy === "change") return fieldLabel(event.field, labels);
+    return "";
+  });
+  return (
+    <div className="hrpay-scroll">
+      <table className="hrpay-table">
+        <thead>
+          <tr>
+            {ids.map((id) => (
+              <th key={id}>{columns.find((column) => column.id === id)?.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={Math.max(ids.length, 1)}>{empty}</td>
+            </tr>
+          ) : (
+            groups.map((group) => (
+              <Fragment key={group.key}>
+                {group.label ? (
+                  <tr>
+                    <td colSpan={ids.length} className="bg-muted/40 px-2 py-1 text-xs font-semibold">{groupBanner(group.label, group.rows.length)}</td>
+                  </tr>
+                ) : null}
+                {group.rows.map((event) => (
+                  <tr key={event.id}>
+                    {ids.map((id) => (
+                      <td key={id} className={id === "before" ? "hrpay-old" : id === "after" ? "hrpay-new" : undefined}>
+                        {id === "when" ? event.at : null}
+                        {id === "by" ? <TableNameCell name={event.by} /> : null}
+                        {id === "item" ? (event.item ? event.item : <EmptyCell />) : null}
+                        {id === "change" ? fieldLabel(event.field, labels) : null}
+                        {id === "before" ? (event.from ? event.from : <EmptyCell />) : null}
+                        {id === "after" ? (event.to ? event.to : <EmptyCell />) : null}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </Fragment>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }

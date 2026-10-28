@@ -16,12 +16,8 @@ import {
 } from "recharts";
 import { CalendarDays, Download, Loader2, Upload, UserX, Users } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
-import {
-  AppListControls,
-  fieldSearchMatch,
-  useListControlLabels,
-  useListViewPrefs,
-} from "@/components/app/app-list-controls";
+import { GroupedSections, fieldSearchMatch, groupRows } from "@/components/app/app-list-controls";
+import { TableToolbar, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { ToggleChip } from "@/components/app/toggle-chip";
@@ -53,6 +49,7 @@ import {
   spanDays,
   type ComparisonPeriodPreset,
   type ComparisonResult,
+  type ComparisonRider,
 } from "./order-comparison-model";
 import type { ComparisonColumnFilters } from "./order-comparison-filters";
 import { ComparisonDayGrid, ComparisonSimpleTable } from "./order-comparison-grid";
@@ -60,10 +57,53 @@ import { OrderReconImportDialog } from "./order-recon-import-dialog";
 
 type Tab = "both" | "unused" | "unmatched";
 
+function rowsForTab(rows: ComparisonRider[], tab: Tab): ComparisonRider[] {
+  switch (tab) {
+    case "both":
+      return ridersInBoth(rows);
+    case "unused":
+      return ridersNotUsingApp(rows);
+    case "unmatched":
+      return ridersMggoOnly(rows);
+    default: {
+      const unreachable: never = tab;
+      return unreachable;
+    }
+  }
+}
+
+function resultGroupLabel(
+  result: ComparisonResult,
+  label: (key: "match" | "am_higher" | "mggo_higher" | "not_using_app" | "mggo_only") => string,
+): string {
+  switch (result) {
+    case "match":
+    case "am_higher":
+    case "mggo_higher":
+    case "not_using_app":
+    case "mggo_only":
+      return label(result);
+    case "no_orders":
+      return "—";
+    default: {
+      const unreachable: never = result;
+      return unreachable;
+    }
+  }
+}
+
 export function OrderReconPageShell() {
   const t = useTranslations("pages.orderRecon");
-  const labels = useListControlLabels();
-  const { prefs, update } = useListViewPrefs("order-recon");
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: t("colRiderName"), locked: true },
+      { id: "mgId", label: t("colMgId") },
+      { id: "restaurant", label: t("colRestaurant"), categorical: true },
+      { id: "result", label: t("colStatus"), categorical: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("order-recon", columns);
   const locale = useLocale();
   const { can } = useAuth();
   const canManage = can("order_recon.manage");
@@ -76,10 +116,9 @@ export function OrderReconPageShell() {
   const [appliedCustom, setAppliedCustom] = useState({ from: today, to: today });
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("both");
-  const [search, setSearch] = useState("");
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [dayIndex, setDayIndex] = useState<number | null>(null);
-  const [columns, setColumns] = useState<ComparisonColumnFilters>({});
+  const [columnFilters, setColumnFilters] = useState<ComparisonColumnFilters>({});
   const [pending, startTransition] = useTransition();
 
   const range = comparisonPeriod(preset, today, appliedCustom);
@@ -108,20 +147,41 @@ export function OrderReconPageShell() {
   );
   const kpi = useMemo(() => comparisonKpis(riders), [riders]);
   const daily = useMemo(() => dailyTotals(riders, days), [riders, days]);
-  const filtered = useMemo(() => {
-    const base = applyPageFilters(riders, { search: "", result, dayIndex, columns });
-    return base.filter((row) =>
-      fieldSearchMatch(row, search, {
-        name: (item) => item.name,
-        employee_id: (item) => item.mgId,
-        restaurant: (item) => item.restaurant,
-      }),
-    );
-  }, [columns, dayIndex, result, riders, search]);
+  const pageRows = useMemo(
+    () => applyPageFilters(riders, { search: "", result, dayIndex, columns: columnFilters }),
+    [columnFilters, dayIndex, result, riders],
+  );
+  const filtered = useMemo(
+    () =>
+      pageRows.filter((row) =>
+        fieldSearchMatch(row, prefs.appliedQuery, {
+          name: (item) => item.name,
+          employee_id: (item) => item.mgId,
+          restaurant: (item) => item.restaurant,
+        }),
+      ),
+    [pageRows, prefs.appliedQuery],
+  );
 
   const both = useMemo(() => ridersInBoth(filtered), [filtered]);
   const unused = useMemo(() => ridersNotUsingApp(filtered), [filtered]);
   const unmatched = useMemo(() => ridersMggoOnly(filtered), [filtered]);
+  const visible = useMemo(() => rowsForTab(filtered, tab), [filtered, tab]);
+  const visibleTotal = useMemo(() => rowsForTab(pageRows, tab).length, [pageRows, tab]);
+  const groups = useMemo(
+    () =>
+      groupRows(
+        visible,
+        prefs.groupBy,
+        {
+          restaurant: (row) => row.restaurant,
+          result: (row) => resultGroupLabel(row.result, (key) => t(`result.${key}`)),
+        },
+        {},
+        "—",
+      ),
+    [prefs.groupBy, t, visible],
+  );
   const monthMeta = monthContaining(range.from);
   const monthName =
     locale === "ar"
@@ -130,7 +190,7 @@ export function OrderReconPageShell() {
         )
       : monthLabelEn(monthMeta.year, monthMeta.month);
 
-  const chips = activeFilterEntries(columns);
+  const chips = activeFilterEntries(columnFilters);
   const colLabels: Record<string, string> = {
     mgId: t("colMgId"),
     name: t("colRiderName"),
@@ -344,23 +404,25 @@ export function OrderReconPageShell() {
             <ToggleChip selected={tab === "unmatched"} icon={CalendarDays} className="h-9" onClick={() => setTab("unmatched")}>
               {t("tabUnmatched")}
             </ToggleChip>
-            <AppListControls
-              searchValue={search}
-              onSearchChange={setSearch}
-              searchPlaceholder={t("searchRiders")}
-              clearSearchLabel={labels.clearSearch}
-              filterSlot={
-                dayIndex != null ? (
-                  <button
-                    type="button"
-                    className="h-8 rounded-md border border-border px-2 text-xs"
-                    onClick={() => setDayIndex(null)}
-                  >
-                    {t("clearDay", { day: days[dayIndex]?.slice(8) ?? "" })}
-                  </button>
-                ) : null
-              }
-            />
+            {dayIndex != null ? (
+              <button
+                type="button"
+                className="h-9 rounded-md border border-border px-2 text-xs"
+                onClick={() => setDayIndex(null)}
+              >
+                {t("clearDay", { day: days[dayIndex]?.slice(8) ?? "" })}
+              </button>
+            ) : null}
+            <div className="min-w-0 basis-full">
+              <TableToolbar
+                prefs={prefs}
+                entity={t("compareTitle")}
+                columns={columns}
+                rowKind="dynamic"
+                filteredCount={visible.length}
+                totalCount={visibleTotal}
+              />
+            </div>
           </div>
 
           {chips.length > 0 ? (
@@ -375,16 +437,16 @@ export function OrderReconPageShell() {
                     type="button"
                     className="text-muted-foreground hover:text-foreground"
                     onClick={() => {
-                      const next = { ...columns };
+                      const next = { ...columnFilters };
                       delete next[chip.id];
-                      setColumns(next);
+                      setColumnFilters(next);
                     }}
                   >
                     ✕
                   </button>
                 </span>
               ))}
-              <button type="button" className="h-7 text-xs text-primary" onClick={() => setColumns({})}>
+              <button type="button" className="h-7 text-xs text-primary" onClick={() => setColumnFilters({})}>
                 {t("clearColumnFilters")}
               </button>
             </div>
@@ -408,7 +470,9 @@ export function OrderReconPageShell() {
               {unused.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground">{t("emptyRows")}</p>
               ) : (
-                <ComparisonSimpleTable riders={unused} mode="unused" />
+                <GroupedSections groups={groups}>
+                  {(rows) => <ComparisonSimpleTable riders={rows} mode="unused" />}
+                </GroupedSections>
               )}
             </AppListCard>
           ) : tab === "unmatched" ? (
@@ -416,7 +480,9 @@ export function OrderReconPageShell() {
               {unmatched.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground">{t("emptyRows")}</p>
               ) : (
-                <ComparisonSimpleTable riders={unmatched} mode="mggo_only" />
+                <GroupedSections groups={groups}>
+                  {(rows) => <ComparisonSimpleTable riders={rows} mode="mggo_only" />}
+                </GroupedSections>
               )}
             </AppListCard>
           ) : (
@@ -424,30 +490,34 @@ export function OrderReconPageShell() {
               {both.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground">{t("emptyRows")}</p>
               ) : (
-                <ComparisonDayGrid
-                  riders={both}
-                  days={days}
-                  monthLabel={monthName}
-                  filters={columns}
-                  onFilters={setColumns}
-                  labels={{
-                    mgId: t("colMgId"),
-                    name: t("colRiderName"),
-                    restaurant: t("colRestaurant"),
-                    month: t("colMonth"),
-                    days: t("colDaysDiff"),
-                    search: t("searchRiders"),
-                    searchMgId: t("searchMgId"),
-                    searchName: t("searchName"),
-                    searchRestaurant: t("searchRestaurant"),
-                    all: t("filterAll"),
-                    clear: t("filterClear"),
-                    apply: t("filterApply"),
-                    min: t("filterMin"),
-                    max: t("filterMax"),
-                    contains: t("filterContains"),
-                  }}
-                />
+                <GroupedSections groups={groups}>
+                  {(rows) => (
+                    <ComparisonDayGrid
+                      riders={rows}
+                      days={days}
+                      monthLabel={monthName}
+                      filters={columnFilters}
+                      onFilters={setColumnFilters}
+                      labels={{
+                        mgId: t("colMgId"),
+                        name: t("colRiderName"),
+                        restaurant: t("colRestaurant"),
+                        month: t("colMonth"),
+                        days: t("colDaysDiff"),
+                        search: t("searchRiders"),
+                        searchMgId: t("searchMgId"),
+                        searchName: t("searchName"),
+                        searchRestaurant: t("searchRestaurant"),
+                        all: t("filterAll"),
+                        clear: t("filterClear"),
+                        apply: t("filterApply"),
+                        min: t("filterMin"),
+                        max: t("filterMax"),
+                        contains: t("filterContains"),
+                      }}
+                    />
+                  )}
+                </GroupedSections>
               )}
             </AppListCard>
           )}

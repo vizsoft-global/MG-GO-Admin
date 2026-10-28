@@ -10,6 +10,13 @@ import {
   TableCell,
 } from "@/components/app/app-data-table";
 import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
+import {
   dimMetricValue,
   EFFICIENCY_BUCKETS,
   formatOpsTrendLabel,
@@ -44,6 +51,16 @@ export function OpsDpdTab({
   granularity: OpsGranularity;
 }) {
   const t = useTranslations("pages.performance.ops");
+  const storeColumns = useMemo((): TableToolbarColumn[] => [
+    { id: "store", label: t("col.store"), locked: true },
+    { id: "zone", label: t("col.zone") },
+    { id: "orders", label: t("col.orders") },
+    { id: "dpd", label: t("col.dpd") },
+    { id: "utr", label: t("col.utr") },
+    { id: "avg", label: t("col.avgDelivery") },
+    { id: "riders", label: t("col.riders") },
+  ], [t]);
+  const storePrefs = useTablePrefs("ops-dpd-stores", storeColumns);
   const riders = useMemo(() => data.riders.map(enrichOpsRider), [data.riders]);
   const seriesName = t(`viewBy.${metric}`);
   const series = [{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }];
@@ -258,73 +275,51 @@ export function OpsDpdTab({
       <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold">{t("storesTitle")}</h3>
-          {data.stores.length ? (
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() =>
-                downloadCsv(
-                  "ops-dpd-stores",
-                  toCsv(
-                    [
-                      t("col.store"),
-                      t("col.zone"),
-                      t("col.orders"),
-                      t("col.dpd"),
-                      t("col.utr"),
-                      t("col.avgDelivery"),
-                      t("col.riders"),
-                    ],
-                    data.stores.map((s) => [
-                      s.store_name,
-                      s.zone_name,
-                      s.orders,
-                      s.store_dpd,
-                      s.utr,
-                      s.avg_delivery_min,
-                      s.active_riders,
-                    ]),
-                  ),
-                )
-              }
-            >
-              {t("exportTab")}
-            </button>
-          ) : null}
         </div>
         {data.stores.length === 0 ? (
           <p className="text-xs text-muted-foreground">{t("emptyStores")}</p>
         ) : (
           <AppDataTable
-            columns={[
-              { id: "store", label: t("col.store") },
-              { id: "zone", label: t("col.zone") },
-              { id: "orders", label: t("col.orders"), className: "text-end" },
-              { id: "dpd", label: t("col.dpd"), className: "text-end" },
-              { id: "utr", label: t("col.utr"), className: "text-end" },
-              { id: "avg", label: t("col.avgDelivery"), className: "text-end" },
-              { id: "riders", label: t("col.riders"), className: "text-end" },
-            ]}
+            toolbar={
+              <TableToolbar
+                prefs={storePrefs}
+                entity={t("storesTitle")}
+                columns={storeColumns}
+                rowKind="dynamic"
+                filteredCount={data.stores.filter((s) => {
+                  const needle = storePrefs.appliedQuery.trim().toLowerCase();
+                  return !needle || `${s.store_name ?? ""} ${s.zone_name ?? ""}`.toLowerCase().includes(needle);
+                }).length}
+                totalCount={data.stores.length}
+                onExport={() => downloadCsv(
+                  "ops-dpd-stores",
+                  toCsv(
+                    [t("col.store"), t("col.zone"), t("col.orders"), t("col.dpd"), t("col.utr"), t("col.avgDelivery"), t("col.riders")],
+                    data.stores.map((s) => [s.store_name, s.zone_name, s.orders, s.store_dpd, s.utr, s.avg_delivery_min, s.active_riders]),
+                  ),
+                )}
+              />
+            }
+            columns={storePrefs.orderedColumns.filter((column) => storePrefs.isVisible(column.id)).map((column) => ({
+              id: column.id,
+              label: column.label,
+              className: column.id === "store" || column.id === "zone" ? undefined : "text-end",
+            }))}
           >
-            {data.stores.map((s) => (
+            {data.stores.filter((s) => {
+              const needle = storePrefs.appliedQuery.trim().toLowerCase();
+              return !needle || `${s.store_name ?? ""} ${s.zone_name ?? ""}`.toLowerCase().includes(needle);
+            }).map((s) => (
               <AppDataTableRow key={s.store_id ?? s.store_name ?? "x"}>
-                <TableCell className="text-sm">{s.store_name ?? "—"}</TableCell>
-                <TableCell className="text-sm">{s.zone_name ?? "—"}</TableCell>
-                <TableCell className="text-end tabular-nums text-sm">
-                  {formatInt(s.orders)}
-                </TableCell>
-                <TableCell className="text-end tabular-nums text-sm">
-                  {formatDpd(s.store_dpd)}
-                </TableCell>
-                <TableCell className="text-end tabular-nums text-sm">
-                  {formatUtr(s.utr)}
-                </TableCell>
-                <TableCell className="text-end tabular-nums text-sm">
-                  {formatMinutes(s.avg_delivery_min)}
-                </TableCell>
-                <TableCell className="text-end tabular-nums text-sm">
-                  {formatInt(s.active_riders)}
-                </TableCell>
+                {storePrefs.orderedColumns.filter((column) => storePrefs.isVisible(column.id)).map((column) => {
+                  if (column.id === "store") return <TableCell key={column.id} className="text-sm">{s.store_name ? <TableNameCell name={s.store_name} /> : <EmptyCell />}</TableCell>;
+                  if (column.id === "zone") return <TableCell key={column.id} className="text-sm">{s.zone_name ? s.zone_name : <EmptyCell />}</TableCell>;
+                  if (column.id === "orders") return <TableCell key={column.id} className="text-end tabular-nums text-sm">{formatInt(s.orders)}</TableCell>;
+                  if (column.id === "dpd") return <TableCell key={column.id} className="text-end tabular-nums text-sm">{formatDpd(s.store_dpd)}</TableCell>;
+                  if (column.id === "utr") return <TableCell key={column.id} className="text-end tabular-nums text-sm">{formatUtr(s.utr)}</TableCell>;
+                  if (column.id === "avg") return <TableCell key={column.id} className="text-end tabular-nums text-sm">{formatMinutes(s.avg_delivery_min)}</TableCell>;
+                  return <TableCell key={column.id} className="text-end tabular-nums text-sm">{formatInt(s.active_riders)}</TableCell>;
+                })}
               </AppDataTableRow>
             ))}
           </AppDataTable>

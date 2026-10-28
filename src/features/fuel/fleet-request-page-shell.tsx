@@ -6,16 +6,19 @@ import { ExternalLink, Loader2 } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
-  AppListControls,
   FlatListPager,
   GroupedSections,
   GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
   useGroupedListView,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -65,10 +68,20 @@ export function FleetRequestPageShell({
   embedded?: boolean;
 }) {
   const t = useTranslations("pages.fleetFuelQueue");
+  const toolbarColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "driver", label: t("colEmployee"), locked: true },
+      { id: "code", label: t("colRequestId") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "zone", label: t("colZone"), categorical: true },
+      { id: "project", label: t("colProject"), categorical: true },
+      { id: "date", label: t("colDate") },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs(fleetRequestPrefsKey(type), toolbarColumns);
   const withHub = useFleetBreadcrumbs();
   const statusT = useTranslations("pages.requests.status");
-  const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs(fleetRequestPrefsKey(type));
   const pageTitle =
     type === "fuel"
       ? t("requestsTitle")
@@ -78,7 +91,6 @@ export function FleetRequestPageShell({
   const { data, isPending } = useFleetRequests(type);
   const rows = data?.rows ?? [];
   const isLoading = data === undefined || isPending;
-  const [search, setSearch] = useState("");
   const [projectKey, setProjectKey] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const isAsset = type === "asset";
@@ -88,7 +100,7 @@ export function FleetRequestPageShell({
     () =>
       rows.filter((row) => {
         if (
-          !fieldSearchMatch(row, search, {
+          !fieldSearchMatch(row, prefs.appliedQuery, {
             name: (item) => item.driver_name,
             employee_id: (item) => item.employee_id,
             plate: (item) => item.plate,
@@ -107,7 +119,7 @@ export function FleetRequestPageShell({
         }
         return true;
       }),
-    [projectKey, rows, search],
+    [prefs.appliedQuery, projectKey, rows],
   );
   const grouped = useMemo(
     () =>
@@ -127,7 +139,7 @@ export function FleetRequestPageShell({
   const listView = useGroupedListView(
     grouped,
     prefs.groupBy !== "none",
-    `${prefs.groupBy}\u0001${search}\u0001${projectKey}`,
+    `${prefs.groupBy}\u0001${prefs.appliedQuery}\u0001${projectKey}`,
   );
   const selected = rows.find((row) => row.id === selectedId) ?? null;
 
@@ -135,26 +147,17 @@ export function FleetRequestPageShell({
     <>
       <AppListCard
         toolbar={
-          <AppListControls
-            className="min-w-0 flex-1"
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder={t("searchPlaceholder")}
-            clearSearchLabel={labels.clearSearch}
-            groupByOptions={[
-              labels.group.none,
-              labels.group.status,
-              labels.group.zone,
-              labels.group.project,
-            ]}
-            groupBy={prefs.groupBy}
-            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
-            groupByLabel={labels.groupBy}
-            viewMode={prefs.viewMode}
-            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
-            tableViewLabel={labels.viewTable}
-            cardsViewLabel={labels.viewCards}
-            filterSlot={
+          <>
+            <TableToolbar
+              prefs={prefs}
+              entity={pageTitle}
+              columns={toolbarColumns}
+              rowKind="dynamic"
+              entityList
+              filteredCount={visible.length}
+              totalCount={rows.length}
+            />
+            <div className="px-4 pb-3">
               <Select
                 items={[
                   { value: "all", label: t("projectAll") },
@@ -181,8 +184,8 @@ export function FleetRequestPageShell({
                   </SelectItem>
                 </SelectContent>
               </Select>
-            }
-          />
+            </div>
+          </>
         }
       >
         {isLoading ? (
@@ -194,12 +197,12 @@ export function FleetRequestPageShell({
             title={type === "fuel" ? t("emptyRequests") : type === "fuel_refund" ? t("emptyRefunds") : t("emptyAssets")}
             description={isAsset ? t("emptyAssetsHint") : t("emptyHint")}
           />
-        ) : prefs.viewMode === "cards" ? (
+        ) : prefs.view === "grid" ? (
           visible.length === 0 ? (
             <AppEmptyState title={t("emptyFilters")} />
           ) : (
             <div className="p-4">
-              <GroupedSections groups={grouped} paged resetKey={`${prefs.groupBy}\u0001${search}\u0001${projectKey}`}>
+              <GroupedSections groups={grouped} paged resetKey={`${prefs.groupBy}\u0001${prefs.appliedQuery}\u0001${projectKey}`}>
                 {(groupRowsList) => (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {groupRowsList.map((row) => (
@@ -210,10 +213,10 @@ export function FleetRequestPageShell({
                         onClick={() => setSelectedId(row.id)}
                       >
                         <p className="truncate text-sm font-semibold">{row.request_code}</p>
-                        <p className="mt-1 truncate text-xs text-muted-foreground">
-                          {row.driver_name}
-                          {row.employee_id ? ` · ${row.employee_id}` : ""}
-                        </p>
+                        <TableNameCell name={row.driver_name} />
+                        {row.employee_id ? (
+                          <p className="mt-1 truncate text-xs text-muted-foreground">{row.employee_id}</p>
+                        ) : null}
                         <div className="mt-2">
                           <StatusPill dot variant={requestStatusVariant(row.status)}>
                             {statusT(requestStatusLabelKey(row.status) as "pending")}
@@ -343,7 +346,7 @@ function FleetRequestRow({
     <AppDataTableRow className="cursor-pointer" onClick={onOpen}>
       <TableCell className="whitespace-nowrap font-medium">{row.request_code}</TableCell>
       <TableCell className="whitespace-nowrap">
-        <p className="font-medium">{row.driver_name}</p>
+        <TableNameCell name={row.driver_name} />
         {row.employee_id ? <p className="text-xs text-muted-foreground">{row.employee_id}</p> : null}
         <Link
           href={`/requests/${row.id}`}

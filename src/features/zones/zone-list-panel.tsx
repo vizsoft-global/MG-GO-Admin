@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Loader2, UserPlus, Users } from "lucide-react";
 import {
@@ -13,6 +13,14 @@ import {
 } from "@/components/ui/table";
 import { Pill, StatusDot } from "@/components/ui/metric-tile";
 import { Button } from "@/components/ui/button";
+import { fieldSearchMatch } from "@/components/app/app-list-controls";
+import {
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { formatZoneArea, zoneAreaSqKm } from "@/lib/geo/zone-area";
 import { cn } from "@/lib/utils";
 import type { GeofenceKind, ZoneRow } from "./types";
@@ -49,6 +57,7 @@ export function ZoneListPanel({
   onEdit,
   onAssignDrivers,
   canAssignDrivers = false,
+  onAdd,
 }: {
   zones: ZoneRow[];
   chips: Array<{ id: "all" | GeofenceKind; label: string }>;
@@ -60,19 +69,36 @@ export function ZoneListPanel({
   onEdit: (zone: ZoneRow) => void;
   onAssignDrivers?: (zone: ZoneRow) => void;
   canAssignDrivers?: boolean;
+  onAdd?: () => void;
 }) {
   const t = useTranslations("pages.zones");
   const locale = useLocale();
+  const toolbarColumns = useMemo((): TableToolbarColumn[] => [
+    { id: "name", label: t("geofence.colName"), locked: true },
+    { id: "type", label: t("geofence.colType") },
+    { id: "area", label: t("geofence.colArea") },
+    { id: "status", label: t("geofence.colStatus") },
+    { id: "drivers", label: t("geofence.colDrivers") },
+    { id: "created", label: t("geofence.colCreated") },
+  ], [t]);
+  const prefs = useTablePrefs("zones", toolbarColumns);
+  const matched = useMemo(
+    () => zones.filter((zone) => fieldSearchMatch(zone, prefs.appliedQuery, {
+      name: (row) => row.name,
+      code: (row) => row.code,
+    })),
+    [prefs.appliedQuery, zones],
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const loadMoreRef = useRef<HTMLTableRowElement>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [zones, kindFilter]);
+  }, [zones, kindFilter, prefs.appliedQuery]);
 
-  const visibleZones = zones.slice(0, visibleCount);
-  const hasMore = visibleCount < zones.length;
+  const visibleZones = matched.slice(0, visibleCount);
+  const hasMore = visibleCount < matched.length;
 
   useEffect(() => {
     const root = scrollRef.current;
@@ -82,7 +108,7 @@ export function ZoneListPanel({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          setVisibleCount((count) => Math.min(count + PAGE_SIZE, zones.length));
+          setVisibleCount((count) => Math.min(count + PAGE_SIZE, matched.length));
         }
       },
       { root, rootMargin: "120px", threshold: 0 },
@@ -90,7 +116,7 @@ export function ZoneListPanel({
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [hasMore, zones.length, visibleCount]);
+  }, [hasMore, matched.length, visibleCount]);
 
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
@@ -120,6 +146,35 @@ export function ZoneListPanel({
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+        <TableToolbar
+          prefs={prefs}
+          entity={t("title")}
+          columns={toolbarColumns}
+          rowKind="dynamic"
+          entityList
+          filteredCount={matched.length}
+          totalCount={zones.length}
+          onAdd={onAdd}
+          addLabel={t("geofence.createButton")}
+        />
+        {prefs.view === "grid" ? (
+          <TableGridCards
+            rows={visibleZones.map((zone) => ({
+              id: zone.code || zone.id,
+              name: zone.name,
+              status: {
+                status: zone.status === "active" ? "working" : "neutral",
+                label: t(`geofence.status.${zone.status}`),
+              },
+              fields: [
+                { label: t("geofence.colType"), value: t(`geofence.kind.${zone.geofence_kind}`) },
+                { label: t("geofence.colArea"), value: formatZoneArea(zoneAreaSqKm(zone.zone_type, zone.geometry)) },
+                { label: t("geofence.colDrivers"), value: String(zone.driver_count) },
+              ],
+              onOpen: () => onSelect(zone.id),
+            }))}
+          />
+        ) : (
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
             <TableRow className="border-slate-200 dark:border-slate-700">
@@ -171,9 +226,7 @@ export function ZoneListPanel({
                         <div className="inline-flex items-start gap-2">
                           <StatusDot tone={typeTone} className="mt-1" />
                           <span>
-                            <span className="block font-medium text-slate-900 dark:text-slate-100">
-                              {zone.name}
-                            </span>
+                            <TableNameCell name={zone.name} />
                             <span className="text-xs text-slate-500 dark:text-slate-300">
                               {zone.code}
                             </span>
@@ -231,10 +284,11 @@ export function ZoneListPanel({
             )}
           </TableBody>
         </Table>
+        )}
       </div>
 
       <div className="shrink-0 border-t border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-300">
-        <p>{t("geofence.showingCount", { shown: visibleZones.length, total: zones.length })}</p>
+        <p>{t("geofence.showingCount", { shown: visibleZones.length, total: matched.length })}</p>
         <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-400">
           {t("geofence.doubleClickToEdit")}
         </p>

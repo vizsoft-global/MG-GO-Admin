@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
   BellRing,
@@ -15,7 +15,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
 import { AppDataTable, AppDataTableRow, TableCell } from "@/components/app/app-data-table";
+import {
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Button } from "@/components/ui/button";
@@ -150,6 +158,49 @@ export function EsignWaitingShell({
   const remind = useRemindEsignRequests();
 
   const rows = useMemo<EsignListRow[]>(() => data?.rows ?? [], [data?.rows]);
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "code", label: t("colCode") },
+      { id: "driver", label: t("colDriver"), locked: true },
+      { id: "document", label: t("colDocument") },
+      { id: "stage", label: t("colStage"), categorical: true },
+      { id: "due", label: t("colDue") },
+      { id: "reminded", label: t("colReminded") },
+      { id: "actions", label: t("colActions"), locked: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("esign-waiting", columns);
+  const shownColumns = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+  const visible = useMemo(() => {
+    const query = prefs.appliedQuery.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) => {
+      const stage = esignRecipientStage(row);
+      const stageText = stage === "opened" ? t("stageOpened") : t("stageNotOpened");
+      return [row.request_code, row.driver_name, row.driver_code, row.title, row.template_name, row.batch_code, stageText]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [prefs.appliedQuery, rows, t]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        visible,
+        prefs.groupBy,
+        {
+          stage: (row) => {
+            const stage = esignRecipientStage(row);
+            return stage === "opened" ? t("stageOpened") : t("stageNotOpened");
+          },
+        },
+        {},
+        "—",
+      ),
+    [prefs.groupBy, t, visible],
+  );
   const ids = useMemo(() => rows.map((row) => row.id).sort(), [rows]);
   const { data: reminderData } = useEsignReminderState(ids);
   const state = reminderData?.state;
@@ -319,85 +370,119 @@ export function EsignWaitingShell({
           />
         </div>
 
+        <TableToolbar
+          prefs={prefs}
+          entity={t("title")}
+          columns={columns}
+          rowKind="dynamic"
+          entityList
+          filteredCount={visible.length}
+          totalCount={rows.length}
+        />
+
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : data?.error ? (
           <AppEmptyState title={t("emptyTitle")} description={data.error} />
-        ) : rows.length === 0 ? (
+        ) : visible.length === 0 ? (
           <AppEmptyState
             title={t("emptyTitle")}
-            description={tab === "all" ? t("emptyDescription") : t("emptyFiltered")}
+            description={rows.length === 0 && tab === "all" ? t("emptyDescription") : t("emptyFiltered")}
+          />
+        ) : prefs.view === "grid" ? (
+          <TableGridCards
+            rows={visible.map((row) => {
+              const stage = esignRecipientStage(row);
+              return {
+                id: row.id,
+                name: row.driver_name,
+                fields: [
+                  { label: t("colCode"), value: row.request_code },
+                  { label: t("colDocument"), value: row.title || "—" },
+                  {
+                    label: t("colStage"),
+                    value: stage === "opened" ? t("stageOpened") : t("stageNotOpened"),
+                  },
+                ],
+                onOpen: () => router.push(`/requests/esign/${row.id}`),
+              };
+            })}
           />
         ) : (
           <AppDataTable
-            columns={[
-              { id: "code", label: t("colCode") },
-              { id: "driver", label: t("colDriver") },
-              { id: "document", label: t("colDocument") },
-              { id: "stage", label: t("colStage") },
-              { id: "due", label: t("colDue") },
-              { id: "reminded", label: t("colReminded") },
-              { id: "actions", label: t("colActions"), className: "text-end" },
-            ]}
+            columns={shownColumns.map((column) => ({
+              id: column.id,
+              label: column.label,
+              className: column.id === "actions" ? "text-end" : undefined,
+            }))}
           >
-            {rows.map((row) => {
-              const stage = esignRecipientStage(row);
-              const info = byId.get(row.id);
-              const hoursLeft = cooldownLeft(row);
-              const cooling = hoursLeft > 0;
-              const sentYmd = kuwaitYmd(row.sent_at);
-              const todayYmd = kuwaitTodayYmd();
-              const ageDays = sentYmd ? daysBetween(sentYmd, todayYmd) : 0;
-              const reminderCount = info?.reminderCount ?? row.reminder_count ?? 0;
-              const canRemind = !cooling && stage !== "expired" && stage !== "cancelled";
-
-              return (
-                <AppDataTableRow
-                  key={row.id}
-                  className="cursor-pointer"
-                  onClick={() => router.push(`/requests/esign/${row.id}`)}
-                >
-                  <TableCell className="font-mono text-xs">
-                    {row.request_code}
-                    {/* ui-system §6: the row opens the detail page; the link is the
-                        affordance, so the columns stay Figma's rather than growing an
-                        extra one for a navigation the whole row already performs. */}
-                    <Link
-                      href={`/requests/esign/${row.id}`}
-                      className="mt-0.5 flex items-center gap-1 font-sans text-xs text-primary hover:underline"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      {t("viewDetails")}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    <div className="max-w-[160px] truncate">{row.driver_name}</div>
-                    <div className="text-xs text-muted-foreground">{row.driver_code}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="max-w-[300px] truncate text-sm font-medium" title={row.title ?? undefined}>
-                      {row.title}
-                    </div>
-                    <div className="max-w-[300px] truncate text-xs text-muted-foreground">
-                      {[row.template_name, row.batch_code].filter(Boolean).join(" · ") || "—"}
-                    </div>
-                  </TableCell>
-                  <TableCell>
+            {grouped.flatMap((group) => [
+              ...(prefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => {
+                const stage = esignRecipientStage(row);
+                const info = byId.get(row.id);
+                const hoursLeft = cooldownLeft(row);
+                const cooling = hoursLeft > 0;
+                const sentYmd = kuwaitYmd(row.sent_at);
+                const todayYmd = kuwaitTodayYmd();
+                const ageDays = sentYmd ? daysBetween(sentYmd, todayYmd) : 0;
+                const reminderCount = info?.reminderCount ?? row.reminder_count ?? 0;
+                const canRemind = !cooling && stage !== "expired" && stage !== "cancelled";
+                const cells: Record<string, ReactNode> = {
+                  code: (
+                    <>
+                      {row.request_code}
+                      <Link
+                        href={`/requests/esign/${row.id}`}
+                        className="mt-0.5 flex items-center gap-1 font-sans text-xs text-primary hover:underline"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        {t("viewDetails")}
+                      </Link>
+                    </>
+                  ),
+                  driver: (
+                    <>
+                      <TableNameCell name={row.driver_name} />
+                      <div className="text-xs text-muted-foreground">{row.driver_code}</div>
+                    </>
+                  ),
+                  document: (
+                    <>
+                      <div className="max-w-[300px] truncate text-sm font-medium" title={row.title ?? undefined}>
+                        {row.title}
+                      </div>
+                      <div className="max-w-[300px] truncate text-xs text-muted-foreground">
+                        {[row.template_name, row.batch_code].filter(Boolean).join(" · ") || "—"}
+                      </div>
+                    </>
+                  ),
+                  stage: (
                     <StatusPill variant={stage === "opened" ? "info" : "warning"}>
                       {stage === "opened" ? t("stageOpened") : t("stageNotOpened")}
                     </StatusPill>
-                  </TableCell>
-                  <TableCell className="text-sm tabular-nums">
-                    <div>{row.due_at ? row.due_at.slice(0, 10) : "—"}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {ageDays <= 0 ? t("sentToday") : t("sentDaysAgo", { count: ageDays })}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs tabular-nums">
-                    {reminderCount > 0 ? (
+                  ),
+                  due: (
+                    <>
+                      <div>{row.due_at ? row.due_at.slice(0, 10) : "—"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {ageDays <= 0 ? t("sentToday") : t("sentDaysAgo", { count: ageDays })}
+                      </div>
+                    </>
+                  ),
+                  reminded:
+                    reminderCount > 0 ? (
                       <span className="inline-flex items-center gap-1.5">
                         <span>{row.last_reminded_at ? row.last_reminded_at.slice(5, 10) : "—"}</span>
                         <span className="rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-xs font-semibold text-muted-foreground">
@@ -406,9 +491,8 @@ export function EsignWaitingShell({
                       </span>
                     ) : (
                       <span className="text-muted-foreground">{t("never")}</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-end">
+                    ),
+                  actions: (
                     <div
                       className="flex items-center justify-end gap-1"
                       onClick={(event) => event.stopPropagation()}
@@ -453,10 +537,37 @@ export function EsignWaitingShell({
                         </Tooltip>
                       )}
                     </div>
-                  </TableCell>
-                </AppDataTableRow>
-              );
-            })}
+                  ),
+                };
+
+                return (
+                  <AppDataTableRow
+                    key={row.id}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/requests/esign/${row.id}`)}
+                  >
+                    {shownColumns.map((column) => (
+                      <TableCell
+                        key={column.id}
+                        className={
+                          column.id === "actions"
+                            ? "text-end"
+                            : column.id === "code"
+                              ? "font-mono text-xs"
+                              : column.id === "due"
+                                ? "text-sm tabular-nums"
+                                : column.id === "reminded"
+                                  ? "text-xs tabular-nums"
+                                  : undefined
+                        }
+                      >
+                        {cells[column.id]}
+                      </TableCell>
+                    ))}
+                  </AppDataTableRow>
+                );
+              }),
+            ])}
           </AppDataTable>
         )}
       </AppListCard>

@@ -20,7 +20,6 @@ import {
   AppListCard,
   AppPage,
   AppPageHeader,
-  AppTableColumnPicker,
   SortableTableHeadLabel,
   VisibleTableCell,
 } from "@/components/app";
@@ -34,18 +33,15 @@ import { TabBar } from "@/components/dashboard/tab-bar";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { TrackingTableToolbar } from "@/features/driver-tracking/table-toolbar";
 import {
-  AppListControls,
   GroupHeaderBar,
   fieldSearchMatch,
   groupRows,
   useGroupedListView,
   useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
 import { ListPager } from "@/components/app/app-list-controls/group-list-chrome";
 import { downloadCsv } from "@/features/driver-tracking/csv-export";
 import { Link } from "@/i18n/navigation";
-import { LIST_SEARCH_DEBOUNCE_MS } from "@/lib/menu/sidebar-menu-query";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,7 +52,13 @@ import {
 } from "@/components/ui/tooltip";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
-import { useTableColumnVisibility } from "@/hooks/use-table-column-visibility";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
 import { AttendanceAnalyticsPanel } from "./attendance-analytics-panel";
 import { AttendanceCheckInCell } from "./attendance-check-in-cell";
@@ -120,7 +122,6 @@ function countActiveFilters(filters: AttendanceFiltersState): number {
 function AttendancePageContent() {
   const t = useTranslations("pages.attendance");
   const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs("attendance");
   const auth = useAuth();
   const canManage = auth.can("attendance.manage");
   const searchParams = useSearchParams();
@@ -133,8 +134,32 @@ function AttendancePageContent() {
       ? initialTab
       : "today",
   );
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const attendanceColumns = useMemo<TableToolbarColumn[]>(() => {
+    if (tab === "problems") {
+      return [
+        { id: "driver", label: t("colDriver"), locked: true },
+        { id: "problem", label: t("colProblem"), categorical: true },
+        { id: "since", label: t("colSince") },
+        { id: "status", label: t("colStatus"), categorical: true },
+        { id: "actions", label: t("colActions"), locked: true },
+      ] as TableToolbarColumn[];
+    }
+    return [
+      { id: "driver", label: t("colDriver"), locked: true },
+      ...(tab === "history" ? [{ id: "date", label: t("colDate"), categorical: true }] : []),
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "partner", label: labels.group.partner.label, categorical: true, defaultHidden: true },
+      { id: "checkIn", label: t("colCheckIn") },
+      { id: "checkInPhoto", label: t("colCheckInPhoto") },
+      { id: "checkOut", label: t("colCheckOut") },
+      { id: "workingHours", label: t("colWorkingHours") },
+      { id: "onDuty", label: t("colOnDuty") },
+      { id: "lastSeen", label: t("colLastSeen") },
+      { id: "actions", label: t("colActions"), locked: true },
+    ] as TableToolbarColumn[];
+  }, [labels.group.partner, t, tab]);
+  const prefs = useTablePrefs(tab === "problems" ? "attendance-problems" : "attendance", attendanceColumns);
+  const debouncedSearch = prefs.appliedQuery.trim();
   const [filters, setFilters] = useState<AttendanceFiltersState>(DEFAULT_ATTENDANCE_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortKey, setSortKey] = useState<AttendanceSortKey>(
@@ -153,11 +178,6 @@ function AttendancePageContent() {
   const [resolveOpen, setResolveOpen] = useState(false);
   const [correctionRow, setCorrectionRow] = useState<AttendanceDailyRow | null>(null);
   const [correctionOpen, setCorrectionOpen] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search.trim()), LIST_SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [search]);
 
   useEffect(() => {
     setPage(0);
@@ -258,37 +278,7 @@ function AttendancePageContent() {
     value: o.value,
     label: t(o.labelKey),
   }));
-
-  const columnVisibilityOptions = useMemo(
-    () => [
-      { id: "driver", label: t("colDriver"), locked: true },
-      { id: "date", label: t("colDate") },
-      { id: "status", label: t("colStatus") },
-      { id: "checkIn", label: t("colCheckIn") },
-      { id: "checkInPhoto", label: t("colCheckInPhoto") },
-      { id: "checkOut", label: t("colCheckOut") },
-      { id: "workingHours", label: t("colWorkingHours") },
-      { id: "onDuty", label: t("colOnDuty") },
-      { id: "lastSeen", label: t("colLastSeen") },
-      { id: "actions", label: t("colActions"), locked: true },
-    ],
-    [t],
-  );
-  const {
-    isVisible: isColumnVisible,
-    toggle: toggleColumn,
-    reset: resetColumns,
-    pickerOptions: columnPickerOptions,
-  } = useTableColumnVisibility(
-    "dpd:attendance:list-columns",
-    columnVisibilityOptions,
-  );
-  const availableColumnPickerOptions = columnPickerOptions.filter(
-    (option) => tab === "history" || option.id !== "date",
-  );
-  const availableHiddenColumnCount = availableColumnPickerOptions.filter(
-    (option) => !isColumnVisible(option.id),
-  ).length;
+  const isColumnVisible = prefs.isVisible;
 
   const tabItems = [
     { id: "today", label: t("tabToday"), icon: CalendarDays },
@@ -387,6 +377,7 @@ function AttendancePageContent() {
       [
         ...(tab === "history" ? ["date"] : []),
         "status",
+        "partner",
         "checkIn",
         "checkInPhoto",
         "checkOut",
@@ -413,7 +404,9 @@ function AttendancePageContent() {
               )}
             </button>
             <div className="inline-block align-middle">
-              <p className="font-medium">{row.driver_name}</p>
+              <p className="font-medium">
+                <TableNameCell name={row.driver_name} />
+              </p>
               <p className="text-xs text-muted-foreground">{row.driver_code}</p>
             </div>
           </TableCell>
@@ -430,6 +423,9 @@ function AttendancePageContent() {
             <StatusPill variant={resolveStatusVariant(row.live_status)}>
               {t(liveLabelKey)}
             </StatusPill>
+          </VisibleTableCell>
+          <VisibleTableCell columnId="partner" isVisible={isColumnVisible}>
+            {row.partner_name ? row.partner_name : <EmptyCell />}
           </VisibleTableCell>
           <VisibleTableCell
             columnId="checkIn"
@@ -552,7 +548,7 @@ function AttendancePageContent() {
   const dailyRows = useMemo(() => {
     const sorted = sortAttendanceDailyRows(dailyData?.rows ?? [], sortKey);
     return sorted.filter((row) =>
-      fieldSearchMatch(row, search, {
+      fieldSearchMatch(row, debouncedSearch, {
         name: (item) => item.driver_name,
         employee_id: (item) => item.employee_id ?? item.driver_code,
         phone: (item) => item.driver_phone,
@@ -560,7 +556,7 @@ function AttendancePageContent() {
         status: (item) => item.live_status,
       }),
     );
-  }, [dailyData?.rows, search, sortKey]);
+  }, [dailyData?.rows, debouncedSearch, sortKey]);
   const groupedSections = useMemo(() => {
     if (prefs.groupBy === "none") return [{ key: "all", label: "", rows: dailyRows }];
     if (prefs.groupBy === "partner" || prefs.groupBy === "date") {
@@ -574,7 +570,7 @@ function AttendancePageContent() {
   const listView = useGroupedListView(
     groupedSections,
     prefs.groupBy !== "none",
-    `${prefs.groupBy}\u0001${search}\u0001${tab}\u0001${fromDate}\u0001${toDate}`,
+    `${prefs.groupBy}\u0001${debouncedSearch}\u0001${tab}\u0001${fromDate}\u0001${toDate}`,
   );
 
   const sortColumnHeader = (column: AttendanceSortColumn, label: string) => (
@@ -591,6 +587,7 @@ function AttendancePageContent() {
           { id: "driver", label: sortColumnHeader("driver", t("colDriver")) },
           { id: "date", label: sortColumnHeader("date", t("colDate")) },
           { id: "status", label: sortColumnHeader("status", t("colStatus")) },
+          { id: "partner", label: labels.group.partner.label },
           { id: "checkIn", label: sortColumnHeader("check_in", t("colCheckIn")) },
           { id: "checkInPhoto", label: t("colCheckInPhoto") },
           { id: "checkOut", label: sortColumnHeader("check_out", t("colCheckOut")) },
@@ -605,6 +602,7 @@ function AttendancePageContent() {
       : [
           { id: "driver", label: sortColumnHeader("driver", t("colDriver")) },
           { id: "status", label: sortColumnHeader("status", t("colStatus")) },
+          { id: "partner", label: labels.group.partner.label },
           { id: "checkIn", label: sortColumnHeader("check_in", t("colCheckIn")) },
           { id: "checkInPhoto", label: t("colCheckInPhoto") },
           { id: "checkOut", label: sortColumnHeader("check_out", t("colCheckOut")) },
@@ -712,29 +710,21 @@ function AttendancePageContent() {
             }
             toolbar={
               <div className="space-y-3 px-1">
-                <AppListControls
-                  searchValue={search}
-                  onSearchChange={setSearch}
-                  searchPlaceholder={t("searchPlaceholder")}
-                  searchAriaLabel={t("searchPlaceholder")}
-                  clearSearchLabel={labels.clearSearch}
-                  groupByOptions={
-                    tab === "history"
-                      ? [labels.group.none, labels.group.partner, labels.group.date]
-                      : [labels.group.none, labels.group.partner, labels.group.status]
-                  }
-                  groupBy={prefs.groupBy}
-                  onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
-                  groupByLabel={labels.groupBy}
-                  viewMode={prefs.viewMode}
-                  onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
-                  tableViewLabel={labels.viewTable}
-                  cardsViewLabel={labels.viewCards}
+                <TableToolbar
+                  prefs={prefs}
+                  entity={t("title")}
+                  columns={attendanceColumns}
+                  rowKind="dynamic"
+                  entityList
+                  filteredCount={tab === "problems" ? (exceptionsData?.rows.length ?? 0) : dailyRows.length}
+                  totalCount={totalCount}
+                  onExport={!isExporting ? () => void handleExport() : undefined}
                 />
                 <TrackingTableToolbar
                   hideSearch
-                  search={search}
-                  onSearchChange={setSearch}
+                  onExport={() => void handleExport()}
+                  search={debouncedSearch}
+                  onSearchChange={prefs.setQuery}
                   searchPlaceholder={t("searchPlaceholder")}
                   sortValue={sortKey}
                   onSortChange={(v) => {
@@ -756,10 +746,6 @@ function AttendancePageContent() {
                   onRefresh={() => void handleRefresh()}
                   isRefreshing={isRefreshing}
                   refreshLabel={t("refresh")}
-                  onExport={() => void handleExport()}
-                  exportDisabled={isExporting}
-                  exportLabel={t("export")}
-                  showExportLabel
                   dateSlot={
                     tab === "history" ? (
                       <div className="flex flex-wrap items-center gap-2">
@@ -804,21 +790,10 @@ function AttendancePageContent() {
                     ) : undefined
                   }
                   filterSlot={
-                    <>
-                      <AttendanceFiltersButton
-                        activeCount={countActiveFilters(filters)}
-                        onClick={() => setFiltersOpen(true)}
-                      />
-                      {dailyEnabled ? (
-                        <AppTableColumnPicker
-                          options={availableColumnPickerOptions}
-                          isVisible={isColumnVisible}
-                          onToggle={toggleColumn}
-                          onReset={resetColumns}
-                          hiddenCount={availableHiddenColumnCount}
-                        />
-                      ) : null}
-                    </>
+                    <AttendanceFiltersButton
+                      activeCount={countActiveFilters(filters)}
+                      onClick={() => setFiltersOpen(true)}
+                    />
                   }
                 />
               </div>
@@ -886,7 +861,7 @@ function AttendancePageContent() {
                   );
                 })}
               </AppDataTable>
-            ) : prefs.viewMode === "cards" ? (
+            ) : prefs.view === "grid" ? (
               listView.sections.map((section) => (
                 <div key={section.key} className="space-y-2 p-3">
                   {section.showHeader ? (
