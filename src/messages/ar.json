@@ -8105,6 +8105,34 @@
           "logo_invalid_type": "استخدم شعار PNG أو JPG أو WebP أو SVG.",
           "logo_upload_failed": "تعذر رفع الشعار."
         },
+        "import": {
+          "action": "استيراد",
+          "title": "استيراد الكفالات",
+          "subtitle": "إنشاء أو تحديث صفوف الكتالوج من Excel",
+          "downloadSample": "تنزيل نموذج العينة",
+          "logoNotInSheet": "الشعار ليس في الورقة. عدّل الصف بعد الاستيراد لرفع شعار.",
+          "capHint": "حتى 200 صفاً. الخلية الفارغة تبقي القيمة المخزّنة. الشرطة تمسح العربية أو نشط أو الترتيب كما يوضح الدليل.",
+          "colRow": "الصف",
+          "colStatus": "الحالة",
+          "statusCreate": "إنشاء",
+          "statusUpdate": "تحديث",
+          "statusError": "خطأ",
+          "apply": "استيراد",
+          "applied": "تم إنشاء {created} وتحديث {updated}.",
+          "nothingToApply": "لا توجد صفوف جاهزة للاستيراد.",
+          "empty": "الورقة بلا صفوف بيانات.",
+          "tooMany": "الورقة فيها أكثر من 200 صف.",
+          "missingColumns": "أضف عمود الإنجليزية أو المفتاح.",
+          "badFile": "استخدم ملف Excel أو CSV.",
+          "errors": {
+            "duplicate_key": "هذا المفتاح يظهر مرتين في الملف.",
+            "invalid_key": "المفتاح أحرف صغيرة وأرقام وشرطة سفلية.",
+            "missing_fields": "الإنجليزية مطلوبة لصف جديد.",
+            "system_status_locked": "لا يمكن إلغاء تفعيل كفالات النظام.",
+            "invalid_active": "نشط يجب أن يكون نعم أو لا.",
+            "invalid_sort": "الترتيب يجب أن يكون عدداً صحيحاً."
+          }
+        },
         "sponsorshipsTitle": "الكفالات",
         "sponsorshipsSubtitle": "الجهة الكافلة لإقامة السائق."
       },

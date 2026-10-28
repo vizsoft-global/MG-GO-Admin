@@ -20,6 +20,7 @@ import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { COLLECTIONS } from "../core/collections";
 import { projectKeyMatches } from "../core/project-key";
 import { requireStaff, requireStaffAny, requireStaffFresh, scopedProjectKey } from "../core/staff";
+import { reportedInstallBuild } from "./driver-devices";
 import { maskDriverForPartner } from "../core/partner-mask";
 import { riderIsNonOperational } from "../core/operational-sections";
 import { digitSubsequenceMatch, textContainsMatch } from "../core/search-text";
@@ -1594,19 +1595,26 @@ export const adminDriverAppInstallVersions = onCall(async (request) => {
     }
   }
 
-  return driverSnap.docs
-    .map((doc) => {
-      const activeDeviceId = asStr(doc.get("active_device_id"));
-      const session = activeDeviceId
-        ? sessionByDriverDevice.get(`${doc.id}\u0000${activeDeviceId}`)
-        : undefined;
-      if (!session) return null;
-      return {
+  return driverSnap.docs.flatMap((doc) => {
+    const activeDeviceId = asStr(doc.get("active_device_id"));
+    const session = activeDeviceId
+      ? sessionByDriverDevice.get(`${doc.id}\u0000${activeDeviceId}`)
+      : undefined;
+    const build = reportedInstallBuild({
+      sessionCode: session ? asNum(session["app_version_code"]) : null,
+      sessionName: session ? asStr(session["app_version_name"]) : null,
+      driverCode: asNum(doc.get("app_version_code")),
+      driverName: asStr(doc.get("app_version_name")),
+    });
+    if (!session && build.code == null) return [];
+    const seen = session?.["last_seen_at"] ?? doc.get("device_meta_at");
+    return [
+      {
         driver_id: doc.id,
-        app_version_code: asNum(session["app_version_code"]),
-        app_version_name: asStr(session["app_version_name"]),
-        last_seen_at: instantOf(session["last_seen_at"])?.toISOString() ?? null,
-      };
-    })
-    .filter((row): row is NonNullable<typeof row> => row !== null);
+        app_version_code: build.code,
+        app_version_name: build.name,
+        last_seen_at: instantOf(seen)?.toISOString() ?? null,
+      },
+    ];
+  });
 });

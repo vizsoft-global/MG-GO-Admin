@@ -13,6 +13,9 @@ export type ImportJobAction = "pause" | "resume" | "cancel" | "finish" | "fail";
 
 export const IMPORT_JOB_STALE_MS = 90_000;
 
+/** Refresh while a chunk is still saving, so the stale check cannot pause a live upload. */
+export const IMPORT_HEARTBEAT_MS = 15_000;
+
 export function canPauseImportJob(status: ImportJobStatus): boolean {
   return status === "running";
 }
@@ -27,6 +30,19 @@ export function canCancelImportJob(status: ImportJobStatus): boolean {
 
 export function isActiveImportJob(status: ImportJobStatus): boolean {
   return status === "running" || status === "paused";
+}
+
+export function shouldBeatImportJob(lastBeatMs: number, nowMs: number): boolean {
+  return nowMs - lastBeatMs >= IMPORT_HEARTBEAT_MS;
+}
+
+/** A paused job with rows left keeps going unless this person pressed Pause. */
+export function shouldAutoContinueImport(
+  status: ImportJobStatus,
+  pausedByUser: boolean,
+  remainingCount: number,
+): boolean {
+  return status === "paused" && !pausedByUser && remainingCount > 0;
 }
 
 export function isImportJobStale(

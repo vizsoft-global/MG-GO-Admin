@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppListCard } from "@/components/app/app-list-card";
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { catalogKeyFromLabel, CATALOG_KEY_RE, type EmployeeCatalogKind, type EmployeeCatalogRow } from "./employee-catalogs";
 import { upsertEmployeeCatalog } from "./employee-catalogs-actions";
+import { SponsorshipImportDialog } from "./sponsorship-import-dialog";
 import { toast } from "sonner";
 
 export function EmployeeCatalogPanel({
@@ -40,6 +41,7 @@ export function EmployeeCatalogPanel({
   const t = useTranslations("pages.settings.employeeCatalogs");
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [key, setKey] = useState("");
   const [labelEn, setLabelEn] = useState("");
   const [labelAr, setLabelAr] = useState("");
@@ -116,10 +118,18 @@ export function EmployeeCatalogPanel({
         title={title}
         description={subtitle}
         actions={
-          <Button type="button" className="h-9" onClick={startAdd}>
-            <Plus className="h-4 w-4" />
-            {t("add")}
-          </Button>
+          <div className="flex items-center gap-2">
+            {isSponsorships ? (
+              <Button type="button" variant="outline" className="h-9" onClick={() => setImportOpen(true)}>
+                <Upload className="h-4 w-4" />
+                {t("import.action")}
+              </Button>
+            ) : null}
+            <Button type="button" className="h-9" onClick={startAdd}>
+              <Plus className="h-4 w-4" />
+              {t("add")}
+            </Button>
+          </div>
         }
       />
       <AppListCard>
@@ -285,6 +295,9 @@ export function EmployeeCatalogPanel({
           </AppModalFooter>
         </DialogContent>
       </Dialog>
+      {isSponsorships ? (
+        <SponsorshipImportDialog open={importOpen} onOpenChange={setImportOpen} rows={rows} />
+      ) : null}
     </AppPage>
   );
 }

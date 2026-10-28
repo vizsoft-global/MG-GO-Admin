@@ -8105,6 +8105,34 @@
           "logo_invalid_type": "Use a PNG, JPG, WebP, or SVG logo.",
           "logo_upload_failed": "The logo could not be uploaded."
         },
+        "import": {
+          "action": "Import",
+          "title": "Import sponsorships",
+          "subtitle": "Create or update catalog rows from Excel",
+          "downloadSample": "Download sample template",
+          "logoNotInSheet": "Logo is not in the sheet. Edit a row after import to upload one.",
+          "capHint": "Up to 200 rows. Blank cells keep the stored value. A dash clears Arabic, Active, or Sort as the Guide describes.",
+          "colRow": "Row",
+          "colStatus": "Status",
+          "statusCreate": "Create",
+          "statusUpdate": "Update",
+          "statusError": "Error",
+          "apply": "Import",
+          "applied": "Imported {created} new and updated {updated}.",
+          "nothingToApply": "No ready rows to import.",
+          "empty": "The sheet has no data rows.",
+          "tooMany": "The sheet has more than 200 rows.",
+          "missingColumns": "Add an English or Key column.",
+          "badFile": "Use an Excel or CSV file.",
+          "errors": {
+            "duplicate_key": "This key appears twice in the file.",
+            "invalid_key": "Key must be lowercase letters, numbers, and underscores.",
+            "missing_fields": "English is required for a new row.",
+            "system_status_locked": "System sponsorships cannot be deactivated.",
+            "invalid_active": "Active must be yes or no.",
+            "invalid_sort": "Sort must be a whole number."
+          }
+        },
         "sponsorshipsTitle": "Sponsorships",
         "sponsorshipsSubtitle": "Who sponsors the rider's residency."
       },
