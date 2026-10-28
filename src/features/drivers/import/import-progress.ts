@@ -1,5 +1,8 @@
 export const IMPORT_CHUNK_APPROVE = 5;
-export const IMPORT_CHUNK_SAVE = 15;
+export const IMPORT_CHUNK_SAVE = 40;
+
+/** Parallel row writes inside one chunk. Creates stay safe because the driver-code counter is a transaction. */
+export const IMPORT_APPLY_CONCURRENCY = 8;
 
 export type DriverImportLogKind =
   | "created"
@@ -28,6 +31,28 @@ const MARK: Record<DriverImportLogKind, string> = {
 };
 
 /** Small enough that one serverless turn cannot hang on a hundred approves. */
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const width = Math.max(1, Math.min(concurrency, items.length || 1));
+  await Promise.all(
+    Array.from({ length: Math.min(width, Math.max(items.length, 1)) }, async () => {
+      while (next < items.length) {
+        const index = next;
+        next += 1;
+        const item = items[index];
+        if (item === undefined) continue;
+        results[index] = await worker(item, index);
+      }
+    }),
+  );
+  return results;
+}
+
 export function importChunkSize(
   rows: readonly { active: boolean | null }[],
   approveImmediately: boolean,

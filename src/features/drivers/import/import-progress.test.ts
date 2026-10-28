@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  IMPORT_APPLY_CONCURRENCY,
   IMPORT_CHUNK_APPROVE,
   IMPORT_CHUNK_SAVE,
   chunkRows,
   formatImportLogLine,
   importChunkSize,
+  mapWithConcurrency,
 } from "./import-progress";
 
 describe("importChunkSize", () => {
-  it("keeps a save-only batch larger so a hundred rows do not become twenty trips", () => {
+  it("keeps a save-only batch large enough that a hundred rows stay a few trips", () => {
     assert.equal(
       importChunkSize([{ active: null }, { active: false }], false),
       IMPORT_CHUNK_SAVE,
@@ -19,6 +21,20 @@ describe("importChunkSize", () => {
   it("shrinks when any row will mint a login — that is the hang", () => {
     assert.equal(importChunkSize([{ active: true }], false), IMPORT_CHUNK_APPROVE);
     assert.equal(importChunkSize([{ active: null }], true), IMPORT_CHUNK_APPROVE);
+  });
+});
+
+describe("mapWithConcurrency", () => {
+  it("keeps each result on its own index while several rows run together", async () => {
+    const rows = [1, 2, 3, 4, 5, 6];
+    const seen: number[] = [];
+    const results = await mapWithConcurrency(rows, 2, async (value) => {
+      seen.push(value);
+      return value * 10;
+    });
+    assert.deepEqual(results, [10, 20, 30, 40, 50, 60]);
+    assert.equal(seen.length, rows.length);
+    assert.ok(IMPORT_APPLY_CONCURRENCY >= 2);
   });
 });
 

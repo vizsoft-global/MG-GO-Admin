@@ -9,10 +9,15 @@ import { staffDb } from "@/lib/firebase/staff-db";
 import type { Json } from "@/types/database";
 import {
   applyOneImportRow,
+  loadImportMatches,
   requireDriversManager,
 } from "./drivers-import-actions";
-import { importChunkSize } from "./import/import-progress";
-import type { DriverImportLogEvent } from "./import/import-progress";
+import {
+  IMPORT_APPLY_CONCURRENCY,
+  importChunkSize,
+  mapWithConcurrency,
+  type DriverImportLogEvent,
+} from "./import/import-progress";
 import { pendingRowDocId, storedImportRow } from "./import/import-job-rows";
 import {
   IMPORT_JOB_STALE_MS,
@@ -31,6 +36,10 @@ const MAX_EVENTS = 2000;
 const PENDING_BATCH = 400;
 const JOB_SUMMARY_COLUMNS =
   "id, file_name, status, row_count, ready_count, remaining_count, applied_count, skipped_count, approved_count, failed_count, uploaded_at, heartbeat_at, duplicate_strategy, approve_immediately, sealed";
+
+function ownsImport(uploadedBy: unknown, userId: string): boolean {
+  return typeof uploadedBy === "string" && uploadedBy.length > 0 && uploadedBy === userId;
+}
 
 function pendingRef(fs: Firestore, jobId: string) {
   const parent = fs.collection(COLLECTIONS.driverImportBatches).doc(jobId);
@@ -168,13 +177,14 @@ export async function listDriverImportJobs(): Promise<
   await pauseStaleJobs(db);
   const { data, error } = await db
     .from("driver_import_batches")
-    .select(
-      JOB_SUMMARY_COLUMNS,
-    )
+    .select(`${JOB_SUMMARY_COLUMNS}, uploaded_by`)
     .order("uploaded_at", { ascending: false })
     .limit(30);
   if (error) return { error: "save_failed" };
-  return { jobs: (data ?? []).map(mapSummary) };
+  const mine = (data ?? []).filter((row) =>
+    ownsImport((row as { uploaded_by?: unknown }).uploaded_by, auth.session.id),
+  );
+  return { jobs: mine.map(mapSummary) };
 }
 
 export async function getDriverImportJob(
@@ -187,10 +197,13 @@ export async function getDriverImportJob(
   await pauseStaleJobs(db);
   const { data, error } = await db
     .from("driver_import_batches")
-    .select(`${JOB_SUMMARY_COLUMNS}, events, credentials, failures, remaining_rows`)
+    .select(`${JOB_SUMMARY_COLUMNS}, uploaded_by, events, credentials, failures, remaining_rows`)
     .eq("id", jobId)
     .maybeSingle();
   if (error || !data) return { error: "save_failed" };
+  if (!ownsImport((data as { uploaded_by?: unknown }).uploaded_by, auth.session.id)) {
+    return { error: "not_authorized" };
+  }
   return {
     job: {
       ...mapSummary(data),
@@ -300,10 +313,13 @@ export async function appendDriverImportRows(payload: {
   const db = await staffClient();
   const { data: batch, error } = await db
     .from("driver_import_batches")
-    .select("id, status, sealed, pending_store, row_count, ready_count, remaining_count")
+    .select("id, status, sealed, pending_store, row_count, ready_count, remaining_count, uploaded_by")
     .eq("id", payload.jobId)
     .maybeSingle();
   if (error || !batch) return { error: "save_failed" };
+  if (!ownsImport((batch as { uploaded_by?: unknown }).uploaded_by, auth.session.id)) {
+    return { error: "not_authorized" };
+  }
   const stored = batch as typeof batch & {
     status?: string;
     sealed?: boolean;
@@ -360,11 +376,14 @@ export async function processDriverImportChunk(
   const { data: batch, error: loadError } = await db
     .from("driver_import_batches")
     .select(
-      "id, status, remaining_count, ready_count, approve_immediately, duplicate_strategy, applied_count, skipped_count, approved_count, failed_count, events, credentials, failures, file_name, pending_store, sealed",
+      "id, status, remaining_count, ready_count, approve_immediately, duplicate_strategy, applied_count, skipped_count, approved_count, failed_count, events, credentials, failures, file_name, pending_store, sealed, uploaded_by",
     )
     .eq("id", jobId)
     .maybeSingle();
   if (loadError || !batch) return { error: "save_failed" };
+  if (!ownsImport((batch as { uploaded_by?: unknown }).uploaded_by, auth.session.id)) {
+    return { error: "not_authorized" };
+  }
 
   if (batch.status !== "running") {
     const latest = await getDriverImportJob(jobId);
@@ -454,6 +473,7 @@ export async function processDriverImportChunk(
   }
 
   const customFieldDefs = await listCustomFieldDefinitions("driver");
+  const loaded = await loadImportMatches(db, rows);
   const events: DriverImportLogEvent[] = [];
   const failures: Array<{ rowIndex: number; reason: string }> = [];
   const credentials: DriverImportCredential[] = [];
@@ -461,14 +481,37 @@ export async function processDriverImportChunk(
   let approved = 0;
   let skipped = 0;
 
-  for (const row of rows) {
-    const result = await applyOneImportRow(row, {
-      db,
-      duplicateStrategy: batch.duplicate_strategy === "skip" ? "skip" : "update",
-      approveImmediately: batch.approve_immediately,
-      customFieldDefs,
-      fileName: batch.file_name,
-    });
+  const results =
+    "error" in loaded
+      ? rows.map((row) => ({
+          events: [
+            {
+              at: new Date().toISOString(),
+              kind: "failed" as const,
+              rowIndex: row.rowIndex,
+              name: row.full_name?.trim() ?? "",
+              employeeId: row.employee_id ?? undefined,
+              detail: loaded.error,
+            },
+          ],
+          applied: 0,
+          approved: 0,
+          credential: undefined,
+          failure: { rowIndex: row.rowIndex, reason: loaded.error },
+        }))
+      : await mapWithConcurrency(rows, IMPORT_APPLY_CONCURRENCY, (row) =>
+          applyOneImportRow(row, {
+            db,
+            duplicateStrategy: batch.duplicate_strategy === "skip" ? "skip" : "update",
+            approveImmediately: batch.approve_immediately,
+            customFieldDefs,
+            fileName: batch.file_name,
+            actorId: auth.session.id,
+            persistJournal: false,
+            matches: loaded.index,
+          }),
+        );
+  for (const result of results) {
     events.push(...result.events);
     applied += result.applied;
     approved += result.approved;
@@ -557,12 +600,13 @@ export async function setDriverImportJobStatus(
   await pauseStaleJobs(db);
   const { data: batch, error } = await db
     .from("driver_import_batches")
-    .select(
-      JOB_SUMMARY_COLUMNS,
-    )
+    .select(`${JOB_SUMMARY_COLUMNS}, uploaded_by`)
     .eq("id", jobId)
     .maybeSingle();
   if (error || !batch) return { error: "save_failed" };
+  if (!ownsImport((batch as { uploaded_by?: unknown }).uploaded_by, auth.session.id)) {
+    return { error: "not_authorized" };
+  }
 
   const next = nextImportJobStatus(asStatus(batch.status), action);
   if (!next) return { error: "import_job_locked" };
