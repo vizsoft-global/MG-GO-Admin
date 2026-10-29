@@ -1,7 +1,10 @@
 import { partnerLabel } from "@/features/performance/performance-ops-format";
 
-/** Client Name and Zone are catalog picks, not free-text identity cells. */
-export type PayrollAssignField = "projectKey" | "zoneId";
+/**
+ * Client Name, Zone and Restaurant are catalog picks, not free-text identity
+ * cells. Restaurant joined them for the Combined Payroll row (SOP item 13).
+ */
+export type PayrollAssignField = "projectKey" | "zoneId" | "restaurantName";
 
 export function payrollAssignField(columnId: string): PayrollAssignField | null {
   switch (columnId) {
@@ -9,6 +12,9 @@ export function payrollAssignField(columnId: string): PayrollAssignField | null 
       return "projectKey";
     case "zone":
       return "zoneId";
+    case "rest":
+    case "restaurant":
+      return "restaurantName";
     default:
       return null;
   }

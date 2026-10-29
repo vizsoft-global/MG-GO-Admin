@@ -9219,13 +9219,35 @@
       },
       "vehicleTypes": {
         "title": "أنواع المركبات",
-        "subtitle": "المفاتيح ثابتة لأنها مربوطة برموز الخريطة. يمكن تغيير التسميات فقط.",
+        "subtitle": "نوع تصنيف المركبة. الدراجة والسيارة لهما رمز خريطة خاص، وأي نوع جديد يرسم رمز الدراجة حتى تُضاف الصورة.",
         "key": "المفتاح",
         "labelEn": "التسمية الإنجليزية",
         "labelAr": "التسمية العربية",
         "save": "حفظ",
         "saved": "تم حفظ نوع المركبة",
-        "saveFailed": "تعذر حفظ التسمية."
+        "saveFailed": "تعذر حفظ نوع المركبة.",
+        "add": "إضافة نوع مركبة",
+        "edit": "تعديل نوع المركبة",
+        "cancel": "إلغاء",
+        "empty": "لا توجد أنواع مركبات بعد",
+        "colLabelEn": "التسمية الإنجليزية",
+        "colLabelAr": "التسمية العربية",
+        "colSort": "ترتيب العرض",
+        "colActive": "مفعّل",
+        "colUsage": "المركبات",
+        "activeLabel": "مفعّل",
+        "inactiveLabel": "غير مفعّل",
+        "activeHint": "النوع غير المفعّل يبقى على المركبات التي تستخدمه ويختفي من القوائم.",
+        "keyHint": "أحرف إنجليزية صغيرة وأرقام وشرطة سفلية. لا يمكن تغيير المفتاح بعد الحفظ.",
+        "keyLocked": "لا يمكن تغيير المفتاح، فهو ما تشير إليه المركبات ورمز الخريطة.",
+        "bikeLocked": "الدراجة هي النوع الافتراضي ولا يمكن تعطيلها.",
+        "errors": {
+          "not_authorized": "ليست لديك الصلاحية.",
+          "invalid_key": "المفتاح يجب أن يكون أحرف إنجليزية صغيرة وأرقاماً وشرطة سفلية.",
+          "missing_fields": "التسمية الإنجليزية مطلوبة.",
+          "bike_locked": "الدراجة هي النوع الافتراضي ولا يمكن تعطيلها.",
+          "save_failed": "تعذر حفظ نوع المركبة."
+        }
       },
       "vehicleUses": {
         "title": "استخدامات المركبة",
@@ -9496,8 +9518,8 @@
       },
       "title": "الرواتب",
       "subtitle": "الحضور الشهري والكفاءة وموافقات الطلبات المرتبطة بها",
-      "tabPayroll": "الرواتب المجمّعة",
-      "tabCombined": "الرواتب",
+      "tabPayroll": "الرواتب",
+      "tabCombined": "الرواتب المجمّعة",
       "tabAppAttendance": "حضور التطبيق",
       "tabHrPayroll": "رواتب الموارد البشرية",
       "tabRequests": "الطلبات",
@@ -9824,7 +9846,13 @@
         "clientSearch": "ابحث عن العملاء",
         "zoneSearch": "ابحث عن المناطق",
         "catalogEmpty": "لا توجد نتائج",
-        "catalogLoading": "جارٍ التحميل…"
+        "catalogLoading": "جارٍ التحميل…",
+        "changed": "{name} · تم تغيير {field} إلى {value}",
+        "restaurantField": "المطعم",
+        "zoneField": "المنطقة",
+        "clientField": "اسم المشروع",
+        "restaurantPlaceholder": "المطعم",
+        "restaurantSearch": "بحث في المطاعم"
       },
       "statusEdit": {
         "title": "تعيين الحالة",
@@ -9846,7 +9874,7 @@
       "payrollBannerTitle": "كفاءة الحضور = ساعات العمل الفعلية ÷ الساعات المطلوبة.",
       "payrollBannerBody": "الساعات الفعلية من تسجيل الدخول → الخروج. الساعات المطلوبة = (أيام الشهر − هيكل الإجازة) × 12. الافتراضي يومان ({days} → {fixed} يوم مطلوب).",
       "combinedBannerTitle": "الرواتب هي شبكة السائق × اليوم.",
-      "combinedBannerBody": "خلايا الإجازة / المرض / الحادث ما زالت من الطلبات المعتمدة. هيكل الإجازة يغيّر الساعات المطلوبة فقط.",
+      "combinedBannerBody": "جدول واحد: MG ID · Driver ID · الاسم مثبّتة، وكتلة الأيام بعد الحالة، وترتيب بقية الأعمدة لك. الساعات المطلوبة = ساعات المشروع اليومية (أمريكانا 12 ساعة، كيتا 10 ساعات) × الأيام المحتسبة من الأول حتى اليوم. اليوم الذي تحتوي خليته على شيء غير الساعات — راحة، مرض، حادث، إجازة، تدريب، مشكلة مركبة — لا يُحتسب، وهكذا تخرج أيام الراحة المسموحة لكل راكب (هيكل الراحة) من الحساب.",
       "shareCard": "{count} من {total} سائق لديهم يوم {status} · {share}% من الرواتب",
       "offStructure": {
         "open": "هيكل الإجازة",
@@ -10004,13 +10032,13 @@
         "inactive": "غير نشط"
       },
       "dayStatus": {
-        "work": "يوم كامل · 12 ساعة",
+        "work": "نشط · 12 ساعة",
         "off": "راحة",
         "sick": "مرضي",
         "accident": "حادث",
         "absent": "غياب",
-        "reduced3": "يوم مخفّض · 3 ساعات",
-        "half": "نصف يوم · 6 ساعات",
+        "reduced3": "3 ساعات",
+        "half": "6 ساعات",
         "actual": "الساعات الفعلية",
         "vehicle": "مشكلة مركبة",
         "abs_lh": "غياب · LH",
@@ -10019,13 +10047,13 @@
         "blank": "لا يوجد سجل"
       },
       "legend": {
-        "work": "يوم كامل",
+        "work": "نشط",
         "off": "راحة",
         "sick": "مرضي",
         "accident": "حادث",
         "absent": "غياب",
-        "reduced3": "مخفّض 3 ساعات",
-        "half": "نصف يوم",
+        "reduced3": "3 ساعات",
+        "half": "6 ساعات",
         "actual": "ساعات فعلية",
         "vehicle": "مشكلة مركبة",
         "abs_lh": "غياب LH",
@@ -10053,21 +10081,21 @@
         "outsourced": "خارجي"
       },
       "slicer": {
-        "partner": "اسم العميل",
+        "partner": "اسم المشروع",
         "zone": "المنطقة",
         "vehicle": "المركبة",
         "nationality": "الجنسية",
         "sourceType": "نوع المصدر",
         "company": "الشركة",
         "store": "المتجر",
-        "allPartners": "كل العملاء",
+        "allPartners": "كل المشاريع",
         "allZones": "كل المناطق",
         "allVehicles": "كل المركبات",
         "allNationalities": "كل الجنسيات",
         "allSourceTypes": "كل الأنواع",
         "allCompanies": "كل الشركات",
         "allStores": "كل المتاجر",
-        "nounPartners": "عملاء",
+        "nounPartners": "مشاريع",
         "nounZones": "مناطق",
         "nounVehicles": "مركبات",
         "nounNationalities": "جنسيات",
@@ -10075,13 +10103,15 @@
         "nounCompanies": "شركات",
         "nounStores": "متاجر",
         "noStores": "لا متاجر للعميل المحدد",
-        "searchPartner": "بحث العميل",
+        "searchPartner": "بحث في المشاريع",
         "searchZone": "بحث المنطقة",
         "searchVehicle": "بحث المركبة",
         "searchNationality": "بحث الجنسية",
         "searchSourceType": "بحث النوع",
         "searchCompany": "بحث الشركة",
-        "searchStore": "بحث المتجر"
+        "searchStore": "بحث المتجر",
+        "zoneCategory": "فئة المنطقة",
+        "allZoneCategories": "كل فئات المناطق"
       },
       "workflow": {
         "title": "سير الموافقة",
@@ -10130,7 +10160,8 @@
         "max": "الأعلى",
         "sortSmallest": "الأصغر أولاً",
         "sortLargest": "الأكبر أولاً",
-        "searchPlaceholder": "بحث القيم"
+        "searchPlaceholder": "بحث القيم",
+        "sortPair": "ترتيب {column}"
       },
       "adjust": {
         "title": "تعديل أيام الرواتب",
@@ -10434,6 +10465,51 @@
           "rule_condition_required": "يجب أن تحتوي كل قاعدة على شرط واحد على الأقل قبل الحفظ.",
           "unknown": "حدث خطأ. لم يتم حفظ التغيير."
         }
+      },
+      "combinedKpi": {
+        "riders": "الراكبون في الرواتب",
+        "active": "إجمالي الراكبين النشطين",
+        "avgEfficiency": "متوسط كفاءة الحضور",
+        "activeAmericana": "إجمالي النشطين أمريكانا",
+        "activeKeeta": "إجمالي النشطين كيتا"
+      },
+      "combinedColumns": {
+        "columns": "الأعمدة",
+        "count": "{count}",
+        "title": "إظهار الأعمدة وترتيبها",
+        "hint": "يُحفظ ترتيبك والأعمدة المخفية لك.",
+        "pinned": "MG ID · Driver ID · الاسم مثبّتة ولا يمكن نقلها.",
+        "drag": "اسحب لإعادة الترتيب",
+        "show": "إظهار العمود",
+        "hide": "إخفاء العمود",
+        "reset": "إعادة الترتيب",
+        "renameHint": "انقر نقرًا مزدوجًا على العنوان لإعادة تسميته.",
+        "dailyGroup": "الأعمدة اليومية ({from} … {to})"
+      },
+      "combinedCols": {
+        "days": "الأيام",
+        "restaurant": "المطعم",
+        "zone": "المنطقة",
+        "zoneCategory": "فئة المنطقة",
+        "projectName": "اسم المشروع",
+        "vehicle": "المركبة",
+        "status": "الحالة",
+        "workingDays": "أيام العمل",
+        "totalHours": "إجمالي الساعات",
+        "totalOrders": "إجمالي الطلبات",
+        "requiredHours": "الساعات المطلوبة",
+        "actualHours": "الساعات الفعلية",
+        "efficiency": "الكفاءة ٪",
+        "threeHourDays": "أيام 3 ساعات",
+        "sixHourDays": "أيام 6 ساعات",
+        "actualDays": "الأيام الفعلية",
+        "off": "راحة",
+        "sick": "مرض",
+        "accident": "حادث",
+        "adjusted": "معدَّل",
+        "unexcused": "غياب بدون عذر",
+        "lessHours": "ساعات أقل",
+        "lessOrders": "طلبات أقل"
       }
     },
     "performance": {

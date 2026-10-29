@@ -22,23 +22,61 @@ export const PAYROLL_HEADING_KEYS = [
   "appTotalHours",
   "appActiveDays",
   "appAvgHours",
+  "rest",
+  "zcat",
+  "proj",
+  "veh",
+  "wd",
+  "tot",
+  "ord",
+  "req",
+  "act",
+  "eff",
+  "h3",
+  "hd",
+  "ad",
+  "o",
+  "sk",
+  "ac",
+  "aj",
+  "ua",
+  "lh",
+  "lo",
 ] as const;
 
 export type PayrollHeadingKey = (typeof PAYROLL_HEADING_KEYS)[number];
 
+/**
+ * Combined Payroll's own headings — the SOP column set, so the pencil on the
+ * new Required Hours / Efficiency / day-count columns renames the same way the
+ * old ones do. `days` is a date block and has no heading of its own.
+ */
 export const COMBINED_HEADING_KEYS = [
   "amId",
   "mgId",
   "name",
-  "restaurant",
-  "restaurantId",
+  "rest",
   "zone",
-  "zoneCategory",
-  "partner",
-  "vehicleKind",
+  "zcat",
+  "proj",
+  "veh",
   "status",
-  "finalOrders",
-  "actualHours",
+  "wd",
+  "tot",
+  "ord",
+  "req",
+  "act",
+  "eff",
+  "h3",
+  "hd",
+  "ad",
+  "o",
+  "sk",
+  "ac",
+  "aj",
+  "ua",
+  "lh",
+  "lo",
 ] as const;
 
 export const AO_HEADING_KEYS = [

@@ -83,6 +83,24 @@ function parseIdentityField(value: unknown): PayrollIdentityField {
   }
 }
 
+/**
+ * What the audit trail records as "was". A rename is only trustworthy if the old
+ * value sits beside the new one (SOP item 13).
+ */
+function previousValue(driver: Dict, field: PayrollIdentityField): string | null {
+  const stored = driver[IDENTITY_COLUMN[field]];
+  return typeof stored === "string" && stored.trim() ? stored.trim() : null;
+}
+
+const IDENTITY_COLUMN: Record<PayrollIdentityField, string> = {
+  employeeId: "employee_id",
+  fullName: "full_name",
+  clientId: "client_id",
+  restaurantName: "restaurant_id",
+  projectKey: "project_key",
+  zoneId: "zone_id",
+};
+
 function clearedRestaurant(value: string): boolean {
   const trimmed = value.trim();
   return trimmed === "" || trimmed === "—" || trimmed === "-" || trimmed === "–";
@@ -284,7 +302,7 @@ export const adminSavePayrollIdentity = onCall(async (request) => {
         action: "update",
         entity: "drivers",
         entityId: driverId,
-        detail: { field, value: value.trim() },
+        detail: { field, value: value.trim(), before: previousValue(driver, field) },
       });
       return { ok: true };
     }
@@ -358,7 +376,7 @@ export const adminSavePayrollIdentity = onCall(async (request) => {
     action: "update",
     entity: "drivers",
     entityId: driverId,
-    detail: { field, value: value.trim() },
+    detail: { field, value: value.trim(), before: previousValue(driver, field) },
   });
   await bumpScanSnapshots(PAYROLL_SNAPSHOTS);
   return { ok: true };

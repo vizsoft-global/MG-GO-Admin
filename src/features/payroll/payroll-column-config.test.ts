@@ -51,11 +51,30 @@ describe("payroll column config", () => {
   });
 
   it("offers the status heading on every view that renders it", () => {
-    for (const keys of [COMBINED_HEADING_KEYS, AO_HEADING_KEYS, APP_ATTENDANCE_HEADING_KEYS]) {
+    // Combined Payroll uses the SOP ids (`veh`), the other two keep `vehicleKind`.
+    const previous: Record<string, string> = {
+      combined: "veh",
+      ao: "vehicleKind",
+      app_attendance: "vehicleKind",
+    };
+    for (const [view, keys] of [
+      ["combined", COMBINED_HEADING_KEYS],
+      ["ao", AO_HEADING_KEYS],
+      ["app_attendance", APP_ATTENDANCE_HEADING_KEYS],
+    ] as const) {
       const list = keys as readonly string[];
       const index = list.indexOf("status");
-      assert.notEqual(index, -1);
-      assert.equal(list[index - 1], "vehicleKind");
+      assert.notEqual(index, -1, view);
+      assert.equal(list[index - 1], previous[view], view);
     }
+  });
+
+  it("offers the Combined-only SOP columns for renaming", () => {
+    const list = COMBINED_HEADING_KEYS as readonly string[];
+    for (const key of ["rest", "zcat", "proj", "req", "act", "eff", "wd", "lo"]) {
+      assert.ok(list.includes(key), key);
+    }
+    // The day block is a date range, so it has no heading of its own.
+    assert.ok(!list.includes("days"));
   });
 });

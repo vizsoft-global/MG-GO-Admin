@@ -44,6 +44,27 @@ const PAYROLL_COLUMN_KEYS = [
   "appTotalHours",
   "appActiveDays",
   "appAvgHours",
+  // Combined Payroll (SOP v1.0) column set — each one is renamable.
+  "rest",
+  "zcat",
+  "proj",
+  "veh",
+  "wd",
+  "tot",
+  "ord",
+  "req",
+  "act",
+  "eff",
+  "h3",
+  "hd",
+  "ad",
+  "o",
+  "sk",
+  "ac",
+  "aj",
+  "ua",
+  "lh",
+  "lo",
 ];
 const HEADING_VIEWS = ["combined", "ao", "app_attendance"];
 

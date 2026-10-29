@@ -15,18 +15,25 @@ export type PayrollAssignOption = {
 type Catalog = {
   clients: PayrollAssignOption[];
   zones: PayrollAssignOption[];
+  restaurants: PayrollAssignOption[];
   zonesLoading: boolean;
 };
 
-const EMPTY: Catalog = { clients: [], zones: [], zonesLoading: false };
+const EMPTY: Catalog = { clients: [], zones: [], restaurants: [], zonesLoading: false };
 const PayrollAssignCatalogContext = createContext<Catalog>(EMPTY);
 
 export function PayrollAssignCatalogProvider({
   clients,
+  restaurants = [],
   enabled,
   children,
 }: {
   clients: readonly PayrollClientConfig[];
+  /**
+   * The restaurant catalogue the payroll snapshot already carries for the Store
+   * slicer. Reusing it keeps the Combined row's dropdown off a second scan.
+   */
+  restaurants?: ReadonlyArray<{ id: string; name: string }>;
   enabled: boolean;
   children: ReactNode;
 }) {
@@ -53,12 +60,21 @@ export function PayrollAssignCatalogProvider({
         keywords: [zone.name, zone.code].filter((part) => part.trim().length > 0),
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
+    const restaurantItems = restaurants
+      .filter((restaurant) => restaurant.id && restaurant.name.trim())
+      .map((restaurant) => ({
+        value: restaurant.id,
+        label: restaurant.name.trim(),
+        keywords: [restaurant.name.trim()],
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
     return {
       clients: clientItems,
       zones: zoneItems,
+      restaurants: restaurantItems,
       zonesLoading: zonesQuery.isLoading,
     };
-  }, [clients, zonesQuery.data, zonesQuery.isLoading]);
+  }, [clients, zonesQuery.data, zonesQuery.isLoading, restaurants]);
   return (
     <PayrollAssignCatalogContext.Provider value={value}>
       {children}
