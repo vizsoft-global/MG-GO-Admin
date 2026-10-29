@@ -50,6 +50,7 @@ import {
   useEmployeeSections,
   useEmployeeStatuses,
 } from "@/features/employees/use-employee-catalogs";
+import { useVehicleTypes } from "@/features/vehicles/use-vehicles";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -297,6 +298,7 @@ function DriversPageContent() {
   );
   const statusesQuery = useEmployeeStatuses();
   const sectionsQuery = useEmployeeSections();
+  const vehicleTypesQuery = useVehicleTypes();
   const [columnFilters, setColumnFilters] = useState<DriversColumnFilters>({});
   const [sort, setSort] = useState<DriversSort>(DEFAULT_DRIVERS_SORT);
   const [levelFilter, setLevelFilter] = useState<DriverLevelFilter>("all");
@@ -504,6 +506,24 @@ function DriversPageContent() {
     [t],
   );
 
+  /**
+   * Vehicle type key → printed label. The catalog is the source so a type the
+   * operator added reads its own name in the cell and in the header filter;
+   * `bike` / `car` stay as the fallback when no catalog row is loaded yet.
+   */
+  const vehicleTypeLabel = useCallback(
+    (key: string | null | undefined): string | null => {
+      const trimmed = (key ?? "").trim();
+      if (!trimmed) return null;
+      const fromCatalog = (vehicleTypesQuery.data ?? []).find((type) => type.key === trimmed);
+      if (fromCatalog) return locale === "ar" ? fromCatalog.label_ar || fromCatalog.label_en : fromCatalog.label_en;
+      if (trimmed === "car" || trimmed === "van") return t("vehicleCar");
+      if (trimmed === "bike") return t("vehicleBike");
+      return trimmed;
+    },
+    [vehicleTypesQuery.data, locale, t],
+  );
+
   const optionLabelFor = useCallback(
     (column: string, value: string, label: string | null): string => {
       if (value === "") {
@@ -521,7 +541,7 @@ function DriversPageContent() {
         case "attendance":
           return value === "on_duty" ? t("attendanceOnDuty") : t("attendanceOffDuty");
         case "vehicle":
-          return value === "car" ? t("vehicleCar") : t("vehicleBike");
+          return vehicleTypeLabel(value) ?? value;
         case "section":
           return catalogLabel(value, sectionsQuery.data ?? [], locale);
         default: {
@@ -538,7 +558,7 @@ function DriversPageContent() {
     },
     // accountStatusLabelFor only reads `t`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t, tCommon, activeCustomDefs, locale, sectionsQuery.data],
+    [t, tCommon, activeCustomDefs, locale, sectionsQuery.data, vehicleTypeLabel],
   );
 
   const filterContext = useMemo(
@@ -1024,11 +1044,14 @@ function DriversPageContent() {
                         </VisibleTableCell>
                         <VisibleTableCell columnId="vehicle" isVisible={isColumnVisible}>
                           <DriverVehicleCell
-                            vehicleTypeKey={driver.vehicle_type_key}
+                            vehicleTypeKey={driver.assigned_vehicle_type_key ?? driver.vehicle_type_key}
                             vehicleLabel={driver.vehicle_label}
                             bikeLabel={t("vehicleBike")}
                             carLabel={t("vehicleCar")}
                             emptyLabel={t("vehicleNone")}
+                            typeLabel={vehicleTypeLabel(
+                              driver.assigned_vehicle_type_key ?? driver.vehicle_type_key,
+                            )}
                           />
                         </VisibleTableCell>
                         <VisibleTableCell

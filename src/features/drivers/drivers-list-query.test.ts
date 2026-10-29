@@ -80,4 +80,19 @@ describe("mapDriversPageRow", () => {
     assert.equal(row.company_tone, "unassigned");
     assert.equal(row.employee_id, null);
   });
+
+  it("carries the assigned vehicle's own type next to the roster fallback", () => {
+    // The Vehicle column prints the assigned vehicle, not the type the intake
+    // sheet guessed before a vehicle existed, so both keys have to reach the row.
+    const row = mapDriversPageRow({
+      id: "d3",
+      driver_code: "10003",
+      full_name: "Vinod",
+      vehicle_label: "12345",
+      vehicle_type_key: "bike",
+      assigned_vehicle_type_key: "van",
+    });
+    assert.equal(row.vehicle_type_key, "bike");
+    assert.equal(row.assigned_vehicle_type_key, "van");
+  });
 });
