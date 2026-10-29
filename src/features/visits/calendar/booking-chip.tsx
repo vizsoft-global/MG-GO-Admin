@@ -18,16 +18,18 @@ export function BookingChip({ name, statusLabel, status, selected = false, onCli
       type="button"
       onClick={onClick}
       className={cn(
-        "flex h-10 w-full overflow-hidden rounded-md text-start",
-        style.wash,
-        selected && "ring-2 ring-[var(--portal-ink)]",
+        "flex min-h-[34px] w-full overflow-hidden rounded-[4px] bg-card text-start",
+        selected && "ring-2 ring-[var(--portal-ink)] ring-offset-1",
       )}
     >
       <span className={cn("w-[3px] shrink-0", style.bar)} aria-hidden />
-      <span className="flex min-w-0 flex-1 flex-col justify-center px-2">
-        <span className="truncate text-xs font-semibold text-[#27273f]">{name}</span>
-        <span className={cn("truncate text-[11px]", style.text)}>{statusLabel}</span>
+      <span className="flex min-w-0 flex-1 flex-col justify-center py-1 ps-1.5 pe-1">
+        <span className="truncate text-[11.5px] leading-4 font-semibold text-[var(--portal-ink)]">
+          {name}
+        </span>
+        <span className={cn("truncate text-[10.5px] leading-3.5", style.text)}>{statusLabel}</span>
       </span>
     </button>
   );
 }
+

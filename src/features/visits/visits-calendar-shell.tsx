@@ -8,13 +8,6 @@ import { toast } from "sonner";
 
 import { AppEmptyState, AppPage } from "@/components/app";
 import { KpiCard } from "@/components/dashboard/kpi-card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { downloadWorkbookXlsx } from "@/features/drivers/import/export-xlsx";
 import { BookingPopover, type BookingPopoverStatus } from "@/features/visits/calendar/booking-popover";
 import {
@@ -25,7 +18,11 @@ import {
   StatusLegend,
 } from "@/features/visits/calendar/calendar-chrome";
 import { busiestDays, serviceMix } from "@/features/visits/calendar/calendar-model";
-import { bookingStatusStyle, serviceColorVar } from "@/features/visits/calendar/colors";
+import {
+  bookingStatusStyle,
+  serviceColorVar,
+  shortServiceLabel,
+} from "@/features/visits/calendar/colors";
 import { DayAgenda } from "@/features/visits/calendar/day-agenda";
 import { DayGrid } from "@/features/visits/calendar/day-grid";
 import { MonthGrid } from "@/features/visits/calendar/month-grid";
@@ -40,12 +37,12 @@ import { addKuwaitDays } from "@/lib/date/kuwait-dates";
 import { kuwaitClockMinutes, kuwaitTodayYmd, kuwaitWeekStartYmd } from "@/lib/date/kuwait-clock";
 import { formatPct } from "@/lib/format/percent";
 import { queryKeys } from "@/lib/query/query-keys";
-import { selectOptionsFrom } from "@/lib/select-items";
 import { cn } from "@/lib/utils";
 import {
   fetchAdminVisitsList,
   fetchVisitBlockedDates,
   fetchVisitBookingConfigs,
+  fetchVisitBranches,
   fetchVisitDayCounts,
   fetchVisitDepartments,
   fetchVisitSlots,
@@ -121,11 +118,58 @@ function formatYmd(ymd: string, locale: string, withWeekday: boolean): string {
   const date = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1));
   return new Intl.DateTimeFormat(locale, {
     timeZone: "UTC",
+    numberingSystem: "latn",
     weekday: withWeekday ? "short" : undefined,
     day: "numeric",
     month: "short",
     year: withWeekday ? undefined : "numeric",
   }).format(date);
+}
+
+const CALENDAR_DATE_STYLES = {
+  day: { weekday: "short", day: "numeric", month: "short", year: "numeric" },
+  dayLong: { weekday: "long", day: "numeric", month: "long" },
+  dayMonth: { day: "numeric", month: "short" },
+  dayMonthLong: { day: "numeric", month: "long" },
+  dayMonthYear: { day: "numeric", month: "short", year: "numeric" },
+  dayOnly: { day: "numeric" },
+  weekdayDay: { weekday: "short", day: "numeric" },
+  weekdayDayMonth: { weekday: "short", day: "numeric", month: "short" },
+  monthLong: { month: "long" },
+} as const;
+
+/** The frames print `Tue, 27 Oct 2026` / `Tuesday, 27 October`, which en-US
+ *  would render as `Tue, Oct 27, 2026` / `Tuesday, October 27`. */
+function calendarLabel(
+  ymd: string,
+  locale: string,
+  style: keyof typeof CALENDAR_DATE_STYLES,
+): string {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const date = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1));
+  const formatted = new Intl.DateTimeFormat(locale === "ar" ? "ar" : "en-GB", {
+    timeZone: "UTC",
+    numberingSystem: "latn",
+    ...CALENDAR_DATE_STYLES[style],
+  }).format(date);
+  if (locale !== "ar" && style === "dayLong") {
+    return formatted.replace(/^(\S+) /, "$1, ");
+  }
+  return formatted;
+}
+
+/** ISO week of the Wednesday inside the Sunday-first week, so 25–31 Oct 2026
+ *  reads as week 44 the way the frames number it. */
+function isoWeekNumber(ymd: string): number {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const date = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1));
+  const thursday = new Date(date);
+  const dayNr = (date.getUTCDay() + 6) % 7;
+  thursday.setUTCDate(thursday.getUTCDate() - dayNr + 3);
+  const firstThursday = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4));
+  const firstDayNr = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNr + 3);
+  return 1 + Math.round((thursday.getTime() - firstThursday.getTime()) / 604_800_000);
 }
 
 export function VisitsCalendarShell({
@@ -185,6 +229,10 @@ export function VisitsCalendarShell({
   const { data: configData } = useQuery({
     queryKey: queryKeys.visits.list({ bookingConfig: true }),
     queryFn: fetchVisitBookingConfigs,
+  });
+  const { data: branchData } = useQuery({
+    queryKey: queryKeys.visits.list({ branches: true }),
+    queryFn: fetchVisitBranches,
   });
   const { data: deptData } = useQuery({
     queryKey: queryKeys.visits.departments(),
@@ -285,9 +333,21 @@ export function VisitsCalendarShell({
       serviceKey ? departments.filter((row) => row.key === serviceKey) : departments,
     [departments, serviceKey],
   );
-  const branchItems = useMemo(
-    () => selectOptionsFrom(configs, (row) => row.branch_id, (row) => row.branch_name),
-    [configs],
+  const branchNames = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of branchData?.rows ?? []) {
+      const label = row.name?.trim() || row.key?.trim();
+      if (label) map.set(row.id, label);
+    }
+    return map;
+  }, [branchData?.rows]);
+  const branchItems = useMemo<{ value: string; label: string }[]>(
+    () =>
+      configs.map((row) => ({
+        value: row.branch_id ?? "",
+        label: branchNames.get(row.branch_id ?? "") ?? row.branch_name ?? row.branch_id ?? "",
+      })),
+    [configs, branchNames],
   );
   const blockedDates = useMemo(() => {
     const set = new Set<string>();
@@ -424,10 +484,10 @@ export function VisitsCalendarShell({
     mode === "year"
       ? String(year)
       : mode === "month"
-        ? formatYmd(monthWindow.from, locale, false)
+        ? `${calendarLabel(monthWindow.from, locale, "monthLong")} ${year}`
         : mode === "week"
-          ? `${formatYmd(weekStart, locale, true)} – ${formatYmd(addKuwaitDays(weekStart, 6), locale, true)}`
-          : formatYmd(cursor, locale, true);
+          ? `${calendarLabel(weekStart, locale, "dayOnly")} – ${calendarLabel(addKuwaitDays(weekStart, 6), locale, "dayMonthYear")}`
+          : calendarLabel(cursor, locale, "day");
 
   const dayServices = visibleDepartments.map((dept) => {
     const rows = activeRows.filter(
@@ -439,11 +499,19 @@ export function VisitsCalendarShell({
 
   const weekDays = Array.from({ length: 7 }, (_, index) => {
     const ymd = addKuwaitDays(weekStart, index);
+    const [yearPart, monthPart, dayPart] = ymd.split("-").map(Number);
     return {
       ymd,
       label: formatYmd(ymd, locale, true).split(" ")[0] ?? ymd,
       dateLabel: formatYmd(ymd, locale, true),
       isToday: ymd === today,
+      dayNumber: dayPart ?? 1,
+      weekday: new Intl.DateTimeFormat(locale === "ar" ? "ar" : "en-GB", {
+        timeZone: "UTC",
+        numberingSystem: "latn",
+        weekday: "short",
+      }).format(new Date(Date.UTC(yearPart ?? 1970, (monthPart ?? 1) - 1, dayPart ?? 1))),
+      bookings: activeRows.filter((row) => row.scheduled_date === ymd).length,
     };
   });
 
@@ -621,8 +689,125 @@ export function VisitsCalendarShell({
       })()
     : null;
 
+  const slotMinutes = config?.slot_length_minutes ?? step;
+  const serviceCount = visibleDepartments.length;
+  const dayPct = dayCap > 0 ? (dayBooked / dayCap) * 100 : null;
+  const nextVisitorRow =
+    activeRows
+      .filter(
+        (row) =>
+          row.status === "confirmed" &&
+          row.scheduled_date === today &&
+          row.slot_start != null &&
+          minutesOf(row.slot_start) >= nowMinutes,
+      )
+      .sort((a, b) => (a.slot_start ?? "").localeCompare(b.slot_start ?? ""))[0] ?? null;
+
+  const weekCapacity = weekDays.reduce((total, day) => total + dayCapacity(day.ymd), 0);
+  const weekBooked = activeRows.length;
+  const fullSlotLabels = weekDays.flatMap((day) =>
+    times
+      .filter((time) => {
+        const booked = visibleDepartments.reduce(
+          (sum, dept) => sum + (bookings.get(`${day.ymd}|${dept.key}|${time}`)?.length ?? 0),
+          0,
+        );
+        const capacity = visibleDepartments.reduce(
+          (sum, dept) => sum + capacityFor(day.ymd, dept.key, time),
+          0,
+        );
+        return capacity > 0 && booked >= capacity;
+      })
+      .map((time) => `${calendarLabel(day.ymd, locale, "weekdayDay")} · ${time}`),
+  );
+  const weekBusiest = busiestDays(
+    weekDays.map((day) => ({
+      date: day.ymd,
+      booked: activeRows.filter((visit) => visit.scheduled_date === day.ymd).length,
+      capacity: dayCapacity(day.ymd),
+    })),
+  )[0];
+  const weekTop = serviceMix([
+    {
+      departments: Object.fromEntries(
+        visibleDepartments.map((dept) => [
+          dept.key,
+          activeRows.filter((row) => row.department_key === dept.key).length,
+        ]),
+      ),
+    },
+  ])[0];
+
+  const monthDays = dayCounts ?? [];
+  const trailingDays = monthDays.filter((day) => day.date > today);
+  const trailingBooked = trailingDays.reduce(
+    (total, day) => total + (serviceKey ? (day.departments[serviceKey] ?? 0) : day.booked),
+    0,
+  );
+  const trailingRange =
+    trailingDays.length > 0
+      ? `${calendarLabel(trailingDays[0]?.date ?? today, locale, "dayOnly")} – ${calendarLabel(monthWindow.to, locale, "dayMonthYear")}`
+      : "";
+  const sunThuDays = monthDays.filter((day) => {
+    const dow = dowOf(day.date);
+    return dow >= 0 && dow <= 4 && dayCapacity(day.date) > 0;
+  });
+  const sunThuAverage =
+    sunThuDays.length > 0
+      ? Math.round(sunThuDays.reduce((total, day) => total + day.booked, 0) / sunThuDays.length)
+      : null;
+  const monthBusiest = busiestDays(
+    monthDays.map((row) => ({
+      date: row.date,
+      booked: row.booked,
+      capacity: dayCapacity(row.date),
+    })),
+  )[0];
+  const monthBusiestCapacity = monthBusiest ? dayCapacity(monthBusiest.date) : 0;
+  const bestMonthIndex = monthTotals.reduce(
+    (best, month, index, all) => (month.booked > all[best].booked ? index : best),
+    0,
+  );
+  const bestMonth = monthTotals[bestMonthIndex];
+  const bestMonthLabel = calendarLabel(
+    `${year}-${String(bestMonthIndex + 1).padStart(2, "0")}-01`,
+    locale,
+    "monthLong",
+  );
+  const bestMonthCapacity = monthDays
+    .filter((day) => Number(day.date.slice(5, 7)) - 1 === bestMonthIndex)
+    .reduce((total, day) => total + dayCapacity(day.date), 0);
+
+  const yearTotal = yearDays.reduce((total, day) => total + day.booked, 0);
+  const scheduledAfterToday = yearDays
+    .filter((day) => day.date > today)
+    .reduce((total, day) => total + day.booked, 0);
+  const peakCapacity = busiest[0] ? dayCapacity(busiest[0].date) : 0;
+  const closedDaysCount = Array.from({ length: 12 }, (_, month) =>
+    new Date(Date.UTC(year, month + 1, 0)).getUTCDate(),
+  ).reduce((total, daysInMonth, month) => {
+    let closed = 0;
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      if (dayClosed(date)) closed += 1;
+    }
+    return total + closed;
+  }, 0);
+
+  const agendaUpNext = agendaRows
+    .filter((row) => row.slot_start != null && row.status !== "cancelled")
+    .sort((a, b) => (a.slot_start ?? "").localeCompare(b.slot_start ?? ""))
+    .slice(0, 3)
+    .map((row) => ({
+      id: row.id,
+      time: row.slot_start?.slice(0, 5) ?? "",
+      name: row.driver_name,
+      serviceLabel: `${serviceName(row.department_key)} · ${t("calendar.desk")}`,
+      status: row.status,
+    }));
+
   return (
-    <AppPage className="space-y-2">
+    <AppPage className="space-y-3">
       {fromEsignHub ? (
         <Link href="/requests/esign" className="text-xs text-primary hover:underline">
           {t("calendar.backToEsign")}
@@ -632,7 +817,7 @@ export function VisitsCalendarShell({
         apps={t("calendarUi.apps")}
         visitSlots={t("calendarUi.visitSlots")}
         calendar={t("calendarUi.calendar")}
-        title={t("calendarUi.title")}
+        title={t("calendarUi.pageTitle")}
         subtitle={t("calendarUi.subtitle")}
         exportLabel={t("calendarUi.export")}
         onExport={exportRows}
@@ -640,22 +825,10 @@ export function VisitsCalendarShell({
         comingSoon={t("calendarUi.comingSoon")}
       />
       <CalendarToolbar
-        branch={
-          branchItems.length > 0 ? (
-            <Select value={config?.branch_id ?? ""} onValueChange={(value) => setBranchId(value || null)}>
-              <SelectTrigger className="h-9 w-44" aria-label={t("calendarUi.branch")}>
-                <SelectValue placeholder={t("calendarUi.branch")} />
-              </SelectTrigger>
-              <SelectContent>
-                {branchItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null
-        }
+        branchItems={branchItems}
+        branchId={config?.branch_id ?? ""}
+        onBranchChange={(value) => setBranchId(value || null)}
+        branchLabel={t("calendarUi.branch")}
         label={periodLabel}
         onPrevious={() => shift(-1)}
         onNext={() => shift(1)}
@@ -683,63 +856,232 @@ export function VisitsCalendarShell({
           month: t("calendar.viewMonth"),
           year: t("calendar.year"),
         }}
+        services={
+          <ServiceChips
+            allLabel={t("calendarUi.allServices")}
+            allCount={departments.length}
+            servicesLabel={t("calendarUi.services")}
+            selectedKey={serviceKey}
+            onSelect={setServiceKey}
+            items={departments.map((dept) => ({
+              key: dept.key,
+              label: departmentLabel(dept, locale),
+              colorClass: serviceColorVar(dept.key, departmentLabel(dept, locale)),
+            }))}
+          />
+        }
       />
-      <ServiceChips
-        allLabel={t("calendarUi.allServices")}
-        selectedKey={serviceKey}
-        onSelect={setServiceKey}
-        items={departments.map((dept) => ({
-          key: dept.key,
-          label: departmentLabel(dept, locale),
-          colorClass: serviceColorVar(dept.key, departmentLabel(dept, locale)),
-        }))}
-      />
-      {mode === "day" || mode === "week" ? (
-        <StatusLegend
-          items={[
-            ...(["confirmed", "checked_in", "completed", "no_show"] as const).map((status) => ({
-              label: statusText(status),
-              className: bookingStatusStyle(status).bar,
-            })),
-            { label: t("calendarUi.openSlot"), className: "border border-border bg-card" },
-          ]}
-        />
-      ) : (
-        <LoadLegend />
-      )}
       {truncated ? <p className="text-xs text-muted-foreground">{t("calendarUi.incomplete")}</p> : null}
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="visit-kpi-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {mode === "day" ? (
           <>
-            <KpiCard layout="portal" portalAccent="ink" label={t("calendarUi.bookingsToday")} value={dayBooked} caption={dayCap > 0 ? formatPct((dayBooked / dayCap) * 100) : undefined} />
-            <KpiCard layout="portal" portalAccent="green" label={t("calendarUi.checkedIn")} value={checkedIn + completed} caption={`${checkedIn} ${t("calendarUi.onSite")} · ${completed} ${t("calendarUi.completed")}`} />
-            <KpiCard layout="portal" portalAccent="blue" label={t("calendarUi.stillToArrive")} value={stillToArrive} />
-            <KpiCard layout="portal" portalAccent="red" label={t("calendarUi.noShows")} value={noShows} />
+            <KpiCard
+              layout="portal"
+              portalAccent="ink"
+              label={t("calendarUi.bookingsToday")}
+              value={dayBooked}
+              caption={
+                dayPct != null
+                  ? t("calendarUi.slotsBooked", { pct: formatPct(dayPct), count: dayCap })
+                  : undefined
+              }
+            />
+            <KpiCard
+              layout="portal"
+              portalAccent="green"
+              label={t("calendarUi.checkedIn")}
+              value={checkedIn + completed}
+              caption={t("calendarUi.onSiteNow", { checked: checkedIn, completed })}
+            />
+            <KpiCard
+              layout="portal"
+              portalAccent="blue"
+              label={t("calendarUi.stillToArrive")}
+              value={stillToArrive}
+              caption={
+                nextVisitorRow
+                  ? t("calendarUi.nextVisitorAt", {
+                      name: nextVisitorRow.driver_name,
+                      time: nextVisitorRow.slot_start?.slice(0, 5) ?? "",
+                    })
+                  : undefined
+              }
+            />
+            <KpiCard
+              layout="portal"
+              portalAccent="red"
+              label={t("calendarUi.noShows")}
+              value={noShows}
+              caption={t("calendarUi.noShowGrace")}
+            />
           </>
         ) : null}
         {mode === "week" ? (
           <>
-            <KpiCard layout="portal" portalAccent="ink" label={t("calendarUi.bookingsWeek")} value={activeRows.length} />
-            <KpiCard layout="portal" portalAccent="ochre" label={t("calendarUi.busiestDay")} value={(() => { const day = busiestDays(weekDays.map((row) => ({ date: row.ymd, booked: activeRows.filter((visit) => visit.scheduled_date === row.ymd).length, capacity: dayCapacity(row.ymd) })))[0]?.date; return day ? formatYmd(day, locale, true) : "—"; })()} />
-            <KpiCard layout="portal" portalAccent="red" label={t("calendarUi.fullSlots")} value={weekDays.reduce((total, day) => total + times.filter((time) => { const booked = visibleDepartments.reduce((sum, dept) => sum + (bookings.get(`${day.ymd}|${dept.key}|${time}`)?.length ?? 0), 0); const capacity = visibleDepartments.reduce((sum, dept) => sum + capacityFor(day.ymd, dept.key, time), 0); return capacity > 0 && booked >= capacity; }).length, 0)} />
-            <KpiCard layout="portal" portalAccent="plum" label={t("calendarUi.topService")} value={serviceMix([{ departments: Object.fromEntries(visibleDepartments.map((dept) => [dept.key, activeRows.filter((row) => row.department_key === dept.key).length])) }])[0] ? serviceName(serviceMix([{ departments: Object.fromEntries(visibleDepartments.map((dept) => [dept.key, activeRows.filter((row) => row.department_key === dept.key).length])) }])[0]?.key ?? "") : "—"} />
+            <KpiCard
+              layout="portal"
+              portalAccent="ink"
+              label={t("calendarUi.bookingsWeek")}
+              value={weekBooked}
+              caption={
+                weekCapacity > 0
+                  ? t("calendarUi.slotsBooked", {
+                      pct: formatPct((weekBooked / weekCapacity) * 100),
+                      count: weekCapacity,
+                    })
+                  : undefined
+              }
+            />
+            <KpiCard
+              layout="portal"
+              portalAccent="ochre"
+              label={t("calendarUi.busiestDay")}
+              value={weekBusiest ? calendarLabel(weekBusiest.date, locale, "weekdayDay") : "—"}
+              caption={t("calendarUi.acrossServices", {
+                count: weekBusiest?.booked ?? 0,
+                services: serviceCount,
+              })}
+            />
+            <KpiCard
+              layout="portal"
+              portalAccent="red"
+              label={t("calendarUi.fullSlots")}
+              value={fullSlotLabels.length}
+              caption={
+                fullSlotLabels.length > 0
+                  ? `${fullSlotLabels.slice(0, 2).join(", ")}${
+                      fullSlotLabels.length > 2
+                        ? ` ${t("calendarUi.moreCount", { count: fullSlotLabels.length - 2 })}`
+                        : ""
+                    }`
+                  : undefined
+              }
+            />
+            <KpiCard
+              layout="portal"
+              portalAccent="plum"
+              label={t("calendarUi.topService")}
+              value={weekTop ? serviceName(weekTop.key) : "—"}
+              caption={
+                weekTop && weekBooked > 0
+                  ? t("calendarUi.shareOfWeek", {
+                      pct: formatPct((weekTop.count / weekBooked) * 100),
+                    })
+                  : undefined
+              }
+            />
           </>
         ) : null}
         {mode === "month" ? (
           <>
-            <KpiCard layout="portal" portalAccent="ink" label={t("calendarUi.bookingsMonth")} value={monthBooked} />
-            <KpiCard layout="portal" portalAccent="ochre" label={t("calendarUi.busiestDay")} value={(() => { const day = busiestDays((dayCounts ?? []).map((row) => ({ date: row.date, booked: row.booked, capacity: dayCapacity(row.date) })))[0]?.date; return day ? formatYmd(day, locale, true) : "—"; })()} />
-            <KpiCard layout="portal" portalAccent="blue" label={t("calendarUi.dailyAverage")} value={(dayCounts ?? []).length > 0 ? Math.round(monthBooked / (dayCounts ?? []).length) : 0} />
-            <KpiCard layout="portal" portalAccent="green" label={t("calendarUi.noShowRate")} value={monthRate == null ? "—" : formatPct(monthRate)} caption={monthRate != null && prevRate != null ? t("calendarUi.noShowDelta", { rate: formatPct(prevRate) }) : undefined} />
+            <KpiCard
+              layout="portal"
+              portalAccent="ink"
+              label={t("calendarUi.bookingsMonth")}
+              value={monthBooked}
+              caption={
+                trailingBooked > 0
+                  ? t("calendarUi.alreadyBooked", {
+                      count: trailingBooked,
+                      range: trailingRange,
+                    })
+                  : undefined
+              }
+            />
+            <KpiCard
+              layout="portal"
+              portalAccent="ochre"
+              label={t("calendarUi.busiestDay")}
+              value={monthBusiest ? calendarLabel(monthBusiest.date, locale, "weekdayDayMonth") : "—"}
+              caption={
+                monthBusiest && monthBusiestCapacity > 0
+                  ? t("calendarUi.slotsBookedOf", {
+                      booked: monthBusiest.booked,
+                      capacity: monthBusiestCapacity,
+                      pct: formatPct((monthBusiest.booked / monthBusiestCapacity) * 100),
+                    })
+                  : undefined
+              }
+            />
+            <KpiCard
+              layout="portal"
+              portalAccent="blue"
+              label={t("calendarUi.dailyAverage")}
+              value={monthDays.length > 0 ? Math.round(monthBooked / monthDays.length) : 0}
+              caption={
+                sunThuAverage != null
+                  ? t("calendarUi.sunThuAverage", { value: sunThuAverage })
+                  : undefined
+              }
+            />
+            <KpiCard
+              layout="portal"
+              portalAccent="green"
+              label={t("calendarUi.noShowRate")}
+              value={monthRate == null ? "—" : formatPct(monthRate)}
+              caption={
+                monthRate != null && prevRate != null
+                  ? t("calendarUi.downFrom", {
+                      value: formatPct(prevRate),
+                      month: calendarLabel(prevWindow.from, locale, "monthLong"),
+                    })
+                  : undefined
+              }
+            />
           </>
         ) : null}
         {mode === "year" ? (
           <>
-            <KpiCard layout="portal" portalAccent="ink" label={t("calendarUi.bookingsYear")} value={yearDays.reduce((total, day) => total + day.booked, 0)} />
-            <KpiCard layout="portal" portalAccent="ochre" label={t("calendarUi.busiestMonth")} value={monthTotals.reduce((best, month) => (month.booked > best.booked ? month : best), monthTotals[0] ?? { label: "—", booked: 0, isCurrent: false }).label} />
-            <KpiCard layout="portal" portalAccent="red" label={t("calendarUi.peakDay")} value={busiest[0] ? formatYmd(busiest[0].date, locale, true) : "—"} />
-            <KpiCard layout="portal" portalAccent="plum" label={t("calendarUi.closedDays")} value={Array.from({ length: 12 }, (_, month) => new Date(Date.UTC(year, month + 1, 0)).getUTCDate()).reduce((total, days, month) => { let closed = 0; for (let day = 1; day <= days; day += 1) { const ymd = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`; if (dayClosed(ymd)) closed += 1; } return total + closed; }, 0)} />
+            <KpiCard
+              layout="portal"
+              portalAccent="ink"
+              label={t("calendarUi.bookingsYear")}
+              value={yearTotal}
+              caption={t("calendarUi.soFar", {
+                from: calendarLabel(`${year}-01-01`, locale, "dayMonth"),
+                to: calendarLabel(today, locale, "dayMonth"),
+                count: scheduledAfterToday,
+              })}
+            />
+            <KpiCard
+              layout="portal"
+              portalAccent="ochre"
+              label={t("calendarUi.busiestMonth")}
+              value={bestMonth ? bestMonthLabel : "—"}
+              caption={
+                bestMonth
+                  ? t("calendarUi.monthCapacityNote", {
+                      count: bestMonth.booked,
+                      pct: formatPct(
+                        bestMonthCapacity > 0 ? (bestMonth.booked / bestMonthCapacity) * 100 : 0,
+                      ),
+                    })
+                  : undefined
+              }
+            />
+            <KpiCard
+              layout="portal"
+              portalAccent="red"
+              label={t("calendarUi.peakDay")}
+              value={busiest[0] ? calendarLabel(busiest[0].date, locale, "dayMonth") : "—"}
+              caption={
+                busiest[0] && peakCapacity > 0
+                  ? t("calendarUi.slotsBookedOf", {
+                      booked: busiest[0].booked,
+                      capacity: peakCapacity,
+                      pct: formatPct((busiest[0].booked / peakCapacity) * 100),
+                    })
+                  : undefined
+              }
+            />
+            <KpiCard
+              layout="portal"
+              portalAccent="grey"
+              label={t("calendarUi.closedDays")}
+              value={closedDaysCount}
+              caption={t("calendarUi.closedDaysNote")}
+            />
           </>
         ) : null}
       </div>
@@ -753,6 +1095,22 @@ export function VisitsCalendarShell({
           <AppEmptyState title={t("calendar.noSlotsTitle")} description={t("calendar.noSlotsDescription")} />
         ) : (
           <DayGrid
+            title={calendarLabel(cursor, locale, "dayLong")}
+            subtitle={`${t("calendarUi.servicesCount", { count: serviceCount })} · ${t("calendarUi.slotMinutes", { minutes: slotMinutes })} · ${t("calendarUi.branchTime")}`}
+            legend={
+              <StatusLegend
+                items={[
+                  ...(["confirmed", "checked_in", "completed", "no_show"] as const).map((status) => ({
+                    label: statusText(status),
+                    className: bookingStatusStyle(status).bar,
+                  })),
+                  {
+                    label: t("calendarUi.openSlot"),
+                    className: "border border-[var(--portal-border)] bg-card",
+                  },
+                ]}
+              />
+            }
             services={dayServices}
             times={times}
             nowMinutes={cursor === today ? nowMinutes : null}
@@ -765,6 +1123,8 @@ export function VisitsCalendarShell({
               unused: (count) => t("calendarUi.unused", { count }),
               open: (count) => t("calendarUi.openPlaces", { count }),
               blocked: t("calendarUi.blocked"),
+              deskBooked: (desk, booked, capacity) =>
+                t("calendarUi.deskBooked", { desk, booked, capacity }),
             }}
             cell={(deptKey, time) => {
               const rows = bookings.get(`${cursor}|${deptKey}|${time}`) ?? [];
@@ -786,9 +1146,30 @@ export function VisitsCalendarShell({
         )
       ) : mode === "week" ? (
         <WeekGrid
+          title={t("calendarUi.weekTitle", {
+            week: isoWeekNumber(addKuwaitDays(weekStart, 3)),
+            range: `${calendarLabel(weekStart, locale, "dayOnly")} – ${calendarLabel(addKuwaitDays(weekStart, 6), locale, "dayMonthLong")}`,
+          })}
+          subtitle={t("calendarUi.weekSubtitle")}
+          legend={
+            <StatusLegend
+              items={[
+                {
+                  label: t("calendarUi.openPlace"),
+                  className: "border border-[var(--portal-border)] bg-card",
+                },
+                { label: t("calendarUi.busyHigh"), className: "bg-[var(--visit-cap-high)]" },
+                { label: t("calendarUi.full"), className: "bg-[var(--visit-cap-full)]" },
+              ]}
+            />
+          }
           days={weekDays}
           times={times}
           labels={{ full: t("calendarUi.full") }}
+          shortLabel={(service) => shortServiceLabel(service.key, service.label)}
+          timeLabel={t("calendarUi.timeColumn")}
+          bookingsLabel={(count) => t("calendarUi.bookingsCount", { count })}
+          todayLabel={t("calendarUi.today")}
           onOpenSlot={(ymd, time) => setSlotTarget({ ymd, time })}
           cell={(ymd, time) => {
             const services = visibleDepartments
@@ -805,9 +1186,22 @@ export function VisitsCalendarShell({
           }}
         />
       ) : mode === "month" ? (
-        <div className="flex flex-col gap-2 lg:flex-row">
+        <div className="flex flex-col gap-4 lg:flex-row">
           <div className="min-w-0 flex-1">
             <MonthGrid
+              title={`${calendarLabel(monthWindow.from, locale, "monthLong")} ${year}`}
+              subtitle={t("calendarUi.monthSubtitle")}
+              legend={
+                <LoadLegend
+                  variant="month"
+                  labels={{
+                    quiet: t("calendarUi.quiet"),
+                    busy: t("calendarUi.busy"),
+                    full: t("calendarUi.fullyBooked"),
+                    closed: t("calendarUi.closed"),
+                  }}
+                />
+              }
               year={year}
               monthIndex={Number(cursor.slice(5, 7)) - 1}
               weekdayLabels={weekdayLabels}
@@ -816,37 +1210,74 @@ export function VisitsCalendarShell({
               todayYmd={today}
               serviceLabel={serviceName}
               onSelectDay={(day) => setAgendaDay(day)}
+              fullLabel={t("calendarUi.full")}
             />
           </div>
           <DayAgenda
-            dateLabel={agendaDate ? formatYmd(agendaDate, locale, true) : ""}
+            dateLabel={agendaDate ? calendarLabel(agendaDate, locale, "dayLong") : ""}
             hoursLabel={
-              config?.opening_time && config.closing_time
-                ? `${config.opening_time.slice(0, 5)} – ${config.closing_time.slice(0, 5)}`
+              agendaDate
+                ? t("calendarUi.openHours", {
+                    booked: statFor(agendaDate).booked,
+                    services: serviceCount,
+                    from: config?.opening_time?.slice(0, 5) ?? "",
+                    to: config?.closing_time?.slice(0, 5) ?? "",
+                  })
                 : ""
             }
-            booked={agendaDate ? (statFor(agendaDate).booked) : 0}
-            checkedIn={agendaRows.filter((row) => row.status === "checked_in" || row.status === "completed").length}
+            isToday={agendaDate === today}
+            todayLabel={t("calendarUi.today")}
+            booked={agendaDate ? statFor(agendaDate).booked : 0}
+            checkedIn={
+              agendaRows.filter(
+                (row) => row.status === "checked_in" || row.status === "completed",
+              ).length
+            }
             noShows={agendaRows.filter((row) => row.status === "no_show").length}
             services={agendaServices}
+            upNext={agendaUpNext}
+            fromLabel={t("calendarUi.fromTime", { time: agendaUpNext[0]?.time ?? "" })}
             onOpenDay={() => {
               if (!agendaDate) return;
               setCursor(agendaDate);
               setMode("day");
             }}
-            openDayLabel={t("calendarUi.openDay")}
+            openDayLabel={t("calendarUi.openDayIn", {
+              date: calendarLabel(agendaDate ?? today, locale, "dayMonth"),
+            })}
             emptyLabel={t("calendar.noSlotsDescription")}
-            bookedLabel={t("calendarUi.bookedOfCapacity")}
+            bookedLabel={t("calendarUi.bookedShort")}
             checkedInLabel={t("calendarUi.checkedIn")}
             noShowsLabel={t("calendarUi.noShows")}
+            byServiceLabel={t("calendarUi.byService")}
+            capacityLabel={t("calendarUi.capacityHeader")}
+            upNextLabel={t("calendarUi.upNext")}
+            statusLabel={statusText}
           />
         </div>
       ) : (
-        <div className="flex flex-col gap-2 lg:flex-row">
+        <div className="flex flex-col gap-4 lg:flex-row">
           <div className="min-w-0 flex-1">
             <YearGrid
+              title={t("calendarUi.yearTitle", { year })}
+              subtitle={t("calendarUi.yearSubtitle")}
+              legend={
+                <LoadLegend
+                  variant="year"
+                  labels={{
+                    quiet: t("calendarUi.quiet"),
+                    busy: t("calendarUi.busy"),
+                    full: t("calendarUi.full"),
+                    closed: t("calendarUi.closed"),
+                  }}
+                />
+              }
               year={year}
               monthLabels={monthTotals.map((month) => month.label)}
+              monthTotals={monthTotals.map((month, index) => ({
+                booked: month.booked,
+                isFuture: `${year}-${String(index + 1).padStart(2, "0")}` > today.slice(0, 7),
+              }))}
               weekdayLabels={weekdayLabels}
               statFor={statFor}
               todayYmd={today}
@@ -858,27 +1289,38 @@ export function VisitsCalendarShell({
                 setCursor(`${year}-${String(month + 1).padStart(2, "0")}-01`);
                 setMode("month");
               }}
+              peakLabel={(day, count) => t("calendarUi.peak", { day, count })}
+              bookedSuffix={t("calendarUi.bookedSuffix")}
             />
           </div>
           <YearInsights
             year={year}
-            months={monthTotals}
+            months={monthTotals.map((month, index) => ({
+              ...month,
+              isFuture: `${year}-${String(index + 1).padStart(2, "0")}` > today.slice(0, 7),
+            }))}
             mix={mix.map((row) => ({ ...row, label: serviceName(row.key) }))}
             busiest={busiest.map((day, index) => ({
               rank: index + 1,
-              label: formatYmd(day.date, locale, true),
+              label: calendarLabel(day.date, locale, "weekdayDayMonth"),
               booked: day.booked,
               capacityPct: day.capacity > 0 ? Math.round((day.booked / day.capacity) * 100) : 0,
             }))}
             labels={{
               byMonth: t("calendarUi.byMonth"),
               serviceMix: t("calendarUi.serviceMix"),
-              share: t("calendarUi.share"),
+              share: t("calendarUi.shareOfBookings"),
               busiestDays: t("calendarUi.busiestDays"),
+              topThree: t("calendarUi.topThree"),
+              completed: t("calendarUi.legendCompleted"),
+              thisMonth: t("calendarUi.thisMonth"),
+              scheduled: t("calendarUi.scheduled"),
+              ofCapacity: (pct) => t("calendarUi.ofCapacity", { pct: formatPct(pct) }),
             }}
           />
         </div>
       )}
+
 
       <BookingPopover
         open={popoverStatus != null && selected != null}

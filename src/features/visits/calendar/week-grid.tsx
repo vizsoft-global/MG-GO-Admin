@@ -1,16 +1,18 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 
+import { serviceColorVar } from "@/features/visits/calendar/colors";
 import { cn } from "@/lib/utils";
-
-import { serviceColorVar } from "./colors";
 
 export type WeekGridDay = {
   ymd: string;
   label: string;
   dateLabel: string;
   isToday: boolean;
+  dayNumber: number;
+  weekday: string;
+  bookings: number;
 };
 
 export type WeekGridService = {
@@ -56,12 +58,14 @@ function WeekSlotCell({
   slot,
   fullLabel,
   onOpenSlot,
+  shortLabel,
 }: {
   day: WeekGridDay;
   time: string;
   slot: WeekGridCell;
   fullLabel: string;
   onOpenSlot: (ymd: string, time: string, anchor: HTMLElement) => void;
+  shortLabel: (service: WeekGridService) => string;
 }) {
   const tone = capTone(slot.booked, slot.capacity);
   const ratio = slot.capacity > 0 ? slot.booked / slot.capacity : 0;
@@ -69,34 +73,33 @@ function WeekSlotCell({
   const shown = slot.blocked ? [] : slot.services.slice(0, 3);
   const extra = slot.blocked ? 0 : Math.max(0, slot.services.length - shown.length);
   const className = cn(
-    "flex min-h-[4.75rem] min-w-0 flex-col gap-1 border-b border-s border-border p-1 text-start",
-    day.isToday && "bg-[var(--visit-load-1)]",
-    slot.blocked && "bg-muted text-muted-foreground",
-    slot.past && "opacity-60",
+    "flex min-h-[58px] min-w-0 flex-col gap-0.5 border-b border-e border-[var(--visit-line)] px-1.5 py-1 text-start",
+    day.isToday && "bg-[var(--visit-today-tint)]",
+    slot.blocked && "bg-[var(--visit-tint)] text-[var(--portal-muted)]",
+    slot.past && "opacity-70",
   );
   const body = (
     <>
-      {shown.length > 0 ? (
-        <span className="flex min-w-0 flex-col gap-0.5">
-          {shown.map((service) => (
-            <span
-              key={service.key}
-              className="flex min-w-0 items-center gap-1 text-[10px] leading-4"
-            >
-              <span
-                aria-hidden
-                className={cn("size-1.5 shrink-0 rounded-full", serviceColorVar(service.key, service.label))}
-              />
-              <span className="min-w-0 flex-1 truncate">{service.label}</span>
-              <span className="shrink-0 tabular-nums">{service.count}</span>
-            </span>
-          ))}
-          {extra > 0 ? (
-            <span className="text-[10px] leading-4 text-muted-foreground">+{extra}</span>
-          ) : null}
+      {shown.map((service) => (
+        <span
+          key={service.key}
+          className="flex min-w-0 items-center gap-1 text-[10px] leading-[14px] text-[var(--portal-ink)]"
+        >
+          <span
+            aria-hidden
+            className={cn(
+              "size-1.5 shrink-0 rounded-[2px]",
+              serviceColorVar(service.key, service.label),
+            )}
+          />
+          <span className="min-w-0 flex-1 truncate">{shortLabel(service)}</span>
+          <span className="shrink-0 tabular-nums">{service.count}</span>
         </span>
+      ))}
+      {extra > 0 ? (
+        <span className="text-[10px] leading-[14px] text-[var(--portal-muted)]">+{extra}</span>
       ) : null}
-      <span className="mt-auto flex items-center gap-1 text-[10px] leading-4">
+      <span className="mt-auto flex items-center justify-end gap-1 text-[10px] leading-[14px] text-[var(--portal-muted)]">
         <span className="tabular-nums">
           {slot.booked}/{slot.capacity}
         </span>
@@ -104,8 +107,8 @@ function WeekSlotCell({
           <span className="font-semibold text-[var(--visit-cap-full)]">{fullLabel}</span>
         ) : null}
       </span>
-      <span className="block h-1 overflow-hidden rounded-full bg-foreground/10">
-        <span className={cn("block h-1", capBarClass(tone))} style={{ width }} />
+      <span className="block h-[3px] overflow-hidden rounded-full bg-[var(--visit-bar-track)]">
+        <span className={cn("block h-[3px] rounded-full", capBarClass(tone))} style={{ width }} />
       </span>
     </>
   );
@@ -119,7 +122,7 @@ function WeekSlotCell({
       type="button"
       className={cn(
         className,
-        "cursor-pointer transition-colors duration-150 hover:bg-muted/40",
+        "cursor-pointer transition-colors duration-150 hover:bg-[var(--visit-tint)]",
       )}
       onClick={(event) => onOpenSlot(day.ymd, time, event.currentTarget)}
     >
@@ -129,59 +132,105 @@ function WeekSlotCell({
 }
 
 export function WeekGrid({
+  title,
+  subtitle,
+  legend,
   days,
   times,
   cell,
   onOpenSlot,
   labels,
+  shortLabel,
+  timeLabel,
+  bookingsLabel,
+  todayLabel,
 }: {
+  title: string;
+  subtitle: string;
+  legend?: ReactNode;
   days: WeekGridDay[];
   times: string[];
   cell: (ymd: string, time: string) => WeekGridCell;
   onOpenSlot: (ymd: string, time: string, anchor: HTMLElement) => void;
   labels: { full: string };
+  shortLabel: (service: WeekGridService) => string;
+  timeLabel: string;
+  bookingsLabel: (count: number) => string;
+  todayLabel: string;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-card">
-      <div
-        className="grid w-max min-w-full"
-        style={{
-          gridTemplateColumns: `4.5rem repeat(${days.length}, minmax(8.5rem, 1fr))`,
-        }}
-      >
-        <div className="sticky start-0 z-20 border-b border-s border-border bg-card" />
-        {days.map((day) => (
-          <div
-            key={day.ymd}
-            className={cn(
-              "border-b border-s border-border px-1.5 py-1 text-start",
-              day.isToday && "bg-[var(--visit-load-1)]",
-            )}
-          >
-            <div className="truncate text-[10px] font-semibold leading-4 text-muted-foreground">
-              {day.label}
-            </div>
-            <div className="truncate text-xs font-semibold leading-4">{day.dateLabel}</div>
+    <section className="overflow-hidden rounded-xl border border-[var(--portal-border)] bg-card">
+      <header className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
+        <div className="min-w-0">
+          <div role="heading" aria-level={2} className="text-xl leading-7 font-bold text-[var(--portal-ink)]">{title}</div>
+          <p className="text-xs leading-5 text-[var(--portal-muted)]">{subtitle}</p>
+        </div>
+        {legend}
+      </header>
+      <div className="overflow-x-auto">
+        <div
+          className="grid min-w-[1080px]"
+          style={{
+            gridTemplateColumns: `64px repeat(${days.length}, minmax(0, 1fr))`,
+          }}
+        >
+          <div className="sticky start-0 z-20 flex items-end border-y border-e border-[var(--visit-line)] bg-[var(--visit-tint)] px-2 py-2 text-[11px] font-medium tracking-[0.02em] text-[var(--portal-muted)] uppercase">
+            {timeLabel}
           </div>
-        ))}
-        {times.map((time, index) => (
-          <Fragment key={`${time}-${index}`}>
-            <div className="sticky start-0 z-10 border-b border-s border-border bg-card px-1.5 py-1 text-start text-[10px] leading-4 whitespace-nowrap text-muted-foreground">
-              {time}
+          {days.map((day) => (
+            <div
+              key={day.ymd}
+              className={cn(
+                "flex flex-col gap-1 border-y border-e border-[var(--visit-line)] px-2.5 py-2",
+                day.isToday ? "bg-[var(--visit-today-tint)]" : "bg-[var(--visit-tint)]",
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "flex size-8 items-center justify-center rounded-full text-lg leading-none font-bold tabular-nums",
+                    day.isToday
+                      ? "bg-[var(--accent-rust)] text-white"
+                      : "text-[var(--portal-ink)]",
+                  )}
+                >
+                  {day.dayNumber}
+                </span>
+                <span
+                  className={cn(
+                    "truncate text-xs font-medium",
+                    day.isToday ? "text-[var(--accent-rust)]" : "text-[var(--portal-muted)]",
+                  )}
+                >
+                  {day.isToday ? `${day.weekday} · ${todayLabel}` : day.weekday}
+                </span>
+              </div>
+              <p className="truncate text-[11px] text-[var(--portal-muted)]">
+                {bookingsLabel(day.bookings)}
+              </p>
             </div>
-            {days.map((day) => (
-              <WeekSlotCell
-                key={`${day.ymd}-${time}`}
-                day={day}
-                time={time}
-                slot={cell(day.ymd, time)}
-                fullLabel={labels.full}
-                onOpenSlot={onOpenSlot}
-              />
-            ))}
-          </Fragment>
-        ))}
+          ))}
+          {times.map((time, index) => (
+            <Fragment key={`${time}-${index}`}>
+              <div className="sticky start-0 z-10 flex items-center border-b border-e border-[var(--visit-line)] bg-card px-2 text-[11px] tabular-nums whitespace-nowrap text-[var(--portal-muted)]">
+                {time}
+              </div>
+              {days.map((day) => (
+                <WeekSlotCell
+                  key={`${day.ymd}-${time}`}
+                  day={day}
+                  time={time}
+                  slot={cell(day.ymd, time)}
+                  fullLabel={labels.full}
+                  onOpenSlot={onOpenSlot}
+                  shortLabel={shortLabel}
+                />
+              ))}
+            </Fragment>
+          ))}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
+
