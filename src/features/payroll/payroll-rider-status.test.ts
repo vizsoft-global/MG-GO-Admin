@@ -192,8 +192,18 @@ describe("rider status", () => {
     assert.equal(PAYROLL_STATUS_CHIP.leave.hex, "#F28C28");
     assert.equal(PAYROLL_STATUS_CHIP.new_hire.hex, "#DCCDF6");
     assert.equal(PAYROLL_STATUS_CHIP.training.hex, "#FFD9B0");
-    assert.equal(PAYROLL_STATUS_CHIP.work.hex, "#9aa4ad");
-    assert.equal(PAYROLL_STATUS_CHIP.off.hex, "#34d399");
+    // SOP v1.0: Active is a plain white cell, not a grey dot; 3 Hours takes
+    // leave-return blue and Half keeps the dark frame. All from PAYROLL_DAY_PAINT.
+    assert.equal(PAYROLL_STATUS_CHIP.work.hex, "#FFFFFF");
+    assert.equal(PAYROLL_STATUS_CHIP.work.border, null);
+    assert.equal(PAYROLL_STATUS_CHIP.reduced3.hex, "#BFE4F8");
+    assert.equal(PAYROLL_STATUS_CHIP.half.hex, "#FFFFFF");
+    assert.equal(PAYROLL_STATUS_CHIP.half.border, "#292A3F");
+    assert.equal(PAYROLL_STATUS_CHIP.off.hex, "#C9EEC4");
+    assert.equal(PAYROLL_STATUS_CHIP.vehicle.hex, "#D13B3B");
+    assert.equal(PAYROLL_STATUS_CHIP.id_suspended.hex, "#D13B3B");
+    assert.equal(PAYROLL_STATUS_CHIP.phone_issue.hex, "#D13B3B");
+    assert.equal(PAYROLL_STATUS_CHIP.terminated.hex, "#D13B3B");
   });
 
   it("lists catalog labels after the seven cores", () => {

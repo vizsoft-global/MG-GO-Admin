@@ -37,14 +37,16 @@ function cellError(message: string, t: (key: string) => string): string {
   return t("saveFailed");
 }
 
+/**
+ * Which identity cells are still editable.
+ *
+ * MG ID and Name are master data (SOP items 7 and 11): they are created on the
+ * employee record and only read back here, so the pencil is gone. Restaurant and
+ * Client ID stay editable because the Combined row is where an operator fixes an
+ * assignment.
+ */
 export function payrollIdentityField(columnId: string): PayrollIdentityField | null {
   switch (columnId) {
-    case "amId":
-      return "employeeId";
-    case "name":
-      return "fullName";
-    case "restaurant":
-      return "restaurantName";
     case "restaurantId":
       return "clientId";
     default:
@@ -268,16 +270,23 @@ export function PayrollAssignCell({
   const t = useTranslations("pages.payroll.cellEdit");
   const catalog = usePayrollAssignCatalog();
   const queryClient = useQueryClient();
-  const stored = field === "projectKey" ? (row.projectKey ?? "") : (row.zoneId ?? "");
+  const stored =
+    field === "projectKey"
+      ? (row.projectKey ?? "")
+      : field === "zoneId"
+        ? (row.zoneId ?? "")
+        : (row.restaurantId ?? "");
   const [draft, setDraft] = useState<string | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     setDraft(undefined);
   }, [stored]);
   const shown = draft ?? stored;
-  const printed = field === "projectKey" ? row.partner : row.zone;
+  const printed =
+    field === "projectKey" ? row.partner : field === "zoneId" ? row.zone : row.restaurant;
   const fallback = printed && printed !== "—" ? printed : "";
-  const base = field === "projectKey" ? catalog.clients : catalog.zones;
+  const base =
+    field === "projectKey" ? catalog.clients : field === "zoneId" ? catalog.zones : catalog.restaurants;
   const items = useMemo(() => {
     if (!shown || base.some((item) => item.value === shown)) return base;
     if (!fallback) return base;
@@ -294,8 +303,20 @@ export function PayrollAssignCell({
     setDraft(value);
     setSaving(true);
     try {
-      await savePayrollIdentity(row.driverId, field, value);
-      toast.success(t("saved"));
+      // The RPC takes a restaurant *name*; the picker holds the document id.
+      const sent =
+        field === "restaurantName"
+          ? (base.find((item) => item.value === value)?.label ?? value)
+          : value;
+      await savePayrollIdentity(row.driverId, field, sent);
+      const renamed = base.find((item) => item.value === value)?.label ?? value;
+      toast.success(
+        t("changed", {
+          name: row.name,
+          field: t(field === "restaurantName" ? "restaurantField" : field === "zoneId" ? "zoneField" : "clientField"),
+          value: renamed || "—",
+        }),
+      );
       await queryClient.invalidateQueries({ queryKey: queryKeys.payroll.all() });
     } catch (error) {
       setDraft(undefined);
@@ -314,10 +335,30 @@ export function PayrollAssignCell({
       items={items}
       value={shown || null}
       onChange={(next) => void commit(next)}
-      placeholder={field === "projectKey" ? t("clientPlaceholder") : t("zonePlaceholder")}
-      searchPlaceholder={field === "projectKey" ? t("clientSearch") : t("zoneSearch")}
-      emptyText={field === "zoneId" && catalog.zonesLoading ? t("catalogLoading") : t("catalogEmpty")}
-      recentsKey={field === "projectKey" ? "payroll.client" : "payroll.zone"}
+      placeholder={
+        field === "projectKey"
+          ? t("clientPlaceholder")
+          : field === "zoneId"
+            ? t("zonePlaceholder")
+            : t("restaurantPlaceholder")
+      }
+      searchPlaceholder={
+        field === "projectKey"
+          ? t("clientSearch")
+          : field === "zoneId"
+            ? t("zoneSearch")
+            : t("restaurantSearch")
+      }
+      emptyText={
+        field === "zoneId" && catalog.zonesLoading ? t("catalogLoading") : t("catalogEmpty")
+      }
+      recentsKey={
+        field === "projectKey"
+          ? "payroll.client"
+          : field === "zoneId"
+            ? "payroll.zone"
+            : "payroll.restaurant"
+      }
       clearable
       disabled={saving}
       className={cn("min-w-[8.5rem] max-w-[14rem] rounded-md px-2 text-xs", INLINE_EDIT_CELL_CLASS)}

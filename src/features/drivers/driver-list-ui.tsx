@@ -146,17 +146,27 @@ export function DriverVehicleCell({
   bikeLabel,
   carLabel,
   emptyLabel,
+  typeLabel,
 }: {
   vehicleTypeKey: string | null;
   vehicleLabel: string | null;
   bikeLabel: string;
   carLabel: string;
   emptyLabel: string;
+  /** The catalog label for `vehicleTypeKey`, resolved by the caller. */
+  typeLabel?: string | null;
 }) {
   if (!vehicleTypeKey && !vehicleLabel) {
     return <span className="text-sm text-muted-foreground">{emptyLabel}</span>;
   }
-  const text = vehicleLabel ?? (vehicleTypeKey === "car" ? carLabel : bikeLabel);
+  // The catalog wins: a type the operator added must print its own name, not
+  // fall back to Bike. Bike/Car stay as the fallback so a missing or inactive
+  // catalog row still reads as something.
+  const text =
+    typeLabel?.trim() ||
+    (vehicleTypeKey === "car" ? carLabel : vehicleTypeKey === "bike" ? bikeLabel : null) ||
+    vehicleLabel ||
+    bikeLabel;
   return (
     <span className="block truncate text-sm text-foreground" title={vehicleLabel ?? undefined}>
       {text}

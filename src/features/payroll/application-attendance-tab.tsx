@@ -34,6 +34,7 @@ import {
 import {
   PayrollColumnsMenu,
   PayrollHeadingLabel,
+  isMasterDataColumn,
   stickyIdentityOffset,
   stickyIdentityStyle,
 } from "./payroll-heading";
@@ -266,12 +267,15 @@ export function ApplicationAttendanceTab({
                           headingConfig,
                         )}
                         heading={
-                          <PayrollHeadingLabel
-                            columnKey={column.id}
-                            fallback={t(`riderCols.${column.labelKey}`)}
-                            config={headingConfig}
-                            canManage={canManage}
-                          />
+                          // SOP §7/§11: no pencil on the master-data trio.
+                          isMasterDataColumn(column.id) ? undefined : (
+                            <PayrollHeadingLabel
+                              columnKey={column.id}
+                              fallback={t(`riderCols.${column.labelKey}`)}
+                              config={headingConfig}
+                              canManage={canManage}
+                            />
+                          )
                         }
                         columnId={column.id}
                         values={searched.map((row) =>

@@ -701,7 +701,7 @@ export function PayrollAttendanceOrdersTab({
                             <span
                               className={cn(
                                 "relative inline-flex min-w-8 justify-center rounded px-1.5 py-0.5 text-xs font-semibold",
-                                dayClass(status),
+                                dayClass(status, row.jobEndDescription),
                                 adjusted && "outline outline-2 outline-orange-400",
                               )}
                             >

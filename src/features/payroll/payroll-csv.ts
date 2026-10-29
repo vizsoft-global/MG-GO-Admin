@@ -55,10 +55,10 @@ export const COMBINED_IDENTITY_HEADERS = [
   "Client ID",
   "Zone",
   "Zone category",
-  "Client Name",
+  "Project Name",
   "Vehicle",
   "Status",
-  "Final orders",
+  "Total Orders",
   "Actual hours",
 ] as const;
 

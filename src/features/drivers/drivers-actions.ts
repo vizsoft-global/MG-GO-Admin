@@ -2527,6 +2527,25 @@ export async function saveDriverPrivateInformation(
 }
 
 /**
+ * The Project tab's Vehicle type cell. Any key the catalog holds is written
+ * as-is — a type the operator added must survive a save. Bike / car / van are
+ * always accepted because they own the map sprites and exist in every
+ * environment; anything else unknown falls back to bike rather than writing a
+ * key that points at nothing.
+ */
+async function resolveVehicleTypeKey(raw: string): Promise<string> {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return "bike";
+  if (trimmed === "bike" || trimmed === "car" || trimmed === "van") return trimmed;
+  const db = await staffClient();
+  const { data } = await db.from("vehicle_types").select("key");
+  const keys = new Set(
+    ((data ?? []) as Array<{ key?: unknown }>).map((row) => String(row.key ?? "").trim().toLowerCase()),
+  );
+  return keys.has(trimmed) ? trimmed : "bike";
+}
+
+/**
  * The Project tab: which project the rider delivers for (the old Partner field
  * moved here). Assignment fields stay where they are — this writes one key.
  */
@@ -2545,7 +2564,7 @@ export async function saveDriverProjectSettings(
     const projectKey = parseDriverProjectKey(formData.get("projectKey"));
     const zoneId = String(formData.get("zoneId") ?? "").trim();
     const vehicleId = String(formData.get("vehicleId") ?? "").trim();
-    const vehicleTypeKey = String(formData.get("vehicleTypeKey") ?? "").trim() === "car" ? "car" : "bike";
+    const vehicleTypeKey = await resolveVehicleTypeKey(String(formData.get("vehicleTypeKey") ?? ""));
     const clientId = normalizeClientValue(String(formData.get("clientId") ?? ""));
     const clientName = normalizeClientValue(String(formData.get("clientName") ?? ""));
     const accommodation = normalizeClientValue(String(formData.get("accommodation") ?? ""));

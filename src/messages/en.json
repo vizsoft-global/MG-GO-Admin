@@ -9219,13 +9219,35 @@
       },
       "vehicleTypes": {
         "title": "Vehicle types",
-        "subtitle": "Keys are locked because the map sprites depend on them. Only labels can change.",
+        "subtitle": "The kind a vehicle is classified by. Bike and car carry their own map sprite; a new type draws the bike sprite until art is added.",
         "key": "Key",
         "labelEn": "English label",
         "labelAr": "Arabic label",
         "save": "Save",
         "saved": "Vehicle type saved",
-        "saveFailed": "Could not save the label."
+        "saveFailed": "Could not save the vehicle type.",
+        "add": "Add vehicle type",
+        "edit": "Edit vehicle type",
+        "cancel": "Cancel",
+        "empty": "No vehicle types yet",
+        "colLabelEn": "English label",
+        "colLabelAr": "Arabic label",
+        "colSort": "Sort order",
+        "colActive": "Active",
+        "colUsage": "Vehicles",
+        "activeLabel": "Active",
+        "inactiveLabel": "Inactive",
+        "activeHint": "An inactive type stays on the vehicles that already use it and is hidden from the pickers.",
+        "keyHint": "Lowercase letters, numbers and underscores. The key cannot be changed after saving.",
+        "keyLocked": "The key cannot be changed. It is what vehicles and the map sprite point at.",
+        "bikeLocked": "Bike is the fallback type and cannot be deactivated.",
+        "errors": {
+          "not_authorized": "You do not have permission.",
+          "invalid_key": "Key must be lowercase letters, numbers, and underscores.",
+          "missing_fields": "English label is required.",
+          "bike_locked": "Bike is the fallback type and cannot be deactivated.",
+          "save_failed": "Could not save the vehicle type."
+        }
       },
       "vehicleUses": {
         "title": "Vehicle uses",
@@ -9496,8 +9518,8 @@
       },
       "title": "Payroll",
       "subtitle": "Monthly attendance, efficiency and the request approvals behind them",
-      "tabPayroll": "Combined Payroll",
-      "tabCombined": "Payroll",
+      "tabPayroll": "Payroll",
+      "tabCombined": "Combined Payroll",
       "tabAppAttendance": "Application Attendance",
       "tabHrPayroll": "HR Payroll",
       "tabRequests": "Requests",
@@ -9824,7 +9846,13 @@
         "clientSearch": "Search clients",
         "zoneSearch": "Search zones",
         "catalogEmpty": "Nothing matches",
-        "catalogLoading": "Loading…"
+        "catalogLoading": "Loading…",
+        "changed": "{name} · {field} changed to {value}",
+        "restaurantField": "Restaurant",
+        "zoneField": "Zone",
+        "clientField": "Project Name",
+        "restaurantPlaceholder": "Restaurant",
+        "restaurantSearch": "Search restaurants"
       },
       "statusEdit": {
         "title": "Set status",
@@ -9846,7 +9874,7 @@
       "payrollBannerTitle": "Attendance Efficiency = Actual Worked Hours ÷ Required Hours.",
       "payrollBannerBody": "Actual hours come from attendance check-in → check-out. Required hours = (days in the month − Off Structure) × 12. Default Off Structure is 2 (this month {days} → {fixed} required days).",
       "combinedBannerTitle": "Payroll is the rider × day grid.",
-      "combinedBannerBody": "OFF / Sick / Accident cells still come from approved leave. Off Structure only changes Required Hours, not the day cells.",
+      "combinedBannerBody": "One table: MG ID · Driver ID · Name are pinned, the day block follows Status, and every column after it is yours to order. Required Hours = the project's daily hours (Americana 12 h, Keeta 10 h) × the counted days from the 1st up to today. A day whose cell holds something other than hours — OFF, Sick, Accident, Leave, Training, Vehicle issue — is not counted, which is how each rider's own 2–3 allowed OFF days (Off Structure) leave the calculation.",
       "shareCard": "{count} of {total} riders have a {status} day · {share}% of payroll",
       "offStructure": {
         "open": "Off Structure",
@@ -10004,13 +10032,13 @@
         "inactive": "Inactive"
       },
       "dayStatus": {
-        "work": "Full day · 12 h",
+        "work": "Active · 12 h",
         "off": "OFF",
         "sick": "Sick",
         "accident": "Accident",
         "absent": "Absent",
-        "reduced3": "Reduced day · 3 h",
-        "half": "Half day · 6 h",
+        "reduced3": "3 Hours",
+        "half": "6 Hours",
         "actual": "Actual hours",
         "vehicle": "Vehicle issue",
         "abs_lh": "Absent · LH",
@@ -10019,13 +10047,13 @@
         "blank": "No record"
       },
       "legend": {
-        "work": "Full day",
+        "work": "Active",
         "off": "OFF",
         "sick": "Sick",
         "accident": "Accident",
         "absent": "Absent",
-        "reduced3": "Reduced 3 h",
-        "half": "Half day",
+        "reduced3": "3 Hours",
+        "half": "6 Hours",
         "actual": "Actual hrs",
         "vehicle": "Vehicle issue",
         "abs_lh": "Absent LH",
@@ -10053,21 +10081,21 @@
         "outsourced": "Outsourced"
       },
       "slicer": {
-        "partner": "Client Name",
+        "partner": "Project Name",
         "zone": "Zone",
         "vehicle": "Vehicle",
         "nationality": "Nationality",
         "sourceType": "Source type",
         "company": "Company",
         "store": "Store",
-        "allPartners": "All clients",
+        "allPartners": "All projects",
         "allZones": "All zones",
         "allVehicles": "All vehicles",
         "allNationalities": "All nationalities",
         "allSourceTypes": "All source types",
         "allCompanies": "All companies",
         "allStores": "All stores",
-        "nounPartners": "Clients",
+        "nounPartners": "Projects",
         "nounZones": "Zones",
         "nounVehicles": "Vehicles",
         "nounNationalities": "Nationalities",
@@ -10075,13 +10103,15 @@
         "nounCompanies": "Companies",
         "nounStores": "Stores",
         "noStores": "No stores for the selected client",
-        "searchPartner": "Search client",
+        "searchPartner": "Search project",
         "searchZone": "Search zone",
         "searchVehicle": "Search vehicle",
         "searchNationality": "Search nationality",
         "searchSourceType": "Search source type",
         "searchCompany": "Search company",
-        "searchStore": "Search store"
+        "searchStore": "Search store",
+        "zoneCategory": "Zone Category",
+        "allZoneCategories": "All zone categories"
       },
       "workflow": {
         "title": "Approval Workflow",
@@ -10130,7 +10160,8 @@
         "max": "Max",
         "sortSmallest": "Smallest first",
         "sortLargest": "Largest first",
-        "searchPlaceholder": "Search values"
+        "searchPlaceholder": "Search values",
+        "sortPair": "Sort {column}"
       },
       "adjust": {
         "title": "Adjust payroll days",
@@ -10434,6 +10465,51 @@
           "rule_condition_required": "Each rule needs at least one condition before it can be saved.",
           "unknown": "Something went wrong. The change was not saved."
         }
+      },
+      "combinedKpi": {
+        "riders": "Riders in payroll",
+        "active": "Total active riders",
+        "avgEfficiency": "Avg attendance eff.",
+        "activeAmericana": "Total active AM",
+        "activeKeeta": "Total active Keeta"
+      },
+      "combinedColumns": {
+        "columns": "Columns",
+        "count": "{count}",
+        "title": "Show and reorder columns",
+        "hint": "Your order and your hidden columns are saved for you.",
+        "pinned": "MG ID · Driver ID · Name stay pinned and cannot be moved.",
+        "drag": "Drag to reorder",
+        "show": "Show column",
+        "hide": "Hide column",
+        "reset": "Reset order",
+        "renameHint": "Double-click a heading to rename it.",
+        "dailyGroup": "Daily columns ({from} … {to})"
+      },
+      "combinedCols": {
+        "days": "Days",
+        "restaurant": "Restaurant",
+        "zone": "Zone",
+        "zoneCategory": "Zone Category",
+        "projectName": "Project Name",
+        "vehicle": "Vehicle",
+        "status": "Status",
+        "workingDays": "Working Days",
+        "totalHours": "Total Hours",
+        "totalOrders": "Total Orders",
+        "requiredHours": "Required Hours",
+        "actualHours": "Actual Hours",
+        "efficiency": "Efficiency %",
+        "threeHourDays": "3 Hours Days",
+        "sixHourDays": "6 Hours Days",
+        "actualDays": "Actual Days",
+        "off": "OFF",
+        "sick": "Sick",
+        "accident": "Accident",
+        "adjusted": "Adjusted",
+        "unexcused": "Unexcused Absence",
+        "lessHours": "Less Hours",
+        "lessOrders": "Less Orders"
       }
     },
     "performance": {

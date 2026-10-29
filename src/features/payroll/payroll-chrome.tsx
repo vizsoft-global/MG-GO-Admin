@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Bike, Building2, CalendarRange, Check, CircleAlert, CircleCheck, CircleDashed, CircleMinus, Flag, Globe2, MapPin, Store, Users } from "lucide-react";
+import { Bike, Building2, CalendarRange, Check, ChevronsUpDown, CircleAlert, CircleCheck, CircleDashed, CircleMinus, Flag, Globe2, MapPin, Store, Users } from "lucide-react";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import {
   Popover,
@@ -316,10 +316,15 @@ export function PayrollSlicerBar({
   slicers,
   onChange,
   options,
+  zoneCategory,
+  onZoneCategory,
 }: {
   slicers: PayrollSlicers;
   onChange: (next: PayrollSlicers) => void;
   options: PayrollOptions;
+  /** Zone band filter, formerly the yellow card's chip row. */
+  zoneCategory?: PayrollZoneCategoryFilter | null;
+  onZoneCategory?: (next: PayrollZoneCategoryFilter | null) => void;
 }) {
   const t = useTranslations("pages.payroll");
   const showStores = storesVisibleForPartners(slicers.projectKeys);
@@ -348,7 +353,7 @@ export function PayrollSlicerBar({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+    <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
       <OpsMultiSelect
         label={t("slicer.partner")}
         icon={Building2}
@@ -369,6 +374,14 @@ export function PayrollSlicerBar({
         onChange={(zoneIds) => patch({ zoneIds })}
         options={zoneOpts}
       />
+      {onZoneCategory ? (
+        <ZoneCategoryLink
+          value={zoneCategory ?? null}
+          onChange={onZoneCategory}
+          label={t("slicer.zoneCategory")}
+          allLabel={t("slicer.allZoneCategories")}
+        />
+      ) : null}
       <OpsMultiSelect
         label={t("slicer.vehicle")}
         icon={Bike}
@@ -427,3 +440,79 @@ export function PayrollSlicerBar({
     </div>
   );
 }
+
+/**
+ * Zone Category as a filter-row control. It replaced the chip row that lived in
+ * the yellow card, so the eight slicers now feed the cards, the legend and the
+ * table together.
+ */
+function ZoneCategoryLink({
+  value,
+  onChange,
+  label,
+  allLabel,
+}: {
+  value: PayrollZoneCategoryFilter | null;
+  onChange: (next: PayrollZoneCategoryFilter | null) => void;
+  label: string;
+  allLabel: string;
+}) {
+  const t = useTranslations("pages.payroll.zoneCategory");
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="min-w-0">
+      <p className="mb-1 flex items-center gap-1 truncate text-xs font-medium text-muted-foreground">
+        <CircleDashed className="size-3 shrink-0 opacity-70" />
+        {label}
+      </p>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger className="inline-flex h-9 w-full items-center justify-between gap-1 rounded-md border border-border bg-background px-2.5 text-start text-xs hover:bg-muted/40">
+          <span className="truncate">{value ? t(value) : allLabel}</span>
+          <ChevronsUpDown className="size-3 shrink-0 opacity-50" />
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="w-[min(240px,90vw)] origin-(--transform-origin) p-2"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              onChange(null);
+              setOpen(false);
+            }}
+            className={cn(
+              "flex h-8 w-full items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40",
+              !value && "font-semibold",
+            )}
+          >
+            <CircleDashed className="size-3 shrink-0 opacity-60" />
+            <span className="truncate">{allLabel}</span>
+            {!value ? <Check className="ms-auto size-3 text-emerald-700" /> : null}
+          </button>
+          {PAYROLL_ZONE_CATEGORY_FILTERS.map((category) => (
+            <button
+              key={category}
+              type="button"
+              onClick={() => {
+                onChange(category);
+                setOpen(false);
+              }}
+              className={cn(
+                "flex h-8 w-full items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40",
+                value === category && "font-semibold",
+              )}
+            >
+              <span
+                className="size-3 shrink-0 rounded-sm"
+                style={{ background: PAYROLL_ZONE_CATEGORY_CHIP[category] }}
+              />
+              <span className="truncate">{t(category)}</span>
+              {value === category ? <Check className="ms-auto size-3 text-emerald-700" /> : null}
+            </button>
+          ))}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+

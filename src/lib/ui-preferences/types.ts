@@ -23,3 +23,6 @@ export type EffectiveUiPreference<T> = {
 };
 
 export const DRIVERS_LIST_COLUMNS_PREF_KEY = "drivers.list.columns.v2";
+
+/** Combined Payroll column order and visibility, saved per staff member. */
+export const PAYROLL_COMBINED_COLUMNS_PREF_KEY = "payroll.combined";

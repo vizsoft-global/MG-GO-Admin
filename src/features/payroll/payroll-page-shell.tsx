@@ -27,11 +27,8 @@ import {
   type PayrollZoneCategoryFilter,
 } from "./payroll-formulas";
 import {
-  PayrollPartnerView,
   PayrollRangePills,
   PayrollSlicerBar,
-  PayrollSummaryStrip,
-  PayrollZoneCategoryChips,
 } from "./payroll-chrome";
 import { PayrollAssignCatalogProvider } from "./payroll-assign-catalog";
 import { PayrollAdjustProvider } from "./payroll-adjust-context";
@@ -41,6 +38,10 @@ import { listPayrollRiderStatuses, savePayrollRiderStatus } from "./payroll-acti
 import { PayrollLegend } from "./payroll-grid";
 import { PayrollTab } from "./payroll-tab";
 import { CombinedPayrollTab } from "./combined-tab";
+import {
+  CombinedExportBridgeProvider,
+  useCombinedExportBridgeValue,
+} from "./combined-export-bridge";
 import { PayrollAttendanceOrdersTab } from "./payroll-attendance-orders-tab";
 import { ApplicationAttendanceTab } from "./application-attendance-tab";
 import { PayrollSettingsTab } from "./payroll-settings-tab";
@@ -94,6 +95,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
   const [statusFilter, setStatusFilter] = useState<PayrollStatusFilter | null>(null);
   const [zoneCategory, setZoneCategory] = useState<PayrollZoneCategoryFilter | null>(null);
   const [offOpen, setOffOpen] = useState(false);
+  const combinedExport = useCombinedExportBridgeValue();
 
   const period = useMemo(
     () => payrollPeriodForPreset(preset, today, customRange, locale),
@@ -167,9 +169,10 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
   }, [rosterRiders, slicers]);
 
   const filteredRiders = useMemo(() => {
-    const byStatus = filterRidersByStatus(slicedRiders, statusFilter);
+    // SOP §3: a status chip keeps riders with that status on a day up to today.
+    const byStatus = filterRidersByStatus(slicedRiders, statusFilter, today);
     return zoneCategory ? byStatus.filter((r) => r.zoneCategory === zoneCategory) : byStatus;
-  }, [slicedRiders, statusFilter, zoneCategory]);
+  }, [slicedRiders, statusFilter, zoneCategory, today]);
 
   const slicedRiderIds = useMemo(() => {
     if (!hasSlicers(slicers)) return null;
@@ -199,27 +202,6 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
     const next = computePayrollKpis(filteredRiders);
     return { ...next, riders: slicedRiders.length };
   }, [filteredRiders, slicedRiders.length]);
-
-  const selectedClients = useMemo(() => {
-    const all = data?.clients ?? [];
-    if (!slicers.projectKeys.length) return all;
-    return all.filter((client) => slicers.projectKeys.includes(client.key));
-  }, [data?.clients, slicers.projectKeys]);
-
-  const usesLabel = useMemo(() => {
-    const first = selectedClients[0];
-    if (!first) return t("uses.none");
-    const parts: string[] = [];
-    if (first.usesZone) parts.push(t("uses.zone"));
-    if (first.usesOrders) parts.push(t("uses.orders"));
-    if (first.usesHours) parts.push(t("uses.hours"));
-    return parts.join(" + ") || t("uses.none");
-  }, [selectedClients, t]);
-
-  const ruleCount = useMemo(() => {
-    const keys = new Set(selectedClients.map((client) => client.key));
-    return (data?.rules ?? []).filter((rule) => keys.has(rule.clientKey)).length;
-  }, [data?.rules, selectedClients]);
 
   function changePreset(next: Exclude<PayrollRangePreset, "custom">) {
     setPreset(next);
@@ -253,14 +235,14 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
 
   function exportHeader() {
     if (!canExport || !data) return;
+    // Combined Payroll writes its own workbook, so the header never falls back
+    // to a CSV that disagrees with the columns and colours on screen.
+    if (tab === "combined") {
+      combinedExport.run();
+      return;
+    }
     const view =
-      tab === "combined"
-        ? "combined"
-        : tab === "attendance-orders"
-          ? "ao"
-          : tab === "app-attendance"
-            ? "app_attendance"
-            : null;
+      tab === "attendance-orders" ? "ao" : tab === "app-attendance" ? "app_attendance" : null;
     exportPayrollHubCsv({
       tab,
       fileKey: month.key,
@@ -289,7 +271,12 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
     <PayrollStatusContextProvider
       value={{ canEdit: tab === "attendance-orders" && canManage, labels: statusLabels, savingId, save: saveStatus }}
     >
-    <PayrollAssignCatalogProvider clients={data?.clients ?? []} enabled={canManage}>
+    <CombinedExportBridgeProvider value={combinedExport}>
+    <PayrollAssignCatalogProvider
+      clients={data?.clients ?? []}
+      restaurants={data?.options.restaurants ?? []}
+      enabled={canManage}
+    >
     <AppPage className="space-y-2">
       <PayrollAdjustProvider>
       <AppPageHeader
@@ -356,33 +343,12 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
         <PayrollSlicerBar
           slicers={slicers}
           onChange={changeSlicers}
+          zoneCategory={zoneCategory}
+          onZoneCategory={setZoneCategory}
           options={keepSelectedPayrollOptions(
             data?.options ?? { zones: [], restaurants: [], nationalities: [], sourceCompanies: [] },
             slicers,
           )}
-        />
-      </div>
-      <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50/40 p-4 shadow-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-amber-900">{t("slicerCardTitle")}</span>
-        </div>
-        <PayrollPartnerView
-          clients={data?.clients ?? []}
-          riders={data?.riders ?? []}
-          value={slicers.projectKeys}
-          onChange={(projectKeys) => changeSlicers({ ...slicers, projectKeys })}
-        />
-        {data ? (
-          <PayrollZoneCategoryChips
-            riders={data.riders}
-            value={zoneCategory}
-            onChange={(next) => setZoneCategory(next)}
-          />
-        ) : null}
-        <PayrollSummaryStrip
-          riders={data?.riders ?? []}
-          ruleCount={ruleCount}
-          usesLabel={usesLabel}
         />
       </div>
       {data && tab !== "settings" ? (
@@ -460,6 +426,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
       </PayrollAdjustProvider>
     </AppPage>
     </PayrollAssignCatalogProvider>
+    </CombinedExportBridgeProvider>
     </PayrollStatusContextProvider>
   );
 }

@@ -202,6 +202,12 @@ export type DriverListRow = {
   vehicle_label: string | null;
   /** `bike` / `car` — the roster badge, independent of whether a plate is linked. */
   vehicle_type_key: string | null;
+  /**
+   * The type of the vehicle actually assigned to the rider. The Vehicle column
+   * prefers this over `vehicle_type_key`, which falls back to whatever the
+   * intake sheet guessed before a vehicle existed.
+   */
+  assigned_vehicle_type_key?: string | null;
 };
 
 /** mg = in-house (system company), partner = outsourced with a company, unassigned = outsourced with none. */
