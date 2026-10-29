@@ -171,16 +171,25 @@ html[data-theme="shopify"] {
   --visit-status-no-show: #a73c24;
   --visit-status-no-show-bg: #f6e9e4;
 
-  --visit-load-0: #f4f1ee;
-  --visit-load-1: #ddebe5;
-  --visit-load-2: #b3d2c5;
-  --visit-load-3: #7faf9c;
-  --visit-load-4: #3f7a66;
-  --visit-load-5: #a73c24;
+  /* Calendar heat: the shared frames shade quiet days near-white and busy days
+   * light sage, with a fully booked day falling back to the rust wash. */
+  --visit-load-0: #f7f5f2;
+  --visit-load-1: #eef5f0;
+  --visit-load-2: #e2efe6;
+  --visit-load-3: #d2e6d8;
+  --visit-load-4: #bcdcc5;
+  --visit-load-5: #f7ded5;
 
   --visit-cap-open: #2f5d50;
   --visit-cap-high: #9a6420;
   --visit-cap-full: #a73c24;
+
+  /* Table hairlines, empty-cell tint, today column and the full-day wash. */
+  --visit-line: #eee9e6;
+  --visit-tint: #f8f6f4;
+  --visit-today-tint: #f1f7f3;
+  --visit-full-wash: #fbeae4;
+  --visit-bar-track: #ece7e3;
 }
 
 html.dark,
@@ -307,14 +316,36 @@ html[data-theme="shopify"].dark {
   --visit-status-no-show: #a73c24;
   --visit-status-no-show-bg: #f6e9e4;
 
-  --visit-load-0: #f4f1ee;
-  --visit-load-1: #ddebe5;
-  --visit-load-2: #b3d2c5;
-  --visit-load-3: #7faf9c;
-  --visit-load-4: #3f7a66;
-  --visit-load-5: #a73c24;
+  /* Calendar heat: the shared frames shade quiet days near-white and busy days
+   * light sage, with a fully booked day falling back to the rust wash. */
+  --visit-load-0: #f7f5f2;
+  --visit-load-1: #eef5f0;
+  --visit-load-2: #e2efe6;
+  --visit-load-3: #d2e6d8;
+  --visit-load-4: #bcdcc5;
+  --visit-load-5: #f7ded5;
 
   --visit-cap-open: #2f5d50;
   --visit-cap-high: #9a6420;
   --visit-cap-full: #a73c24;
+
+  /* Table hairlines, empty-cell tint, today column and the full-day wash. */
+  --visit-line: #eee9e6;
+  --visit-tint: #f8f6f4;
+  --visit-today-tint: #f1f7f3;
+  --visit-full-wash: #fbeae4;
+  --visit-bar-track: #ece7e3;
+}
+
+/* The shared `p { font-weight: 400 }` reset in globals.css outranks utility
+   classes, so the Visit Calendar KPI numbers (printed bold in the shared frames)
+   need their own rule. */
+.visit-kpi-grid > * {
+  padding-block: 14px;
+}
+.visit-kpi-grid > * > p:nth-of-type(2) {
+  font-size: 32px;
+  line-height: 38px;
+  font-weight: 700;
+  text-wrap: balance;
 }

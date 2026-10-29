@@ -54,6 +54,40 @@ export function serviceColorVar(key: string, label?: string): string {
   return SERVICE_BG_CLASS[token];
 }
 
+const SERVICE_SHORT_LABEL: Record<string, string> = {
+  compliance: "Compl.",
+  compliances: "Compl.",
+  complianceservices: "Compl.",
+  hr: "HR",
+  hrservices: "HR",
+  humanresources: "HR",
+  legal: "Legal",
+  operations: "Ops",
+  operationsservices: "Ops",
+  exit: "Exit",
+  exitprocess: "Exit",
+  documents: "Docs",
+  documentssignatures: "Docs",
+  training: "Training",
+  meeting: "Meeting",
+  meetingrequest: "Meeting",
+  other: "Other",
+};
+
+/** Week cells are a third of the day grid wide, so a long catalog label would
+ *  truncate mid-word. The frames print a fixed short form instead. */
+export function shortServiceLabel(key: string, label?: string): string {
+  const known = SERVICE_SHORT_LABEL[normaliseServiceKey(key)];
+  if (known) return known;
+  if (label) {
+    const knownLabel = SERVICE_SHORT_LABEL[normaliseServiceKey(label)];
+    if (knownLabel) return knownLabel;
+    const first = label.trim().split(/\s+/)[0] ?? label;
+    return first.length > 9 ? `${first.slice(0, 8)}…` : first;
+  }
+  return "—";
+}
+
 export function loadClass(level: 0 | 1 | 2 | 3 | 4 | 5): string {
   switch (level) {
     case 0:
