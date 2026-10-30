@@ -46,6 +46,10 @@ import {
   type Dict,
 } from "./_shared";
 import { bumpScanSnapshots, PAYROLL_SNAPSHOTS } from "../router/read-snapshot";
+import {
+  adjustmentStatusCode,
+  normalizeAdjustmentStatus,
+} from "./payroll-adjustment-status";
 
 const DEFAULT_OFF_DAYS = 2;
 const DAY_HOURS = 12;
@@ -59,21 +63,6 @@ const MAX_DPD = 100_000;
 const MAX_EFFICIENCY = 1000;
 const RECOMPUTE_WINDOW_MONTHS = 24;
 
-const ADJUSTMENT_STATUSES = new Set([
-  "auto",
-  "12",
-  "3h",
-  "half",
-  "actual",
-  "off",
-  "abs",
-  "abs_lh",
-  "abs_lo",
-  "sick",
-  "accident",
-  "vehicle",
-  "custom",
-]);
 const ZONE_CATEGORIES = new Set(["good", "average", "low"]);
 const APPROVED_STATUSES = new Set(["approved", "awaiting_driver_ack"]);
 
@@ -312,9 +301,12 @@ export const adminApplyPayrollAdjustments = onCall(async (request) => {
     }
     const date = dateMatch[0];
 
-    const status = (typeof cell.status === "string" ? cell.status : "").trim().toLowerCase();
-    if (!ADJUSTMENT_STATUSES.has(status)) {
-      throw new HttpsError("invalid-argument", `invalid_adjustment_status:${status}`);
+    const status = normalizeAdjustmentStatus(cell.status);
+    if (!status) {
+      throw new HttpsError(
+        "invalid-argument",
+        `invalid_adjustment_status:${adjustmentStatusCode(cell.status)}`,
+      );
     }
 
     const hoursRaw = cell.hours;
