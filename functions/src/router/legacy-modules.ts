@@ -78,6 +78,9 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   "./rpcs/bites-reconcile": [
     "bitesMirrorSweep"
   ],
+  "./rpcs/delivery-context-sweep": [
+    "deliveryProximitySweep"
+  ],
   "./rpcs/home-snapshot-repair": [
     "homeSnapshotRepair"
   ],
