@@ -22,7 +22,7 @@ import { DriverRestaurantPicker } from "../driver-restaurant-picker";
 import { hasOpsAssignment } from "../driver-assignment";
 import { saveDriverProjectSettings } from "../drivers-actions";
 import { SearchableSelect } from "../form/searchable-select";
-import type { DriverProjectKey } from "@/features/fleet/fleet-labels";
+import { DRIVER_PROJECT_LABEL, type DriverProjectKey } from "@/features/fleet/fleet-labels";
 import type { DriverAccountStatus, DriverDetailModel } from "../types";
 import { useDriverFormOptions } from "../use-driver-form-options";
 
@@ -151,8 +151,9 @@ export function ProjectTab({
   };
 
   const projects: { key: DriverProjectKey | ""; label: string }[] = [
-    { key: "americana", label: "Americana" },
-    { key: "keeta", label: "Keeta" },
+    { key: "americana", label: DRIVER_PROJECT_LABEL.americana },
+    { key: "keeta", label: DRIVER_PROJECT_LABEL.keeta },
+    { key: "five_guys", label: DRIVER_PROJECT_LABEL.five_guys },
     { key: "", label: t("projectUnset") },
   ];
 

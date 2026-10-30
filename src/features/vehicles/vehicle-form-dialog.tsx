@@ -384,6 +384,7 @@ export function VehicleFormDialog({
                 label={t("fieldProject")}
                 keetaLabel={t("projectKeeta")}
                 americanaLabel={t("projectAmericana")}
+                fiveGuysLabel={t("projectFiveGuys")}
                 unsetLabel={t("projectUnset")}
                 disabled={!vehicle?.assigned_driver_id}
                 hint={vehicle?.assigned_driver_id ? undefined : t("projectFromRiderHint")}

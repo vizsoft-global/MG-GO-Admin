@@ -159,7 +159,7 @@
     "sourceCompanies": "الشركات",
     "employeeStatuses": "حالات الموظف",
     "employeeSections": "أقسام الموظف",
-    "nationalityCategories": "الجنسية",
+    "nationalityCategories": "فئة الجنسية",
     "bankCodes": "رموز البنوك",
     "employeedesk": "EmployeeDesk",
     "employeedeskAll": "كل الطلبات",
@@ -1419,7 +1419,7 @@
       "groupEmployeeStatus": "حالة الموظف",
       "groupProject": "مفتاح المشروع",
       "groupSection": "فئة الموظف",
-      "groupNationalityCategory": "الجنسية",
+      "groupNationalityCategory": "فئة الجنسية",
       "viewTable": "عرض الجدول",
       "viewCards": "عرض البطاقات",
       "employeesDashboardLink": "لوحة الموظفين",
@@ -2518,12 +2518,13 @@
           "sponsorship": "الكفالة",
           "jobPosition": "الوظيفة",
           "hiringType": "نوع التوظيف",
-          "nationality": "الجنسية",
-          "nationalityCategory": "الجنسية",
-          "selectCategory": "اختر الجنسية",
+          "nationality": "فئة الجنسية",
+          "nationalityCategory": "فئة الجنسية",
+          "selectCategory": "اختر فئة الجنسية",
           "section": "القسم",
           "selectSection": "اختر القسم",
           "selectSponsorship": "اختر الكفالة",
+          "searchSponsorship": "ابحث عن شركة الكفالة…",
           "selectJob": "اختر الوظيفة",
           "selectHiring": "اختر نوع التوظيف",
           "selectBank": "اختر البنك",
@@ -2740,7 +2741,7 @@
         "passportNumber": "رقم الجواز",
         "employeeStatus": "حالة الموظف",
         "sections": "فئة الموظف",
-        "nationalityCategories": "الجنسية",
+        "nationalityCategories": "فئة الجنسية",
         "beneficiaryCivilId": "الرقم المدني للمستفيد",
         "bank": "بنك المستفيد",
         "accountNumber": "رقم الحساب",
@@ -2752,7 +2753,7 @@
         "phone": "12345678",
         "civilId": "123456789012",
         "nationality": "اختر الجنسية",
-        "searchNationality": "ابحث عن الجنسية…",
+        "searchNationality": "ابحث عن فئة الجنسية…",
         "sourceCompany": "اختر الشركة",
         "searchSourceCompany": "ابحث عن شركة…",
         "driverCodeAuto": "يُعيَّن عند الحفظ",
@@ -2790,6 +2791,7 @@
       "project": {
         "keeta": "كيتا",
         "americana": "أمريكانا",
+        "fiveGuys": "فايف جايز",
         "unset": "بدون"
       },
       "riderCategory": {
@@ -4147,6 +4149,7 @@
       "projectAll": "كل المشاريع",
       "projectKeeta": "كيتا",
       "projectAmericana": "أمريكانا",
+      "projectFiveGuys": "فايف جايز",
       "projectUnset": "بدون",
       "projectFromRiderHint": "المشروع يأتي من السائق المعيَّن.",
       "statusActive": "نشطة",
@@ -8199,6 +8202,7 @@
         "cancel": "إلغاء",
         "saved": "تم حفظ الكتالوج",
         "invalid": "أدخل تسمية إنجليزية ومفتاحاً صالحاً.",
+        "search": "ابحث بالمفتاح أو التسمية",
         "colKey": "المفتاح",
         "colLabelEn": "الإنجليزية",
         "colLabelAr": "العربية",
@@ -8215,8 +8219,8 @@
         "statusesSubtitle": "قيم حالة الموارد البشرية على الموظفين والتقارير.",
         "sectionsTitle": "أقسام الموظف",
         "sectionsSubtitle": "الأقسام المعيّنة للموظفين.",
-        "nationalityTitle": "الجنسية",
-        "nationalitySubtitle": "قيم الجنسية على الموظفين ولوحة العد.",
+        "nationalityTitle": "فئة الجنسية",
+        "nationalitySubtitle": "قيم فئة الجنسية على الموظفين ولوحة العد — الجنسيات إضافة إلى مجموعات عربي / أفريقي / آسيوي.",
         "banksTitle": "رموز البنوك",
         "banksSubtitle": "بنوك الكويت لتفاصيل دفع الموظف.",
         "errors": {
@@ -11880,8 +11884,8 @@
             "body": "الأقسام المعيّنة في سجل الموظف."
           },
           "nationalityCategories": {
-            "title": "الجنسية",
-            "body": "قيم الجنسية على الموظفين والتقارير."
+            "title": "فئة الجنسية",
+            "body": "قيم فئة الجنسية على الموظفين والتقارير — الجنسيات إضافة إلى مجموعات عربي / أفريقي / آسيوي."
           },
           "sponsorships": {
             "title": "الكفالات",

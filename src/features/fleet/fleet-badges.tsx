@@ -172,7 +172,11 @@ export function ProjectBadge({ value }: { value: DriverProjectKey | null | undef
   if (!value) return <span className="text-muted-foreground">—</span>;
   return (
     <SoftPill className="bg-fleet-purple text-fleet-purple-fg">
-      {value === "keeta" ? t("projectKeeta") : t("projectAmericana")}
+      {value === "keeta"
+        ? t("projectKeeta")
+        : value === "americana"
+          ? t("projectAmericana")
+          : t("projectFiveGuys")}
     </SoftPill>
   );
 }

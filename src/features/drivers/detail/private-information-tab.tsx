@@ -44,6 +44,7 @@ import {
 } from "../driver-private-fields";
 import { saveDriverPrivateInformation } from "../drivers-actions";
 import { FieldBlock, FieldLabel } from "../form/driver-form-primitives";
+import { SearchableSelect } from "../form/searchable-select";
 import type { DriverDetailModel } from "../types";
 
 type CardKey = "identity" | "status" | "bank" | "salary";
@@ -499,20 +500,17 @@ export function PrivateInformationTab({
           </FieldBlock>
           <FieldBlock>
             <FieldLabel className={LABEL}>{t("fields.sponsorship")}</FieldLabel>
-            <Select
-              items={choiceItems(sponsorRows, locale, t("fields.selectSponsorship"), [form.sponsorshipKey])}
+            {/* Fifty-one sponsor companies: a plain Select would be an unsearchable wall. */}
+            <SearchableSelect
               value={form.sponsorshipKey || "none"}
               onValueChange={(value) => set("sponsorshipKey", !value || value === "none" ? "" : value)}
-            >
-              <SelectTrigger className={cn(FIELD, "w-full")} disabled={readonly}>
-                <SelectValue placeholder={t("fields.selectSponsorship")} />
-              </SelectTrigger>
-              <SelectContent>
-                {choiceItems(sponsorRows, locale, t("fields.selectSponsorship"), [form.sponsorshipKey]).map((item) => (
-                  <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              items={choiceItems(sponsorRows, locale, t("fields.selectSponsorship"), [form.sponsorshipKey])}
+              placeholder={t("fields.selectSponsorship")}
+              searchPlaceholder={t("fields.searchSponsorship")}
+              recentsKey="driver-sponsorship"
+              disabled={readonly}
+              className={cn(FIELD, "w-full")}
+            />
           </FieldBlock>
           <FieldBlock>
             <FieldLabel className={LABEL}>{t("fields.jobPosition")}</FieldLabel>

@@ -686,6 +686,7 @@ export function DriverFormSheet({
               projectLabels={{
                 keeta: tNew("project.keeta"),
                 americana: tNew("project.americana"),
+                fiveGuys: tNew("project.fiveGuys"),
                 unset: tNew("project.unset"),
               }}
               placeholders={{

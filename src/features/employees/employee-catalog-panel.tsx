@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { Plus, Upload } from "lucide-react";
@@ -51,8 +51,23 @@ export function EmployeeCatalogPanel({
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
+  const [query, setQuery] = useState("");
   const isSections = kind === "employee_sections";
   const isSponsorships = kind === "sponsorships";
+
+  /**
+   * `sponsorships` ships fifty-one companies and `nationality_categories`
+   * twenty-five, so a search beat scrolling the whole table.
+   */
+  const visibleRows = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return rows;
+    return rows.filter((row) =>
+      [row.key, row.label_en, row.label_ar]
+        .filter((value) => typeof value === "string")
+        .some((value) => value.toLowerCase().includes(needle)),
+    );
+  }, [query, rows]);
 
   const reset = () => {
     setKey("");
@@ -119,6 +134,12 @@ export function EmployeeCatalogPanel({
         description={subtitle}
         actions={
           <div className="flex items-center gap-2">
+            <Input
+              className="h-9 w-56"
+              value={query}
+              placeholder={t("search")}
+              onChange={(event) => setQuery(event.target.value)}
+            />
             {isSponsorships ? (
               <Button type="button" variant="outline" className="h-9" onClick={() => setImportOpen(true)}>
                 <Upload className="h-4 w-4" />
@@ -146,7 +167,7 @@ export function EmployeeCatalogPanel({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => (
+            {visibleRows.map((row) => (
               <TableRow
                 key={row.key}
                 className="cursor-pointer"

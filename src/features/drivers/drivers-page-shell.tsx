@@ -51,6 +51,7 @@ import {
   useEmployeeStatuses,
 } from "@/features/employees/use-employee-catalogs";
 import { useVehicleTypes } from "@/features/vehicles/use-vehicles";
+import { driverProjectLabel } from "@/features/fleet/fleet-labels";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -1084,7 +1085,7 @@ function DriversPageContent() {
                           )}
                         </VisibleTableCell>
                         <VisibleTableCell columnId="project" isVisible={isColumnVisible}>
-                          {driver.project_key ? driver.project_key : <EmptyCell />}
+                          {driverProjectLabel(driver.project_key) ?? <EmptyCell />}
                         </VisibleTableCell>
                         <VisibleTableCell columnId="nationality_category" isVisible={isColumnVisible}>
                           {driver.nationality_category_keys.join(", ")}
