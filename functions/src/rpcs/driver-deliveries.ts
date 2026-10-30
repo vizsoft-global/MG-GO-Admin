@@ -23,6 +23,11 @@ import {
   type ProofOcrMode,
 } from "../core/delivery-flags";
 import { driverRestaurantIds } from "./deliveries-shared";
+import {
+  deliveryContextRestaurants,
+  isDeliveryContextStale,
+  readDeliveryContextSnapshot,
+} from "./delivery-context";
 import { findActiveShift } from "./driver-shift";
 import { invalidateDriverHomeDailySafe } from "./driver-home";
 import { syncBitesOrderMilestone, type BitesPartnerStamp } from "./bites-order-sync";
@@ -1067,17 +1072,11 @@ export const driverCancelDelivery = onCall(async (request) => {
   return serializeDelivery(deliveryId, { ...current, ...patch });
 });
 
-export const driverGetDeliveryProximityContext = onCall(async (request) => {
-  const ctx = await requireRider(request);
-  const settings = await loadProximitySettings();
-  const zoneId = asString(ctx.driver["zone_id"]);
-  const [zoneSnap, assigned] = await Promise.all([
-    zoneId ? getFirestore().collection(COLLECTIONS.zones).doc(zoneId).get() : Promise.resolve(null),
-    loadAssignedRestaurantContext(ctx.uid, ctx.driver),
-  ]);
-  const zoneData = zoneSnap?.exists ? ((zoneSnap.data() ?? {}) as Dict) : null;
-
-  const restaurants = assigned
+/** The restaurant rows as the rider app reads them: sorted, geofences oldest first. */
+function restaurantPayloads(
+  assigned: Array<{ id: string; data: Dict; geofences: Dict[] }>,
+): Dict[] {
+  return assigned
     .slice()
     .sort((a, b) => asString(a.data["name"])?.localeCompare(asString(b.data["name"]) ?? "") ?? 0)
     .map((row) => ({
@@ -1097,6 +1096,46 @@ export const driverGetDeliveryProximityContext = onCall(async (request) => {
           color: asString(fence["color"]),
         })),
     }));
+}
+
+/**
+ * The proximity gate's inputs.
+ *
+ * `deliveryProximitySweep` rebuilds one shared document every ten minutes with
+ * the fleet settings, the zone shapes and every restaurant with its geofences,
+ * so a call reads that document instead of a dozen rows. Anything the snapshot
+ * cannot cover — no document yet, stale, a store added since the last build, a
+ * zone newer than the build — takes the live path, so the gate never answers
+ * from a context it does not actually have.
+ */
+export const driverGetDeliveryProximityContext = onCall(async (request) => {
+  const ctx = await requireRider(request);
+  const zoneId = asString(ctx.driver["zone_id"]);
+
+  const snapshot = await readDeliveryContextSnapshot();
+  const current = snapshot && !isDeliveryContextStale(snapshot) ? snapshot : null;
+  const cachedZone = current && zoneId ? (current.zones[zoneId] ?? null) : null;
+  const cachedRestaurants = current
+    ? await deliveryContextRestaurants(ctx.uid, ctx.driver, current)
+    : null;
+
+  let settings: Pick<DeliveryProximitySettings, "proximityMeters" | "earlyDropMeters" | "proofOcrMode">;
+  let zoneData: Dict | null;
+  let restaurants: Dict[];
+
+  if (current && cachedRestaurants && (zoneId === null || cachedZone)) {
+    settings = current.settings;
+    zoneData = cachedZone;
+    restaurants = cachedRestaurants;
+  } else {
+    settings = await loadProximitySettings();
+    const [zoneSnap, assigned] = await Promise.all([
+      zoneId ? getFirestore().collection(COLLECTIONS.zones).doc(zoneId).get() : Promise.resolve(null),
+      loadAssignedRestaurantContext(ctx.uid, ctx.driver),
+    ]);
+    zoneData = zoneSnap?.exists ? ((zoneSnap.data() ?? {}) as Dict) : null;
+    restaurants = restaurantPayloads(assigned);
+  }
 
   return {
     proximity_meters: settings.proximityMeters,
