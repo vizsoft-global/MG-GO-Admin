@@ -163,7 +163,7 @@ const STANDARD_COLUMNS: Array<
   { field: "nationality", header: "Country", allowed: "Country name or ISO code.", example: "India" },
   { field: "employee_status_key", header: "Employee Status", allowed: "A status from the employee catalog, e.g. running. A blank cell is skipped and does not fail the row. `-` clears.", example: "running" },
   { field: "section_keys", header: "Employee Category", allowed: "Section names, comma-separated. A blank cell is skipped. `-` clears every section.", example: "" },
-  { field: "project_key", header: "Project key", allowed: "A project key such as keeta or americana. `-` clears.", example: "" },
+  { field: "project_key", header: "Project key", allowed: "keeta, americana or five_guys. `-` clears.", example: "" },
   { field: "accommodation", header: "Accommodation", allowed: "Free text. `-` clears.", example: "" },
   { field: "work_start_date", header: "Work Start", allowed: "Date YYYY-MM-DD or DD-MM-YYYY. Stored as work_start_date. `-` clears.", example: "2024-01-15" },
   { field: "screenshots_allowed", header: "Screenshots", allowed: "yes or no. `-` turns the flag off.", example: "no" },

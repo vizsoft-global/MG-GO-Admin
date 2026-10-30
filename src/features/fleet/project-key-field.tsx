@@ -13,6 +13,7 @@ export function ProjectKeyField({
   label,
   keetaLabel,
   americanaLabel,
+  fiveGuysLabel,
   unsetLabel,
   hint,
   disabled,
@@ -22,6 +23,7 @@ export function ProjectKeyField({
   label: string;
   keetaLabel: string;
   americanaLabel: string;
+  fiveGuysLabel: string;
   unsetLabel: string;
   hint?: string;
   disabled?: boolean;
@@ -32,6 +34,8 @@ export function ProjectKeyField({
         return keetaLabel;
       case "americana":
         return americanaLabel;
+      case "five_guys":
+        return fiveGuysLabel;
       default: {
         const _exhaustive: never = key;
         return _exhaustive;
@@ -42,7 +46,7 @@ export function ProjectKeyField({
   return (
     <FieldBlock>
       <FieldLabel icon={Briefcase}>{label}</FieldLabel>
-      <div role="radiogroup" className="grid grid-cols-3 gap-1.5">
+      <div role="radiogroup" className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         {DRIVER_PROJECT_KEYS.map((key) => {
           const selected = value === key;
           return (

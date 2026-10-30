@@ -22,11 +22,41 @@ describe("employee catalogs", () => {
     for (const key of ["cancelled", "leave", "leave_return"] as const) {
       assert.equal(DEFAULT_EMPLOYEE_STATUSES.some((row) => row.key === key), true);
     }
-    assert.equal(DEFAULT_NATIONALITY_CATEGORIES.length, 20);
-    assert.equal(DEFAULT_SPONSORSHIPS.length, 4);
     assert.equal(DEFAULT_BANK_CODES.some((row) => row.is_nbk), true);
     assert.equal(isNbkBank("nbk", DEFAULT_BANK_CODES), true);
     assert.equal(isNbkBank("kfh", DEFAULT_BANK_CODES), false);
+  });
+
+  it("seeds the twenty nationalities plus the four region groups", () => {
+    assert.equal(DEFAULT_NATIONALITY_CATEGORIES.length, 24);
+    for (const key of ["arab", "african", "african_arab", "asian"] as const) {
+      assert.equal(DEFAULT_NATIONALITY_CATEGORIES.some((row) => row.key === key), true);
+    }
+    assert.equal(
+      DEFAULT_NATIONALITY_CATEGORIES.find((row) => row.key === "african_arab")?.label_en,
+      "African / Arab",
+    );
+    // The countries stay: riders are filed under them today.
+    assert.equal(DEFAULT_NATIONALITY_CATEGORIES.some((row) => row.key === "indian"), true);
+  });
+
+  it("seeds the sponsor companies HR listed, each with a usable key", () => {
+    assert.equal(DEFAULT_SPONSORSHIPS.length, 51);
+    assert.equal(DEFAULT_SPONSORSHIPS[0]?.label_en, "AL AJHAR FOR CONSUMABLES DELIVERY");
+    assert.equal(
+      DEFAULT_SPONSORSHIPS[DEFAULT_SPONSORSHIPS.length - 1]?.label_en,
+      "ZETIC EXPRESS FOR CONSUMABLES DELIVERY",
+    );
+    const keys = DEFAULT_SPONSORSHIPS.map((row) => row.key);
+    assert.equal(new Set(keys).size, keys.length);
+    for (const key of keys) {
+      // The catalog form and the callable both refuse a longer or invalid key.
+      assert.match(key, /^[a-z0-9_]{1,40}$/);
+    }
+    // The four relationship words are gone: they named no company.
+    for (const retired of ["in_house", "partner", "outsourced", "government"]) {
+      assert.equal(keys.includes(retired), false);
+    }
   });
 
   it("optionalChoice clears blank and none, and refuses a value outside the enum", () => {

@@ -368,6 +368,7 @@ export function VehiclesPageShell({
       if (column === "project") {
         if (value === "keeta") return t("projectKeeta");
         if (value === "americana") return t("projectAmericana");
+        if (value === "five_guys") return t("projectFiveGuys");
         return value;
       }
       if (column === "replacement") return value === "yes" ? t("replacementBanner") : t("replacementNo");

@@ -43,12 +43,12 @@ describe("sponsorship import preview", () => {
   it("keeps stored labels on a blank update", () => {
     const preview = previewSponsorshipImport({
       headers: HEADERS,
-      rows: [["in_house", "", "", "", ""]],
+      rows: [["al_ajhar_for_consumables_delivery", "", "", "", ""]],
       existing: EXISTING,
     });
     assert.equal(preview.rows[0]?.status, "update");
-    assert.equal(preview.rows[0]?.payload?.label_en, "In-house");
-    assert.equal(preview.rows[0]?.payload?.label_ar, "داخلي");
+    assert.equal(preview.rows[0]?.payload?.label_en, "AL AJHAR FOR CONSUMABLES DELIVERY");
+    assert.equal(preview.rows[0]?.payload?.label_ar, "AL AJHAR FOR CONSUMABLES DELIVERY");
     assert.equal(preview.rows[0]?.payload?.is_active, true);
     assert.equal(preview.rows[0]?.payload?.sort_order, 10);
   });
@@ -56,7 +56,7 @@ describe("sponsorship import preview", () => {
   it("refuses deactivating a system row", () => {
     const preview = previewSponsorshipImport({
       headers: HEADERS,
-      rows: [["in_house", "In-house", "داخلي", "no", "10"]],
+      rows: [["al_ajhar_for_consumables_delivery", "AL AJHAR", "", "no", "10"]],
       existing: EXISTING,
     });
     assert.equal(preview.rows[0]?.status, "error");
@@ -107,10 +107,13 @@ describe("sponsorship import preview", () => {
     assert.equal(previewSponsorshipImport({ headers: HEADERS, rows, existing: EXISTING }).error, "too_many");
   });
 
-  it("ships the four system keys on the sample sheet", () => {
+  it("ships every sponsor company on the sample sheet", () => {
     const sheets = sponsorshipImportTemplateSheets();
     assert.equal(sheets[0]?.name, "Sponsorships");
     const keys = (sheets[0]?.aoa.slice(1) ?? []).map((row) => row[0]);
-    assert.deepEqual(keys, ["in_house", "partner", "outsourced", "government"]);
+    assert.equal(keys.length, DEFAULT_SPONSORSHIPS.length);
+    assert.equal(keys[0], "al_ajhar_for_consumables_delivery");
+    // The relationship words HR retired must not come back through the sheet.
+    assert.equal(keys.includes("in_house"), false);
   });
 });

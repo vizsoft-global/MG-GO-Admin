@@ -159,7 +159,7 @@
     "sourceCompanies": "Companies",
     "employeeStatuses": "Employee statuses",
     "employeeSections": "Employee sections",
-    "nationalityCategories": "Nationality",
+    "nationalityCategories": "Nationality Category",
     "bankCodes": "Bank codes",
     "employeedesk": "EmployeeDesk",
     "employeedeskAll": "All requests",
@@ -1420,7 +1420,7 @@
       "groupEmployeeStatus": "Employee status",
       "groupProject": "Project key",
       "groupSection": "Employee Category",
-      "groupNationalityCategory": "Nationality",
+      "groupNationalityCategory": "Nationality category",
       "viewTable": "Table view",
       "viewCards": "Card view",
       "employeesDashboardLink": "Employee dashboard",
@@ -2518,12 +2518,13 @@
           "sponsorship": "Sponsorship",
           "jobPosition": "Job position",
           "hiringType": "Hiring type",
-          "nationality": "Nationality",
-          "nationalityCategory": "Nationality",
-          "selectCategory": "Select nationality",
+          "nationality": "Nationality Category",
+          "nationalityCategory": "Nationality Category",
+          "selectCategory": "Select nationality category",
           "section": "Section",
           "selectSection": "Select section",
           "selectSponsorship": "Select sponsorship",
+          "searchSponsorship": "Search sponsor company…",
           "selectJob": "Select position",
           "selectHiring": "Select hiring type",
           "selectBank": "Select bank",
@@ -2740,7 +2741,7 @@
         "passportNumber": "Passport number",
         "employeeStatus": "Employee status",
         "sections": "Employee category",
-        "nationalityCategories": "Nationality",
+        "nationalityCategories": "Nationality Category",
         "beneficiaryCivilId": "Beneficiary civil ID",
         "bank": "Beneficiary bank",
         "accountNumber": "Account number",
@@ -2752,7 +2753,7 @@
         "phone": "12345678",
         "civilId": "123456789012",
         "nationality": "Select nationality",
-        "searchNationality": "Search nationality…",
+        "searchNationality": "Search nationality category…",
         "sourceCompany": "Select company",
         "searchSourceCompany": "Search company…",
         "driverCodeAuto": "Assigned on save",
@@ -2790,6 +2791,7 @@
       "project": {
         "keeta": "Keeta",
         "americana": "Americana",
+        "fiveGuys": "Five Guys",
         "unset": "Unset"
       },
       "riderCategory": {
@@ -4147,6 +4149,7 @@
       "projectAll": "All projects",
       "projectKeeta": "Keeta",
       "projectAmericana": "Americana",
+      "projectFiveGuys": "Five Guys",
       "projectUnset": "Unset",
       "projectFromRiderHint": "Project comes from the assigned rider.",
       "statusActive": "Active",
@@ -8199,6 +8202,7 @@
         "cancel": "Cancel",
         "saved": "Catalog saved",
         "invalid": "Enter an English label and a valid key.",
+        "search": "Search key or label",
         "colKey": "Key",
         "colLabelEn": "English",
         "colLabelAr": "Arabic",
@@ -8215,8 +8219,8 @@
         "statusesSubtitle": "HR status values used on Employees and reports.",
         "sectionsTitle": "Employee sections",
         "sectionsSubtitle": "Departments or sections assigned to employees.",
-        "nationalityTitle": "Nationality",
-        "nationalitySubtitle": "Nationality values used on Employees and the dashboard.",
+        "nationalityTitle": "Nationality Category",
+        "nationalitySubtitle": "Nationality Category values used on Employees and the dashboard — the nationalities plus the Arab / African / Asian groups.",
         "banksTitle": "Bank codes",
         "banksSubtitle": "Kuwait banks used for employee payment details.",
         "errors": {
@@ -11880,8 +11884,8 @@
             "body": "Sections assigned on the employee record."
           },
           "nationalityCategories": {
-            "title": "Nationality",
-            "body": "Nationality values used on Employees and reports."
+            "title": "Nationality Category",
+            "body": "Nationality Category values used on Employees and reports — the nationalities plus the Arab / African / Asian groups."
           },
           "sponsorships": {
             "title": "Sponsorships",

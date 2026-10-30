@@ -23,8 +23,21 @@ export type VehicleFuelCompany = (typeof VEHICLE_FUEL_COMPANIES)[number];
 export const VEHICLE_TYPES_OF_USE = ["operational", "trainer", "standby"] as const;
 export type VehicleTypeOfUse = (typeof VEHICLE_TYPES_OF_USE)[number];
 
-export const DRIVER_PROJECT_KEYS = ["keeta", "americana"] as const;
+export const DRIVER_PROJECT_KEYS = ["keeta", "americana", "five_guys"] as const;
 export type DriverProjectKey = (typeof DRIVER_PROJECT_KEYS)[number];
+
+/** Proper nouns, so they read the same in either locale. */
+export const DRIVER_PROJECT_LABEL: Record<DriverProjectKey, string> = {
+  keeta: "Keeta",
+  americana: "Americana",
+  five_guys: "Five Guys",
+};
+
+/** The project a rider is on, as the operator should read it. */
+export function driverProjectLabel(key: string | null | undefined): string | null {
+  const parsed = parseDriverProjectKey(key);
+  return parsed ? DRIVER_PROJECT_LABEL[parsed] : null;
+}
 
 export function isVehicleCarType(value: string | null | undefined): value is VehicleCarType {
   return VEHICLE_CAR_TYPES.includes(value as VehicleCarType);

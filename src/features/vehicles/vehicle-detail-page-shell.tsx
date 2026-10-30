@@ -118,7 +118,9 @@ export function VehicleDetailPageShell({
           ? t("projectKeeta")
           : vehicle.assigned_project_key === "americana"
             ? t("projectAmericana")
-            : "—",
+            : vehicle.assigned_project_key === "five_guys"
+              ? t("projectFiveGuys")
+              : "—",
     },
   ];
 

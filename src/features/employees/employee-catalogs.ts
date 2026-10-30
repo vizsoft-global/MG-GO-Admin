@@ -81,9 +81,12 @@ export const DEFAULT_EMPLOYEE_SECTIONS: readonly EmployeeCatalogRow[] = [
 ];
 
 /**
- * The nationality catalog HR files a rider under. Seeded so the Profile's
- * Nationality picker is usable on day one; an operator edit to any row
- * wins, and a stored list keeps its own order.
+ * The nationality catalog HR files a rider under — the picker the employee
+ * profile labels "Nationality Category". Seeded so it is usable on day one; an
+ * operator edit to any row wins, and a stored list keeps its own order.
+ *
+ * The four region groups sit after the nationalities: HR asked for them on top
+ * of the countries, not instead of them.
  */
 export const DEFAULT_NATIONALITY_CATEGORIES: readonly EmployeeCatalogRow[] = [
   { key: "bangladeshi", label_en: "Bangladeshi", label_ar: "بنغلاديشي", is_active: true, is_system: true, sort_order: 10 },
@@ -106,18 +109,104 @@ export const DEFAULT_NATIONALITY_CATEGORIES: readonly EmployeeCatalogRow[] = [
   { key: "syrian", label_en: "Syrian", label_ar: "سوري", is_active: true, is_system: true, sort_order: 180 },
   { key: "togo", label_en: "Togo", label_ar: "توغولي", is_active: true, is_system: true, sort_order: 190 },
   { key: "ugandan", label_en: "Ugandan", label_ar: "أوغندي", is_active: true, is_system: true, sort_order: 200 },
+  // Region groups: a rider can be filed under a nationality, a region, or both.
+  { key: "arab", label_en: "Arab", label_ar: "عربي", is_active: true, is_system: true, sort_order: 210 },
+  { key: "african", label_en: "African", label_ar: "أفريقي", is_active: true, is_system: true, sort_order: 220 },
+  {
+    key: "african_arab",
+    label_en: "African / Arab",
+    label_ar: "أفريقي / عربي",
+    is_active: true,
+    is_system: true,
+    sort_order: 230,
+  },
+  { key: "asian", label_en: "Asian", label_ar: "آسيوي", is_active: true, is_system: true, sort_order: 240 },
 ];
 
 /**
- * Who sponsors the rider's residency. A global catalog rather than a fixed
- * enum so HR can add a new sponsor company without a deploy.
+ * Who sponsors the rider's residency: the group's sponsor companies, in the
+ * order HR listed them. A global catalog rather than a fixed enum so HR can add
+ * a sponsor without a deploy, and the old In-house / Partner / Outsourced /
+ * Government placeholders are gone — they named a relationship, not a company.
+ *
+ * The key is the slug of the English name (`catalogKeyFromLabel`). Six names
+ * would pass the 40-character catalog limit, so they carry a short key below.
  */
-export const DEFAULT_SPONSORSHIPS: readonly EmployeeCatalogRow[] = [
-  { key: "in_house", label_en: "In-house", label_ar: "داخلي", is_active: true, is_system: true, sort_order: 10 },
-  { key: "partner", label_en: "Partner", label_ar: "شريك", is_active: true, is_system: true, sort_order: 20 },
-  { key: "outsourced", label_en: "Outsourced", label_ar: "مُسنَد لجهة خارجية", is_active: true, is_system: true, sort_order: 30 },
-  { key: "government", label_en: "Government", label_ar: "حكومي", is_active: true, is_system: true, sort_order: 40 },
-];
+const SPONSORSHIP_NAMES = [
+  "AL AJHAR FOR CONSUMABLES DELIVERY",
+  "AL ATLAL FOR CONSUMABLES DELIVERY",
+  "AL MIZAN FOR CONSUMABLES DELIVERY",
+  "AL MONJIZ EXPRESS FOR CONSUMABLES DELIVERY",
+  "AL MUSALLAM HOLDING COMPANY W.L.L.",
+  "Al-HUDHUD FOR CONSUMABLES DELIVERY",
+  "AMANY AL KUWAIT FOR CONSUMABLES DELIVERY",
+  "AROUB AL AHLIYA FOR CONSUMABLES DELIVERY",
+  "AXIS EXPRESS FOR CONSUMABLES DELIVERY",
+  "AXIS FOR CONSUMABLES DELIVERY",
+  "BARQ ALWOSOL FOR CONSUMABLES DELIVERY",
+  "BROOKIE EXPRESS FOR CONSUMABLES DELIVERY",
+  "CLICK GO FOR CONSUMABLES DELIVERY",
+  "CYCLE STATION FOR BIKES REPAIRS",
+  "DOOR DASH FOR CONSUMABLES DELIVERY",
+  "FORTY FOR CONSUMABLES DELIVERY",
+  "FREE SOLUTIONS FOR CONSUMABLES DELIVERY",
+  "FROM TO EXPRESS FOR CONSUMABLES DELIVERY",
+  "FROM TO FOR CONSUMABLES DELIVERY",
+  "GLOBAL LINK FOR CONSUMABLES DELIVERY",
+  "INJAZFLOW FOR ENTREPRENEURSHIP",
+  "KUWAITI INDIAN UNITED COMPANY - KIU",
+  "MAKENZY FOR CONSUMABLES DELIVERY",
+  "ORDER FOOD FOR CONSUMABLE DELIVERY QATAR",
+  "ORDER FOOD FOR CONSUMABLES DELIVERY",
+  "ORDER FOUR FOR CONSUMABLES DELIVERY",
+  "ORDER SERVICE FOR CONSUMABLES DELIVERY",
+  "ORDER SERVICE FOR GENERAL TRADING",
+  "YUM FOR CONSUMABLES DELIVERY",
+  "YUMMY FOR CONSUMABLES DELIVERY",
+  "BAJAJ SERVICE FOR BIKE REPAIR",
+  "PARTNER AL KUWAITYA FOR CONSUMABLES DELIVERY",
+  "PERFORMANCE MACHINE COMPANY",
+  "PICK GO FOR CONSUMABLES DELIVERY",
+  "PICKER EXPRESS FOR CONSUMABLES DELIVERY",
+  "PICKER FOR CONSUMABLES DELIVERY",
+  "RABTAT AL QUREEN FOR COSUMABLES DELIVERY",
+  "RAHAL AL KOUT FOR CONSUMABLES DELIVER",
+  "RELIANCE SERVICE FOR CONSUMABLES DELIVERY",
+  "RVD FOR CONSUMABLES DELIVERY",
+  "SADEEQ PLUS FOR CONSUMABLES DELIVERY",
+  "SKY SERVICE FOR CONSUMABLES DELIVERY",
+  "SPARKLES BUILDING AND ROAD CLEANING CONTRACTING COMPANY W.L.L.",
+  "SUPER SPEED COMPANY",
+  "TAKE GO FOR CONSUMABLES DELIVERY",
+  "UNITY EXPRESS FOR CONSUMABLES DELIVERY",
+  "UNITY FOR CONSUMABLES DELIVERY",
+  "VALOUR FOR CONSUMABLES DELIVERY",
+  "VALOUR GO FOR CONSUMABLES DELIVERY",
+  "VAMOS FOR CONSUMABLES DELIVERY",
+  "ZETIC EXPRESS FOR CONSUMABLES DELIVERY",
+] as const;
+
+const SPONSORSHIP_KEY_OVERRIDES: Record<string, string> = {
+  "AL MONJIZ EXPRESS FOR CONSUMABLES DELIVERY": "al_monjiz_express_delivery",
+  "ORDER FOOD FOR CONSUMABLE DELIVERY QATAR": "order_food_consumable_delivery_qatar",
+  "PARTNER AL KUWAITYA FOR CONSUMABLES DELIVERY": "al_kuwaitya_for_consumables_delivery",
+  "RABTAT AL QUREEN FOR COSUMABLES DELIVERY": "rabtat_al_qureen_consumables_delivery",
+  "RELIANCE SERVICE FOR CONSUMABLES DELIVERY": "reliance_service_consumables_delivery",
+  "SPARKLES BUILDING AND ROAD CLEANING CONTRACTING COMPANY W.L.L.":
+    "sparkles_building_and_road_cleaning",
+};
+
+export const DEFAULT_SPONSORSHIPS: readonly EmployeeCatalogRow[] = SPONSORSHIP_NAMES.map(
+  (name, index) => ({
+    key: SPONSORSHIP_KEY_OVERRIDES[name] ?? catalogKeyFromLabel(name),
+    label_en: name,
+    // No official Arabic sponsor names yet; the picker falls back to English.
+    label_ar: name,
+    is_active: true,
+    is_system: true,
+    sort_order: (index + 1) * 10,
+  }),
+);
 
 export function isSystemSponsorshipKey(key: string): boolean {
   return DEFAULT_SPONSORSHIPS.some((row) => row.key === key);

@@ -91,6 +91,7 @@ export function DriverFormIdentitySection({
   projectLabels: {
     keeta: string;
     americana: string;
+    fiveGuys: string;
     unset: string;
   };
   placeholders: {
@@ -308,6 +309,7 @@ export function DriverFormIdentitySection({
         label={labels.project}
         keetaLabel={projectLabels.keeta}
         americanaLabel={projectLabels.americana}
+        fiveGuysLabel={projectLabels.fiveGuys}
         unsetLabel={projectLabels.unset}
         disabled={disabled}
       />
