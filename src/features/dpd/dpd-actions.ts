@@ -3,6 +3,7 @@
 import type { Firestore } from "firebase-admin/firestore";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
+import { refreshDeliveryContext } from "@/lib/firebase/refresh-delivery-context";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
@@ -854,6 +855,7 @@ export async function saveRestaurant(formData: FormData): Promise<DpdMutationRes
       routeName: "saveRestaurant",
       after: { name, partner_id: partnerId, zone_id: zoneId, status },
     });
+    await refreshDeliveryContext();
     return { success: true, id, logoWarning: logoResult.logoWarning };
   }
 
@@ -886,6 +888,7 @@ export async function saveRestaurant(formData: FormData): Promise<DpdMutationRes
     routeName: "saveRestaurant",
     after: { name, partner_id: partnerId, zone_id: zoneId, status },
   });
+  await refreshDeliveryContext();
   return { success: true, id: data.id, logoWarning: logoResult.logoWarning };
 }
 
@@ -913,6 +916,7 @@ export async function deleteRestaurant(id: string): Promise<DpdMutationResult> {
     entityId: id,
     routeName: "deleteRestaurant",
   });
+  await refreshDeliveryContext();
   return { success: true };
 }
 

@@ -4,13 +4,14 @@
  * `driverGetDeliveryProximityContext` used to assemble this per rider per call —
  * the settings doc, the zone, the rider's restaurant rows and every geofence on
  * them, a dozen reads for data that is identical for every rider on the same
- * stores. `deliveryProximitySweep` rebuilds this document every five minutes and
- * the callable serves from it, so a call costs the rider's two auth reads, the
- * rider's restaurant id list and this one document.
+ * stores. `deliveryProximitySweep` rebuilds this document every ten minutes,
+ * every admin write that changes its inputs rebuilds it inline, and the callable
+ * serves from it, so a call costs the rider's two auth reads, the rider's
+ * restaurant id list and this one document.
  *
  * This module deliberately does not import `driver-deliveries.ts`: the builder
  * needs that module's loaders, and importing it back would make the pair
- * circular. The builder lives in `delivery-context-sweep.ts` instead.
+ * circular. The builder lives in `delivery-context-build.ts` instead.
  */
 import { getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";

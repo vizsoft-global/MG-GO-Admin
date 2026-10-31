@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { COLLECTIONS } from "@/lib/firebase/db";
+import { refreshDeliveryContext } from "@/lib/firebase/refresh-delivery-context";
 import { staffDb } from "@/lib/firebase/staff-db";
 import {
   suggestZoneCode,
@@ -162,6 +163,8 @@ export async function createZone(input: {
     },
   });
 
+  // A zone shape is half of the rider's proximity gate.
+  await refreshDeliveryContext();
   return { success: true, id };
 }
 
@@ -246,6 +249,7 @@ export async function updateZone(input: {
     },
   });
 
+  await refreshDeliveryContext();
   return { success: true, id: input.id };
 }
 
@@ -329,6 +333,7 @@ export async function deleteZone(id: string, force = false): Promise<ZoneMutatio
     context: { force },
   });
 
+  await refreshDeliveryContext();
   return { success: true };
 }
 
