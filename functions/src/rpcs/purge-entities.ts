@@ -4,6 +4,7 @@ import { COLLECTIONS, FIELDS } from "../core/collections";
 import { parseIdList } from "../core/query";
 import { requireStaff } from "../core/staff";
 import { pushRestaurantMirror } from "./bites-mirror";
+import { rebuildDeliveryContextSafe } from "./delivery-context-build";
 
 /** Firestore caps one commit at 500 writes, and an `in` filter at 30 values. */
 export const DELETE_CHUNK = 400;
@@ -307,6 +308,7 @@ export const adminPurgeRestaurants = onCall(async (request) => {
   await deleteByIds(COLLECTIONS.restaurants, ids);
   // The rows are gone, so each push drops that store's catalogue and rider mirror.
   await refreshStores(ids);
+  await rebuildDeliveryContextSafe("admin_purge_restaurants");
 
   return { deleted: ids.length, storage_prefixes: storagePrefixes };
 });
@@ -319,6 +321,7 @@ export const adminPurgeZones = onCall(async (request) => {
 
   await releaseForeignKeyGuards("zones");
   await deleteByIds(COLLECTIONS.zones, ids);
+  await rebuildDeliveryContextSafe("admin_purge_zones");
   return { deleted: ids.length };
 });
 

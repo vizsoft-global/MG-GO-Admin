@@ -5,6 +5,7 @@ import { parseId } from "../core/query";
 import { requireStaff } from "../core/staff";
 import { stampStoredRow } from "../core/search-text";
 import { pushRestaurantMirror } from "./bites-mirror";
+import { rebuildDeliveryContextSafe } from "./delivery-context-build";
 
 const ZONES = COLLECTIONS.zones;
 const ZONE_GEOFENCE_SETTINGS = "zone_geofence_settings";
@@ -162,6 +163,9 @@ export const adminUpsertZone = onCall(async (request) => {
     );
   }
 
+  // The rider's gate reads this shape from the cache, so the rebuild is part of
+  // the save, not the next sweep.
+  await rebuildDeliveryContextSafe("admin_upsert_zone");
   return { success: true, id: ref.id };
 });
 
@@ -188,6 +192,7 @@ export const adminDeleteZone = onCall(async (request) => {
 
   await db.collection(ZONES).doc(id).delete();
   await db.collection(ZONE_GEOFENCE_SETTINGS).doc(id).delete().catch(() => undefined);
+  await rebuildDeliveryContextSafe("admin_delete_zone");
   return { success: true };
 });
 
@@ -311,6 +316,8 @@ export const adminUpsertRestaurant = onCall(async (request) => {
   }
   // Bites-Admin reads its own copy of the catalogue to refuse duplicate store names.
   await pushRestaurantMirror(db, ref.id);
+  // A store's coordinates and geofences are what the proximity gate measures.
+  await rebuildDeliveryContextSafe("admin_upsert_restaurant");
   return { success: true, id: ref.id };
 });
 
@@ -328,6 +335,7 @@ export const adminDeleteRestaurant = onCall(async (request) => {
   await batch.commit();
   // A missing restaurant drops both the catalogue mirror and any store→rider link.
   await pushRestaurantMirror(db, id);
+  await rebuildDeliveryContextSafe("admin_delete_restaurant");
   return { success: true };
 });
 

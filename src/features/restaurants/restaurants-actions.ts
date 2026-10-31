@@ -33,6 +33,7 @@ import {
   type ZoneGeometryType,
 } from "@/lib/geo/zone-geometry";
 import { COLLECTIONS } from "@/lib/firebase/db";
+import { refreshDeliveryContext } from "@/lib/firebase/refresh-delivery-context";
 import { catalogNameStamp } from "@/lib/search/prefix";
 import { staffDb } from "@/lib/firebase/staff-db";
 import type { Json } from "@/types/database";
@@ -912,6 +913,8 @@ export async function saveRestaurantGeofences(
     routeName: "saveRestaurantGeofences",
     after: { geofence_count: geofences.length },
   });
+  // Geofences are what the rider's proximity gate measures around a store.
+  await refreshDeliveryContext();
   return { success: true };
 }
 
@@ -1049,6 +1052,7 @@ export async function saveRestaurant(formData: FormData): Promise<RestaurantMuta
       routeName: "saveRestaurant",
       after: { name, partner_id: partnerId, zone_id: zoneId, status },
     });
+    await refreshDeliveryContext();
     return {
       success: true,
       id,
@@ -1090,6 +1094,7 @@ export async function saveRestaurant(formData: FormData): Promise<RestaurantMuta
     routeName: "saveRestaurant",
     after: { name, partner_id: partnerId, zone_id: zoneId, status },
   });
+  await refreshDeliveryContext();
   return {
     success: true,
     id: newId,
@@ -1157,5 +1162,6 @@ export async function deleteRestaurant(id: string): Promise<RestaurantMutationRe
     entityId: id,
     routeName: "deleteRestaurant",
   });
+  await refreshDeliveryContext();
   return { success: true };
 }
