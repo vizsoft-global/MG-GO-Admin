@@ -1,13 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { Layers, LayoutList, Loader2, Plus, RefreshCw, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
 import { ToggleChip } from "@/components/app/toggle-chip";
+import {
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
+import type { FrameStatus } from "@/components/app/status-badge";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -139,6 +148,20 @@ export function EsignBatchesShell() {
   };
   const tabCounts = useMemo(() => trackerTabCounts(tracker), [tracker]);
   const options = useMemo(() => trackerFilterOptions(tracker), [tracker]);
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "batch", label: t("colBatch"), locked: true },
+      { id: "template", label: t("colTemplate"), locked: true },
+      { id: "recipients", label: t("colRecipients") },
+      { id: "progress", label: t("colProgress") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "sent", label: t("colSent") },
+      { id: "actions", label: t("colActions"), locked: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("esign-batches", columns);
+  const shownColumns = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -165,9 +188,42 @@ export function EsignBatchesShell() {
     });
   }, [tracker, tab, templateId, senderId, dateFrom, dateTo, search, recipients]);
 
+  const filtered = useMemo(() => {
+    const query = prefs.appliedQuery.trim().toLowerCase();
+    if (!query) return visible;
+    return visible.filter((row) => {
+      const status = t(`batchStatus.${batchStageKey(row.stage)}`);
+      return [
+        row.batch.batch_code,
+        row.batch.title,
+        row.batch.template_name,
+        row.batch.category_label,
+        row.batch.created_by_name,
+        status,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [visible, prefs.appliedQuery, t]);
+
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filtered,
+        prefs.groupBy,
+        {
+          status: (row) => t(`batchStatus.${batchStageKey(row.stage)}`),
+        },
+        {},
+        "—",
+      ),
+    [filtered, prefs.groupBy, t],
+  );
+
   const failedBatches = useMemo(
-    () => visible.filter((row) => row.batch.failed_count > 0),
-    [visible],
+    () => filtered.filter((row) => row.batch.failed_count > 0),
+    [filtered],
   );
 
   async function retryAll() {
@@ -216,39 +272,91 @@ export function EsignBatchesShell() {
   const showBatch = scope === "all" || scope === "batch";
   const showIndividual = scope === "all" || scope === "individual";
 
-  const batchTable = loading ? (
-    <div className="flex h-48 items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-    </div>
-  ) : error ? (
-    <AppEmptyState title={t("emptyTitle")} description={error} />
-  ) : visible.length === 0 ? (
-    <AppEmptyState
-      title={tracker.length === 0 ? t("emptyTitle") : t("emptyFiltered")}
-      description={tracker.length === 0 ? t("emptyDescription") : t("clearFilters")}
+  const batchToolbar = (
+    <TableToolbar
+      prefs={prefs}
+      entity={t("title")}
+      columns={columns}
+      rowKind="dynamic"
+      entityList
+      filteredCount={filtered.length}
+      totalCount={tracker.length}
+      onAdd={() => router.push(newTemplateHref)}
+      addLabel={t("newFromTemplate")}
     />
-  ) : (
-    <AppDataTable
-      columns={[
-        { id: "batch", label: t("colBatch") },
-        { id: "template", label: t("colTemplate") },
-        { id: "recipients", label: t("colRecipients") },
-        { id: "progress", label: t("colProgress") },
-        { id: "status", label: t("colStatus") },
-        { id: "sent", label: t("colSent") },
-        { id: "actions", label: t("colActions"), className: "text-end" },
-      ]}
-    >
-      {visible.map((row) => (
-        <BatchRow
-          key={row.batch.id}
-          row={row}
-          t={t}
-          trackLabel={tRcm("track")}
-          onOpen={() => router.push(paths.detailHref(row.batch.id))}
+  );
+  const tableHasRows = !loading && !error && filtered.length > 0 && prefs.view === "list";
+  const batchTable = (
+    <>
+      {tableHasRows ? null : batchToolbar}
+      {loading ? (
+        <div className="flex h-48 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : error ? (
+        <AppEmptyState title={t("emptyTitle")} description={error} />
+      ) : filtered.length === 0 ? (
+        <AppEmptyState
+          title={tracker.length === 0 ? t("emptyTitle") : t("emptyFiltered")}
+          description={tracker.length === 0 ? t("emptyDescription") : t("clearFilters")}
         />
-      ))}
-    </AppDataTable>
+      ) : prefs.view === "grid" ? (
+        <TableGridCards
+          rows={filtered.map((row) => ({
+            id: row.batch.batch_code,
+            name: row.batch.title,
+            status: {
+              status: stageFrameStatus(row.stage),
+              label: t(`batchStatus.${batchStageKey(row.stage)}`),
+            },
+            fields: [
+              {
+                label: t("colTemplate"),
+                value: row.batch.template_name ?? row.batch.category_label ?? "—",
+              },
+              { label: t("colRecipients"), value: t("employeesCount", { count: row.progress.total }) },
+              {
+                label: t("colProgress"),
+                value: t("progressSlash", { signed: row.progress.signed, total: row.progress.total }),
+              },
+              { label: t("colSent"), value: formatEsignTrackerDate(row.batch.created_at) },
+            ],
+            onOpen: () => router.push(paths.detailHref(row.batch.id)),
+          }))}
+        />
+      ) : (
+        <AppDataTable
+          toolbar={batchToolbar}
+          columns={shownColumns.map((column) => ({
+            id: column.id,
+            label: column.id === "actions" ? t("colActions") : column.label,
+            className: column.id === "actions" ? "text-end" : undefined,
+          }))}
+        >
+          {grouped.flatMap((group) => [
+            ...(prefs.groupBy !== "none"
+              ? [
+                  <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                    <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                      {group.label} · {group.rows.length}
+                    </TableCell>
+                  </AppDataTableRow>,
+                ]
+              : []),
+            ...group.rows.map((row) => (
+              <BatchRow
+                key={row.batch.id}
+                row={row}
+                t={t}
+                trackLabel={tRcm("track")}
+                columns={shownColumns}
+                onOpen={() => router.push(paths.detailHref(row.batch.id))}
+              />
+            )),
+          ])}
+        </AppDataTable>
+      )}
+    </>
   );
 
   const batchFilters = (
@@ -256,12 +364,6 @@ export function EsignBatchesShell() {
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {t("scopeBatch")}
       </p>
-      <Input
-        className="h-9"
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder={t("searchPlaceholder")}
-      />
       <CountPills items={tabItems} activeId={tab} onSelect={(id) => setTab(id)} vertical />
       <SearchSelect
         items={options.templates}
@@ -304,6 +406,7 @@ export function EsignBatchesShell() {
         variant="outline"
         className="h-9 w-full"
         onClick={() => {
+          prefs.setQuery("");
           setSearch("");
           setTemplateId(null);
           setSenderId(null);
@@ -339,16 +442,6 @@ export function EsignBatchesShell() {
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={breadcrumbs}
-        actions={
-          <Button
-            size="sm"
-            className="h-9 cursor-pointer bg-zinc-950 text-white hover:bg-zinc-800"
-            render={<Link href={newTemplateHref} />}
-          >
-            <Plus className="me-1.5 h-3.5 w-3.5" />
-            {t("newFromTemplate")}
-          </Button>
-        }
       />
 
       {scope === "individual" ? null : (
@@ -473,6 +566,23 @@ function kuwaitBatchDay(iso: string): string {
   }).format(date);
 }
 
+function stageFrameStatus(stage: EsignBatchStage): FrameStatus {
+  switch (stage) {
+    case "completed":
+      return "working";
+    case "has_declines":
+      return "absent";
+    case "in_progress":
+      return "pending";
+    case "waiting":
+      return "other";
+    default: {
+      const unexpected: never = stage;
+      return unexpected;
+    }
+  }
+}
+
 function stageDotClass(stage: EsignBatchStage): string {
   switch (stage) {
     case "completed":
@@ -534,65 +644,78 @@ function BatchRow({
   row,
   t,
   trackLabel,
+  columns,
   onOpen,
 }: {
   row: EsignTrackerBatch;
   t: ReturnType<typeof useTranslations>;
   trackLabel: string;
+  columns: TableToolbarColumn[];
   onOpen: () => void;
 }) {
   const { batch, progress, stage } = row;
   const tone = stageDotClass(stage);
-
-  return (
-    <AppDataTableRow onClick={onOpen}>
-      <TableCell>
-        <span className="text-xs font-semibold">{batch.batch_code}</span>
-      </TableCell>
-      <TableCell className="text-xs">
-        <span className="block font-medium">{batch.title}</span>
+  const cells: Record<string, ReactNode> = {
+    batch: <span className="text-xs font-semibold">{batch.batch_code}</span>,
+    template: (
+      <>
+        <TableNameCell name={batch.title} />
         <span className="block text-xs text-muted-foreground">
           {batch.template_name ?? batch.category_label ?? "—"}
         </span>
-      </TableCell>
-      <TableCell className="text-xs text-muted-foreground">
+      </>
+    ),
+    recipients: (
+      <span className="text-xs text-muted-foreground">
         {t("employeesCount", { count: progress.total })}
-      </TableCell>
-      <TableCell>
-        <div className="flex min-w-[140px] flex-col gap-1">
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {t("progressSlash", { signed: progress.signed, total: progress.total })}
-          </span>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-emerald-500 transition-[width] duration-200"
-              style={{ width: `${progress.percent}%` }}
-            />
-          </div>
-        </div>
-      </TableCell>
-      <TableCell>
-        <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium", tone)}>
-          <span className={cn("size-1.5 rounded-full bg-current")} aria-hidden />
-          {t(`batchStatus.${batchStageKey(stage)}`)}
+      </span>
+    ),
+    progress: (
+      <div className="flex min-w-[140px] flex-col gap-1">
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {t("progressSlash", { signed: progress.signed, total: progress.total })}
         </span>
-      </TableCell>
-      <TableCell className="text-xs tabular-nums text-muted-foreground">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-emerald-500 transition-[width] duration-200"
+            style={{ width: `${progress.percent}%` }}
+          />
+        </div>
+      </div>
+    ),
+    status: (
+      <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium", tone)}>
+        <span className="size-1.5 rounded-full bg-current" aria-hidden />
+        {t(`batchStatus.${batchStageKey(stage)}`)}
+      </span>
+    ),
+    sent: (
+      <span className="text-xs tabular-nums text-muted-foreground">
         {formatEsignTrackerDate(batch.created_at)}
-      </TableCell>
-      <TableCell className="text-end">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 cursor-pointer px-3 text-xs font-medium"
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpen();
-          }}
-        >
-          {trackLabel}
-        </Button>
-      </TableCell>
+      </span>
+    ),
+    actions: (
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 cursor-pointer px-3 text-xs font-medium"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpen();
+        }}
+      >
+        {trackLabel}
+      </Button>
+    ),
+  };
+
+  return (
+    <AppDataTableRow onClick={onOpen}>
+      {columns.map((column) => (
+        <TableCell key={column.id} className={column.id === "actions" ? "text-end" : undefined}>
+          {cells[column.id]}
+        </TableCell>
+      ))}
     </AppDataTableRow>
   );
 }

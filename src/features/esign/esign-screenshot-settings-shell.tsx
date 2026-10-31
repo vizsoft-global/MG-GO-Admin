@@ -1,11 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { ExternalLink, Loader2, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { Link } from "@/i18n/navigation";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -17,6 +24,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+
+function shotWidth(id: string): string {
+  if (id === "item") return "w-[46%]";
+  if (id === "applies") return "w-[34%]";
+  return "w-[20%]";
+}
 import {
   fetchRequestTypeScreenshotPolicy,
   updateRequestTypeScreenshotPolicy,
@@ -130,6 +143,38 @@ export function EsignScreenshotSettingsShell({
     }
   }
 
+  const shotColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "item", label: t("colItem"), locked: true },
+      { id: "applies", label: t("colAppliesTo") },
+      { id: "shot", label: t("colScreenshot") },
+    ],
+    [t],
+  );
+  const typePrefs = useTablePrefs("esign.screenshot.types", shotColumns);
+  const categoryPrefs = useTablePrefs("esign.screenshot.categories", shotColumns);
+  const shownTypes = typePrefs.orderedColumns.filter((column) => typePrefs.isVisible(column.id));
+  const shownCategories = categoryPrefs.orderedColumns.filter((column) =>
+    categoryPrefs.isVisible(column.id),
+  );
+  const typeQuery = typePrefs.appliedQuery.trim().toLowerCase();
+  const filteredTypes = typePolicies.filter((row) => {
+    if (!typeQuery) return true;
+    const item = tTypes(row.request_type as RequestTypeSlug).toLowerCase();
+    const applies = t(`appliesTo.${row.request_type}` as "appliesTo.leave").toLowerCase();
+    return item.includes(typeQuery) || applies.includes(typeQuery);
+  });
+  const categoryQuery = categoryPrefs.appliedQuery.trim().toLowerCase();
+  const filteredCategories = (categories?.rows ?? [])
+    .filter((row) => row.is_active)
+    .filter((row) => {
+      if (!categoryQuery) return true;
+      return (
+        row.label_en.toLowerCase().includes(categoryQuery) ||
+        (row.description ?? "").toLowerCase().includes(categoryQuery)
+      );
+    });
+
   return (
     <AppPage className="space-y-3">
       <AppPageHeader
@@ -185,46 +230,60 @@ export function EsignScreenshotSettingsShell({
           <p className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("sectionRequestTypes")}
           </p>
+          <TableToolbar
+            prefs={typePrefs}
+            entity={t("sectionRequestTypes")}
+            columns={shotColumns}
+            rowKind="dynamic"
+            filteredCount={filteredTypes.length}
+            totalCount={typePolicies.length}
+          />
           <Table style={{ tableLayout: "fixed" }}>
             <TableHeader>
               <TableRow>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[46%]")}>{t("colItem")}</TableHead>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[34%]")}>{t("colAppliesTo")}</TableHead>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[20%]")}>
-                  {t("colScreenshot")}
-                </TableHead>
+                {shownTypes.map((column) => (
+                  <TableHead key={column.id} className={cn(TABLE_HEAD_CLASS, shotWidth(column.id))}>
+                    {column.label}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {typesLoading ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
+                  <TableCell colSpan={shownTypes.length} className="py-6 text-center text-muted-foreground">
                     <Loader2 className="mx-auto h-4 w-4 animate-spin" />
                   </TableCell>
                 </TableRow>
               ) : (
-                typePolicies.map((row) => (
-                  <TableRow key={row.request_type}>
-                    <TableCell className="truncate text-sm font-medium">
-                      {tTypes(row.request_type as RequestTypeSlug)}
-                    </TableCell>
-                    <TableCell className="truncate text-xs text-muted-foreground">
-                      {t(`appliesTo.${row.request_type}` as "appliesTo.leave")}
-                    </TableCell>
-                    <TableCell>
+                filteredTypes.map((row) => {
+                  const label = tTypes(row.request_type as RequestTypeSlug);
+                  const cells: Record<string, ReactNode> = {
+                    item: <TableNameCell name={label} />,
+                    applies: t(`appliesTo.${row.request_type}` as "appliesTo.leave") || <EmptyCell />,
+                    shot: (
                       <div className="flex items-center gap-2">
                         <Switch
                           checked={!row.screenshot_restricted}
                           onCheckedChange={() => toggleType(row)}
-                          aria-label={tTypes(row.request_type as RequestTypeSlug)}
+                          aria-label={label}
                         />
                         <span className="text-xs text-muted-foreground">
                           {row.screenshot_restricted ? t("blocked") : t("allowed")}
                         </span>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                    ),
+                  };
+                  return (
+                    <TableRow key={row.request_type}>
+                      {shownTypes.map((column) => (
+                        <TableCell key={column.id} className="truncate text-sm">
+                          {cells[column.id]}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -234,46 +293,62 @@ export function EsignScreenshotSettingsShell({
           <p className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("sectionCategories")}
           </p>
+          <TableToolbar
+            prefs={categoryPrefs}
+            entity={t("sectionCategories")}
+            columns={shotColumns}
+            rowKind="dynamic"
+            filteredCount={filteredCategories.length}
+            totalCount={(categories?.rows ?? []).filter((row) => row.is_active).length}
+          />
           <Table style={{ tableLayout: "fixed" }}>
             <TableHeader>
               <TableRow>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[46%]")}>{t("colItem")}</TableHead>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[34%]")}>{t("colAppliesTo")}</TableHead>
-                <TableHead className={cn(TABLE_HEAD_CLASS, "w-[20%]")}>
-                  {t("colScreenshot")}
-                </TableHead>
+                {shownCategories.map((column) => (
+                  <TableHead key={column.id} className={cn(TABLE_HEAD_CLASS, shotWidth(column.id))}>
+                    {column.label}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {categoriesLoading ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={shownCategories.length}
+                    className="py-6 text-center text-muted-foreground"
+                  >
                     <Loader2 className="mx-auto h-4 w-4 animate-spin" />
                   </TableCell>
                 </TableRow>
               ) : (
-                (categories?.rows ?? [])
-                  .filter((row) => row.is_active)
-                  .map((row) => (
+                filteredCategories.map((row) => {
+                  const cells: Record<string, ReactNode> = {
+                    item: <TableNameCell name={row.label_en} />,
+                    applies: row.description || <EmptyCell />,
+                    shot: (
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={!row.screenshot_restricted}
+                          onCheckedChange={() => toggleCategory(row)}
+                          aria-label={row.label_en}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {row.screenshot_restricted ? t("blocked") : t("allowed")}
+                        </span>
+                      </div>
+                    ),
+                  };
+                  return (
                     <TableRow key={row.id}>
-                      <TableCell className="truncate text-sm font-medium" title={row.label_en}>{row.label_en}</TableCell>
-                      <TableCell className="truncate text-xs text-muted-foreground">
-                        {row.description ?? "—"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={!row.screenshot_restricted}
-                            onCheckedChange={() => toggleCategory(row)}
-                            aria-label={row.label_en}
-                          />
-                          <span className="text-xs text-muted-foreground">
-                            {row.screenshot_restricted ? t("blocked") : t("allowed")}
-                          </span>
-                        </div>
-                      </TableCell>
+                      {shownCategories.map((column) => (
+                        <TableCell key={column.id} className="truncate text-sm">
+                          {cells[column.id]}
+                        </TableCell>
+                      ))}
                     </TableRow>
-                  ))
+                  );
+                })
               )}
             </TableBody>
           </Table>

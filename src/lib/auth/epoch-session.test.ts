@@ -17,6 +17,7 @@ import {
   type EpochReader,
 } from "./epoch-cache";
 import { loadMutationSession, loadReadSession, type EpochProbe } from "./epoch-session";
+import { canAccessAdminPanel } from "./permissions";
 import { panelGate, signedInEntryRedirect } from "./staff-entry";
 import { applyReturnedEpochs } from "../menu/apply-returned-epochs";
 
@@ -786,6 +787,31 @@ test("applyReturnedEpochs does not rewind a higher counter", () => {
     settings: 4,
     menu: 2,
   });
+});
+
+test("an approved staff profile with no archived_at can open the panel", () => {
+  assert.equal(
+    canAccessAdminPanel({
+      id: "staff",
+      role: "staff",
+      adminRoleId: "role",
+      approvalStatus: "approved",
+      isSuperAdmin: false,
+      archivedAt: undefined,
+    }),
+    true,
+  );
+  assert.equal(
+    canAccessAdminPanel({
+      id: "staff",
+      role: "staff",
+      adminRoleId: "role",
+      approvalStatus: "approved",
+      isSuperAdmin: false,
+      archivedAt: "2026-10-01T00:00:00.000Z",
+    }),
+    false,
+  );
 });
 
 test("panel gate sends unclaimed staff to claim before pending or maintenance", () => {

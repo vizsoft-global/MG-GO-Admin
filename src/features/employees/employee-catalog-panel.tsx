@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppListCard } from "@/components/app/app-list-card";
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { catalogKeyFromLabel, CATALOG_KEY_RE, type EmployeeCatalogKind, type EmployeeCatalogRow } from "./employee-catalogs";
 import { upsertEmployeeCatalog } from "./employee-catalogs-actions";
+import { SponsorshipImportDialog } from "./sponsorship-import-dialog";
 import { toast } from "sonner";
 
 export function EmployeeCatalogPanel({
@@ -40,6 +41,7 @@ export function EmployeeCatalogPanel({
   const t = useTranslations("pages.settings.employeeCatalogs");
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [key, setKey] = useState("");
   const [labelEn, setLabelEn] = useState("");
   const [labelAr, setLabelAr] = useState("");
@@ -49,8 +51,23 @@ export function EmployeeCatalogPanel({
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
+  const [query, setQuery] = useState("");
   const isSections = kind === "employee_sections";
   const isSponsorships = kind === "sponsorships";
+
+  /**
+   * `sponsorships` ships fifty-one companies and `nationality_categories`
+   * twenty-five, so a search beat scrolling the whole table.
+   */
+  const visibleRows = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return rows;
+    return rows.filter((row) =>
+      [row.key, row.label_en, row.label_ar]
+        .filter((value) => typeof value === "string")
+        .some((value) => value.toLowerCase().includes(needle)),
+    );
+  }, [query, rows]);
 
   const reset = () => {
     setKey("");
@@ -116,10 +133,24 @@ export function EmployeeCatalogPanel({
         title={title}
         description={subtitle}
         actions={
-          <Button type="button" className="h-9" onClick={startAdd}>
-            <Plus className="h-4 w-4" />
-            {t("add")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Input
+              className="h-9 w-56"
+              value={query}
+              placeholder={t("search")}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            {isSponsorships ? (
+              <Button type="button" variant="outline" className="h-9" onClick={() => setImportOpen(true)}>
+                <Upload className="h-4 w-4" />
+                {t("import.action")}
+              </Button>
+            ) : null}
+            <Button type="button" className="h-9" onClick={startAdd}>
+              <Plus className="h-4 w-4" />
+              {t("add")}
+            </Button>
+          </div>
         }
       />
       <AppListCard>
@@ -136,7 +167,7 @@ export function EmployeeCatalogPanel({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => (
+            {visibleRows.map((row) => (
               <TableRow
                 key={row.key}
                 className="cursor-pointer"
@@ -285,6 +316,9 @@ export function EmployeeCatalogPanel({
           </AppModalFooter>
         </DialogContent>
       </Dialog>
+      {isSponsorships ? (
+        <SponsorshipImportDialog open={importOpen} onOpenChange={setImportOpen} rows={rows} />
+      ) : null}
     </AppPage>
   );
 }

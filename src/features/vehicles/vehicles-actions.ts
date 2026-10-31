@@ -1,7 +1,9 @@
 "use server";
 
 import { getLocale } from "next-intl/server";
+import { revalidatePath } from "next/cache";
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
+import { callAdminFunction } from "@/lib/firebase/callable";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
@@ -757,39 +759,88 @@ export async function bulkUpdateVehicles(
   return { updated: unique.length };
 }
 
-export async function updateVehicleTypeLabel(formData: FormData): Promise<{ error?: string }> {
+/** How many vehicles currently carry each catalog key. */
+export async function listVehicleTypeUsage(): Promise<Record<string, number>> {
+  await requireStaff();
+  const db = await openDb();
+  const rows = await allRows(db, COLLECTIONS.vehicles);
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    const key = str(row.vehicle_type_key) || "bike";
+    if (row.archived_at) continue;
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+}
+
+const VEHICLE_TYPE_KEY_RE = /^[a-z0-9_]{1,40}$/;
+
+/**
+ * Create or edit a `vehicle_types` row. The key is immutable once written — it is
+ * what `vehicles.vehicle_type_key` and the map sprite both point at — so an edit
+ * only changes labels, order and the active flag.
+ */
+export async function upsertVehicleType(input: {
+  key: string;
+  labelEn: string;
+  labelAr: string;
+  isActive: boolean;
+  sortOrder: number;
+}): Promise<{ ok: true } | { error: string }> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireVehicles("vehicles.manage");
-  if ("error" in auth) return auth;
+  if ("error" in auth) return { error: "not_authorized" };
 
-  const key = emptyText(formData.get("key"));
-  const labelEn = emptyText(formData.get("labelEn"));
-  const labelAr = emptyText(formData.get("labelAr"));
-  if (!key || !labelEn || !labelAr) return { error: "missing_fields" };
+  const key = input.key.trim().toLowerCase();
+  const labelEn = input.labelEn.trim();
+  const labelAr = input.labelAr.trim() || labelEn;
+  if (!VEHICLE_TYPE_KEY_RE.test(key)) return { error: "invalid_key" };
+  if (!labelEn) return { error: "missing_fields" };
 
   const db = await openDb();
-  try {
-    const byId = db.collection(COLLECTIONS.vehicleTypes).doc(key);
-    const snap = await byId.get();
-    if (snap.exists) {
-      await byId.set({ label_en: labelEn, label_ar: labelAr }, { merge: true });
-    } else {
-      const found = await db.collection(COLLECTIONS.vehicleTypes).where("key", "==", key).limit(1).get();
-      const doc = found.docs[0];
-      if (!doc) return { error: "save_failed" };
-      await doc.ref.set({ label_en: labelEn, label_ar: labelAr }, { merge: true });
+  const ref = db.collection(COLLECTIONS.vehicleTypes).doc(key);
+  const before = await ref.get();
+  const existed = before.exists;
+
+  // `bike` is the sprite fallback and the fuel-limit default; deactivating it
+  // would leave every unmapped type drawing art nothing points at.
+  if (existed && key === "bike" && !input.isActive) return { error: "bike_locked" };
+
+  const sortOrder = Number.isFinite(input.sortOrder) ? Math.trunc(input.sortOrder) : 100;
+  const { error } = await callAdminFunction("admin_upsert_vehicle_type", {
+    key,
+    labelEn,
+    labelAr,
+    isActive: input.isActive,
+    sortOrder,
+  });
+  if (error) {
+    if (error.message === "invalid_key" || error.message === "missing_fields") {
+      return { error: error.message };
     }
-  } catch (error) {
-    return { error: formatError(error as { message?: string }) };
+    return { error: "save_failed" };
   }
 
   void logAdminMutation({
-    action: "update",
+    action: existed ? "update" : "create",
     entityType: "vehicle_type",
     entityId: key,
     routeName: "/settings/vehicle-types",
-    after: { label_en: labelEn, label_ar: labelAr },
+    ...(existed
+      ? {
+          before: {
+            label_en: str(before.get("label_en")),
+            label_ar: str(before.get("label_ar")),
+            is_active: before.get("is_active") !== false,
+            sort_order: numOrNull(before.get("sort_order")),
+          },
+        }
+      : {}),
+    after: { label_en: labelEn, label_ar: labelAr, is_active: input.isActive, sort_order: sortOrder },
   });
-  return {};
+  revalidatePath("/settings/vehicle-types");
+  revalidatePath("/vehicles");
+  revalidatePath("/operations");
+  return { ok: true };
 }

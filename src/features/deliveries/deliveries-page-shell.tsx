@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { LIST_SEARCH_DEBOUNCE_MS } from "@/lib/menu/sidebar-menu-query";
 import { useTranslations } from "next-intl";
 import {
   Activity,
@@ -11,7 +10,6 @@ import {
   Check,
   CheckCircle2,
   Clock,
-  Download,
   Eye,
   FileSpreadsheet,
   Loader2,
@@ -24,18 +22,15 @@ import {
 } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
 import {
-  AppListControls,
   GroupedSections,
   fieldSearchMatch,
   groupRows,
   useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
 import {
   AppDataTable,
   AppDataTableEmpty,
   AppDataTableRow,
-  AppTableColumnPicker,
   VisibleTableCell,
 } from "@/components/app";
 import { TableCell } from "@/components/app/app-data-table";
@@ -53,7 +48,13 @@ import {
   DateRangeFilter,
   type DateRangeValue,
 } from "@/components/app/date-range-filter";
-import { useTableColumnVisibility } from "@/hooks/use-table-column-visibility";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
@@ -188,7 +189,25 @@ async function fetchDeliveryGpsFromApi(deliveryId: string) {
 function DeliveriesPageContent() {
   const t = useTranslations("pages.deliveries");
   const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs("deliveries");
+  const toolbarColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "select", label: t("bulk.selectAll"), locked: true },
+      { id: "deliveryId", label: t("colDeliveryId"), locked: true },
+      { id: "driver", label: t("colDriver"), locked: true },
+      { id: "employeeId", label: t("colEmployeeId") },
+      { id: "restaurant", label: t("colRestaurant") },
+      { id: "zone", label: t("colZone"), categorical: true },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "partner", label: labels.group.partner.label, categorical: true, defaultHidden: true },
+      { id: "orderId", label: t("colOrderId") },
+      { id: "when", label: t("colWhen") },
+      { id: "actions", label: t("colActions"), locked: true },
+    ],
+    [labels.group.partner, t],
+  );
+  const prefs = useTablePrefs("deliveries", toolbarColumns);
+  const debouncedSearch = prefs.appliedQuery.trim();
+  const isColumnVisible = prefs.isVisible;
   const queryClient = useQueryClient();
   const { can } = useAuth();
   const canManage = can("deliveries.manage");
@@ -197,8 +216,6 @@ function DeliveriesPageContent() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [tabFilter, setTabFilter] = useState<DeliveryStatusFilterValue>("all");
   const [zoneFilter, setZoneFilter] = useState("all");
   const [partnerFilter, setPartnerFilter] = useState("all");
@@ -224,12 +241,6 @@ function DeliveriesPageContent() {
     selectedDeliveryIdRef.current = null;
     setSelectedDelivery(null);
   }, []);
-
-  // Debounce free-text search so we don't refetch on every keystroke.
-  useEffect(() => {
-    const handle = setTimeout(() => setDebouncedSearch(search.trim()), LIST_SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(handle);
-  }, [search]);
 
   const filter = useMemo<DeliveriesQueryFilter>(
     () => ({
@@ -271,7 +282,7 @@ function DeliveriesPageContent() {
   const visible = useMemo(
     () =>
       deliveries.filter((row) =>
-        fieldSearchMatch(row, search, {
+        fieldSearchMatch(row, debouncedSearch, {
           name: (item) => item.driver_name,
           employee_id: (item) => item.driver_employee_id || item.driver_code,
           zone: (item) => item.zone_name,
@@ -279,7 +290,7 @@ function DeliveriesPageContent() {
           status: (item) => item.status,
         }),
       ),
-    [deliveries, search],
+    [deliveries, debouncedSearch],
   );
   const groupedDeliveries = useMemo(
     () =>
@@ -629,30 +640,6 @@ function DeliveriesPageContent() {
     !isLoading && !isError && visible.length === 0 && hasFiltersOrSearch;
   const showEmptyAll = !isLoading && !isError && visible.length === 0 && !hasFiltersOrSearch;
 
-  const columnVisibilityOptions = useMemo(
-    () => [
-      { id: "select", label: t("bulk.selectAll"), locked: true as const },
-      { id: "deliveryId", label: t("colDeliveryId") },
-      { id: "driver", label: t("colDriver") },
-      { id: "employeeId", label: t("colEmployeeId") },
-      { id: "restaurant", label: t("colRestaurant") },
-      { id: "zone", label: t("colZone") },
-      { id: "status", label: t("colStatus") },
-      { id: "orderId", label: t("colOrderId") },
-      { id: "when", label: t("colWhen") },
-      { id: "actions", label: t("colActions"), locked: true as const },
-    ],
-    [t],
-  );
-
-  const {
-    isVisible: isColumnVisible,
-    toggle: toggleColumn,
-    reset: resetColumns,
-    pickerOptions: columnPickerOptions,
-    hiddenToggleableCount,
-  } = useTableColumnVisibility("dpd:deliveries:list-columns", columnVisibilityOptions);
-
   const tableColumns = useMemo(
     () =>
       [
@@ -676,11 +663,17 @@ function DeliveriesPageContent() {
         { id: "restaurant", label: t("colRestaurant") },
         { id: "zone", label: t("colZone") },
         { id: "status", label: t("colStatus"), className: "text-end" },
+        { id: "partner", label: labels.group.partner.label },
         { id: "orderId", label: t("colOrderId") },
         { id: "when", label: t("colWhen") },
         { id: "actions", label: t("colActions"), className: "w-12 text-end" },
-      ].filter((col) => col.id === "select" || isColumnVisible(col.id)),
-    [isColumnVisible, selected, t, verifiableVisible],
+      ]
+        .filter((col) => isColumnVisible(col.id))
+        .sort((left, right) => {
+          const rank = new Map(prefs.orderedColumns.map((column, index) => [column.id, index]));
+          return (rank.get(left.id) ?? 999) - (rank.get(right.id) ?? 999);
+        }),
+    [isColumnVisible, labels.group.partner, prefs.orderedColumns, selected, t, verifiableVisible],
   );
 
   const selectTab = (id: DeliveryStatusFilterValue) => {
@@ -726,22 +719,7 @@ function DeliveriesPageContent() {
       <AppListCard
         toolbar={
           <div className="flex flex-col gap-3">
-            <AppListControls
-              searchValue={search}
-              onSearchChange={setSearch}
-              searchPlaceholder={t("searchPlaceholder")}
-              searchAriaLabel={t("searchPlaceholder")}
-              clearSearchLabel={labels.clearSearch}
-              groupByOptions={[labels.group.none, labels.group.status, labels.group.zone, labels.group.partner]}
-              groupBy={prefs.groupBy}
-              onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
-              groupByLabel={labels.groupBy}
-              viewMode={prefs.viewMode}
-              onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
-              tableViewLabel={labels.viewTable}
-              cardsViewLabel={labels.viewCards}
-              filterSlot={
-                <>
+            <div className="flex flex-wrap items-center gap-2">
                   <Select
                     value={tabFilter}
                     onValueChange={(value) =>
@@ -828,17 +806,6 @@ function DeliveriesPageContent() {
                     className="w-[150px]"
                     clearable={false}
                   />
-                  <AppTableColumnPicker
-                    options={columnPickerOptions}
-                    isVisible={isColumnVisible}
-                    onToggle={toggleColumn}
-                    onReset={resetColumns}
-                    hiddenCount={hiddenToggleableCount}
-                  />
-                </>
-              }
-              trailing={
-                <>
                   <Button
                     type="button"
                     variant="outline"
@@ -865,27 +832,9 @@ function DeliveriesPageContent() {
                     <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
                     <span className="hidden sm:inline">{t("ordersReport.button")}</span>
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-9 w-9 cursor-pointer rounded-lg p-0"
-                    onClick={handleExport}
-                    disabled={isExporting || totalForFilter === 0}
-                    title={t("export")}
-                    aria-label={t("export")}
-                  >
-                    {isExporting ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Download className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
                   <ClearAllModuleButton entity="deliveries" compact />
-                </>
-              }
-            />
-            {(hasActiveFilters || search) && !searchIncomplete && (
+            </div>
+            {(hasActiveFilters || debouncedSearch) && !searchIncomplete && (
               <p className="text-sm tabular-nums text-muted-foreground">
                 {t("totalDeliveries", { count: totalForFilter })}
                 {kpiCounts && totalForFilter !== kpiCounts.total
@@ -972,8 +921,18 @@ function DeliveriesPageContent() {
               {t("emptyDescription")}
             </p>
           </div>
-        ) : prefs.viewMode === "cards" ? (
+        ) : prefs.view === "grid" ? (
           <CardContent className="p-4">
+            <TableToolbar
+              prefs={prefs}
+              entity={t("title")}
+              columns={toolbarColumns}
+              rowKind="dynamic"
+              entityList
+              filteredCount={visible.length}
+              totalCount={totalForFilter || deliveries.length}
+              onExport={!isExporting && totalForFilter > 0 ? () => void handleExport() : undefined}
+            />
             <GroupedSections groups={groupedDeliveries}>
               {(rows) => (
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -1009,6 +968,18 @@ function DeliveriesPageContent() {
               </div>
             ) : null}
             <AppDataTable
+              toolbar={
+                <TableToolbar
+                  prefs={prefs}
+                  entity={t("title")}
+                  columns={toolbarColumns}
+                  rowKind="dynamic"
+                  entityList
+                  filteredCount={visible.length}
+                  totalCount={totalForFilter || deliveries.length}
+                  onExport={!isExporting && totalForFilter > 0 ? () => void handleExport() : undefined}
+                />
+              }
               columns={tableColumns}
               headerRowClassName="bg-primary/5 hover:bg-primary/5"
               empty={
@@ -1079,7 +1050,7 @@ function DeliveriesPageContent() {
                       </VisibleTableCell>
                       <VisibleTableCell columnId="driver" isVisible={isColumnVisible}>
                         <span className="inline-flex flex-wrap items-center gap-1.5 text-sm font-medium text-foreground">
-                          {delivery.driver_name}
+                          {delivery.driver_name ? <TableNameCell name={delivery.driver_name} /> : <EmptyCell />}
                           {delivery.gps_is_mocked ? (
                             <span
                               className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive"
@@ -1111,7 +1082,10 @@ function DeliveriesPageContent() {
                         isVisible={isColumnVisible}
                         className="text-sm text-muted-foreground"
                       >
-                        {delivery.zone_name}
+                        {delivery.zone_name ? delivery.zone_name : <EmptyCell />}
+                      </VisibleTableCell>
+                      <VisibleTableCell columnId="partner" isVisible={isColumnVisible}>
+                        {delivery.partner_name ? delivery.partner_name : <EmptyCell />}
                       </VisibleTableCell>
                       <VisibleTableCell
                         columnId="status"

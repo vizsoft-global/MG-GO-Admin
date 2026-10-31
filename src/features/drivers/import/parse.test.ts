@@ -22,6 +22,21 @@ describe("parseImportVehicleType", () => {
     assert.equal(parseImportVehicleType(""), null);
     assert.equal(parseImportVehicleType(null), null);
   });
+
+  it("keeps a type the catalog publishes instead of flattening it to bike or car", () => {
+    const catalog = [
+      { key: "bike", label_en: "Bike", label_ar: "دراجة" },
+      { key: "car", label_en: "Car", label_ar: "سيارة" },
+      { key: "van", label_en: "Van", label_ar: "فان" },
+      { key: "truck", label_en: "Truck", label_ar: "شاحنة" },
+    ];
+    assert.equal(parseImportVehicleType("Van", catalog), "van");
+    assert.equal(parseImportVehicleType("truck", catalog), "truck");
+    assert.equal(parseImportVehicleType("فان", catalog), "van");
+    // A type the catalog does not hold keeps the historical car alias.
+    assert.equal(parseImportVehicleType("Lorry", catalog), "car");
+    assert.equal(parseImportVehicleType("Bike", catalog), "bike");
+  });
 });
 
 describe("parseRiderCategory", () => {

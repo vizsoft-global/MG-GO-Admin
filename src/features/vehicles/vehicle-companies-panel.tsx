@@ -1,28 +1,22 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Building2, ExternalLink, Pencil, Plus } from "lucide-react";
+import { Building2, ExternalLink, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppFormSection } from "@/components/app";
+import { AppDataTable, AppDataTableRow, TableCell } from "@/components/app/app-data-table";
+import { groupHeaderProps, groupRows, GroupTableHeaderRow, useGroupedListView } from "@/components/app/app-list-controls";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
-import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { EmptyCell, TableNameCell, TableToolbar, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
 import { SegmentOption } from "@/components/app/toggle-chip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
 import { Link } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -95,20 +89,40 @@ export function VehicleCompaniesPanel({ companies }: { companies: VehicleCompany
 
   const activeCount = companies.filter((item) => item.is_active).length;
   const assignedVehicles = companies.reduce((sum, item) => sum + item.vehicle_count, 0);
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: t("colLabelEn"), locked: true },
+      { id: "labelAr", label: t("colLabelAr") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "vehicles", label: t("colVehicles") },
+      { id: "actions", label: t("colActions"), locked: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("vehicle-companies", columns);
+  const filtered = useMemo(() => {
+    const query = prefs.appliedQuery.trim().toLowerCase();
+    if (!query) return companies;
+    return companies.filter((item) =>
+      [item.label_en, item.label_ar, item.is_active ? t("active") : t("inactive"), String(item.vehicle_count)]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [companies, prefs.appliedQuery, t]);
+  const grouped = prefs.groupBy !== "none";
+  const sections = useMemo(
+    () =>
+      groupRows(filtered, grouped ? prefs.groupBy : "none", {
+        status: (item) => (item.is_active ? t("active") : t("inactive")),
+      }),
+    [filtered, grouped, prefs.groupBy, t],
+  );
+  const view = useGroupedListView(sections, grouped, prefs.groupBy);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
 
   return (
-    <AppFormSection
-      title={t("title")}
-      description={t("subtitle")}
-      action={
-        canManage ? (
-          <Button type="button" className="h-9" onClick={openNew}>
-            <Plus className="size-4" aria-hidden />
-            {t("add")}
-          </Button>
-        ) : undefined
-      }
-    >
+    <AppFormSection title={t("title")} description={t("subtitle")}>
       <div className="mb-3 grid gap-2 sm:grid-cols-3">
         {[
           { label: t("kpiTotal"), value: companies.length },
@@ -121,79 +135,61 @@ export function VehicleCompaniesPanel({ companies }: { companies: VehicleCompany
           </div>
         ))}
       </div>
-      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colLabelEn")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colLabelAr")}</TableHead>
-              <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
-              <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>{t("colVehicles")}</TableHead>
-              <TableHead className={`${TABLE_HEAD_CLASS} w-28 text-end`}>{t("colActions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {companies.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                  {t("empty")}
-                </TableCell>
-              </TableRow>
-            ) : (
-              companies.map((item) => (
-                <TableRow key={item.key}>
-                  <TableCell className="font-medium">
-                    <span className="inline-flex items-center gap-1.5">
-                      <Building2 className="size-3.5 text-muted-foreground" aria-hidden />
-                      {item.label_en}
-                    </span>
+      <AppDataTable
+        toolbar={
+          <TableToolbar
+            prefs={prefs}
+            entity={t("title")}
+            columns={columns}
+            rowKind="dynamic"
+            filteredCount={filtered.length}
+            totalCount={companies.length}
+            onAdd={canManage ? openNew : undefined}
+            addLabel={t("add")}
+          />
+        }
+        columns={shown.map((column) => ({
+          id: column.id,
+          label: column.label,
+          className: column.id === "vehicles" || column.id === "actions" ? "text-end" : undefined,
+        }))}
+        empty={filtered.length === 0 ? <p className="px-4 py-8 text-center text-sm text-muted-foreground">{t("empty")}</p> : undefined}
+      >
+        {view.sections.flatMap((section) => {
+          const header = grouped ? (
+            <GroupTableHeaderRow
+              key={`${section.key}-header`}
+              colSpan={Math.max(shown.length, 1)}
+              {...groupHeaderProps(section)}
+              onToggle={() => view.toggle(section.key)}
+              onStep={(dir) => view.step(section.key, dir)}
+            />
+          ) : null;
+          const body = section.visibleRows.map((item) => (
+            <AppDataTableRow key={item.key}>
+              {shown.map((column) => {
+                if (!isCompanyColumn(column.id)) return null;
+                return (
+                  <TableCell
+                    key={column.id}
+                    className={column.id === "vehicles" || column.id === "actions" ? "text-end" : undefined}
+                  >
+                    {companyCell(column.id, item, {
+                      active: t("active"),
+                      inactive: t("inactive"),
+                      viewVehicles: t("viewVehicles"),
+                      edit: t("edit"),
+                      canManage,
+                      onEdit: () => openEdit(item),
+                    })}
                   </TableCell>
-                  <TableCell>{item.label_ar || "—"}</TableCell>
-                  <TableCell>
-                    {item.is_active ? (
-                      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                        {t("active")}
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-muted-foreground">
-                        {t("inactive")}
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-end">
-                    <span className="inline-flex items-center justify-end gap-1.5 tabular-nums">
-                      {item.vehicle_count}
-                      {item.vehicle_count > 0 ? (
-                        <Link
-                          href={`/vehicles?company=${encodeURIComponent(item.key)}`}
-                          className="inline-flex items-center gap-0.5 text-xs text-primary hover:bg-primary/10"
-                        >
-                          {t("viewVehicles")}
-                          <ExternalLink className="size-3" aria-hidden />
-                        </Link>
-                      ) : null}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-end">
-                    {canManage ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-primary hover:bg-primary/10"
-                        onClick={() => openEdit(item)}
-                      >
-                        <Pencil className="size-3.5" aria-hidden />
-                        {t("edit")}
-                      </Button>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                );
+              })}
+            </AppDataTableRow>
+          ));
+          return header ? [header, ...body] : body;
+        })}
+      </AppDataTable>
 
       <Dialog open={draft !== null} onOpenChange={(open) => (open ? null : setDraft(null))}>
         <DialogContent showCloseButton closeOutside className="w-[min(560px,96vw)] overflow-visible p-0">
@@ -281,4 +277,78 @@ export function VehicleCompaniesPanel({ companies }: { companies: VehicleCompany
       </Dialog>
     </AppFormSection>
   );
+}
+
+const COMPANY_COLUMN_IDS = ["name", "labelAr", "status", "vehicles", "actions"] as const;
+type CompanyColumnId = (typeof COMPANY_COLUMN_IDS)[number];
+
+function isCompanyColumn(id: string): id is CompanyColumnId {
+  return (COMPANY_COLUMN_IDS as readonly string[]).includes(id);
+}
+
+function companyCell(
+  id: CompanyColumnId,
+  item: VehicleCompanyWithUsage,
+  labels: {
+    active: string;
+    inactive: string;
+    viewVehicles: string;
+    edit: string;
+    canManage: boolean;
+    onEdit: () => void;
+  },
+): ReactNode {
+  switch (id) {
+    case "name":
+      return (
+        <span className="inline-flex items-center gap-1.5 font-medium">
+          <Building2 className="size-3.5 text-muted-foreground" aria-hidden />
+          <TableNameCell name={item.label_en} />
+        </span>
+      );
+    case "labelAr":
+      return item.label_ar ? item.label_ar : <EmptyCell />;
+    case "status":
+      return item.is_active ? (
+        <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+          {labels.active}
+        </Badge>
+      ) : (
+        <Badge variant="outline" className="text-muted-foreground">
+          {labels.inactive}
+        </Badge>
+      );
+    case "vehicles":
+      return (
+        <span className="inline-flex items-center justify-end gap-1.5 tabular-nums">
+          {item.vehicle_count}
+          {item.vehicle_count > 0 ? (
+            <Link
+              href={`/vehicles?company=${encodeURIComponent(item.key)}`}
+              className="inline-flex items-center gap-0.5 text-xs text-primary hover:bg-primary/10"
+            >
+              {labels.viewVehicles}
+              <ExternalLink className="size-3" aria-hidden />
+            </Link>
+          ) : null}
+        </span>
+      );
+    case "actions":
+      return labels.canManage ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 text-primary hover:bg-primary/10"
+          onClick={labels.onEdit}
+        >
+          <Pencil className="size-3.5" aria-hidden />
+          {labels.edit}
+        </Button>
+      ) : null;
+    default: {
+      const _exhaustive: never = id;
+      return _exhaustive;
+    }
+  }
 }

@@ -18,8 +18,25 @@ import {
   UserPlus,
 } from "lucide-react";
 import { ToggleChip } from "@/components/app/toggle-chip";
-import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { AppEmptyState } from "@/components/app/app-empty-state";
+import {
+  AppDataTable,
+  AppDataTableEmpty,
+  AppDataTableRow,
+  TableCell,
+} from "@/components/app/app-data-table";
+import {
+  GroupTableHeaderRow,
+  groupRows,
+  useGroupedListView,
+} from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { Button } from "@/components/ui/button";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
@@ -127,6 +144,48 @@ export function DriverHistoryTab({ intakeId }: { intakeId: string }) {
     () => query.data?.pages.flatMap((page) => page.rows) ?? [],
     [query.data],
   );
+  const historyColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "when", label: t("colWhen") },
+      { id: "who", label: t("colWho"), locked: true },
+      { id: "what", label: t("colWhat"), categorical: true },
+      { id: "changes", label: t("colChanges") },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs(`driver-history-${intakeId}`, historyColumns);
+  const filteredRows = useMemo(() => {
+    const queryText = prefs.appliedQuery.trim().toLowerCase();
+    if (!queryText) return rows;
+    return rows.filter((row) =>
+      [
+        row.actor_name,
+        row.source,
+        ...row.changes.flatMap((change) => [change.field, change.before, change.after]),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(queryText),
+    );
+  }, [prefs.appliedQuery, rows]);
+  const groupedRows = useMemo(
+    () =>
+      groupRows(
+        filteredRows,
+        prefs.groupBy,
+        { what: (row) => row.source },
+        {},
+        "—",
+      ),
+    [filteredRows, prefs.groupBy],
+  );
+  const listView = useGroupedListView(
+    groupedRows,
+    prefs.groupBy !== "none",
+    `${prefs.groupBy}\u0001${prefs.appliedQuery}\u0001${source}`,
+  );
+  const shownColumns = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
 
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm">
@@ -171,56 +230,100 @@ export function DriverHistoryTab({ intakeId }: { intakeId: string }) {
           />
         </div>
       ) : (
-        <div className="max-h-[520px] overflow-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 bg-muted/80">
-              <tr>
-                <th className={`${TABLE_HEAD_CLASS} px-3 py-2`}>{t("colWhen")}</th>
-                <th className={`${TABLE_HEAD_CLASS} px-3 py-2`}>{t("colWho")}</th>
-                <th className={`${TABLE_HEAD_CLASS} px-3 py-2`}>{t("colWhat")}</th>
-                <th className={`${TABLE_HEAD_CLASS} px-3 py-2`}>{t("colChanges")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} className="border-t border-border/60 align-top">
-                  <td className="whitespace-nowrap px-3 py-2 tabular-nums text-muted-foreground">
-                    {formatWhen(row.created_at, locale)}
-                  </td>
-                  <td className="px-3 py-2 font-medium text-foreground">{row.actor_name}</td>
-                  <td className="px-3 py-2">
-                    <span className="inline-flex rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-xs font-semibold">
-                      {DRIVER_CHANGE_SOURCES.includes(row.source)
-                        ? t(`source.${row.source}`)
-                        : row.source}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">
-                    {row.changes.length === 0 ? (
-                      <span className="text-muted-foreground">
-                        {typeof row.context.note === "string" ? row.context.note : "—"}
-                      </span>
-                    ) : (
-                      <ul className="space-y-0.5">
-                        {row.changes.map((change) => (
-                          <li key={change.field} className="flex flex-wrap gap-x-2">
-                            <span className="font-medium text-foreground">
-                              {fieldLabel(change.field, t)}
+        <div>
+          <AppDataTable
+            toolbar={
+              <TableToolbar
+                prefs={prefs}
+                entity={t("colWho")}
+                columns={historyColumns}
+                rowKind="dynamic"
+                filteredCount={filteredRows.length}
+                totalCount={rows.length}
+              />
+            }
+            columns={shownColumns.map((column) => ({ id: column.id, label: column.label }))}
+            empty={
+              filteredRows.length === 0 ? (
+                <AppDataTableEmpty>{t("emptyTitle")}</AppDataTableEmpty>
+              ) : undefined
+            }
+          >
+            {listView.sections.flatMap((section) => [
+              section.showHeader ? (
+                <GroupTableHeaderRow
+                  key={`g-${section.key}`}
+                  colSpan={shownColumns.length}
+                  label={section.label}
+                  total={section.total}
+                  open={section.open}
+                  page={section.page}
+                  showPager={section.showPager}
+                  onToggle={() => listView.toggle(section.key)}
+                  onStep={(dir) => listView.step(section.key, dir)}
+                />
+              ) : null,
+              ...section.visibleRows.map((row) => (
+                <AppDataTableRow key={row.id} className="align-top">
+                  {shownColumns.map((column) => {
+                    switch (column.id) {
+                      case "when":
+                        return (
+                          <TableCell key={column.id} className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+                            {formatWhen(row.created_at, locale)}
+                          </TableCell>
+                        );
+                      case "who":
+                        return (
+                          <TableCell key={column.id} className="text-xs">
+                            <TableNameCell name={row.actor_name} />
+                          </TableCell>
+                        );
+                      case "what":
+                        return (
+                          <TableCell key={column.id} className="text-xs">
+                            <span className="inline-flex rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-xs font-semibold">
+                              {DRIVER_CHANGE_SOURCES.includes(row.source)
+                                ? t(`source.${row.source}`)
+                                : row.source}
                             </span>
-                            <span className="text-muted-foreground">
-                              {change.before ?? "—"}
-                            </span>
-                            <span className="text-muted-foreground">→</span>
-                            <span className="text-foreground">{change.after ?? "—"}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                          </TableCell>
+                        );
+                      case "changes":
+                        return (
+                          <TableCell key={column.id} className="text-xs">
+                            {row.changes.length === 0 ? (
+                              typeof row.context.note === "string" && row.context.note.trim() ? (
+                                <span className="text-muted-foreground">{row.context.note}</span>
+                              ) : (
+                                <EmptyCell />
+                              )
+                            ) : (
+                              <ul className="space-y-0.5">
+                                {row.changes.map((change) => (
+                                  <li key={change.field} className="flex flex-wrap gap-x-2">
+                                    <span className="font-medium text-foreground">
+                                      {fieldLabel(change.field, t)}
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {change.before ?? "—"}
+                                    </span>
+                                    <span className="text-muted-foreground">→</span>
+                                    <span className="text-foreground">{change.after ?? "—"}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </TableCell>
+                        );
+                      default:
+                        return null;
+                    }
+                  })}
+                </AppDataTableRow>
+              )),
+            ])}
+          </AppDataTable>
           {query.hasNextPage ? (
             <div className="border-t border-border p-3 text-center">
               <Button

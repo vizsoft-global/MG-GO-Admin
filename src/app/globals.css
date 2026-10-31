@@ -147,10 +147,18 @@ html[data-font="plus-jakarta-sans"] {
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body);
   }
   html {
     @apply font-sans;
   }
+  h1, h2, h3 {
+    font-family: var(--font-display);
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Reduced motion: keep opacity/color transitions, strip transform-based motion.

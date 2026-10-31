@@ -5,6 +5,8 @@ import { useLocale, useTranslations } from "next-intl";
 import { Calculator, Loader2, Plus, RotateCcw, Save, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { TABLE_HEAD_CLASS } from "@/components/app";
+import { useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { ListToolbar, rowMatches } from "@/features/roster/table-kit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -71,6 +73,24 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
   const [sampleRejected, setSampleRejected] = useState("2");
   const [sampleCancelled, setSampleCancelled] = useState("0");
   const [sampleInvalidDays, setSampleInvalidDays] = useState("0");
+  const bandColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "from", label: t("bands.from"), locked: true },
+      { id: "to", label: t("bands.to") },
+      { id: "rate", label: t("bands.rate") },
+      { id: "actions", label: t("bands.add"), locked: true },
+    ],
+    [t],
+  );
+  const previewColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "line", label: t("preview.base"), locked: true },
+      { id: "amount", label: t("preview.final"), locked: true },
+    ],
+    [t],
+  );
+  const bandPrefs = useTablePrefs("payroll.payBands", bandColumns);
+  const previewPrefs = useTablePrefs("payroll.payPreview", previewColumns);
 
   useEffect(() => {
     let alive = true;
@@ -296,13 +316,17 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
                 <h3 className="text-sm font-semibold">{t("bands.title")}</h3>
                 <p className="text-xs text-muted-foreground">{t("bands.hint")}</p>
               </div>
-              {canManage ? (
-                <Button type="button" variant="outline" className="h-9" onClick={addBand}>
-                  <Plus className="size-3.5" />
-                  {t("bands.add")}
-                </Button>
-              ) : null}
             </div>
+            <ListToolbar
+              prefs={bandPrefs}
+              entity={t("bands.title")}
+              columns={bandColumns}
+              rowKind="dynamic"
+              filteredCount={plan.bands.filter((band) => rowMatches(bandPrefs.appliedQuery, [band.from, band.to, band.rate])).length}
+              totalCount={plan.bands.length}
+              onAdd={canManage ? addBand : undefined}
+              addLabel={t("bands.add")}
+            />
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="border-b border-border">
@@ -313,7 +337,9 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
                 </tr>
               </thead>
               <tbody>
-                {plan.bands.map((band, index) => (
+                {plan.bands.map((band, index) => {
+                  if (!rowMatches(bandPrefs.appliedQuery, [band.from, band.to, band.rate])) return null;
+                  return (
                   <tr key={`band-${index}`} className="border-b border-border/60">
                     <td className="px-2 py-2">
                       <Input
@@ -359,7 +385,8 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
                       ) : null}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -498,6 +525,15 @@ export function PayPlanEditor({ canManage }: { canManage: boolean }) {
               <span className="text-xs">{t("currency")}</span>
             </div>
 
+            <ListToolbar
+              prefs={previewPrefs}
+              entity={t("preview.final")}
+              columns={previewColumns}
+              rowKind="fixed"
+              fixedRows={4}
+              filteredCount={preview.bands.length + 3}
+              totalCount={preview.bands.length + 3}
+            />
             <table className="w-full border-collapse text-xs">
               <tbody>
                 <tr className="border-b border-border/60">

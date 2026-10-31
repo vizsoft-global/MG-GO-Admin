@@ -1,16 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Ban, CheckCircle2, ClipboardList, Clock, Download, Loader2, Search } from "lucide-react";
+import { Ban, CheckCircle2, ClipboardList, Clock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { GroupedSections, groupRows } from "@/components/app/app-list-controls";
 import {
   AppDataTable,
   AppDataTableEmpty,
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
+import { VisibleTableCell } from "@/components/app/visible-table-cell";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Button } from "@/components/ui/button";
@@ -49,6 +57,49 @@ const STATUS_TONE: Record<OrderExceptionStatus, string> = {
   rejected: "border-rose-200 bg-rose-50 text-rose-700",
 };
 
+const ORDER_EXCEPTION_COLUMNS = [
+  "rider",
+  "order",
+  "kind",
+  "source",
+  "reason",
+  "proof",
+  "day",
+  "status",
+  "reviewed",
+] as const;
+
+type OrderExceptionColumnId = (typeof ORDER_EXCEPTION_COLUMNS)[number];
+
+const CELL_CLASS: Record<OrderExceptionColumnId, string> = {
+  rider: "max-w-[180px]",
+  order: "font-mono text-xs",
+  kind: "text-xs",
+  source: "text-xs",
+  reason: "max-w-[220px] truncate text-xs",
+  proof: "text-xs tabular-nums",
+  day: "text-xs tabular-nums",
+  status: "",
+  reviewed: "max-w-[140px] truncate text-xs text-muted-foreground",
+};
+
+function isOrderExceptionColumnId(id: string): id is OrderExceptionColumnId {
+  switch (id) {
+    case "rider":
+    case "order":
+    case "kind":
+    case "source":
+    case "reason":
+    case "proof":
+    case "day":
+    case "status":
+    case "reviewed":
+      return true;
+    default:
+      return false;
+  }
+}
+
 function statusLabel(
   t: ReturnType<typeof useTranslations<"pages.orderExceptions">>,
   status: OrderExceptionStatus,
@@ -60,13 +111,27 @@ function statusLabel(
 
 export function OrderExceptionsPageShell() {
   const t = useTranslations("pages.orderExceptions");
+  const toolbarColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "rider", label: t("colRider"), locked: true },
+      { id: "order", label: t("colOrder") },
+      { id: "kind", label: t("colKind") },
+      { id: "source", label: t("colSource") },
+      { id: "reason", label: t("colReason") },
+      { id: "proof", label: t("colProof") },
+      { id: "day", label: t("colDay") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "reviewed", label: t("colReviewed") },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("order-exceptions", toolbarColumns);
+  const appliedSearch = prefs.appliedQuery.trim();
   const [tab, setTab] = useState<OrderExceptionStatusFilter>("pending");
   const [kind, setKind] = useState<OrderExceptionKindFilter>("all");
   const [source, setSource] = useState<OrderExceptionSourceFilter>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
   const [cursors, setCursors] = useState<Array<string | null>>([null]);
   const [selected, setSelected] = useState<OrderExceptionRow | null>(null);
@@ -75,7 +140,7 @@ export function OrderExceptionsPageShell() {
     () => ({ from: from || undefined, to: to || undefined }),
     [from, to],
   );
-  const slow = Boolean(debouncedSearch || range.from || range.to);
+  const slow = Boolean(appliedSearch || range.from || range.to);
   const filters = useMemo(
     () => ({
       status: tab,
@@ -83,12 +148,12 @@ export function OrderExceptionsPageShell() {
       source,
       ...(range.from ? { from: range.from } : {}),
       ...(range.to ? { to: range.to } : {}),
-      ...(debouncedSearch ? { search: debouncedSearch } : {}),
+      ...(appliedSearch ? { search: appliedSearch } : {}),
       limit: ORDER_EXCEPTION_PAGE_SIZE,
       offset: slow ? page * ORDER_EXCEPTION_PAGE_SIZE : 0,
       cursor: slow ? null : (cursors[page] ?? null),
     }),
-    [tab, kind, source, range.from, range.to, debouncedSearch, page, cursors, slow],
+    [tab, kind, source, range.from, range.to, appliedSearch, page, cursors, slow],
   );
 
   const list = useOrderExceptionsList(filters);
@@ -117,7 +182,7 @@ export function OrderExceptionsPageShell() {
   const counts = summary.data;
   const pageStart = page * ORDER_EXCEPTION_PAGE_SIZE;
   const hasFilters =
-    kind !== "all" || source !== "all" || Boolean(from) || Boolean(to) || Boolean(debouncedSearch);
+    kind !== "all" || source !== "all" || Boolean(from) || Boolean(to) || Boolean(appliedSearch);
 
   function resetPage() {
     setPage(0);
@@ -134,6 +199,14 @@ export function OrderExceptionsPageShell() {
     });
   }, [nextCursor, page, slow]);
 
+  const appliedSearchRef = useRef(appliedSearch);
+  useEffect(() => {
+    if (appliedSearchRef.current === appliedSearch) return;
+    appliedSearchRef.current = appliedSearch;
+    setPage(0);
+    setCursors([null]);
+  }, [appliedSearch]);
+
   const kindItems = [
     { value: "all", label: t("kindAll") },
     { value: "rejected", label: t("kindRejected") },
@@ -147,12 +220,91 @@ export function OrderExceptionsPageShell() {
 
   const errorCode = list.error ? orderExceptionErrorMessage(list.error) : null;
 
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        rows,
+        prefs.groupBy,
+        { status: (row) => row.status },
+        {
+          pending: t("statusPending"),
+          approved: t("statusApproved"),
+          rejected: t("statusRejected"),
+        },
+        "—",
+      ),
+    [prefs.groupBy, rows, t],
+  );
+  const tableColumns = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+
+  function orderCell(columnId: OrderExceptionColumnId, row: OrderExceptionRow): ReactNode {
+    switch (columnId) {
+      case "rider":
+        return (
+          <>
+            <TableNameCell name={row.driver_name} />
+            {row.driver_code ? (
+              <p className="truncate font-mono text-xs text-muted-foreground">{row.driver_code}</p>
+            ) : null}
+          </>
+        );
+      case "order":
+        return row.order_id ? `#${row.order_id}` : "—";
+      case "kind":
+        switch (row.kind) {
+          case "rejected":
+            return t("kindRejected");
+          case "cancelled":
+            return t("kindCancelled");
+          default: {
+            const _never: never = row.kind;
+            return _never;
+          }
+        }
+      case "source":
+        switch (row.source) {
+          case "driver_declined":
+            return t("sourceDriver");
+          case "store_or_customer":
+            return t("sourceStore");
+          default: {
+            const _never: never = row.source;
+            return _never;
+          }
+        }
+      case "reason":
+        return row.reason ?? "—";
+      case "proof":
+        return row.proof_count > 0 ? t("proofCount", { count: row.proof_count }) : t("proofNone");
+      case "day":
+        return row.day ?? "—";
+      case "status":
+        return (
+          <span
+            className={cn(
+              "inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold",
+              STATUS_TONE[row.status],
+            )}
+          >
+            {statusLabel(t, row.status)}
+          </span>
+        );
+      case "reviewed":
+        return row.reviewed_by_name ?? "—";
+      default: {
+        const _never: never = columnId;
+        return _never;
+      }
+    }
+  }
+
   /**
    * The sheet is written from the same controls the list is showing, so an export
    * can never cover a different window than the one on screen. Columns come from the
    * `col*` keys the table already uses — a header cannot drift from its column.
    */
   function handleExport() {
+    if (exportRows.isPending) return;
     exportRows.mutate(filters, {
       onSuccess: (result) => {
         if (result.rows.length === 0) {
@@ -168,7 +320,7 @@ export function OrderExceptionsPageShell() {
             source,
             from: range.from,
             to: range.to,
-            search: debouncedSearch || undefined,
+            search: appliedSearch || undefined,
           },
           matchedRows: result.matched,
           labels: {
@@ -254,24 +406,6 @@ export function OrderExceptionsPageShell() {
       <AppListCard
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[180px] flex-1">
-              <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                onBlur={() => {
-                  setDebouncedSearch(search.trim());
-                  resetPage();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter") return;
-                  setDebouncedSearch(search.trim());
-                  resetPage();
-                }}
-                placeholder={t("searchPlaceholder")}
-                className="h-9 ps-8"
-              />
-            </div>
             <Select
               items={kindItems}
               value={kind}
@@ -332,23 +466,21 @@ export function OrderExceptionsPageShell() {
               }}
               className="h-9 w-[140px]"
             />
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9"
-              disabled={exportRows.isPending}
-              onClick={handleExport}
-            >
-              {exportRows.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Download className="h-3.5 w-3.5" />
-              )}
-              {exportRows.isPending ? t("exporting") : t("export")}
-            </Button>
           </div>
         }
       >
+        <div className="border-b border-border">
+          <TableToolbar
+            prefs={prefs}
+            entity={t("title")}
+            columns={toolbarColumns}
+            rowKind="dynamic"
+            entityList
+            filteredCount={total}
+            totalCount={total}
+            onExport={handleExport}
+          />
+        </div>
         {list.isLoading ? (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -367,58 +499,76 @@ export function OrderExceptionsPageShell() {
             </p>
             <p className="mt-1 text-xs text-muted-foreground">{t("emptyHint")}</p>
           </AppDataTableEmpty>
+        ) : prefs.view === "grid" ? (
+          <div className="p-4">
+            <GroupedSections groups={grouped}>
+              {(groupRowsList) => (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {groupRowsList.map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => setSelected(row)}
+                      className="cursor-pointer rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
+                    >
+                      <TableNameCell name={row.driver_name} />
+                      <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                        {row.order_id ? `#${row.order_id}` : "—"}
+                      </p>
+                      <div className="mt-2">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold",
+                            STATUS_TONE[row.status],
+                          )}
+                        >
+                          {statusLabel(t, row.status)}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </GroupedSections>
+          </div>
         ) : (
           <AppDataTable
             stickyHeader
-            columns={[
-              { id: "rider", label: t("colRider") },
-              { id: "order", label: t("colOrder") },
-              { id: "kind", label: t("colKind") },
-              { id: "source", label: t("colSource") },
-              { id: "reason", label: t("colReason") },
-              { id: "proof", label: t("colProof") },
-              { id: "day", label: t("colDay") },
-              { id: "status", label: t("colStatus") },
-              { id: "reviewed", label: t("colReviewed") },
-            ]}
+            columns={tableColumns.map((column) => ({ id: column.id, label: column.label }))}
           >
-            {rows.map((row) => (
-              <AppDataTableRow key={row.id} onClick={() => setSelected(row)}>
-                <TableCell className="max-w-[180px]">
-                  <p className="truncate text-sm font-medium">{row.driver_name ?? "—"}</p>
-                  <p className="truncate font-mono text-xs text-muted-foreground">
-                    {row.driver_code ?? ""}
-                  </p>
-                </TableCell>
-                <TableCell className="font-mono text-xs">{row.order_id ? `#${row.order_id}` : "—"}</TableCell>
-                <TableCell className="text-xs">
-                  {row.kind === "rejected" ? t("kindRejected") : t("kindCancelled")}
-                </TableCell>
-                <TableCell className="text-xs">
-                  {row.source === "driver_declined" ? t("sourceDriver") : t("sourceStore")}
-                </TableCell>
-                <TableCell className="max-w-[220px] truncate text-xs">{row.reason ?? "—"}</TableCell>
-                <TableCell className="text-xs tabular-nums">
-                  {row.proof_count > 0
-                    ? t("proofCount", { count: row.proof_count })
-                    : t("proofNone")}
-                </TableCell>
-                <TableCell className="text-xs tabular-nums">{row.day ?? "—"}</TableCell>
-                <TableCell>
-                  <span
-                    className={cn(
-                      "inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold",
-                      STATUS_TONE[row.status],
-                    )}
-                  >
-                    {statusLabel(t, row.status)}
-                  </span>
-                </TableCell>
-                <TableCell className="max-w-[140px] truncate text-xs text-muted-foreground">
-                  {row.reviewed_by_name ?? "—"}
-                </TableCell>
-              </AppDataTableRow>
-            ))}
+            {grouped.flatMap((group) => [
+              ...(prefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`group-${group.key}`} className="hover:bg-transparent">
+                      <TableCell
+                        colSpan={tableColumns.length}
+                        className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
+                      >
+                        {group.label}
+                        <span className="ms-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
+                          {group.rows.length}
+                        </span>
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => (
+                <AppDataTableRow key={row.id} onClick={() => setSelected(row)}>
+                  {tableColumns.map((column) =>
+                    isOrderExceptionColumnId(column.id) ? (
+                      <VisibleTableCell
+                        key={column.id}
+                        columnId={column.id}
+                        isVisible={prefs.isVisible}
+                        className={CELL_CLASS[column.id]}
+                      >
+                        {orderCell(column.id, row)}
+                      </VisibleTableCell>
+                    ) : null,
+                  )}
+                </AppDataTableRow>
+              )),
+            ])}
           </AppDataTable>
         )}
         {total > ORDER_EXCEPTION_PAGE_SIZE || page > 0 ? (

@@ -9,7 +9,6 @@ import {
   Bike,
   Car,
   CircleDot,
-  Download,
   ExternalLink,
   FilterX,
   Loader2,
@@ -25,7 +24,6 @@ import {
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
-  AppListControls,
   FlatListPager,
   GroupedSections,
   GroupTableHeaderRow,
@@ -33,9 +31,13 @@ import {
   scopeSelectionState,
   toggleScopeSelection,
   useGroupedListView,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { useRouter } from "@/i18n/navigation";
 import { Link } from "@/i18n/navigation";
 import {
@@ -157,6 +159,18 @@ export function VehiclesPageShell({
   tab?: string;
 }) {
   const t = useTranslations("pages.vehicles");
+  const toolbarColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "plate", label: t("colPlate"), locked: true },
+      { id: "driver", label: t("colDriver"), locked: true },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "type", label: t("colType"), categorical: true },
+      { id: "zone", label: t("fieldZone"), categorical: true },
+      { id: "project", label: t("colProject"), categorical: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("vehicles", toolbarColumns);
   const withHub = useFleetBreadcrumbs();
   const locale = useLocale();
   const { can } = useAuth();
@@ -170,9 +184,6 @@ export function VehiclesPageShell({
   const { data: useTypes = [] } = useVehicleUseTypes();
   const { data: companies = [] } = useVehicleCompanies();
   const searchParams = useSearchParams();
-  const [search, setSearch] = useState("");
-  const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs("vehicles");
   const [projectFilter, setProjectFilter] = useState<VehicleProjectFilter>("all");
   const [statusFilter, setStatusFilter] = useState<VehicleStatusFilter>("all");
   const [carTypeFilter, setCarTypeFilter] = useState<VehicleCarTypeFilter>("all");
@@ -196,7 +207,7 @@ export function VehiclesPageShell({
     carType: carTypeFilter,
     typeOfUse: typeOfUseFilter,
     kind: kindFilter,
-    search,
+    search: prefs.appliedQuery,
     project: projectFilter,
     assignment: assignmentFilter,
     replacement: replacementFilter,
@@ -216,11 +227,13 @@ export function VehiclesPageShell({
     useTableColumnVisibility("dpd:vehicles:list-columns", columnOptions);
 
   const replaceQuery = (next: { add?: boolean; tab?: VehicleListTab }) => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams.toString());
     const nextTab = next.tab ?? activeTab;
     const nextAdd = next.add ?? addOpen;
-    if (nextTab !== "all") params.set("tab", nextTab);
+    if (nextTab === "all") params.delete("tab");
+    else params.set("tab", nextTab);
     if (nextAdd) params.set("add", "1");
+    else params.delete("add");
     const qs = params.toString();
     router.replace(qs ? `/vehicles?${qs}` : "/vehicles");
   };
@@ -237,7 +250,7 @@ export function VehiclesPageShell({
           vehicleMatchesProject(row, projectFilter) &&
           vehicleMatchesAssignment(row, assignmentFilter) &&
           vehicleMatchesReplacement(row, replacementFilter) &&
-          vehicleMatchesSearch(row, search, "all"),
+          vehicleMatchesSearch(row, prefs.appliedQuery, "all"),
       ),
     [
       activeTab,
@@ -245,7 +258,7 @@ export function VehiclesPageShell({
       carTypeFilter,
       kindFilter, projectFilter,
       replacementFilter,
-      search,
+      prefs.appliedQuery,
       statusFilter,
       typeOfUseFilter,
       vehicles,
@@ -264,6 +277,8 @@ export function VehiclesPageShell({
         prefs.groupBy,
         {
           status: (row) => row.status,
+          type: (row) => row.vehicle_type_label || row.vehicle_type_key,
+          zone: (row) => row.assigned_zone_name,
           project: (row) => row.assigned_project_key,
         },
         {},
@@ -286,7 +301,7 @@ export function VehiclesPageShell({
     setCarTypeFilter(next.carType);
     setTypeOfUseFilter(next.typeOfUse);
     setKindFilter(next.kind);
-    setSearch(next.search);
+    prefs.setQuery(next.search);
     setProjectFilter(next.project);
     setAssignmentFilter(next.assignment);
     setReplacementFilter(next.replacement);
@@ -294,7 +309,7 @@ export function VehiclesPageShell({
   };
 
   const clearAll = () => {
-    setSearch("");
+    prefs.setQuery("");
     setProjectFilter("all");
     setStatusFilter("all");
     setCarTypeFilter("all");
@@ -316,7 +331,7 @@ export function VehiclesPageShell({
     (kindFilter !== "all" ? 1 : 0) +
     (assignmentFilter !== "all" ? 1 : 0) +
     (replacementFilter !== "all" ? 1 : 0);
-  const activeFilterCount = countActiveFilters(columnFilters) + (search ? 1 : 0) + kpiExtras;
+  const activeFilterCount = countActiveFilters(columnFilters) + (prefs.appliedQuery ? 1 : 0) + kpiExtras;
   const headerLabels = useMemo(
     () => ({
       search: t("colFilterSearch"),
@@ -353,6 +368,7 @@ export function VehiclesPageShell({
       if (column === "project") {
         if (value === "keeta") return t("projectKeeta");
         if (value === "americana") return t("projectAmericana");
+        if (value === "five_guys") return t("projectFiveGuys");
         return value;
       }
       if (column === "replacement") return value === "yes" ? t("replacementBanner") : t("replacementNo");
@@ -471,22 +487,22 @@ export function VehiclesPageShell({
 
       <AppListCard
         toolbar={
-          <AppListControls
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder={t("searchPlaceholder")}
-            searchAriaLabel={t("searchPlaceholder")}
-            clearSearchLabel={labels.clearSearch}
-            groupByOptions={[labels.group.none, labels.group.status, labels.group.project]}
-            groupBy={prefs.groupBy}
-            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
-            groupByLabel={labels.groupBy}
-            viewMode={prefs.viewMode}
-            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
-            tableViewLabel={labels.viewTable}
-            cardsViewLabel={labels.viewCards}
-            filterSlot={
-              <>
+          <>
+            <TableToolbar
+              prefs={prefs}
+              entity={t("title")}
+              columns={toolbarColumns}
+              rowKind="dynamic"
+              entityList
+              filteredCount={visible.length}
+              totalCount={vehicles.length}
+              onExport={
+                !isLoading && visible.length > 0 ? () => downloadVehicleListXlsx(visible) : undefined
+              }
+              onAdd={canCreate ? () => replaceQuery({ add: true }) : undefined}
+              addLabel={t("addVehicle")}
+            />
+            <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
                 <Select
                   items={tabSelectItems}
                   value={activeTab}
@@ -526,16 +542,6 @@ export function VehiclesPageShell({
                   onReset={reset}
                   hiddenCount={hiddenToggleableCount}
                 />
-              </>
-            }
-            trailing={
-            <div className="flex shrink-0 items-center gap-1.5">
-              {!isLoading ? (
-                <p className="hidden text-xs tabular-nums text-muted-foreground lg:inline">
-                  {t("showingCount", { shown: visible.length, total: vehicles.length })}
-                </p>
-              ) : null}
-              <div className="hidden h-6 w-px shrink-0 bg-border sm:block" aria-hidden />
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -557,25 +563,6 @@ export function VehiclesPageShell({
                 />
                 <TooltipContent>{t("refresh")}</TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
-                      onClick={() => downloadVehicleListXlsx(visible)}
-                      disabled={isLoading || visible.length === 0}
-                      aria-label={t("export")}
-                    >
-                      <Download className="h-4 w-4" />
-                      <span className="ms-1.5 hidden md:inline">{t("export")}</span>
-                    </Button>
-                  }
-                />
-                <TooltipContent>{t("export")}</TooltipContent>
-              </Tooltip>
               {canManage ? (
                 <Tooltip>
                   <TooltipTrigger
@@ -596,20 +583,8 @@ export function VehiclesPageShell({
                   <TooltipContent>{t("bulkImport")}</TooltipContent>
                 </Tooltip>
               ) : null}
-              {canCreate ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-9 shrink-0 cursor-pointer rounded-lg px-2.5"
-                  onClick={() => replaceQuery({ add: true })}
-                >
-                  <Plus className="h-4 w-4" />
-                  <span className="ms-1.5 hidden sm:inline">{t("addVehicle")}</span>
-                </Button>
-              ) : null}
             </div>
-            }
-          />
+          </>
         }
       >
         {isLoading ? (
@@ -633,7 +608,7 @@ export function VehiclesPageShell({
             ) : null}
           </div>
         ) : (
-          prefs.viewMode === "cards" ? (
+          prefs.view === "grid" ? (
           <CardContent className="p-4">
             {canManage && selectedRows.length > 0 ? (
               <VehicleBulkBar rows={selectedRows} onDone={() => setSelectedIds(new Set())} />
@@ -648,10 +623,10 @@ export function VehiclesPageShell({
                       onClick={() => router.push(`/vehicles/${row.id}`)}
                       className="cursor-pointer rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/30"
                     >
-                      <p className="truncate text-sm font-semibold text-foreground">{row.reg_number}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {row.assigned_driver_name || "—"}
-                      </p>
+                      <TableNameCell name={row.reg_number || row.bike_id} />
+                      <div className="mt-0.5">
+                        <TableNameCell name={row.assigned_driver_name} />
+                      </div>
                       <div className="mt-2">
                         <VehicleStatusBadge status={row.status} />
                       </div>
@@ -764,7 +739,7 @@ function VehicleRow({
         </TableCell>
       ) : null}
       <VisibleTableCell columnId="plate" isVisible={isVisible} className="whitespace-nowrap">
-        <p className="font-medium">{row.reg_number || row.bike_id}</p>
+        <TableNameCell name={row.reg_number || row.bike_id} />
         <div className="mt-0.5 flex flex-wrap items-center gap-1">
           <VehicleStatusBadge status={row.status} />
           {row.assigned_on_duty ? (
@@ -830,9 +805,10 @@ function VehicleRow({
         {row.location_text ?? "—"}
       </VisibleTableCell>
       <VisibleTableCell columnId="driver" isVisible={isVisible} className="whitespace-nowrap">
-        {row.assigned_driver_name
-          ? `${row.assigned_driver_name}${row.assigned_employee_id ? ` · ${row.assigned_employee_id}` : ""}`
-          : "—"}
+        <TableNameCell name={row.assigned_driver_name} />
+        {row.assigned_employee_id ? (
+          <p className="text-xs text-muted-foreground">{row.assigned_employee_id}</p>
+        ) : null}
       </VisibleTableCell>
       <VisibleTableCell columnId="empCompany" isVisible={isVisible} className="whitespace-nowrap">
         {row.assigned_partner_name ?? "—"}

@@ -14,6 +14,14 @@ describe("vehicleSpriteKey", () => {
     assert.equal(vehicleSpriteKey("scooter"), DEFAULT_VEHICLE_TYPE_KEY);
     assert.equal(vehicleSpriteKey(null), DEFAULT_VEHICLE_TYPE_KEY);
   });
+
+  it("draws the bike sprite for a type the catalog added", () => {
+    // Adding a type to `vehicle_types` must not need a new map sprite. Anything
+    // the atlas does not know falls back to bike rather than drawing nothing.
+    for (const key of ["truck", "cycle", "pickup", "forklift"]) {
+      assert.equal(vehicleSpriteKey(key), DEFAULT_VEHICLE_TYPE_KEY, key);
+    }
+  });
 });
 
 describe("vehicleTypeFromDriverJoin", () => {

@@ -3,25 +3,14 @@
 import { useCallback, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  Download,
-  Filter,
-  Loader2,
-  Pencil,
-  Plus,
-  RefreshCw,
-  X,
-} from "lucide-react";
+import { Filter, Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
-  AppListControls,
   FlatListPager,
   GroupedSections,
   fieldSearchMatch,
   groupRows,
   useGroupedListView,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
 import {
   AppDataTable,
@@ -29,6 +18,13 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -115,9 +111,18 @@ function PartnersPageContent() {
   const queryClient = useQueryClient();
 
   const { data: partners = [], isLoading, refetch } = usePartnersList();
-  const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs("partners");
-  const [search, setSearch] = useState("");
+  const toolbarColumns = useMemo((): TableToolbarColumn[] => {
+    const cols: TableToolbarColumn[] = [
+      { id: "logo", label: t("colLogo") },
+      { id: "partner", label: t("colPartner"), locked: true },
+      { id: "description", label: t("colDescription") },
+      { id: "drivers", label: t("colDrivers") },
+      { id: "created", label: t("colCreated") },
+    ];
+    if (canManage) cols.push({ id: "actions", label: t("colActions") });
+    return cols;
+  }, [canManage, t]);
+  const tablePrefs = useTablePrefs("partners", toolbarColumns);
   const [driversFilter, setDriversFilter] = useState<DriversFilter>("all");
   const [logoFilter, setLogoFilter] = useState<LogoFilter>("all");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -129,7 +134,7 @@ function PartnersPageContent() {
   const visible = useMemo(() => {
     return partners.filter((p) => {
       if (
-        !fieldSearchMatch(p, search, {
+        !fieldSearchMatch(p, tablePrefs.appliedQuery, {
           name: (row) => row.name,
           slug: (row) => row.slug,
           description: (row) => row.description,
@@ -143,7 +148,7 @@ function PartnersPageContent() {
       if (logoFilter === "noLogo" && p.logo_url) return false;
       return true;
     });
-  }, [partners, search, driversFilter, logoFilter]);
+  }, [partners, tablePrefs.appliedQuery, driversFilter, logoFilter]);
   const grouped = useMemo(
     () => groupRows(visible, "none", {}, {}, "—"),
     [visible],
@@ -151,7 +156,7 @@ function PartnersPageContent() {
   const listView = useGroupedListView(
     grouped,
     false,
-    `${search}\u0001${driversFilter}\u0001${logoFilter}`,
+    `${tablePrefs.appliedQuery}\u0001${driversFilter}\u0001${logoFilter}`,
   );
 
   const invalidatePartners = useCallback(() => {
@@ -208,24 +213,43 @@ function PartnersPageContent() {
     !isLoading && partners.length > 0 && visible.length === 0;
   const showEmptyAll = !isLoading && partners.length === 0;
 
-  const tableColumns = useMemo(() => {
-    const cols = [
-      { id: "logo", label: t("colLogo"), className: "w-14" },
-      { id: "partner", label: t("colPartner") },
-      { id: "description", label: t("colDescription"), className: "hidden md:table-cell" },
-      { id: "drivers", label: t("colDrivers") },
-      { id: "created", label: t("colCreated"), className: "hidden sm:table-cell" },
-    ];
-    if (canManage) {
-      cols.push({ id: "actions", label: t("colActions"), className: "w-12 text-end" });
-    }
-    return cols;
-  }, [canManage, t]);
+  const tableColumns = tablePrefs.orderedColumns
+    .filter((column) => tablePrefs.isVisible(column.id))
+    .map((column) => ({
+      id: column.id,
+      label: column.label,
+      className: column.id === "logo" ? "w-14" : column.id === "actions" ? "w-12 text-end" : undefined,
+    }));
 
-  const countLabel =
-    visible.length !== partners.length
-      ? `${t("totalPartners", { count: visible.length })} ${t("ofTotal", { total: partners.length })}`
-      : t("totalPartners", { count: visible.length });
+  const filterChips = [
+    ...(driversFilter !== "all"
+      ? [{ id: "drivers", label: `${t("filterDrivers")}: ${driversFilterLabel(driversFilter)}` }]
+      : []),
+    ...(logoFilter !== "all"
+      ? [{ id: "logo", label: `${t("filterLogo")}: ${logoFilterLabel(logoFilter)}` }]
+      : []),
+  ];
+
+  const toolbar = (
+    <TableToolbar
+      prefs={tablePrefs}
+      entity={t("title")}
+      columns={toolbarColumns}
+      rowKind="dynamic"
+      entityList
+      filteredCount={visible.length}
+      totalCount={partners.length}
+      onExport={() => exportPartnersCsv(visible)}
+      onAdd={canManage ? handleAdd : undefined}
+      addLabel={t("addPartner")}
+      chips={filterChips}
+      onRemoveChip={(id) => {
+        if (id === "drivers") setDriversFilter("all");
+        if (id === "logo") setLogoFilter("all");
+      }}
+      onClearChips={clearAllFilters}
+    />
+  );
 
   const filterMenu = (
     <DropdownMenu>
@@ -307,91 +331,11 @@ function PartnersPageContent() {
                 />
                 {t("refresh")}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9 cursor-pointer rounded-lg"
-                onClick={() => exportPartnersCsv(visible)}
-                disabled={visible.length === 0}
-              >
-                <Download className="me-2 h-3.5 w-3.5" />
-                {t("export")}
-              </Button>
-              {canManage ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  className="h-9 cursor-pointer rounded-lg"
-                  onClick={handleAdd}
-                >
-                  <Plus className="me-2 h-3.5 w-3.5" />
-                  {t("addPartner")}
-                </Button>
-              ) : null}
+              {filterMenu}
             </div>
         }
       />
-      <AppListCard
-        toolbar={
-          <AppListControls
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder={t("searchPlaceholder")}
-            searchAriaLabel={t("searchPlaceholder")}
-            clearSearchLabel={labels.clearSearch}
-            viewMode={prefs.viewMode}
-            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
-            tableViewLabel={labels.viewTable}
-            cardsViewLabel={labels.viewCards}
-            filterSlot={filterMenu}
-            trailing={
-              <p className="shrink-0 text-sm tabular-nums text-muted-foreground">
-                {countLabel}
-              </p>
-            }
-          />
-        }
-        filterChips={
-          hasActiveFilters ? (
-            <>
-              {driversFilter !== "all" ? (
-                <Badge variant="secondary" className="gap-1 rounded-lg pe-1">
-                  {t("filterDrivers")}: {driversFilterLabel(driversFilter)}
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded p-0.5 hover:bg-muted"
-                    onClick={() => setDriversFilter("all")}
-                    aria-label={t("clearFilters")}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ) : null}
-              {logoFilter !== "all" ? (
-                <Badge variant="secondary" className="gap-1 rounded-lg pe-1">
-                  {t("filterLogo")}: {logoFilterLabel(logoFilter)}
-                  <button
-                    type="button"
-                    className="cursor-pointer rounded p-0.5 hover:bg-muted"
-                    onClick={() => setLogoFilter("all")}
-                    aria-label={t("clearFilters")}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ) : null}
-              <button
-                type="button"
-                className="cursor-pointer text-xs text-primary hover:underline"
-                onClick={clearAllFilters}
-              >
-                {t("clearFilters")}
-              </button>
-            </>
-          ) : undefined
-        }
-      >
+      <AppListCard>
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -412,15 +356,16 @@ function PartnersPageContent() {
               </Button>
             ) : null}
           </div>
-        ) : prefs.viewMode === "cards" ? (
-          <CardContent className="p-4">
+        ) : tablePrefs.view === "grid" ? (
+          <CardContent className="p-0">
+            {toolbar}
             {showEmptySearch ? (
               <AppEmptyState
                 title={t("emptySearchTitle")}
                 description={t("emptySearchDescription")}
               />
             ) : (
-              <GroupedSections groups={grouped} paged resetKey={`${search}\u0001${driversFilter}\u0001${logoFilter}`}>
+              <GroupedSections groups={grouped} paged resetKey={`${tablePrefs.appliedQuery}\u0001${driversFilter}\u0001${logoFilter}`}>
                 {(rows) => (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {rows.map((partner) => (
@@ -448,6 +393,7 @@ function PartnersPageContent() {
           <CardContent className="p-0">
             <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
             <AppDataTable
+              toolbar={toolbar}
               columns={tableColumns}
               empty={
                 showEmptySearch ? (
@@ -479,66 +425,84 @@ function PartnersPageContent() {
                         }
                       }}
                     >
-                      <TableCell>
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30">
-                          {partner.logo_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={partner.logo_url}
-                              alt=""
-                              className="h-full w-full object-contain p-0.5"
-                            />
-                          ) : (
-                            <span className="text-sm font-semibold text-muted-foreground">
-                              {partner.name.charAt(0).toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="min-w-0">
-                          <p className="truncate font-medium text-foreground">
-                            {partner.name}
-                          </p>
-                          <p className="font-mono text-xs text-muted-foreground">
-                            {partner.slug}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden max-w-xs md:table-cell">
-                        {partner.description ? (
-                          <p className="line-clamp-2 text-sm text-muted-foreground">
-                            {partner.description}
-                          </p>
-                        ) : (
-                          <p className="text-sm italic text-muted-foreground/70">
-                            {t("noDescription")}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {t("driversCount", { count: partner.driver_count })}
-                      </TableCell>
-                      <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
-                        {formatCreatedAt(partner.created_at, locale)}
-                      </TableCell>
-                      {canManage ? (
-                        <TableCell className="text-end">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            className="shrink-0 cursor-pointer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEdit(partner);
-                            }}
-                            aria-label={t("editPartner")}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                        </TableCell>
-                      ) : null}
+                      {tableColumns.map((column) => {
+                        switch (column.id) {
+                          case "logo":
+                            return (
+                              <TableCell key={column.id}>
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30">
+                                  {partner.logo_url ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={partner.logo_url}
+                                      alt=""
+                                      className="h-full w-full object-contain p-0.5"
+                                    />
+                                  ) : (
+                                    <span className="text-sm font-semibold text-muted-foreground">
+                                      {partner.name.charAt(0).toUpperCase()}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                            );
+                          case "partner":
+                            return (
+                              <TableCell key={column.id}>
+                                <div className="min-w-0">
+                                  <TableNameCell name={partner.name} />
+                                  <p className="font-mono text-xs text-muted-foreground">
+                                    {partner.slug}
+                                  </p>
+                                </div>
+                              </TableCell>
+                            );
+                          case "description":
+                            return (
+                              <TableCell key={column.id} className="max-w-xs">
+                                {partner.description ? (
+                                  <p className="line-clamp-2 text-sm text-muted-foreground">
+                                    {partner.description}
+                                  </p>
+                                ) : (
+                                  <EmptyCell />
+                                )}
+                              </TableCell>
+                            );
+                          case "drivers":
+                            return (
+                              <TableCell key={column.id} className="text-sm text-muted-foreground">
+                                {t("driversCount", { count: partner.driver_count })}
+                              </TableCell>
+                            );
+                          case "created":
+                            return (
+                              <TableCell key={column.id} className="text-sm text-muted-foreground">
+                                {formatCreatedAt(partner.created_at, locale)}
+                              </TableCell>
+                            );
+                          case "actions":
+                            return (
+                              <TableCell key={column.id} className="text-end">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="shrink-0 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(partner);
+                                  }}
+                                  aria-label={t("editPartner")}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                              </TableCell>
+                            );
+                          default:
+                            return null;
+                        }
+                      })}
                     </AppDataTableRow>
                   )))
                 : null}

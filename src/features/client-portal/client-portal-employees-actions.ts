@@ -2,13 +2,14 @@
 
 import { logAdminActivity } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
-import { parsePartnerProjectKey, partnerProjectMatches } from "@/lib/auth/staff-access";
+import { partnerProjectMatches } from "@/lib/auth/staff-access";
 import { DOCUMENT_TYPES, type DriverDocumentType } from "@/features/drivers/types";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { callAdminFunction } from "@/lib/firebase/callable";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { listExistingDriverDocuments, listExtraDriverDocuments } from "@/lib/storage/driver-documents";
+import { resolvePortalProject } from "./portal-access";
 
 const PAGE = 5000;
 const CAP = 20000;
@@ -45,12 +46,9 @@ function cleanId(value: string): string {
 async function portalSession(projectArg: string | undefined) {
   const session = await getSessionUser();
   if (!session || (!session.isSuperAdmin && !session.permissions.has("client_portal.view"))) return null;
-  if (session.accessKind === "partner") {
-    const locked = session.partnerProjectKey;
-    if (!locked) return null;
-    return { locked };
-  }
-  return { locked: parsePartnerProjectKey(projectArg) ?? "keeta" };
+  const resolved = resolvePortalProject(session, projectArg);
+  if ("error" in resolved) return null;
+  return { locked: resolved.projectKey };
 }
 
 async function loadIntake(intakeId: string): Promise<{ project: unknown; linkedProfileId: string | null } | null> {

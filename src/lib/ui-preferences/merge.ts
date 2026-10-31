@@ -48,10 +48,16 @@ export function normalizeListColumnPreference(
       : system.sort && known.has(system.sort.id)
         ? system.sort
         : null;
+  const groupBy =
+    raw.groupBy === null || typeof raw.groupBy === "string" ? raw.groupBy : system.groupBy;
+  const viewMode =
+    raw.viewMode === "list" || raw.viewMode === "grid" ? raw.viewMode : system.viewMode;
   return {
     order,
     visible: visible.length > 0 ? visible : [...system.visible],
     sort,
+    ...(groupBy !== undefined ? { groupBy } : {}),
+    ...(viewMode !== undefined ? { viewMode } : {}),
   };
 }
 

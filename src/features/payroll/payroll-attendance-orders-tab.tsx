@@ -32,7 +32,9 @@ import {
   riderColumnValue,
 } from "./payroll-rider-columns";
 import { dayClass, PayrollFillHandle, ZoneCategoryPill } from "./payroll-grid";
+import { payrollAssignField } from "./payroll-assign";
 import {
+  PayrollAssignCell,
   PayrollIdentityCell,
   PayrollOrderCell,
   payrollIdentityField,
@@ -626,6 +628,12 @@ export function PayrollAttendanceOrdersTab({
                           <PayrollStatusCell row={row} today={today} canEdit={editable} />
                         ) : column.id === "actualHours" ? (
                           row.actualHours.toFixed(2)
+                        ) : payrollAssignField(column.id) ? (
+                          <PayrollAssignCell
+                            row={row}
+                            field={payrollAssignField(column.id)!}
+                            canEdit={editable}
+                          />
                         ) : payrollIdentityField(column.id) ? (
                           <PayrollIdentityCell
                             driverId={row.driverId}
@@ -693,7 +701,7 @@ export function PayrollAttendanceOrdersTab({
                             <span
                               className={cn(
                                 "relative inline-flex min-w-8 justify-center rounded px-1.5 py-0.5 text-xs font-semibold",
-                                dayClass(status),
+                                dayClass(status, row.jobEndDescription),
                                 adjusted && "outline outline-2 outline-orange-400",
                               )}
                             >

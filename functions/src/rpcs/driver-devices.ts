@@ -32,6 +32,25 @@ function asTimestampMillis(value: unknown): number {
   return 0;
 }
 
+/**
+ * The build the install table should print. Login stamps the session once;
+ * `driverRecordAppVersion` then writes the running build onto the driver.
+ * The higher code is the one the phone is actually on.
+ */
+export function reportedInstallBuild(args: {
+  sessionCode: number | null;
+  sessionName: string | null;
+  driverCode: number | null;
+  driverName: string | null;
+}): { code: number | null; name: string | null } {
+  const session = args.sessionCode;
+  const driver = args.driverCode;
+  if (driver != null && (session == null || driver > session)) {
+    return { code: driver, name: args.driverName ?? args.sessionName };
+  }
+  return { code: session, name: args.sessionName ?? args.driverName };
+}
+
 /** One `driver_device_sessions` document in the wire shape `admin_driver_device_overview` returned. */
 function sessionJson(raw: Dict, activeDeviceId: string | null, docId: string): Dict {
   const deviceId = asString(raw["device_id"]);
@@ -117,6 +136,12 @@ export const adminListDriverDevices = onCall(async (request) => {
       const session = activeDeviceId
         ? sessionByDriverDevice.get(`${doc.id}\u0000${activeDeviceId}`)
         : undefined;
+      const build = reportedInstallBuild({
+        sessionCode: session ? asNumber(session["app_version_code"]) : null,
+        sessionName: session ? asString(session["app_version_name"]) : null,
+        driverCode: asNumber(driver["app_version_code"]),
+        driverName: asString(driver["app_version_name"]),
+      });
       return {
         driver_id: doc.id,
         driver_code: asString(driver["driver_code"]),
@@ -135,8 +160,8 @@ export const adminListDriverDevices = onCall(async (request) => {
         device_manufacturer: session ? asString(session["device_manufacturer"]) : null,
         os_version: session ? asString(session["os_version"]) : null,
         android_sdk_int: session ? asNumber(session["android_sdk_int"]) : null,
-        app_version_name: session ? asString(session["app_version_name"]) : null,
-        app_version_code: session ? asNumber(session["app_version_code"]) : null,
+        app_version_name: build.name,
+        app_version_code: build.code,
         device_meta: session ? (session["device_meta"] ?? null) : null,
         device_meta_at: session ? isoTimestamp(session["device_meta_at"]) : null,
         last_seen_at: session ? isoTimestamp(session["last_seen_at"]) : null,
@@ -388,5 +413,34 @@ export const driverRecordAppVersion = onCall(async (request) => {
   }
 
   await driverRef.set(patch, { merge: true });
+
+  if (deviceId && versionCode > 0) {
+    const now = Timestamp.now();
+    const sessions = await db
+      .collection(COLLECTIONS.driverDeviceSessions)
+      .where("driver_id", "==", request.auth.uid)
+      .where("device_id", "==", deviceId)
+      .limit(20)
+      .get();
+    const batch = db.batch();
+    let sessionWrites = 0;
+    for (const doc of sessions.docs) {
+      if (doc.get("revoked_at") != null) continue;
+      const sessionPatch: Dict = {
+        app_version_code: versionCode,
+        last_seen_at: now,
+        updated_at: now,
+      };
+      if (versionName) sessionPatch["app_version_name"] = versionName;
+      if (meta) {
+        sessionPatch["device_meta"] = meta;
+        sessionPatch["device_meta_at"] = now;
+      }
+      batch.set(doc.ref, sessionPatch, { merge: true });
+      sessionWrites += 1;
+    }
+    if (sessionWrites > 0) await batch.commit();
+  }
+
   return { ok: true };
 });

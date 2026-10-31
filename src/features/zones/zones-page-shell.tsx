@@ -3,15 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { ChevronDown, Loader2, Plus } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import { AppPage } from "@/components/app/app-page";
-import {
-  AppListControls,
-  fieldSearchMatch,
-  useListControlLabels,
-  useListViewPrefs,
-} from "@/components/app/app-list-controls";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,8 +49,6 @@ function ZonesPageSkeleton() {
 
 function ZonesPageContent() {
   const t = useTranslations("pages.zones");
-  const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs("zones");
   const router = useRouter();
   const { can } = useAuth();
   const canManage = can("zones.manage");
@@ -66,7 +57,6 @@ function ZonesPageContent() {
   const { data: zones = [], isLoading } = useZonesList();
   const [kindFilter, setKindFilter] = useState<"all" | GeofenceKind>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
   const [assignZone, setAssignZone] = useState<ZoneRow | null>(null);
 
   // Live refresh: re-fetch the zone list whenever zones, their geofence
@@ -97,14 +87,8 @@ function ZonesPageContent() {
 
   const filteredZones = useMemo(
     () =>
-      zones.filter((z) => {
-        if (!zoneMatchesKindFilter(z, kindFilter)) return false;
-        return fieldSearchMatch(z, search, {
-          name: (row) => row.name,
-          code: (row) => row.code,
-        });
-      }),
-    [kindFilter, search, zones],
+      zones.filter((z) => zoneMatchesKindFilter(z, kindFilter)),
+    [kindFilter, zones],
   );
 
   const kindChips: Array<{ id: "all" | GeofenceKind; label: string }> = [
@@ -134,14 +118,7 @@ function ZonesPageContent() {
           <ZoneGeofencesSummary zones={zones} compact />
 
           <div className="shrink-0 space-y-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-            <AppListControls
-              searchValue={search}
-              onSearchChange={setSearch}
-              searchPlaceholder={t("placeholders.searchZones")}
-              searchAriaLabel={t("placeholders.searchZones")}
-              clearSearchLabel={labels.clearSearch}
-              filterSlot={
-                <>
+            <div className="flex flex-wrap items-center gap-2">
                   <DropdownMenu>
                     <DropdownMenuTrigger className="inline-flex h-9 flex-1 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
                       {t("geofence.bulkActions")}
@@ -155,20 +132,7 @@ function ZonesPageContent() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                   <ClearAllModuleButton entity="zones" compact />
-                  {canManage ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-9 w-full cursor-pointer rounded-lg sm:w-auto sm:min-w-[9.5rem]"
-                      onClick={handleAdd}
-                    >
-                      <Plus className="me-1.5 h-3.5 w-3.5" />
-                      {t("geofence.createButton")}
-                    </Button>
-                  ) : null}
-                </>
-              }
-            />
+            </div>
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden">
@@ -183,6 +147,7 @@ function ZonesPageContent() {
               onEdit={handleEdit}
               canAssignDrivers={canAssignDrivers}
               onAssignDrivers={setAssignZone}
+              onAdd={canManage ? handleAdd : undefined}
             />
           </div>
         </aside>

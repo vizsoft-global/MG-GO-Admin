@@ -49,18 +49,37 @@ export function parseImportActive(
   return "invalid";
 }
 
+export type ImportVehicleTypeEntry = {
+  key: string;
+  label_en?: string | null;
+  label_ar?: string | null;
+};
+
 /**
- * Reads the sheet's Vehicle Type cell. The catalogue is locked to two keys
- * because a map sprite is drawn from it, so anything that is not clearly a car
- * is a bike — rule 12's unknown-vehicle default. `null` means the cell was
- * blank, and the matched vehicle's own type (or bike) decides.
+ * Reads the sheet's Vehicle Type cell.
+ *
+ * A key or label the `vehicle_types` catalog publishes wins, so a type the
+ * operator added (van, truck) survives the import instead of being flattened.
+ * Without a catalog entry the historical aliases below still apply: anything
+ * that reads like a car is `car`, and everything else is `bike` — the same
+ * default the map sprite applies. `null` means the cell was blank, and the
+ * matched vehicle's own type (or bike) decides.
  */
 export function parseImportVehicleType(
   raw: string | null | undefined,
-): "bike" | "car" | null {
-  const value = String(raw ?? "").trim().toLowerCase();
+  catalog: readonly ImportVehicleTypeEntry[] = [],
+): string | null {
+  const original = String(raw ?? "").trim();
+  const value = original.toLowerCase();
   if (!value) return null;
   const key = value.replace(/[\s-]+/g, "_");
+  const published = catalog.find(
+    (entry) =>
+      entry.key.trim().toLowerCase() === key ||
+      (entry.label_en ?? "").trim().toLowerCase() === value ||
+      (entry.label_ar ?? "").trim() === original,
+  );
+  if (published) return published.key.trim().toLowerCase();
   if (
     [
       "car",

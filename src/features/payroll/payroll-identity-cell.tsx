@@ -2,10 +2,14 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { SearchSelect } from "@/components/ui/search-select";
 import { queryKeys } from "@/lib/query/query-keys";
+import { INLINE_EDIT_CELL_CLASS } from "@/components/app/constants";
 import { cn } from "@/lib/utils";
+import { usePayrollAssignCatalog } from "./payroll-assign-catalog";
+import type { PayrollAssignField } from "./payroll-assign";
 import {
   savePayrollIdentity,
   savePayrollOrders,
@@ -13,8 +17,10 @@ import {
 } from "./payroll-actions";
 import type { PayrollRiderRow } from "./payroll-types";
 
-const INPUT =
-  "h-6 w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-xs text-foreground outline-none transition-colors focus:border-border focus:bg-background";
+const INPUT = cn(
+  "w-full min-w-0 rounded-sm px-1 text-xs text-foreground outline-none",
+  INLINE_EDIT_CELL_CLASS,
+);
 
 function cellError(message: string, t: (key: string) => string): string {
   if (message.includes("employee_id_taken")) return t("employeeIdTaken");
@@ -25,18 +31,22 @@ function cellError(message: string, t: (key: string) => string): string {
   if (message.includes("date_out_of_range")) return t("dateOutOfRange");
   if (message.includes("invalid_orders")) return t("invalidOrders");
   if (message.includes("invalid_client_id")) return t("invalidClientId");
+  if (message.includes("unknown_client")) return t("unknownClient");
+  if (message.includes("unknown_zone")) return t("unknownZone");
   if (message.includes("driver_not_found")) return t("driverNotFound");
   return t("saveFailed");
 }
 
+/**
+ * Which identity cells are still editable.
+ *
+ * MG ID and Name are master data (SOP items 7 and 11): they are created on the
+ * employee record and only read back here, so the pencil is gone. Restaurant and
+ * Client ID stay editable because the Combined row is where an operator fixes an
+ * assignment.
+ */
 export function payrollIdentityField(columnId: string): PayrollIdentityField | null {
   switch (columnId) {
-    case "amId":
-      return "employeeId";
-    case "name":
-      return "fullName";
-    case "restaurant":
-      return "restaurantName";
     case "restaurantId":
       return "clientId";
     default:
@@ -54,6 +64,10 @@ export function payrollIdentityValue(row: PayrollRiderRow, field: PayrollIdentit
       return row.restaurant === "—" ? "" : row.restaurant;
     case "clientId":
       return row.restaurantClientId?.trim() ?? "";
+    case "projectKey":
+      return row.projectKey ?? "";
+    case "zoneId":
+      return row.zoneId ?? "";
     default: {
       const unknown: never = field;
       return unknown;
@@ -241,5 +255,114 @@ export function PayrollOrderCell(props: {
         props.overridden && "border-t-orange-500",
       )}
     />
+  );
+}
+
+export function PayrollAssignCell({
+  row,
+  field,
+  canEdit,
+}: {
+  row: PayrollRiderRow;
+  field: PayrollAssignField;
+  canEdit: boolean;
+}) {
+  const t = useTranslations("pages.payroll.cellEdit");
+  const catalog = usePayrollAssignCatalog();
+  const queryClient = useQueryClient();
+  const stored =
+    field === "projectKey"
+      ? (row.projectKey ?? "")
+      : field === "zoneId"
+        ? (row.zoneId ?? "")
+        : (row.restaurantId ?? "");
+  const [draft, setDraft] = useState<string | undefined>(undefined);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    setDraft(undefined);
+  }, [stored]);
+  const shown = draft ?? stored;
+  const printed =
+    field === "projectKey" ? row.partner : field === "zoneId" ? row.zone : row.restaurant;
+  const fallback = printed && printed !== "—" ? printed : "";
+  const base =
+    field === "projectKey" ? catalog.clients : field === "zoneId" ? catalog.zones : catalog.restaurants;
+  const items = useMemo(() => {
+    if (!shown || base.some((item) => item.value === shown)) return base;
+    if (!fallback) return base;
+    return [{ value: shown, label: fallback, keywords: [fallback] }, ...base];
+  }, [base, shown, fallback]);
+
+  if (!canEdit) {
+    return printed && printed !== "—" ? printed : "—";
+  }
+
+  async function commit(next: string | null) {
+    const value = next ?? "";
+    if (value === stored) return;
+    setDraft(value);
+    setSaving(true);
+    try {
+      // The RPC takes a restaurant *name*; the picker holds the document id.
+      const sent =
+        field === "restaurantName"
+          ? (base.find((item) => item.value === value)?.label ?? value)
+          : value;
+      await savePayrollIdentity(row.driverId, field, sent);
+      const renamed = base.find((item) => item.value === value)?.label ?? value;
+      toast.success(
+        t("changed", {
+          name: row.name,
+          field: t(field === "restaurantName" ? "restaurantField" : field === "zoneId" ? "zoneField" : "clientField"),
+          value: renamed || "—",
+        }),
+      );
+      await queryClient.invalidateQueries({ queryKey: queryKeys.payroll.all() });
+    } catch (error) {
+      setDraft(undefined);
+      toast.error(cellError(error instanceof Error ? error.message : "", t));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
+    <SearchSelect
+      items={items}
+      value={shown || null}
+      onChange={(next) => void commit(next)}
+      placeholder={
+        field === "projectKey"
+          ? t("clientPlaceholder")
+          : field === "zoneId"
+            ? t("zonePlaceholder")
+            : t("restaurantPlaceholder")
+      }
+      searchPlaceholder={
+        field === "projectKey"
+          ? t("clientSearch")
+          : field === "zoneId"
+            ? t("zoneSearch")
+            : t("restaurantSearch")
+      }
+      emptyText={
+        field === "zoneId" && catalog.zonesLoading ? t("catalogLoading") : t("catalogEmpty")
+      }
+      recentsKey={
+        field === "projectKey"
+          ? "payroll.client"
+          : field === "zoneId"
+            ? "payroll.zone"
+            : "payroll.restaurant"
+      }
+      clearable
+      disabled={saving}
+      className={cn("min-w-[8.5rem] max-w-[14rem] rounded-md px-2 text-xs", INLINE_EDIT_CELL_CLASS)}
+    />
+    </div>
   );
 }

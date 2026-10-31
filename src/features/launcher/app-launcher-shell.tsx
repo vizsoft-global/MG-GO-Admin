@@ -32,6 +32,7 @@ import {
   visibleLauncherTiles,
 } from "@/lib/menu/launcher-modules";
 import { launcherGlyphSrc } from "@/lib/menu/launcher-glyphs";
+import { sanitizeMenuIconColor, sanitizeMenuIconUrl } from "@/lib/menu/menu-icon";
 import { APP_NAV_KEY_BY_ID, resolveIcon } from "@/lib/menu/menu-registry";
 import { LAUNCHER_BRAND } from "@/lib/menu/module-colors";
 import type { Permission } from "@/lib/auth/permissions";
@@ -66,7 +67,13 @@ function formatAdminRole(slug: string): string {
     .join(" ");
 }
 
-function LauncherGlyph({ id, icon }: { id: string; icon: string }) {
+function LauncherGlyph({ id, icon, iconUrl }: { id: string; icon: string; iconUrl?: string }) {
+  const custom = sanitizeMenuIconUrl(iconUrl);
+  if (custom) {
+    return (
+      <img src={custom} alt="" width={40} height={40} className="size-10 object-contain" />
+    );
+  }
   const src = launcherGlyphSrc(id);
   if (src) {
     return <img src={src} alt="" width={30} height={30} />;
@@ -257,12 +264,12 @@ export function AppLauncherShell({
         <span
           className="relative grid size-16 place-items-center overflow-visible rounded-2xl border-[0.7px] border-black/15 shadow-[0_3px_10px_rgba(0,0,0,0.2)] transition-[transform,box-shadow] duration-200 ease-[var(--ease-out)] motion-reduce:transition-none motion-reduce:group-hover/hub:[transform:none] motion-reduce:group-hover/hub:shadow-[0_3px_10px_rgba(0,0,0,0.2)] [@media(hover:hover)_and_(pointer:fine)]:group-hover/hub:[transform:translateY(-1.5px)_scale(1.024)] [@media(hover:hover)_and_(pointer:fine)]:group-hover/hub:shadow-[0_12px_26px_rgba(0,0,0,0.42)]"
           style={{
-            backgroundColor: LAUNCHER_BRAND.tile,
+            backgroundColor: sanitizeMenuIconColor(item.iconColor) || LAUNCHER_BRAND.tile,
             backgroundImage: "linear-gradient(180deg, transparent, rgba(0,0,0,0.15))",
           }}
         >
           <span className="inline-grid origin-center">
-            <LauncherGlyph id={item.id} icon={item.icon} />
+            <LauncherGlyph id={item.id} icon={item.icon} iconUrl={item.iconUrl} />
           </span>
           {badge ? (
             <span
@@ -385,7 +392,8 @@ export function AppLauncherShell({
       </header>
 
       <main className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-4 py-6">
-        <div className="flex w-full max-w-[754px] items-center justify-between gap-[15px]">
+        <div className="flex w-full max-w-[754px] -translate-y-8 flex-col items-center">
+        <div className="flex w-full items-center justify-between gap-[15px]">
           <div className="flex items-center gap-2.5 ps-1">
             <img
               src="/launcher/v5/mark.svg?v=3"
@@ -443,6 +451,7 @@ export function AppLauncherShell({
             {visible.map(renderTile)}
           </div>
         </nav>
+        </div>
       </main>
 
         <div className="relative z-10 mt-auto flex w-full shrink-0 flex-col items-center">

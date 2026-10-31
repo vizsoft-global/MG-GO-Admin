@@ -4,6 +4,16 @@ import { useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { AppEmptyState } from "@/components/app/app-empty-state";
+import {
+  AppDataTable,
+  AppDataTableRow,
+  TableCell,
+} from "@/components/app/app-data-table";
+import {
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { CardContent } from "@/components/ui/card";
 import { useAttendanceAnalytics } from "./use-attendance-table";
 import { attendanceWindowTooLarge } from "./attendance-query-error";
@@ -17,6 +27,24 @@ export function AttendanceAnalyticsPanel({
 }) {
   const t = useTranslations("pages.attendance");
   const { data, isLoading, isError, error } = useAttendanceAnalytics(fromDate, toDate);
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "date", label: t("colDate"), locked: true },
+      { id: "checkedIn", label: t("kpiCheckedIn") },
+      { id: "late", label: t("kpiLate") },
+      { id: "absent", label: t("kpiAbsent") },
+      { id: "compliance", label: t("kpiCompliance") },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("attendance-analytics", columns);
+  const filtered = useMemo(() => {
+    const query = prefs.appliedQuery.trim().toLowerCase();
+    const daily = data?.daily ?? [];
+    if (!query) return daily;
+    return daily.filter((row) => row.date.toLowerCase().includes(query));
+  }, [data?.daily, prefs.appliedQuery]);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
 
   const summary = useMemo(() => {
     if (!data?.daily.length) return null;
@@ -84,30 +112,56 @@ export function AttendanceAnalyticsPanel({
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/30 text-start">
-              <th className="px-3 py-2 font-medium">{t("colDate")}</th>
-              <th className="px-3 py-2 font-medium">{t("kpiCheckedIn")}</th>
-              <th className="px-3 py-2 font-medium">{t("kpiLate")}</th>
-              <th className="px-3 py-2 font-medium">{t("kpiAbsent")}</th>
-              <th className="px-3 py-2 font-medium">{t("kpiCompliance")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.daily.map((row) => (
-              <tr key={row.date} className="border-b border-border last:border-0">
-                <td className="px-3 py-2">{row.date}</td>
-                <td className="px-3 py-2 tabular-nums">{row.checked_in}</td>
-                <td className="px-3 py-2 tabular-nums">{row.late}</td>
-                <td className="px-3 py-2 tabular-nums">{row.absent}</td>
-                <td className="px-3 py-2 tabular-nums">{row.avg_compliance}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <AppDataTable
+        toolbar={
+          <TableToolbar
+            prefs={prefs}
+            entity={t("colDate")}
+            columns={columns}
+            rowKind="aggregate"
+            filteredCount={filtered.length}
+            totalCount={data.daily.length}
+          />
+        }
+        columns={shown.map((column) => ({ id: column.id, label: column.label }))}
+      >
+        {filtered.map((row) => (
+          <AppDataTableRow key={row.date}>
+            {shown.map((column) => {
+              switch (column.id) {
+                case "date":
+                  return <TableCell key={column.id}>{row.date}</TableCell>;
+                case "checkedIn":
+                  return (
+                    <TableCell key={column.id} className="tabular-nums">
+                      {row.checked_in}
+                    </TableCell>
+                  );
+                case "late":
+                  return (
+                    <TableCell key={column.id} className="tabular-nums">
+                      {row.late}
+                    </TableCell>
+                  );
+                case "absent":
+                  return (
+                    <TableCell key={column.id} className="tabular-nums">
+                      {row.absent}
+                    </TableCell>
+                  );
+                case "compliance":
+                  return (
+                    <TableCell key={column.id} className="tabular-nums">
+                      {row.avg_compliance}%
+                    </TableCell>
+                  );
+                default:
+                  return null;
+              }
+            })}
+          </AppDataTableRow>
+        ))}
+      </AppDataTable>
     </CardContent>
   );
 }

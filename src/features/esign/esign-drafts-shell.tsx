@@ -1,11 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { ExternalLink, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppDataTable, AppDataTableRow, TableCell } from "@/components/app/app-data-table";
 import { SimpleConfirmDialog } from "@/components/simple-confirm-dialog";
 import { StatusPill } from "@/components/dashboard/status-pill";
@@ -65,9 +74,31 @@ export function EsignDraftsShell() {
     return { all: drafts.length, single, bulk };
   }, [drafts]);
 
-  const visible = useMemo(
-    () => (kind === "all" ? drafts : drafts.filter((row) => row.kind === kind)),
-    [drafts, kind],
+  const draftColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "draft", label: t("colDraft"), locked: true },
+      { id: "template", label: t("colTemplate") },
+      { id: "rows", label: t("colRecipients") },
+      { id: "author", label: t("colAuthor"), categorical: true },
+      { id: "updated", label: t("colUpdated") },
+      { id: "actions", label: t("colActions"), locked: true },
+    ],
+    [t],
+  );
+  const tablePrefs = useTablePrefs("esign.drafts", draftColumns);
+  const shownColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
+  const visible = useMemo(() => {
+    const scoped = kind === "all" ? drafts : drafts.filter((row) => row.kind === kind);
+    const query = tablePrefs.appliedQuery.trim().toLowerCase();
+    if (!query) return scoped;
+    return scoped.filter((row) =>
+      [row.title, row.template_name, row.created_by_name].join(" ").toLowerCase().includes(query),
+    );
+  }, [drafts, kind, tablePrefs.appliedQuery]);
+  const grouped = useMemo(
+    () =>
+      groupRows(visible, tablePrefs.groupBy, { author: (row) => row.created_by_name }, {}, "—"),
+    [tablePrefs.groupBy, visible],
   );
 
   const tabs = [
@@ -115,18 +146,22 @@ export function EsignDraftsShell() {
             >
               {t("back")}
             </Button>
-            <Button
-              size="sm"
-              className="h-9 cursor-pointer"
-              render={<Link href={sendHref} />}
-            >
-              {t("newDraft")}
-            </Button>
           </div>
         }
       />
 
       <AppListCard className="p-0">
+        <TableToolbar
+          prefs={tablePrefs}
+          entity={t("title")}
+          columns={draftColumns}
+          rowKind="dynamic"
+          entityList
+          filteredCount={visible.length}
+          totalCount={drafts.length}
+          onAdd={() => router.push(sendHref)}
+          addLabel={t("newDraft")}
+        />
         <div className="border-b border-border p-3">
           <TabBar items={tabs} activeId={kind} onSelect={(id) => setKind(id as EsignDraftKind | "all")} />
         </div>
@@ -143,40 +178,55 @@ export function EsignDraftsShell() {
             description={drafts.length === 0 ? t("emptyDescription") : undefined}
           />
         ) : (
+          tablePrefs.view === "grid" ? (
+            <TableGridCards
+              rows={visible.map((row) => ({
+                id: row.id,
+                name: row.title?.trim() || t("untitled"),
+                fields: [
+                  { label: t("colTemplate"), value: row.template_name ?? "—" },
+                  { label: t("colAuthor"), value: row.created_by_name ?? "—" },
+                ],
+                onOpen: () => resume(row),
+              }))}
+            />
+          ) : (
           <AppDataTable
-            columns={[
-              { id: "draft", label: t("colDraft") },
-              { id: "template", label: t("colTemplate") },
-              { id: "rows", label: t("colRecipients") },
-              { id: "author", label: t("colAuthor") },
-              { id: "updated", label: t("colUpdated") },
-              { id: "actions", label: t("colActions"), className: "text-end" },
-            ]}
+            columns={shownColumns.map((column) => ({
+              id: column.id,
+              label: column.label,
+              className: column.id === "actions" ? "text-end" : undefined,
+            }))}
           >
-            {visible.map((row) => (
-              <AppDataTableRow key={row.id} onClick={() => resume(row)}>
-                <TableCell>
-                  <span className="text-sm font-medium">
-                    {row.title?.trim() || t("untitled")}
-                  </span>
-                  <span className="mt-0.5 flex items-center gap-1.5">
-                    <StatusPill variant={row.kind === "bulk" ? "warning" : "neutral"}>
-                      {row.kind === "bulk" ? t("kindBulk") : t("kindSingle")}
-                    </StatusPill>
-                    <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                  </span>
-                </TableCell>
-                <TableCell className="text-xs">{row.template_name ?? "—"}</TableCell>
-                <TableCell className="text-xs tabular-nums">
-                  {row.kind === "bulk" ? row.row_count : 1}
-                </TableCell>
-                <TableCell className="max-w-[160px] truncate text-xs">
-                  {row.created_by_name ?? "—"}
-                </TableCell>
-                <TableCell className="text-xs tabular-nums text-muted-foreground">
-                  {formatEsignTrackerDate(row.updated_at)}
-                </TableCell>
-                <TableCell className="text-end">
+            {grouped.flatMap((group) => [
+              ...(tablePrefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                      <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => {
+                const cells: Record<string, ReactNode> = {
+                  draft: (
+                    <>
+                      <TableNameCell name={row.title?.trim() || t("untitled")} />
+                      <span className="mt-0.5 flex items-center gap-1.5">
+                        <StatusPill variant={row.kind === "bulk" ? "warning" : "neutral"}>
+                          {row.kind === "bulk" ? t("kindBulk") : t("kindSingle")}
+                        </StatusPill>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                      </span>
+                    </>
+                  ),
+                  template: row.template_name ? row.template_name : <EmptyCell />,
+                  rows: row.kind === "bulk" ? row.row_count : 1,
+                  author: row.created_by_name ? row.created_by_name : <EmptyCell />,
+                  updated: formatEsignTrackerDate(row.updated_at),
+                  actions: (
+                <div className="text-end">
                   <div
                     className="flex items-center justify-end gap-1"
                     onClick={(event) => event.stopPropagation()}
@@ -206,10 +256,22 @@ export function EsignDraftsShell() {
                       <TooltipContent>{t("remove")}</TooltipContent>
                     </Tooltip>
                   </div>
-                </TableCell>
+                </div>
+                  ),
+                };
+                return (
+              <AppDataTableRow key={row.id} onClick={() => resume(row)}>
+                {shownColumns.map((column) => (
+                  <TableCell key={column.id} className={column.id === "actions" ? "text-end" : undefined}>
+                    {cells[column.id] ?? <EmptyCell />}
+                  </TableCell>
+                ))}
               </AppDataTableRow>
-            ))}
+                );
+              }),
+            ])}
           </AppDataTable>
+          )
         )}
       </AppListCard>
 

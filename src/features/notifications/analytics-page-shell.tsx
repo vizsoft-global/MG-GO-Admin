@@ -1,9 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2 } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppListCard } from "@/components/app/app-list-card";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
@@ -32,6 +38,21 @@ export function AnalyticsPageShell() {
   const [toDate, setToDate] = useState("");
   const filters = { fromDate: fromDate || undefined, toDate: toDate || undefined };
   const { data: daily, isLoading, refetch } = useNotificationAnalyticsDaily(filters);
+  const columns = useMemo((): TableToolbarColumn[] => [
+    { id: "date", label: t("analyticsDate") },
+    { id: "title", label: t("colTitle"), locked: true },
+    { id: "sent", label: t("analyticsSent") },
+    { id: "delivered", label: t("analyticsDelivered") },
+    { id: "opened", label: t("analyticsOpened") },
+    { id: "clicked", label: t("analyticsClicked") },
+    { id: "failed", label: t("analyticsFailed") },
+  ], [t]);
+  const prefs = useTablePrefs("notification-analytics", columns);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+  const needle = prefs.appliedQuery.trim().toLowerCase();
+  const rows = (daily ?? []).filter((row) =>
+    !needle || `${row.metric_date} ${row.campaign?.title ?? ""} ${row.campaign_id}`.toLowerCase().includes(needle),
+  );
 
   const totals = (daily ?? []).reduce(
     (acc, row) => ({
@@ -134,36 +155,49 @@ export function AnalyticsPageShell() {
           ) : !daily?.length ? (
             <p className="py-8 text-center text-sm text-muted-foreground">{t("analyticsEmpty")}</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("analyticsDate")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colTitle")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("analyticsSent")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("analyticsDelivered")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("analyticsOpened")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("analyticsClicked")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("analyticsFailed")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {daily.map((row) => (
-                  <TableRow key={`${row.metric_date}-${row.campaign_id}`}>
-                    <TableCell>{row.metric_date}</TableCell>
-                    <TableCell>
-                      {row.campaign?.title ?? (
-                        <span className="font-mono text-xs text-muted-foreground">{row.campaign_id.slice(0, 8)}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>{row.sent_count}</TableCell>
-                    <TableCell>{row.delivered_count}</TableCell>
-                    <TableCell>{row.opened_count}</TableCell>
-                    <TableCell>{row.clicked_count}</TableCell>
-                    <TableCell>{row.failed_count}</TableCell>
+            <div className="overflow-hidden rounded-lg border border-border">
+              <TableToolbar
+                prefs={prefs}
+                entity={t("analyticsDailyTitle")}
+                columns={columns}
+                rowKind="dynamic"
+                filteredCount={rows.length}
+                totalCount={daily.length}
+              />
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {shown.map((column) => (
+                      <TableHead key={column.id} className={TABLE_HEAD_CLASS}>{column.label}</TableHead>
+                    ))}
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row) => (
+                    <TableRow key={`${row.metric_date}-${row.campaign_id}`}>
+                      {shown.map((column) => {
+                        if (column.id === "date") return <TableCell key={column.id}>{row.metric_date}</TableCell>;
+                        if (column.id === "title") {
+                          return (
+                            <TableCell key={column.id}>
+                              {row.campaign?.title ? <TableNameCell name={row.campaign.title} /> : (
+                                <span className="font-mono text-xs text-muted-foreground">{row.campaign_id.slice(0, 8)}</span>
+                              )}
+                            </TableCell>
+                          );
+                        }
+                        const value = column.id === "sent" ? row.sent_count
+                          : column.id === "delivered" ? row.delivered_count
+                          : column.id === "opened" ? row.opened_count
+                          : column.id === "clicked" ? row.clicked_count
+                          : row.failed_count;
+                        return <TableCell key={column.id}>{value}</TableCell>;
+                      })}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </AppListCard>

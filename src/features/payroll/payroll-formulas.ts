@@ -114,25 +114,107 @@ export const PAYROLL_STATUS_FILTERS = [
 ] as const;
 export type PayrollStatusFilter = (typeof PAYROLL_STATUS_FILTERS)[number];
 
-/** Chip dot colours, one per SOP day type. Names that also exist on the HR
- *  employee catalog reuse `hrStatusPaint` so the legend and Status column
- *  cannot disagree. */
-export const PAYROLL_STATUS_CHIP: Record<PayrollStatusFilter, { hex: string }> = {
-  work: { hex: "#9aa4ad" },
-  reduced3: { hex: "#fbbf24" },
-  half: { hex: "#22d3ee" },
-  sick: { hex: "#f59e0b" },
-  off: { hex: "#34d399" },
-  accident: { hex: hrStatusPaint("accident").fill },
-  absent: { hex: hrStatusPaint("absent_mosal").fill },
-  cancelled: { hex: hrStatusPaint("cancelled").fill },
-  leave: { hex: hrStatusPaint("leave").fill },
-  terminated: { hex: "#b91c1c" },
-  phone_issue: { hex: "#f97316" },
-  id_suspended: { hex: "#7c3aed" },
-  vehicle: { hex: "#a5b4fc" },
-  new_hire: { hex: hrStatusPaint("new").fill },
-  training: { hex: hrStatusPaint("training").fill },
+/**
+ * One paint per day type, shared by every payroll grid, the legend, the Status
+ * column and the Excel export, so a day cannot look different on two surfaces.
+ * Every name that also exists on the HR employee catalog takes that catalog's
+ * fill, which is what the SOP asks for:
+ *
+ *   Active  → white with a light border     3 Hours → leave-return blue
+ *   6 Hours → white with the dark frame      OFF     → transfer-from-company green
+ *   Sick / Leave → orange  Accident → yellow  New hire → lilac  Training → peach
+ *   Absent / Terminated / Phone / ID / Vehicle → red
+ */
+export type PayrollDayPaint = {
+  fill: string;
+  text: string;
+  /** Border hex, or null when the fill alone carries the state. */
+  border: string | null;
+};
+
+export const PAYROLL_DAY_PAINT: Record<DayStatus, PayrollDayPaint> = {
+  work: { fill: "#FFFFFF", text: "#292A3F", border: null },
+  reduced3: { fill: hrStatusPaint("leave_return").fill, text: "#0E3346", border: null },
+  half: { fill: "#FFFFFF", text: "#292A3F", border: "#292A3F" },
+  actual: { fill: "#D1FAE5", text: "#065F46", border: null },
+  off: { fill: hrStatusPaint("transfer_from_company").fill, text: "#14401A", border: null },
+  sick: { fill: hrStatusPaint("leave").fill, text: "#2B1600", border: null },
+  leave: { fill: hrStatusPaint("leave").fill, text: "#2B1600", border: null },
+  accident: { fill: hrStatusPaint("accident").fill, text: "#3A3000", border: null },
+  new_hire: { fill: hrStatusPaint("new").fill, text: "#2E1C57", border: null },
+  training: { fill: hrStatusPaint("training").fill, text: "#4A2600", border: null },
+  absent: { fill: hrStatusPaint("absent_mosal").fill, text: "#FFFFFF", border: null },
+  terminated: { fill: hrStatusPaint("absent_mosal").fill, text: "#FFFFFF", border: null },
+  phone_issue: { fill: hrStatusPaint("absent_mosal").fill, text: "#FFFFFF", border: null },
+  id_suspended: { fill: hrStatusPaint("absent_mosal").fill, text: "#FFFFFF", border: null },
+  vehicle: { fill: hrStatusPaint("absent_mosal").fill, text: "#FFFFFF", border: null },
+  cancelled: { fill: hrStatusPaint("cancelled").fill, text: "#FFFFFF", border: null },
+  abs_lh: { fill: "#FAE8FF", text: "#86198F", border: null },
+  abs_lo: { fill: "#FFE4E6", text: "#9F1239", border: "#FDA4AF" },
+  custom: { fill: "#F3E8FF", text: "#6B21A8", border: null },
+  blank: { fill: "transparent", text: "#98A2B3", border: null },
+};
+
+/**
+ * The paint for one cell. `cancelled` is the only status whose fill is not fixed:
+ * it follows its Employee Status tile — dark green on an End of Contract, red
+ * otherwise (SOP §3 "same colour as the tile with that name").
+ */
+export function payrollDayPaint(
+  status: DayStatus,
+  jobEndDescription?: string | null,
+): PayrollDayPaint {
+  if (status === "cancelled") {
+    const paint = hrStatusPaint("cancelled", jobEndDescription ?? "");
+    return { fill: paint.fill, text: paint.text, border: null };
+  }
+  return PAYROLL_DAY_PAINT[status];
+}
+
+/**
+ * The paint as an inline style. The border is an inset shadow because a day cell
+ * already owns its Tailwind classes, and "white with a dark frame" cannot be
+ * expressed without fighting them.
+ */
+export function dayCellStyle(status: DayStatus, jobEndDescription?: string | null): {
+  backgroundColor: string;
+  color: string;
+  boxShadow?: string;
+} {
+  const paint = payrollDayPaint(status, jobEndDescription);
+  return {
+    backgroundColor: paint.fill,
+    color: paint.text,
+    ...(paint.border ? { boxShadow: `inset 0 0 0 1px ${paint.border}` } : {}),
+  };
+}
+
+/** The legend swatch for a day type, taken from the same paint as the cells. */
+function chipOf(status: DayStatus): { hex: string; border: string | null } {
+  const paint = PAYROLL_DAY_PAINT[status];
+  return { hex: paint.fill, border: paint.border };
+}
+
+/** Chip dot colours, one per SOP day type, straight off `PAYROLL_DAY_PAINT`. */
+export const PAYROLL_STATUS_CHIP: Record<
+  PayrollStatusFilter,
+  { hex: string; border: string | null }
+> = {
+  work: chipOf("work"),
+  reduced3: chipOf("reduced3"),
+  half: chipOf("half"),
+  sick: chipOf("sick"),
+  off: chipOf("off"),
+  accident: chipOf("accident"),
+  absent: chipOf("absent"),
+  cancelled: chipOf("cancelled"),
+  leave: chipOf("leave"),
+  terminated: chipOf("terminated"),
+  phone_issue: chipOf("phone_issue"),
+  id_suspended: chipOf("id_suspended"),
+  vehicle: chipOf("vehicle"),
+  new_hire: chipOf("new_hire"),
+  training: chipOf("training"),
 };
 
 export function riderHasDayStatus(
@@ -175,12 +257,27 @@ export function countedRiderDays(rows: ReadonlyArray<{ days: readonly DayStatus[
   return rows.reduce((sum, row) => sum + row.days.filter((status) => status !== "blank").length, 0);
 }
 
-export function filterRidersByStatus<T extends { days: readonly DayStatus[] }>(
-  rows: readonly T[],
-  status: PayrollStatusFilter | null,
-): T[] {
+/**
+ * The status chip filter. SOP §3: a chip keeps the riders who have that status on
+ * at least one day **up to today** — a future approved leave must not pull a rider
+ * into the OFF or Leave chip before the day happens.
+ *
+ * Without `today` the whole month is scanned, which is what the other callers have
+ * always done.
+ */
+export function filterRidersByStatus<
+  T extends { days: readonly DayStatus[]; dayInfo?: ReadonlyArray<{ date: string }> },
+>(rows: readonly T[], status: PayrollStatusFilter | null, today?: string | null): T[] {
   if (!status) return [...rows];
-  return rows.filter((row) => riderHasDayStatus(row.days, status));
+  if (!today) return rows.filter((row) => riderHasDayStatus(row.days, status));
+  return rows.filter((row) => {
+    for (let index = 0; index < row.days.length; index += 1) {
+      if (row.days[index] !== status) continue;
+      const date = row.dayInfo?.[index]?.date;
+      if (!date || date <= today) return true;
+    }
+    return false;
+  });
 }
 
 export function shareOfPayroll(matching: number, total: number): number {
@@ -292,6 +389,118 @@ export function requiredHoursForRange(
 export function offStructureHoursFor(offStructureDays: number): number {
   if (!Number.isFinite(offStructureDays)) return 0;
   return Math.max(0, offStructureDays) * PAYROLL_DAY_HOURS;
+}
+
+/**
+ * Hours one counted day asks for, by project. SOP v1.0: Americana rides a 12 h
+ * day, Keeta a 10 h day. The project key decides; the printed Client Name is the
+ * fallback for a rider whose key was never set but whose restaurant names Keeta.
+ */
+export function companyDayHours(
+  projectKey: string | null | undefined,
+  clientName?: string | null,
+): number {
+  const key = (projectKey ?? "").trim().toLowerCase();
+  if (key === "keeta") return 10;
+  if (key) return 12;
+  return (clientName ?? "").trim().toLowerCase().includes("keeta") ? 10 : 12;
+}
+
+/**
+ * Day types that ask for no hours. These are the rider's own allowance of OFF,
+ * Sick, Accident and Leave days — the 2 or 3 days the Off Structure grants — plus
+ * the days that are not work at all.
+ */
+const UNCOUNTED_DAYS = new Set<DayStatus>([
+  "off",
+  "sick",
+  "accident",
+  "leave",
+  "training",
+  "vehicle",
+  "cancelled",
+  "terminated",
+  "phone_issue",
+  "id_suspended",
+  "new_hire",
+  "blank",
+]);
+
+/** False for the day types that must not add Required Hours. */
+export function isCountedDay(status: DayStatus): boolean {
+  return !UNCOUNTED_DAYS.has(status);
+}
+
+/** The part of the period that has already happened (`date <= today`), inclusive. */
+export function elapsedDates(dates: readonly string[], today?: string | null): string[] {
+  if (!today) return [...dates];
+  return dates.filter((date) => date <= today);
+}
+
+/**
+ * Required Hours on Combined Payroll: every counted day that has already
+ * happened, at the project's day length. A day the rules excluded asks for
+ * nothing, which is how the rider's allowed off days leave the calculation.
+ *
+ *   Americana, 5 counted days → 60 h · Keeta, 5 counted days → 50 h
+ */
+export function combinedRequiredHours(
+  row: { days: readonly DayStatus[] },
+  dates: readonly string[],
+  today?: string | null,
+  hoursPerDay: number = PAYROLL_DAY_HOURS,
+): number {
+  let counted = 0;
+  for (let index = 0; index < dates.length; index += 1) {
+    const date = dates[index];
+    if (today && date > today) continue;
+    if (isCountedDay(row.days[index] ?? "blank")) counted += 1;
+  }
+  return counted * hoursPerDay;
+}
+
+/** Efficiency % = Actual Hours ÷ Required Hours. Zero when nothing was required. */
+export function combinedEfficiencyPct(actualHours: number, requiredHours: number): number {
+  if (!Number.isFinite(actualHours) || !Number.isFinite(requiredHours) || requiredHours <= 0) {
+    return 0;
+  }
+  return (actualHours / requiredHours) * 100;
+}
+
+/** The five Combined Payroll cards. */
+export type CombinedKpis = {
+  riders: number;
+  active: number;
+  avgEfficiency: number;
+  activeAmericana: number;
+  activeKeeta: number;
+};
+
+export function computeCombinedKpis(
+  rows: ReadonlyArray<{
+    status: "Active" | "Inactive";
+    projectKey: string | null;
+    partner: string;
+    efficiency: number;
+  }>,
+): CombinedKpis {
+  const riders = rows.length;
+  const activeRows = rows.filter((row) => row.status === "Active");
+  const avgEfficiency =
+    riders === 0 ? 0 : rows.reduce((sum, row) => sum + (Number.isFinite(row.efficiency) ? row.efficiency : 0), 0) / riders;
+  let activeAmericana = 0;
+  let activeKeeta = 0;
+  for (const row of activeRows) {
+    if (companyDayHours(row.projectKey, row.partner) === 10) activeKeeta += 1;
+    else activeAmericana += 1;
+  }
+  return {
+    riders,
+    active: activeRows.length,
+    avgEfficiency,
+    activeAmericana,
+    activeKeeta,
+  };
 }
 
 export function parseMonthKey(key: string): { year: number; month: number } | null {

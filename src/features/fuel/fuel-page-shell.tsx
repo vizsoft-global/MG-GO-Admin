@@ -6,11 +6,14 @@ import { Calendar, CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Exter
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
-  AppListControls,
   fieldSearchMatch,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -46,9 +49,19 @@ export function FuelPageShell({
   embedded?: boolean;
 }) {
   const t = useTranslations("pages.fuel");
+  const toolbarColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "employee", label: t("colEmployee"), locked: true },
+      { id: "plate", label: t("colPlate") },
+      { id: "chip", label: t("colChip") },
+      { id: "fuelType", label: t("colFuelType") },
+      { id: "project", label: t("colProject") },
+      { id: "zone", label: t("colZone") },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("fuel", toolbarColumns);
   const withHub = useFleetBreadcrumbs();
-  const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs("fuel");
   const { can } = useAuth();
   const canEditFuel = can("fuel.edit");
   const [mode, setMode] = useState<FuelRangeMode>("weekly");
@@ -59,7 +72,6 @@ export function FuelPageShell({
   const [appliedFrom, setAppliedFrom] = useState(initialAnchor);
   const [appliedTo, setAppliedTo] = useState(initialAnchor);
   const [rangeError, setRangeError] = useState<"order" | "span" | null>(null);
-  const [search, setSearch] = useState("");
   const [projectKey, setProjectKey] = useState<string>("all");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<FleetRequestListRow | null>(null);
@@ -93,7 +105,7 @@ export function FuelPageShell({
       .filter((row) => row.request_type !== "asset" && daySet.has(toKuwaitYmd(row.created_at)))
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
   }, [daySet, fuelRequests.data, refundRequests.data]);
-  const rows = useMemo(() => {
+  const baseRows = useMemo(() => {
     const fillsOnly = buildFuelWeekRows(fills, range.days, range.start.slice(0, 7));
     const requests = requestRows.flatMap((row) =>
       row.request_type === "fuel" || row.request_type === "fuel_refund"
@@ -122,10 +134,14 @@ export function FuelPageShell({
     const overrideByKey = new Map(
       (withdrawnOverrides.data ?? []).map((item) => [`${item.vehicleId}:${item.driverId}`, item.amountKwd]),
     );
-    return withFuelRequestRows(fillsOnly, requests, range.days)
-      .map((row) => applyWithdrawnOverride(row, overrideByKey.get(`${row.vehicleId}:${row.driverId}`)))
-      .filter((row) =>
-        fieldSearchMatch(row, search, {
+    return withFuelRequestRows(fillsOnly, requests, range.days).map((row) =>
+      applyWithdrawnOverride(row, overrideByKey.get(`${row.vehicleId}:${row.driverId}`)),
+    );
+  }, [fills, range.days, range.start, requestRows, withdrawnOverrides.data]);
+  const rows = useMemo(
+    () =>
+      baseRows.filter((row) =>
+        fieldSearchMatch(row, prefs.appliedQuery, {
           name: (item) => item.driverName,
           employee_id: (item) => item.employeeId,
           plate: (item) => item.plate,
@@ -134,8 +150,9 @@ export function FuelPageShell({
           vehicleCompany: (item) => item.vehicleCompany,
           chip: (item) => item.chip,
         }),
-      );
-  }, [fills, range.days, range.start, requestRows, search, withdrawnOverrides.data]);
+      ),
+    [baseRows, prefs.appliedQuery],
+  );
   const selected = rows.find((row) => row.key === selectedKey) ?? null;
 
   const applyCustom = () => {
@@ -241,13 +258,16 @@ export function FuelPageShell({
                 {rangeError === "span" ? t("rangeTooLong") : t("rangeOrder")}
               </p>
             ) : null}
-            <AppListControls
-              className="min-w-[220px] flex-1"
-              searchValue={search}
-              onSearchChange={setSearch}
-              searchPlaceholder={t("searchPlaceholder")}
-              clearSearchLabel={labels.clearSearch}
-            />
+            <div className="min-w-[16rem] flex-1 basis-full">
+              <TableToolbar
+                prefs={prefs}
+                entity={t("title")}
+                columns={toolbarColumns}
+                rowKind="dynamic"
+                filteredCount={rows.length}
+                totalCount={baseRows.length}
+              />
+            </div>
             <Select
               items={[
                 { value: "all", label: t("projectAll") },
@@ -375,7 +395,7 @@ function FuelRow({
       onClick={() => router.push(`/fuel/drivers/${row.driverId}`)}
     >
       <TableCell className="whitespace-nowrap">
-        <p className="font-medium">{row.driverName ?? "—"}</p>
+        <TableNameCell name={row.driverName} />
         {row.employeeId ? <p className="text-xs text-muted-foreground">{row.employeeId}</p> : null}
         <Link
           href={`/fuel/drivers/${row.driverId}`}

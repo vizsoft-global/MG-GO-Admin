@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { FileText, Loader2, Plus, Trash2, UserRound } from "lucide-react";
+import { FileText, Loader2, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
+import { groupRows } from "@/components/app/app-list-controls";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { ToggleChip } from "@/components/app/toggle-chip";
@@ -13,6 +14,13 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -178,6 +186,19 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
     await queryClient.invalidateQueries({ queryKey: queryKeys.esign.template(templateId) });
   }
 
+  const fieldColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "key", label: t("colKey"), locked: true },
+      { id: "label", label: t("colLabel"), locked: true },
+      { id: "type", label: t("colType"), categorical: true },
+      { id: "req", label: t("colRequired") },
+      { id: "act", label: t("colActions"), locked: true },
+    ],
+    [t],
+  );
+  const fieldPrefs = useTablePrefs("esign.templateFields", fieldColumns);
+  const shownFields = fieldPrefs.orderedColumns.filter((column) => fieldPrefs.isVisible(column.id));
+
   if (isLoading) {
     return (
       <AppPage>
@@ -199,6 +220,15 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
     ...EMPLOYEE_PLACEHOLDER_KEYS,
     ...template.fields.map((f) => f.field_key),
   ];
+  const fieldQuery = fieldPrefs.appliedQuery.trim().toLowerCase();
+  const filteredFields = template.fields.filter((field) => {
+    if (!fieldQuery) return true;
+    return (
+      field.field_key.toLowerCase().includes(fieldQuery) ||
+      field.label_en.toLowerCase().includes(fieldQuery) ||
+      (field.label_ar ?? "").toLowerCase().includes(fieldQuery)
+    );
+  });
 
   return (
     <AppPage>
@@ -329,52 +359,78 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
       </AppListCard>
 
       <AppListCard className="p-0">
-        <div className="flex items-center justify-between p-4">
+        <div className="p-4">
           <SectionHeading icon={FileText} accent="warning">
             {t("fields")}
           </SectionHeading>
-          <Button size="sm" className="h-9" onClick={() => setFieldOpen(true)}>
-            <Plus className="me-1.5 h-3.5 w-3.5" />
-            {t("addField")}
-          </Button>
         </div>
+        <TableToolbar
+          prefs={fieldPrefs}
+          entity={t("fields")}
+          columns={fieldColumns}
+          rowKind="dynamic"
+          filteredCount={filteredFields.length}
+          totalCount={template.fields.length}
+          onAdd={() => setFieldOpen(true)}
+          addLabel={t("addField")}
+        />
         {template.fields.length === 0 ? (
           <div className="px-4 pb-4 text-xs text-muted-foreground">{t("noFields")}</div>
         ) : (
-          <AppDataTable
-            columns={[
-              { id: "key", label: t("colKey") },
-              { id: "label", label: t("colLabel") },
-              { id: "type", label: t("colType") },
-              { id: "req", label: t("colRequired") },
-              { id: "act", label: t("colActions") },
-            ]}
-          >
-            {template.fields.map((field) => (
-              <AppDataTableRow key={field.id}>
-                <TableCell className="font-mono text-xs">{field.field_key}</TableCell>
-                <TableCell className="text-sm">
-                  {field.label_en}
-                  {field.label_ar ? (
-                    <div className="text-xs text-muted-foreground">{field.label_ar}</div>
-                  ) : null}
-                </TableCell>
-                <TableCell className="text-sm">{field.field_type}</TableCell>
-                <TableCell className="text-sm">{field.is_required ? t("required") : "—"}</TableCell>
-                <TableCell>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-destructive hover:bg-destructive/10"
-                    onClick={() => void removeField(field.id)}
-                  >
-                    <Trash2 className="me-1 h-3.5 w-3.5" />
-                    {t("remove")}
-                  </Button>
-                </TableCell>
-              </AppDataTableRow>
-            ))}
+          <AppDataTable columns={shownFields.map((column) => ({ id: column.id, label: column.label }))}>
+            {groupRows(
+              filteredFields,
+              fieldPrefs.groupBy,
+              { type: (field) => field.field_type },
+              {},
+              "—",
+            ).flatMap((group) => [
+              ...(fieldPrefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`}>
+                      <TableCell colSpan={shownFields.length} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((field) => {
+                const cells: Record<string, ReactNode> = {
+                  key: <span className="font-mono text-xs">{field.field_key}</span>,
+                  label: (
+                    <>
+                      <TableNameCell name={field.label_en} />
+                      {field.label_ar ? (
+                        <div className="text-xs text-muted-foreground">{field.label_ar}</div>
+                      ) : null}
+                    </>
+                  ),
+                  type: field.field_type,
+                  req: field.is_required ? t("required") : <EmptyCell />,
+                  act: (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-destructive hover:bg-destructive/10"
+                      onClick={() => void removeField(field.id)}
+                    >
+                      <Trash2 className="me-1 h-3.5 w-3.5" />
+                      {t("remove")}
+                    </Button>
+                  ),
+                };
+                return (
+                  <AppDataTableRow key={field.id}>
+                    {shownFields.map((column) => (
+                      <TableCell key={column.id} className="text-sm">
+                        {cells[column.id]}
+                      </TableCell>
+                    ))}
+                  </AppDataTableRow>
+                );
+              }),
+            ])}
           </AppDataTable>
         )}
       </AppListCard>

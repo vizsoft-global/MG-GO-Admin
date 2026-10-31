@@ -7,6 +7,10 @@ export type ListColumnPreference = {
   order: string[];
   visible: string[];
   sort: UiPreferenceSort | null;
+  /** Last Group by column id, or "none". Optional so older saved prefs still load. */
+  groupBy?: string | null;
+  /** Last list or grid choice. Optional so older saved prefs still load. */
+  viewMode?: "list" | "grid";
 };
 
 export type UiPreferenceSource = "user" | "role" | "system";
@@ -19,3 +23,6 @@ export type EffectiveUiPreference<T> = {
 };
 
 export const DRIVERS_LIST_COLUMNS_PREF_KEY = "drivers.list.columns.v2";
+
+/** Combined Payroll column order and visibility, saved per staff member. */
+export const PAYROLL_COMBINED_COLUMNS_PREF_KEY = "payroll.combined";

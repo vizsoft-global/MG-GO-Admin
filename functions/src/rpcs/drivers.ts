@@ -20,6 +20,7 @@ import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { COLLECTIONS } from "../core/collections";
 import { projectKeyMatches } from "../core/project-key";
 import { requireStaff, requireStaffAny, requireStaffFresh, scopedProjectKey } from "../core/staff";
+import { reportedInstallBuild } from "./driver-devices";
 import { maskDriverForPartner } from "../core/partner-mask";
 import { riderIsNonOperational } from "../core/operational-sections";
 import { digitSubsequenceMatch, textContainsMatch } from "../core/search-text";
@@ -143,14 +144,18 @@ function kuwaitDayStart(now: Date): Date {
 }
 
 /**
- * What the Vehicle column shows: no assignment is blank, a car stays a car,
- * and anything else (including a plate with no stored type) is a bike.
+ * What the Vehicle column shows, and what its header filter matches on.
+ *
+ * The stored key is returned unchanged, so a type added to the catalog filters
+ * correctly. Before this, everything that was not a car read back as `bike`,
+ * which made a third type unfilterable. A row with a plate but no stored type
+ * stays `bike` — that is the same default `vehicleSpriteKey` applies.
  */
-function vehicleListValue(row: Dict): string {
+export function vehicleListValue(row: Dict): string {
   const type = asStr(row["vehicle_type_key"]);
   const label = asStr(row["vehicle_label"]);
   if (!type && !label) return "";
-  return type === "car" ? "car" : "bike";
+  return type || "bike";
 }
 
 /** `admin_drivers_column_value`. */
@@ -653,6 +658,10 @@ async function loadDriverRows(
         (driver ? asStr(driver["vehicle_type_key"]) : null) ??
         (vehicle ? asStr(vehicle["vehicle_type_key"]) : null) ??
         asStr(intake["vehicle_type_key"]),
+      // What the assigned vehicle itself is. The Vehicle column prefers this so
+      // the cell names the bike/car/van the rider actually holds, not a type the
+      // intake sheet guessed before a vehicle was assigned.
+      assigned_vehicle_type_key: vehicle ? asStr(vehicle["vehicle_type_key"]) : null,
       restaurant_ids: restaurantIds,
       restaurant_names: restaurantNames,
       workflow_status: asStr(intake["workflow_status"]),
@@ -866,6 +875,7 @@ async function hydrateDeferredPage(rows: Dict[], phases: PhaseMarks): Promise<vo
         asStr(driver["vehicle_type_key"]) ??
         (vehicle ? asStr(vehicle["vehicle_type_key"]) : null) ??
         asStr(row["vehicle_type_key"]);
+      row["assigned_vehicle_type_key"] = vehicle ? asStr(vehicle["vehicle_type_key"]) : null;
       row["account_status"] = accountStatus;
       row["status_key"] = isBlocked ? "blocked" : accountStatus;
       row["is_blocked"] = isBlocked;
@@ -1594,19 +1604,26 @@ export const adminDriverAppInstallVersions = onCall(async (request) => {
     }
   }
 
-  return driverSnap.docs
-    .map((doc) => {
-      const activeDeviceId = asStr(doc.get("active_device_id"));
-      const session = activeDeviceId
-        ? sessionByDriverDevice.get(`${doc.id}\u0000${activeDeviceId}`)
-        : undefined;
-      if (!session) return null;
-      return {
+  return driverSnap.docs.flatMap((doc) => {
+    const activeDeviceId = asStr(doc.get("active_device_id"));
+    const session = activeDeviceId
+      ? sessionByDriverDevice.get(`${doc.id}\u0000${activeDeviceId}`)
+      : undefined;
+    const build = reportedInstallBuild({
+      sessionCode: session ? asNum(session["app_version_code"]) : null,
+      sessionName: session ? asStr(session["app_version_name"]) : null,
+      driverCode: asNum(doc.get("app_version_code")),
+      driverName: asStr(doc.get("app_version_name")),
+    });
+    if (!session && build.code == null) return [];
+    const seen = session?.["last_seen_at"] ?? doc.get("device_meta_at");
+    return [
+      {
         driver_id: doc.id,
-        app_version_code: asNum(session["app_version_code"]),
-        app_version_name: asStr(session["app_version_name"]),
-        last_seen_at: instantOf(session["last_seen_at"])?.toISOString() ?? null,
-      };
-    })
-    .filter((row): row is NonNullable<typeof row> => row !== null);
+        app_version_code: build.code,
+        app_version_name: build.name,
+        last_seen_at: instantOf(seen)?.toISOString() ?? null,
+      },
+    ];
+  });
 });

@@ -21,7 +21,8 @@ export function DashboardFrame({ children }: { children: ReactNode }) {
     if (accessKind !== "partner") return;
     const allowed =
       pathname === "/client-portal" ||
-      pathname.startsWith("/client-portal/") ||
+      pathname === "/client-portal/employees" ||
+      pathname.startsWith("/client-portal/employees/") ||
       pathname === "/operations-dashboard" ||
       pathname.startsWith("/operations-dashboard/");
     if (!allowed) router.replace("/client-portal");

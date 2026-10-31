@@ -41,7 +41,7 @@ export function AttendanceDriverDetailPageShell({ driverId }: { driverId: string
 
       {dayRow ? (
         <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs font-semibold text-muted-foreground">
             {t("colCheckInPhoto")}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-3">

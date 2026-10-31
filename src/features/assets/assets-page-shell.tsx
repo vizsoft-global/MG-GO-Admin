@@ -22,16 +22,19 @@ import { ClearAllModuleButton } from "@/features/settings/clear-all-module-butto
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
-  AppListControls,
   FlatListPager,
   GroupedSections,
   GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
   useGroupedListView,
-  useListControlLabels,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
+import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -136,6 +139,15 @@ function AssetsPageSkeleton() {
 
 function AssetsPageContent() {
   const t = useTranslations("pages.assets");
+  const toolbarColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: t("colAsset"), locked: true },
+      { id: "category", label: t("colCategory") },
+      { id: "status", label: t("colStatus"), categorical: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("assets", toolbarColumns);
   const withHub = useFleetBreadcrumbs();
   const { can } = useAuth();
   const router = useRouter();
@@ -169,9 +181,6 @@ function AssetsPageContent() {
     low_stock_count: 0,
   };
 
-  const labels = useListControlLabels();
-  const { prefs, update: updateListPrefs } = useListViewPrefs("assets");
-  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
@@ -193,7 +202,7 @@ function AssetsPageContent() {
   const visible = useMemo(() => {
     return items.filter((row) => {
       if (
-        !fieldSearchMatch(row, search, {
+        !fieldSearchMatch(row, prefs.appliedQuery, {
           name: (item) => item.name,
           status: (item) => (item.is_active ? "active" : "inactive"),
           code: (item) => item.code,
@@ -209,7 +218,7 @@ function AssetsPageContent() {
       if (categoryFilter !== "all" && row.category !== categoryFilter) return false;
       return true;
     });
-  }, [items, search, statusFilter, categoryFilter]);
+  }, [categoryFilter, items, prefs.appliedQuery, statusFilter]);
   const grouped = useMemo(
     () =>
       groupRows(
@@ -229,7 +238,7 @@ function AssetsPageContent() {
   const listView = useGroupedListView(
     grouped,
     prefs.groupBy !== "none",
-    `${prefs.groupBy}\u0001${search}\u0001${statusFilter}\u0001${categoryFilter}`,
+    `${prefs.groupBy}\u0001${prefs.appliedQuery}\u0001${statusFilter}\u0001${categoryFilter}`,
   );
 
   const invalidateAssets = useCallback(() => {
@@ -324,17 +333,6 @@ function AssetsPageContent() {
                 </Button>
               </>
             ) : null}
-            {canCreate && tab === "catalog" ? (
-              <Button
-                type="button"
-                size="sm"
-                className="h-9 cursor-pointer rounded-lg"
-                onClick={handleAdd}
-              >
-                <Plus className="me-2 h-3.5 w-3.5" />
-                {t("addAsset")}
-              </Button>
-            ) : null}
           </div>
         }
       />
@@ -351,7 +349,12 @@ function AssetsPageContent() {
             icon: id === "assignments" ? ClipboardList : id === "catalog" ? Package : FileText,
           }))}
           activeId={tab}
-          onSelect={(id) => router.replace(`/assets?tab=${id}`)}
+          onSelect={(id) => {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("tab", id);
+            const qs = params.toString();
+            router.replace(qs ? `/assets?${qs}` : "/assets");
+          }}
         />
       ) : null}
       {tab === "assignments" ? <AssetsAssignmentsPanel /> : null}
@@ -380,21 +383,19 @@ function AssetsPageContent() {
 
       <AppListCard
         toolbar={
-          <AppListControls
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder={t("searchPlaceholder")}
-            searchAriaLabel={t("searchPlaceholder")}
-            clearSearchLabel={labels.clearSearch}
-            groupByOptions={[labels.group.none, labels.group.status]}
-            groupBy={prefs.groupBy}
-            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
-            groupByLabel={labels.groupBy}
-            viewMode={prefs.viewMode}
-            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
-            tableViewLabel={labels.viewTable}
-            cardsViewLabel={labels.viewCards}
-            filterSlot={
+          <>
+            <TableToolbar
+              prefs={prefs}
+              entity={t("title")}
+              columns={toolbarColumns}
+              rowKind="dynamic"
+              entityList
+              filteredCount={visible.length}
+              totalCount={items.length}
+              onAdd={canCreate && tab === "catalog" ? handleAdd : undefined}
+              addLabel={t("addAsset")}
+            />
+            <div className="px-4 pb-3">
               <DropdownMenu>
                 <DropdownMenuTrigger
                   className={cn(
@@ -464,8 +465,8 @@ function AssetsPageContent() {
                   ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
-            }
-          />
+            </div>
+          </>
         }
       >
         <CardContent className="p-0">
@@ -502,10 +503,10 @@ function AssetsPageContent() {
                 {t("clearFilters")}
               </Button>
             </div>
-          ) : prefs.viewMode === "cards" ? (
+          ) : prefs.view === "grid" ? (
             <div className="p-4">
               <p className="mb-3 text-xs text-muted-foreground">{countLabel}</p>
-              <GroupedSections groups={grouped} paged resetKey={`${prefs.groupBy}\u0001${search}\u0001${statusFilter}\u0001${categoryFilter}`}>
+              <GroupedSections groups={grouped} paged resetKey={`${prefs.groupBy}\u0001${prefs.appliedQuery}\u0001${statusFilter}\u0001${categoryFilter}`}>
                 {(rows) => (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {rows.map((row) => (
@@ -515,7 +516,7 @@ function AssetsPageContent() {
                         className="w-full rounded-xl border border-border bg-card p-4 text-start shadow-sm hover:bg-muted/40"
                         onClick={() => handleViewDetail(row)}
                       >
-                        <p className="truncate text-sm font-semibold">{row.name}</p>
+                        <TableNameCell name={row.name} />
                         <p className="mt-1 text-xs text-muted-foreground">{row.code}</p>
                         <div className="mt-2">
                           <Badge variant={row.is_active ? "default" : "secondary"}>
@@ -583,7 +584,7 @@ function AssetsPageContent() {
                                 />
                               </span>
                               <div>
-                                <p className="font-medium">{row.name}</p>
+                                <TableNameCell name={row.name} />
                                 <p className="text-xs text-muted-foreground">{row.code}</p>
                               </div>
                             </div>

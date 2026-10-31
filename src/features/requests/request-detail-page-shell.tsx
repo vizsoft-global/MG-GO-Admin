@@ -519,7 +519,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
               <h2 className="mb-3 text-sm font-semibold">{t("detail.fields")}</h2>
               <div className="mb-3 grid gap-3 sm:grid-cols-2">
                 <div className="min-w-0">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="mb-1 text-xs font-semibold text-muted-foreground">
                     {tRcm("access.sender")}
                   </p>
                   <RequesterHeader
@@ -535,7 +535,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                   </p>
                 </div>
                 <div className="min-w-0">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="mb-1 text-xs font-semibold text-muted-foreground">
                     {tRcm("access.receiver")}
                   </p>
                   <p className="text-sm font-semibold">
@@ -554,7 +554,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                     const row = allDetailRows.find((item) => item.key === key);
                     return (
                       <div key={key} className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <p className="text-xs font-semibold text-muted-foreground">
                           {row?.label ?? key}
                         </p>
                         <p
@@ -569,7 +569,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                     );
                   })}
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <p className="text-xs font-semibold text-muted-foreground">
                       {tRcm("decision.against")}
                     </p>
                     <p className="text-sm font-medium">{complaintAgainst(request.payload)}</p>
@@ -613,7 +613,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                     ) : null}
                     {boxed && boxed.value !== "—" ? (
                       <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <p className="text-xs font-semibold text-muted-foreground">
                           {boxed.label}
                         </p>
                         <p className="mt-1 whitespace-pre-wrap text-sm">{boxed.value}</p>
@@ -626,7 +626,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 );
               })()}
               <div className="mt-3 space-y-1.5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-semibold text-muted-foreground">
                   {t("detail.attachments")}
                 </p>
                 {attachments.length === 0 ? (
@@ -717,7 +717,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                     <span>{t("detail.awaitingClarification")}</span>
                   </p>
                 ) : null}
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Label className="text-xs font-semibold text-muted-foreground">
                   {isComplaint ? tRcm("decision.responseLabel") : tRcm("decision.commentLabel")}
                 </Label>
                 <Textarea
@@ -732,7 +732,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 />
                 {isComplaint ? (
                   <div className="mt-3">
-                    <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Label className="text-xs font-semibold text-muted-foreground">
                       {tRcm("decision.closingRemark")}
                     </Label>
                     <Textarea
@@ -1308,7 +1308,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             </div>
             {acknowledged && (parsedAck.text || parsedAck.keys.length > 0) ? (
               <div className="mt-2 rounded-lg border border-border bg-muted/30 px-2.5 py-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-semibold text-muted-foreground">
                   {t("detail.terms.riderNote")}
                 </p>
                 {parsedAck.text ? (
@@ -1377,7 +1377,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             <DialogDescription>{tRcm("decision.approveConsequence")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5 px-5 py-4">
-            <Label htmlFor="approve-comment" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Label htmlFor="approve-comment" className="text-xs font-semibold text-muted-foreground">
               {tRcm("decision.yourComment")}
             </Label>
             <Textarea
@@ -1420,7 +1420,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5 px-5 py-4">
-            <Label htmlFor="reject-comment" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Label htmlFor="reject-comment" className="text-xs font-semibold text-muted-foreground">
               {tRcm("decision.yourComment")}
               <span className="ms-0.5 text-destructive">*</span>
             </Label>

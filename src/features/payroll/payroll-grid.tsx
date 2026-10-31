@@ -30,7 +30,8 @@ import {
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { cn } from "@/lib/utils";
-import { PayrollIdentityCell, payrollIdentityField, payrollIdentityValue } from "./payroll-identity-cell";
+import { payrollAssignField } from "./payroll-assign";
+import { PayrollAssignCell, PayrollIdentityCell, payrollIdentityField, payrollIdentityValue } from "./payroll-identity-cell";
 import {
   countDaysByStatus,
   countedRiderDays,
@@ -80,48 +81,55 @@ import {
   resolveColumnLabel,
   type PayrollColumnConfigRow,
 } from "./payroll-column-config";
-import { PayrollHeadingLabel, stickyIdentityOffset, stickyIdentityStyle } from "./payroll-heading";
+import { PayrollHeadingLabel, isMasterDataColumn, stickyIdentityOffset, stickyIdentityStyle } from "./payroll-heading";
+import { isEndOfContract } from "./hr-payroll-status";
 
-export function dayClass(status: DayStatus): string {
+/**
+ * The day-cell classes. Every hex here is the fill from `PAYROLL_DAY_PAINT` in
+ * `payroll-formulas` — Tailwind needs the literal to generate the rule, so this
+ * list cannot be built at runtime. `combined-day-paint.test.ts` fails if the two
+ * disagree, which is what keeps the two grids and the legend on one palette.
+ */
+export function dayClass(status: DayStatus, jobEndDescription?: string | null): string {
   switch (status) {
     case "work":
-      return "text-muted-foreground";
+      // SOP §3: Active is plain white — no fill and no frame.
+      return "bg-white text-[#292A3F]";
     case "reduced3":
-      return "bg-amber-100 text-amber-900";
+      return "bg-[#BFE4F8] text-[#0E3346]";
     case "half":
-      return "bg-cyan-100 text-cyan-900";
+      return "bg-white text-[#292A3F] ring-1 ring-inset ring-[#292A3F]";
     case "actual":
-      return "bg-emerald-100 text-emerald-800";
+      return "bg-[#D1FAE5] text-[#065F46]";
     case "off":
-      return "bg-emerald-100 text-emerald-800";
+      return "bg-[#C9EEC4] text-[#14401A]";
     case "sick":
-      return "bg-orange-100 text-orange-800";
-    case "accident":
-      return "bg-[#FFE45C] text-[#3A3000]";
-    case "vehicle":
-      return "bg-indigo-100 text-indigo-800";
-    case "absent":
-      return "bg-[#D13B3B] text-white";
-    case "abs_lh":
-      return "bg-fuchsia-100 text-fuchsia-800";
-    case "abs_lo":
-      return "bg-rose-100 text-rose-800 ring-1 ring-inset ring-rose-300";
-    case "cancelled":
-      return "bg-[#D13B3B] text-white";
     case "leave":
       return "bg-[#F28C28] text-[#2B1600]";
-    case "terminated":
-      return "bg-neutral-200 text-neutral-700";
-    case "phone_issue":
-      return "bg-teal-100 text-teal-800";
-    case "id_suspended":
-      return "bg-violet-100 text-violet-800";
+    case "accident":
+      return "bg-[#FFE45C] text-[#3A3000]";
     case "new_hire":
       return "bg-[#DCCDF6] text-[#2E1C57]";
     case "training":
       return "bg-[#FFD9B0] text-[#4A2600]";
+    case "absent":
+    case "terminated":
+    case "phone_issue":
+    case "id_suspended":
+    case "vehicle":
+      return "bg-[#D13B3B] text-white";
+    case "cancelled":
+      // SOP §3: Cancelled takes the colour of its Employee Status tile — dark green
+      // on an End of Contract, red otherwise.
+      return isEndOfContract(jobEndDescription ?? "")
+        ? "bg-[#1E6B3A] text-white"
+        : "bg-[#D13B3B] text-white";
+    case "abs_lh":
+      return "bg-[#FAE8FF] text-[#86198F]";
+    case "abs_lo":
+      return "bg-[#FFE4E6] text-[#9F1239] ring-1 ring-inset ring-[#FDA4AF]";
     case "custom":
-      return "bg-purple-100 text-purple-800";
+      return "bg-[#F3E8FF] text-[#6B21A8]";
     case "blank":
       return "text-muted-foreground/40";
     default: {
@@ -231,6 +239,7 @@ export function PayrollDayGrid({
   onExport,
   empty,
   editor,
+  identityEdit = false,
   headingConfig,
   headingManage = false,
   today,
@@ -242,6 +251,8 @@ export function PayrollDayGrid({
   onExport: (rows: readonly PayrollRiderRow[]) => void;
   empty: string;
   editor?: PayrollGridEditor;
+  /** Client Name and Zone on Combined. Day cells stay on `editor`. */
+  identityEdit?: boolean;
   headingConfig?: ReadonlyMap<string, PayrollColumnConfigRow>;
   headingManage?: boolean;
   /** Kuwait date the page calls today; drives the Rider Status column. */
@@ -776,7 +787,8 @@ export function PayrollDayGrid({
                   key={column.id}
                   label={headingConfig ? resolveColumnLabel(column.id, fallback, headingConfig) : fallback}
                   heading={
-                    headingConfig ? (
+                    // SOP §7/§11: no pencil on the master-data trio, in any table.
+                    headingConfig && !isMasterDataColumn(column.id) ? (
                       <PayrollHeadingLabel
                         columnKey={column.id}
                         fallback={fallback}
@@ -848,7 +860,7 @@ export function PayrollDayGrid({
                           )}
                           style={sticky?.style}
                         >
-                          {renderIdentityCell(row, column, today, editable)}
+                          {renderIdentityCell(row, column, today, identityEdit || editable)}
                         </td>
                         );
                       })}
@@ -922,7 +934,7 @@ export function PayrollDayGrid({
                             }
                         className={cn(
                               "relative min-w-[52px] px-1 py-1.5 text-center text-xs font-semibold select-none",
-                              dayClass(st),
+                              dayClass(st, row.jobEndDescription),
                               selected && "ring-2 ring-inset ring-primary/60",
                               isFillTarget(item.index, columnIndex) && "outline-dashed outline-1 outline-emerald-500",
                               adjusted && "outline outline-2 outline-orange-400",
@@ -1068,6 +1080,8 @@ function renderIdentityCell(
 ) {
   if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
   if (column.id === "status") return <PayrollStatusCell row={row} today={today} canEdit={canEdit} />;
+  const assign = payrollAssignField(column.id);
+  if (assign) return <PayrollAssignCell row={row} field={assign} canEdit={canEdit} />;
   const field = payrollIdentityField(column.id);
   if (field) {
     return (
@@ -1091,6 +1105,8 @@ function renderSummaryCell(
 ) {
   if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
   if (column.id === "status") return <PayrollStatusCell row={row} today={today} canEdit={canEdit} />;
+  const assign = payrollAssignField(column.id);
+  if (assign) return <PayrollAssignCell row={row} field={assign} canEdit={canEdit} />;
   const field = payrollIdentityField(column.id);
   if (field) {
     return (
@@ -1337,7 +1353,19 @@ export function PayrollLegend({
             onClick={() => onSelect?.(selected === id ? null : id)}
             icon={PAYROLL_STATUS_ICONS[id]}
             leading={
-              <span className="size-3.5 rounded-sm" style={{ background: PAYROLL_STATUS_CHIP[id].hex }} />
+              <span
+                className={cn(
+                  "size-3.5 rounded-sm",
+                  // A white swatch would vanish on the card without a hairline.
+                  !PAYROLL_STATUS_CHIP[id].border && "ring-1 ring-inset ring-black/10",
+                )}
+                style={{
+                  background: PAYROLL_STATUS_CHIP[id].hex,
+                  ...(PAYROLL_STATUS_CHIP[id].border
+                    ? { boxShadow: `inset 0 0 0 1px ${PAYROLL_STATUS_CHIP[id].border}` }
+                    : {}),
+                }}
+              />
             }
           >
             {t(`legend.${id}`)}

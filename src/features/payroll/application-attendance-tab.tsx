@@ -34,13 +34,16 @@ import {
 import {
   PayrollColumnsMenu,
   PayrollHeadingLabel,
+  isMasterDataColumn,
   stickyIdentityOffset,
   stickyIdentityStyle,
 } from "./payroll-heading";
 import { PayrollListToolbar } from "./payroll-list-toolbar";
 import { PayrollStatusCell } from "./payroll-status-cell";
 import { usePayrollStatusFilterList } from "./payroll-status-context";
+import { payrollAssignField } from "./payroll-assign";
 import {
+  PayrollAssignCell,
   PayrollIdentityCell,
   payrollIdentityField,
   payrollIdentityValue,
@@ -264,12 +267,15 @@ export function ApplicationAttendanceTab({
                           headingConfig,
                         )}
                         heading={
-                          <PayrollHeadingLabel
-                            columnKey={column.id}
-                            fallback={t(`riderCols.${column.labelKey}`)}
-                            config={headingConfig}
-                            canManage={canManage}
-                          />
+                          // SOP §7/§11: no pencil on the master-data trio.
+                          isMasterDataColumn(column.id) ? undefined : (
+                            <PayrollHeadingLabel
+                              columnKey={column.id}
+                              fallback={t(`riderCols.${column.labelKey}`)}
+                              config={headingConfig}
+                              canManage={canManage}
+                            />
+                          )
                         }
                         columnId={column.id}
                         values={searched.map((row) =>
@@ -331,9 +337,12 @@ export function ApplicationAttendanceTab({
                       );
                       const value = riderColumnValue(row, column.id, today);
                       const identityField = payrollIdentityField(column.id);
+                      const assignField = payrollAssignField(column.id);
                       const display =
                         column.id === "status" ? (
                           <PayrollStatusCell row={row} today={today} canEdit={false} />
+                        ) : assignField ? (
+                          <PayrollAssignCell row={row} field={assignField} canEdit={canManage} />
                         ) : identityField ? (
                           <PayrollIdentityCell
                             driverId={row.driverId}

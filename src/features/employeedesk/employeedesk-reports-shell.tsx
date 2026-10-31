@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -25,6 +25,13 @@ import {
   AppPageHeader,
   TableCell,
 } from "@/components/app";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { Link } from "@/i18n/navigation";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -146,6 +153,25 @@ export function EmployeeDeskReportsShell({
    * panel — so the fallback lives inside the memo, not beside it.
    */
   const departmentRows = useMemo(() => departments.data?.rows ?? [], [departments.data]);
+  const reportColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "department", label: t("workload.columns.department"), locked: true },
+      { id: "requests", label: t("workload.columns.requests") },
+      { id: "approved", label: t("workload.columns.approved") },
+      { id: "rejected", label: t("workload.columns.rejected") },
+      { id: "avgStep", label: t("workload.columns.avgStep") },
+    ],
+    [t],
+  );
+  const reportPrefs = useTablePrefs("employeedesk.reports", reportColumns);
+  const reportShown = reportPrefs.orderedColumns.filter((column) => reportPrefs.isVisible(column.id));
+  const reportRows = useMemo(() => {
+    const query = reportPrefs.appliedQuery.trim().toLowerCase();
+    if (!query) return departmentRows;
+    return departmentRows.filter((row) =>
+      (row.department_label ?? "").toLowerCase().includes(query),
+    );
+  }, [departmentRows, reportPrefs.appliedQuery]);
   const departmentMax = useMemo(
     () => departmentRows.reduce((max, row) => Math.max(max, row.requests), 0),
     [departmentRows],
@@ -300,15 +326,23 @@ export function EmployeeDeskReportsShell({
           </div>
         ) : (
           <AppDataTable
-            columns={[
-              { id: "department", label: t("workload.columns.department") },
-              { id: "requests", label: t("workload.columns.requests"), className: "text-end" },
-              { id: "approved", label: t("workload.columns.approved"), className: "text-end" },
-              { id: "rejected", label: t("workload.columns.rejected"), className: "text-end" },
-              { id: "avgStep", label: t("workload.columns.avgStep"), className: "text-end" },
-            ]}
+            toolbar={
+              <TableToolbar
+                prefs={reportPrefs}
+                entity={t("workload.title")}
+                columns={reportColumns}
+                rowKind="aggregate"
+                filteredCount={reportRows.length}
+                totalCount={departmentRows.length}
+              />
+            }
+            columns={reportShown.map((column) => ({
+              id: column.id,
+              label: column.label,
+              className: column.id === "department" ? undefined : "text-end",
+            }))}
             empty={
-              departmentRows.length === 0 ? (
+              reportRows.length === 0 ? (
                 <AppDataTableEmpty>
                   <p className="text-sm font-medium">
                     {departments.data?.error ? t("workload.failed") : t("workload.empty")}
@@ -320,11 +354,11 @@ export function EmployeeDeskReportsShell({
               ) : undefined
             }
           >
-            {departmentRows.map((row) => (
-              <AppDataTableRow key={row.department_key}>
-                <TableCell>
+            {reportRows.map((row) => {
+              const cells: Record<string, ReactNode> = {
+                department: (
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">{row.department_label}</span>
+                    <TableNameCell name={row.department_label} />
                     {departmentMax > 0 ? (
                       <span
                         className="h-1 rounded-full bg-primary/25"
@@ -333,15 +367,25 @@ export function EmployeeDeskReportsShell({
                       />
                     ) : null}
                   </div>
-                </TableCell>
-                <TableCell className="text-end tabular-nums">{row.requests}</TableCell>
-                <TableCell className="text-end tabular-nums">{row.approved}</TableCell>
-                <TableCell className="text-end tabular-nums">{row.rejected}</TableCell>
-                <TableCell className="text-end tabular-nums">
-                  {formatDays(row.avg_step_seconds)}
-                </TableCell>
+                ),
+                requests: row.requests,
+                approved: row.approved,
+                rejected: row.rejected,
+                avgStep: formatDays(row.avg_step_seconds) || <EmptyCell />,
+              };
+              return (
+              <AppDataTableRow key={row.department_key}>
+                {reportShown.map((column) => (
+                  <TableCell
+                    key={column.id}
+                    className={column.id === "department" ? undefined : "text-end tabular-nums"}
+                  >
+                    {cells[column.id] ?? <EmptyCell />}
+                  </TableCell>
+                ))}
               </AppDataTableRow>
-            ))}
+              );
+            })}
           </AppDataTable>
         )}
       </AppListCard>

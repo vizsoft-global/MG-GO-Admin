@@ -215,5 +215,6 @@ export function mapDriversPageRow(raw: RawPageRow): DriverListPageRow {
     vehicle_id: str(raw.vehicle_id),
     vehicle_label: str(raw.vehicle_label),
     vehicle_type_key: str(raw.vehicle_type_key),
+    assigned_vehicle_type_key: str(raw.assigned_vehicle_type_key),
   };
 }

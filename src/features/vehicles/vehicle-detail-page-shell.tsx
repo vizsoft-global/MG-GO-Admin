@@ -37,7 +37,7 @@ function parseTab(value: string | null | undefined): DetailTab {
 function MetaCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className="mt-1 truncate text-sm font-medium text-foreground">{value}</p>
     </div>
   );
@@ -118,7 +118,9 @@ export function VehicleDetailPageShell({
           ? t("projectKeeta")
           : vehicle.assigned_project_key === "americana"
             ? t("projectAmericana")
-            : "—",
+            : vehicle.assigned_project_key === "five_guys"
+              ? t("projectFiveGuys")
+              : "—",
     },
   ];
 

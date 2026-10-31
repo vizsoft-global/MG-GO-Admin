@@ -1,17 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { AppListCard, AppPage, AppPageHeader, SearchField } from "@/components/app";
+import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
+import { EmptyCell, TableNameCell, TableToolbar, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
 import {
   AppDataTable,
   AppDataTableEmpty,
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -99,18 +100,6 @@ function formatAuditDetail(
   }
 }
 
-function initialsOf(name: string): string {
-  return (
-    name
-      .split(" ")
-      .map((part) => part[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join("")
-      .toUpperCase() || "?"
-  );
-}
-
 export function RequestsAuditPanel() {
   const t = useTranslations("pages.requests.settings.audit");
   const tRoot = useTranslations("pages.requests");
@@ -118,6 +107,23 @@ export function RequestsAuditPanel() {
   const [rows, setRows] = useState<RequestsAuditLogRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const auditColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "when", label: t("colWhen") },
+      { id: "actor", label: t("colActor"), locked: true },
+      { id: "action", label: t("colAction"), categorical: true },
+      { id: "target", label: t("colTarget") },
+      { id: "details", label: t("colDetails") },
+    ],
+    [t],
+  );
+  const tablePrefs = useTablePrefs("requests.audit", auditColumns);
+  useEffect(() => {
+    setSearch(tablePrefs.appliedQuery);
+  }, [tablePrefs.appliedQuery]);
+  const shownAuditColumns = tablePrefs.orderedColumns.filter((column) =>
+    tablePrefs.isVisible(column.id),
+  );
   const [actionFilter, setActionFilter] = useState("all");
   const [actorFilter, setActorFilter] = useState("all");
   const [datePreset, setDatePreset] = useState<RequestDatePreset>("all");
@@ -282,13 +288,6 @@ export function RequestsAuditPanel() {
               ))}
             </SelectContent>
           </Select>
-          <SearchField
-            className="w-56 flex-none"
-            value={search}
-            onChange={setSearch}
-            placeholder={t("searchPlaceholder")}
-            clearLabel={t("clearSearch")}
-          />
           <Select
             value={sortDir}
             onValueChange={(v) => v && setSortDir(v as "desc" | "asc")}
@@ -315,13 +314,17 @@ export function RequestsAuditPanel() {
           </span>
         </div>
         <AppDataTable
-          columns={[
-            { id: "when", label: t("colWhen") },
-            { id: "actor", label: t("colActor") },
-            { id: "action", label: t("colAction") },
-            { id: "target", label: t("colTarget") },
-            { id: "details", label: t("colDetails") },
-          ]}
+          toolbar={
+            <TableToolbar
+              prefs={tablePrefs}
+              entity={t("title")}
+              columns={auditColumns}
+              rowKind="dynamic"
+              filteredCount={filteredRows.length}
+              totalCount={rows.length}
+            />
+          }
+          columns={shownAuditColumns.map((column) => ({ id: column.id, label: column.label }))}
           empty={
             loading ? (
               <AppDataTableEmpty>
@@ -332,57 +335,62 @@ export function RequestsAuditPanel() {
             ) : undefined
           }
         >
-          {loading || filteredRows.length === 0 ? null : (
-            pagedRows.map((row) => (
-              <AppDataTableRow key={row.id}>
-                <TableCell className="text-xs whitespace-nowrap">
-                  {formatTimestamp(row.created_at, locale)}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Avatar className="h-6 w-6">
-                      <AvatarFallback className="text-xs">
-                        {initialsOf(row.actor_name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-medium">{row.actor_name}</p>
-                      {row.actor_role ? (
-                        <p className="truncate text-xs text-muted-foreground">
-                          {row.actor_role}
+          {loading || filteredRows.length === 0
+            ? null
+            : groupRows(pagedRows, tablePrefs.groupBy, { action: (row) => row.action }, {}, "—").flatMap(
+                (group) => [
+                  ...(tablePrefs.groupBy !== "none"
+                    ? [
+                        <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                          <TableCell colSpan={shownAuditColumns.length} className="text-xs font-semibold">
+                            {group.label} · {group.rows.length}
+                          </TableCell>
+                        </AppDataTableRow>,
+                      ]
+                    : []),
+                  ...group.rows.map((row) => {
+                    const detail = formatAuditDetail(row.detail, t, (type) => {
+                      if (!type) return "";
+                      return tTypes.has(type as "leave") ? tTypes(type as "leave") : type;
+                    });
+                    const cells: Record<string, ReactNode> = {
+                      when: formatTimestamp(row.created_at, locale),
+                      actor: (
+                        <div className="min-w-0">
+                          <TableNameCell name={row.actor_name} />
+                          {row.actor_role ? (
+                            <p className="truncate text-xs text-muted-foreground">{row.actor_role}</p>
+                          ) : null}
+                        </div>
+                      ),
+                      action: (
+                        <span
+                          className={`inline-flex rounded-md border px-1.5 py-0.5 text-xs font-semibold capitalize ${actionTone(row.action)}`}
+                        >
+                          {row.action}
+                        </span>
+                      ),
+                      target: row.target_code ? (
+                        <p className="truncate text-xs">
+                          {`${row.target_code}${row.target_type ? ` · ${tTypes(row.target_type)}` : ""}`}
                         </p>
-                      ) : null}
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <span
-                    className={`inline-flex rounded-md border px-1.5 py-0.5 text-xs font-semibold capitalize ${actionTone(row.action)}`}
-                  >
-                    {row.action}
-                  </span>
-                </TableCell>
-                <TableCell className="max-w-[200px]">
-                  <p className="truncate text-xs">
-                    {row.target_code
-                      ? `${row.target_code}${row.target_type ? ` · ${tTypes(row.target_type)}` : ""}`
-                      : (row.route_name ?? "—")}
-                  </p>
-                  {row.target_code && row.route_name ? (
-                    <p className="truncate text-xs text-muted-foreground">{row.route_name}</p>
-                  ) : null}
-                </TableCell>
-                <TableCell className="max-w-[280px] whitespace-normal text-xs text-muted-foreground">
-                  {formatAuditDetail(row.detail, t, (type) => {
-                    if (!type) return "";
-                    return tTypes.has(type as "leave")
-                      ? tTypes(type as "leave")
-                      : type;
-                  })}
-                </TableCell>
-              </AppDataTableRow>
-            ))
-          )}
+                      ) : row.route_name ? (
+                        row.route_name
+                      ) : (
+                        <EmptyCell />
+                      ),
+                      details: detail || <EmptyCell />,
+                    };
+                    return (
+                      <AppDataTableRow key={row.id}>
+                        {shownAuditColumns.map((column) => (
+                          <TableCell key={column.id}>{cells[column.id] ?? <EmptyCell />}</TableCell>
+                        ))}
+                      </AppDataTableRow>
+                    );
+                  }),
+                ],
+              )}
         </AppDataTable>
         {!loading && filteredRows.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-1">

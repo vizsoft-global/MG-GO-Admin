@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Search } from "lucide-react";
 import { AppDataTable, AppDataTableEmpty, AppDataTableRow, AppPage, AppPageHeader, TableCell } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
+import { EmptyCell, TableNameCell, TableToolbar, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { SearchSelect, type SearchSelectItem } from "@/components/ui/search-select";
 import {
   Select,
@@ -17,6 +17,7 @@ import {
 import { avatarTintFromName } from "@/features/drivers/form/driver-form-primitives";
 import { useZonesList } from "@/features/zones/use-zones";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { REQUEST_DATE_PRESETS } from "./date-presets";
 import { listScopeFlags } from "./request-list-scopes";
@@ -67,6 +68,7 @@ export function RcmTypeQueueShell({
   const tRequests = useTranslations("pages.requests");
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const zones = useZonesList();
   const [scope, setScope] = useState<RcmQueueScope>(initialScope);
   const [datePreset, setDatePreset] = useState<RequestDatePreset>(initialDatePreset);
@@ -233,21 +235,50 @@ export function RcmTypeQueueShell({
 
   function rememberScope(next: RcmQueueScope) {
     setScope(next);
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams.toString());
     params.set("type", type);
     params.set("preset", datePreset);
     params.set("scope", next);
     router.replace(`${pathname}?${params.toString()}`);
   }
 
-  const columns = [
-    { id: "id", label: t("queue.colId") },
-    { id: "employee", label: t("queue.colEmployee") },
-    ...columnKeys.map((key) => ({ id: key, label: columnLabel(key) })),
-    { id: "step", label: t("queue.colStep") },
-    { id: "waiting", label: t("queue.colWaiting") },
-    { id: "review", label: t("queue.colReview"), className: "text-end" },
-  ];
+  const columns = useMemo<TableToolbarColumn[]>(() => {
+    const keys = queueColumnKeys(type);
+    return [
+      { id: "id", label: t("queue.colId"), locked: true },
+      { id: "employee", label: t("queue.colEmployee"), locked: true },
+      ...keys.map((key) => ({
+        id: key,
+        label: columnLabel(key),
+        categorical: key === "category" || key === "severity" || key === "vehicle",
+      })),
+      { id: "step", label: t("queue.colStep"), categorical: true },
+      { id: "waiting", label: t("queue.colWaiting") },
+      { id: "review", label: t("queue.colReview"), locked: true },
+    ];
+  }, [t, type]);
+  const tablePrefs = useTablePrefs(`rcm.queue.${type}`, columns);
+  useEffect(() => {
+    setSearchInput(tablePrefs.appliedQuery);
+    setSearchApplied(tablePrefs.appliedQuery.trim());
+  }, [tablePrefs.appliedQuery]);
+  const shownColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        rows,
+        tablePrefs.groupBy,
+        {
+          step: (row) => row.current_step_label,
+          category: (row) => columnValue("category", row),
+          severity: (row) => row.severity,
+          vehicle: (row) => columnValue("vehicle", row),
+        },
+        {},
+        "—",
+      ),
+    [rows, tablePrefs.groupBy, facts.data],
+  );
 
   return (
     <AppPage className="space-y-2">
@@ -342,19 +373,25 @@ export function RcmTypeQueueShell({
             </SelectItem>
           </SelectContent>
         </Select>
-        <div className="relative min-w-[220px] flex-1">
-          <Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            placeholder={t("queue.search")}
-            className="h-9 ps-8"
-          />
-        </div>
       </div>
       <div className="rounded-xl border border-border bg-card shadow-sm">
         <AppDataTable
-          columns={columns}
+          toolbar={
+            <TableToolbar
+              prefs={tablePrefs}
+              entity={typeLabel}
+              columns={columns}
+              rowKind="dynamic"
+              entityList
+              filteredCount={rows.length}
+              totalCount={total}
+            />
+          }
+          columns={shownColumns.map((column) => ({
+            id: column.id,
+            label: column.label,
+            className: column.id === "review" ? "text-end" : undefined,
+          }))}
           empty={
             rows.length === 0 && !active.isLoading ? (
               <AppDataTableEmpty>{active.data?.error ?? t("queue.empty")}</AppDataTableEmpty>
@@ -375,7 +412,17 @@ export function RcmTypeQueueShell({
             ) : null
           }
         >
-          {rows.map((row) => {
+          {grouped.flatMap((group) => [
+            ...(tablePrefs.groupBy !== "none"
+              ? [
+                  <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
+                    <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                      {group.label} · {group.rows.length}
+                    </TableCell>
+                  </AppDataTableRow>,
+                ]
+              : []),
+            ...group.rows.map((row) => {
             const overdue = isQueueRowOverdue({
               status: row.status,
               createdAt: row.created_at,
@@ -383,55 +430,60 @@ export function RcmTypeQueueShell({
             });
             const code = row.employee_id || row.driver_code;
             const zone = row.driver_zone && !/^[0-9a-f-]{16,}$/i.test(row.driver_zone) ? row.driver_zone : "";
+            const textOrEmpty = (value: string) => (value === "—" || value.trim() === "" ? <EmptyCell /> : value);
+            const cells: Record<string, ReactNode> = {
+              id: <span className="font-mono text-xs">{row.request_code}</span>,
+              employee: (
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                      avatarTintFromName(row.driver_name),
+                    )}
+                  >
+                    {initials(row.driver_name)}
+                  </span>
+                  <span className="min-w-0">
+                    <TableNameCell name={row.driver_name} />
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {[code, zone].filter(Boolean).join(" · ") || <EmptyCell />}
+                    </span>
+                  </span>
+                </div>
+              ),
+              step: row.current_step_label ? row.current_step_label : <EmptyCell />,
+              waiting: (
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                  <span>{waitingLabel(row.created_at)}</span>
+                  {overdue ? (
+                    <span className="font-medium text-red-600">{t("queue.overdue")}</span>
+                  ) : null}
+                </div>
+              ),
+              review: (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9"
+                  render={<Link href={`/employeedesk/${row.id}`} />}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {t("queue.review")}
+                </Button>
+              ),
+            };
+            for (const key of columnKeys) cells[key] = textOrEmpty(columnValue(key, row));
             return (
               <AppDataTableRow key={row.id} onClick={() => openRow(row.id)}>
-                <TableCell className="font-mono text-xs">{row.request_code}</TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                        avatarTintFromName(row.driver_name),
-                      )}
-                    >
-                      {initials(row.driver_name)}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium">{row.driver_name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {[code, zone].filter(Boolean).join(" · ") || "—"}
-                      </span>
-                    </span>
-                  </div>
-                </TableCell>
-                {columnKeys.map((key) => (
-                  <TableCell key={key} className="text-sm">
-                    {columnValue(key, row)}
+                {shownColumns.map((column) => (
+                  <TableCell key={column.id} className={column.id === "review" ? "text-end" : "text-sm"}>
+                    {cells[column.id] ?? <EmptyCell />}
                   </TableCell>
                 ))}
-                <TableCell className="text-sm">{row.current_step_label ?? "—"}</TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                    <span>{waitingLabel(row.created_at)}</span>
-                    {overdue ? (
-                      <span className="font-medium text-red-600">{t("queue.overdue")}</span>
-                    ) : null}
-                  </div>
-                </TableCell>
-                <TableCell className="text-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9"
-                    render={<Link href={`/employeedesk/${row.id}`} />}
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    {t("queue.review")}
-                  </Button>
-                </TableCell>
               </AppDataTableRow>
             );
-          })}
+          }),
+          ])}
         </AppDataTable>
         {total > PAGE_SIZE ? (
           <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-2">

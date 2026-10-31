@@ -39,7 +39,6 @@ import { DriverAttendanceTab } from "./driver-attendance-tab";
 import { DriverActivityTab } from "./driver-activity-tab";
 import { DriverHistoryTab } from "./driver-history-tab";
 import { DriverPerformanceTab } from "./driver-performance-tab";
-import { DriverWrongActionsTab } from "@/features/wrong-actions/driver-wrong-actions-tab";
 import { DriverArchiveDialog } from "./driver-archive-dialog";
 import { DriverLevelOverrideDialog } from "./driver-level-badge";
 import { DriverEditSheet } from "./driver-edit-sheet";
@@ -80,8 +79,6 @@ type DetailTabId =
   | "earnings"
   | "deductions"
   | "loan"
-  | "complaint"
-  | "wrong-actions"
   | "driver-devices";
 
 /**
@@ -185,7 +182,7 @@ function PasscodeCard({
 
   return (
     <div className="rounded-[14px] border border-border bg-card px-6 py-5">
-      <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">{t("title")}</p>
+      <p className="text-xs font-bold tracking-[0.06em] text-[#A73C24]">{t("title")}</p>
       <div className="mt-3 space-y-3">
         {!isActive ? (
           <p className="text-sm text-muted-foreground">{t("inactiveHint")}</p>
@@ -314,7 +311,6 @@ function DriverDetailContent({ id }: { id: string }) {
   const [levelOverrideOpen, setLevelOverrideOpen] = useState(false);
   const canViewOps = can("driver_ops.view");
   const canViewPerformance = can("performance.view");
-  const canViewWrongActions = can("wrong_actions.view");
   const canExportOps = can("driver_ops.export");
   const { data: driver, isLoading, isError } = useDriverDetail(id);
   const sectionsQuery = useEmployeeSections();
@@ -490,10 +486,6 @@ function DriverDetailContent({ id }: { id: string }) {
     { id: "earnings", label: t("tabEarnings") },
     { id: "deductions", label: t("tabDeductions") },
     { id: "loan", label: t("tabLoan") },
-    { id: "complaint", label: t("tabComplaint") },
-    ...(canViewWrongActions
-      ? [{ id: "wrong-actions" as const, label: t("tabWrongActions") }]
-      : []),
   ];
 
   if (isLoading) return <DetailSkeleton />;
@@ -587,7 +579,7 @@ function DriverDetailContent({ id }: { id: string }) {
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {driver.linked_profile_id && !isArchived && canManage ? (
         <div className="rounded-[14px] border border-border bg-card px-6 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+          <p className="text-xs font-bold tracking-[0.06em] text-[#A73C24]">
             {tBlock("title")}
           </p>
           <div className="mt-3">
@@ -604,7 +596,7 @@ function DriverDetailContent({ id }: { id: string }) {
       ) : null}
       {driver.linked_profile_id && !isArchived && canManage ? (
         <div className="rounded-[14px] border border-border bg-card px-6 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+          <p className="text-xs font-bold tracking-[0.06em] text-[#A73C24]">
             {tFreeze("title")}
           </p>
           <div className="mt-3">
@@ -622,7 +614,7 @@ function DriverDetailContent({ id }: { id: string }) {
       ) : null}
       {driver.linked_profile_id && !isArchived && canManage ? (
         <div className="rounded-[14px] border border-border bg-card px-6 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+          <p className="text-xs font-bold tracking-[0.06em] text-[#A73C24]">
             {t("loginVerificationExemptTitle")}
           </p>
           <div className="mt-3">
@@ -637,7 +629,7 @@ function DriverDetailContent({ id }: { id: string }) {
       ) : null}
       {driver.linked_profile_id && !isArchived && canManage ? (
         <div className="rounded-[14px] border border-border bg-card px-6 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+          <p className="text-xs font-bold tracking-[0.06em] text-[#A73C24]">
             {t("screenshotsAllowedTitle")}
           </p>
           <div className="mt-3">
@@ -652,7 +644,7 @@ function DriverDetailContent({ id }: { id: string }) {
       ) : null}
       {!isArchived && canManage ? (
         <div className="rounded-[14px] border border-border bg-card px-6 py-5">
-          <p className="text-xs font-bold uppercase tracking-[0.06em] text-[#A73C24]">
+          <p className="text-xs font-bold tracking-[0.06em] text-[#A73C24]">
             {t("accountStatus.title")}
           </p>
           <div className="mt-3">
@@ -743,24 +735,6 @@ function DriverDetailContent({ id }: { id: string }) {
           driverName={driver.full_name}
         />
       );
-    }
-
-    // Incidents are filed against `drivers.id`, which is the linked profile. An
-    // intake that has never been approved has no driver row to attach one to.
-    if (activeTab === "wrong-actions" && canViewWrongActions) {
-      if (!driver.linked_profile_id) {
-        return (
-          <div className="rounded-xl border border-border bg-card shadow-sm">
-            <div className="py-12">
-              <AppEmptyState
-                title={t("attendanceNeedsLinkTitle")}
-                description={t("attendanceNeedsLinkDescription")}
-              />
-            </div>
-          </div>
-        );
-      }
-      return <DriverWrongActionsTab driverId={driver.linked_profile_id} />;
     }
 
     if (activeTab === "activity" && driver.linked_profile_id && canViewOps) {
@@ -1105,7 +1079,7 @@ function DriverDetailContent({ id }: { id: string }) {
                 key={field.label}
                 className="flex flex-col gap-[3px] rounded-[10px] border border-border px-3.5 py-3"
               >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
+                <p className="text-[11px] font-semibold tracking-[0.07em] text-muted-foreground">
                   {field.label}
                 </p>
                 <p className="truncate text-base font-semibold text-foreground">{field.value}</p>

@@ -17,7 +17,6 @@ import { useSearchParams } from "next/navigation";
 import {
   ArchiveRestore,
   CheckCircle2,
-  Download,
   Eye,
   FilterX,
   LayoutDashboard,
@@ -31,7 +30,6 @@ import {
 import { toast } from "sonner";
 import { AppListCard, AppPage } from "@/components/app";
 import {
-  AppListControls,
   FlatListPager,
   GroupedSections,
   GroupTableHeaderRow,
@@ -39,7 +37,6 @@ import {
   scopeSelectionState,
   toggleScopeSelection,
   useGroupedListView,
-  useListViewPrefs,
 } from "@/components/app/app-list-controls";
 import { EmployeeStatusBadge } from "@/features/employees/employee-status-badge";
 import { catalogLabel } from "@/features/employees/employee-catalogs";
@@ -53,14 +50,22 @@ import {
   useEmployeeSections,
   useEmployeeStatuses,
 } from "@/features/employees/use-employee-catalogs";
+import { useVehicleTypes } from "@/features/vehicles/use-vehicles";
+import { driverProjectLabel } from "@/features/fleet/fleet-labels";
 import {
   AppDataTable,
   AppDataTableEmpty,
   AppDataTableRow,
-  AppTableColumnPicker,
   TableCell,
   VisibleTableCell,
 } from "@/components/app";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -82,8 +87,6 @@ import { cn } from "@/lib/utils";
 import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
 import { customFieldColumnId, type CustomFieldDefinition } from "@/lib/custom-fields/types";
 import { formatCustomFieldDisplay } from "@/lib/custom-fields/validate";
-import { useDriversListColumns } from "./use-drivers-list-columns";
-import { LIST_SEARCH_DEBOUNCE_MS } from "@/lib/menu/sidebar-menu-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import { fetchDriversForExport } from "./drivers-list-actions";
@@ -246,6 +249,43 @@ function DriversPageContent() {
     () => (customFieldDefs ?? []).filter((d) => d.is_active && !d.archived_at),
     [customFieldDefs],
   );
+  const toolbarColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "select", label: t("selectAll"), locked: true },
+      { id: "clientId", label: t("colClientId"), locked: true },
+      { id: "employeeId", label: t("colEmployeeId") },
+      { id: "riderCategory", label: t("colRiderCategory") },
+      { id: "companyClientId", label: t("colCompanyClientId") },
+      { id: "companyName", label: t("colCompanyName") },
+      { id: "name", label: t("colName"), locked: true },
+      { id: "phone", label: t("colPhone") },
+      { id: "restaurants", label: t("colRestaurants") },
+      { id: "zone", label: t("colZone"), categorical: true },
+      { id: "vehicle", label: t("colVehicle") },
+      { id: "section", label: t("colSection"), categorical: true },
+      { id: "partner", label: t("colProject"), categorical: true },
+      { id: "employee_status", label: t("groupEmployeeStatus"), categorical: true, defaultHidden: true },
+      { id: "project", label: t("groupProject"), categorical: true, defaultHidden: true },
+      { id: "nationality_category", label: t("groupNationalityCategory"), categorical: true, defaultHidden: true },
+      { id: "driverId", label: t("colDriverId"), defaultHidden: true },
+      { id: "clientName", label: t("colClientName"), defaultHidden: true },
+      { id: "todayDeliveries", label: t("colTodayDeliveries") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "attendance", label: t("colAttendance") },
+      { id: "passcode", label: t("colPasscode") },
+      ...activeCustomDefs.map((d) => ({
+        id: customFieldColumnId(d.key),
+        label: d.label,
+        defaultHidden: true,
+      })),
+      { id: "actions", label: t("colActions"), locked: true },
+    ],
+    [activeCustomDefs, t],
+  );
+  const prefs = useTablePrefs("drivers", toolbarColumns);
+  const debouncedSearch = prefs.appliedQuery.trim();
+  const isColumnVisible = prefs.isVisible;
+  const orderedVisibleIds = prefs.orderedColumns.map((column) => column.id);
   const approveDriver = useApproveDriverIntake();
   const restoreDriver = useRestoreDriverIntake();
   const archiveMany = useArchiveDriverIntakes();
@@ -257,20 +297,13 @@ function DriversPageContent() {
   const [tabFilter, setTabFilter] = useState<DriversTab>(() =>
     parseDriversTab(searchParams.get("tab")),
   );
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const { prefs, update: updateListPrefs } = useListViewPrefs("drivers");
   const statusesQuery = useEmployeeStatuses();
   const sectionsQuery = useEmployeeSections();
+  const vehicleTypesQuery = useVehicleTypes();
   const [columnFilters, setColumnFilters] = useState<DriversColumnFilters>({});
   const [sort, setSort] = useState<DriversSort>(DEFAULT_DRIVERS_SORT);
   const [levelFilter, setLevelFilter] = useState<DriverLevelFilter>("all");
   const levelIndex = useDriverLevelIndex();
-
-  useEffect(() => {
-    const id = window.setTimeout(() => setDebouncedSearch(search.trim()), LIST_SEARCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(id);
-  }, [search]);
 
   // The dashboard tile links straight to `?tab=pending`, and the detail page returns to the same
   // address — so the queue survives whatever the router does with the mounted shell.
@@ -323,6 +356,7 @@ function DriversPageContent() {
         project: (row) => row.project_key,
         section: (row) => row.section_keys[0],
         nationality_category: (row) => row.nationality_category_keys[0],
+        status: (row) => row.account_status,
       },
       labels,
       t("companyUnassigned"),
@@ -457,56 +491,6 @@ function DriversPageContent() {
     });
   };
 
-  const columnVisibilityOptions = useMemo(
-    () => [
-      { id: "select", label: t("selectAll"), locked: true as const },
-      { id: "clientId", label: t("colClientId") },
-      { id: "employeeId", label: t("colEmployeeId") },
-      { id: "riderCategory", label: t("colRiderCategory") },
-      { id: "companyClientId", label: t("colCompanyClientId") },
-      { id: "companyName", label: t("colCompanyName") },
-      { id: "name", label: t("colName") },
-      { id: "phone", label: t("colPhone") },
-      { id: "restaurants", label: t("colRestaurants") },
-      { id: "zone", label: t("colZone") },
-      { id: "vehicle", label: t("colVehicle") },
-      { id: "section", label: t("colSection") },
-      { id: "partner", label: t("colProject") },
-      { id: "driverId", label: t("colDriverId"), defaultVisible: false as const },
-      { id: "clientName", label: t("colClientName"), defaultVisible: false as const },
-      { id: "todayDeliveries", label: t("colTodayDeliveries") },
-      { id: "status", label: t("colStatus") },
-      { id: "attendance", label: t("colAttendance") },
-      { id: "passcode", label: t("colPasscode") },
-      ...activeCustomDefs.map((d) => ({
-        id: customFieldColumnId(d.key),
-        label: d.label,
-        defaultVisible: false as const,
-      })),
-      { id: "actions", label: t("colActions"), locked: true as const },
-    ],
-    [t, activeCustomDefs],
-  );
-
-  const {
-    isVisible: isColumnVisible,
-    toggle: toggleColumn,
-    move: moveColumn,
-    reorder: reorderColumns,
-    resetToRoleDefault: resetColumns,
-    pickerOptions: columnPickerOptions,
-    orderedVisibleIds,
-    hiddenToggleableCount,
-    source: columnSource,
-  } = useDriversListColumns(columnVisibilityOptions);
-
-  const columnSourceLabel =
-    columnSource === "user"
-      ? tCommon("columnSourceUser")
-      : columnSource === "role"
-        ? tCommon("columnSourceRole")
-        : tCommon("columnSourceSystem");
-
   const headerLabels = useMemo<DriversHeaderLabels>(
     () => ({
       search: t("columnFilter.search"),
@@ -521,6 +505,24 @@ function DriversPageContent() {
       filterBy: (label) => t("columnFilter.filterBy", { label }),
     }),
     [t],
+  );
+
+  /**
+   * Vehicle type key → printed label. The catalog is the source so a type the
+   * operator added reads its own name in the cell and in the header filter;
+   * `bike` / `car` stay as the fallback when no catalog row is loaded yet.
+   */
+  const vehicleTypeLabel = useCallback(
+    (key: string | null | undefined): string | null => {
+      const trimmed = (key ?? "").trim();
+      if (!trimmed) return null;
+      const fromCatalog = (vehicleTypesQuery.data ?? []).find((type) => type.key === trimmed);
+      if (fromCatalog) return locale === "ar" ? fromCatalog.label_ar || fromCatalog.label_en : fromCatalog.label_en;
+      if (trimmed === "car" || trimmed === "van") return t("vehicleCar");
+      if (trimmed === "bike") return t("vehicleBike");
+      return trimmed;
+    },
+    [vehicleTypesQuery.data, locale, t],
   );
 
   const optionLabelFor = useCallback(
@@ -540,7 +542,7 @@ function DriversPageContent() {
         case "attendance":
           return value === "on_duty" ? t("attendanceOnDuty") : t("attendanceOffDuty");
         case "vehicle":
-          return value === "car" ? t("vehicleCar") : t("vehicleBike");
+          return vehicleTypeLabel(value) ?? value;
         case "section":
           return catalogLabel(value, sectionsQuery.data ?? [], locale);
         default: {
@@ -557,7 +559,7 @@ function DriversPageContent() {
     },
     // accountStatusLabelFor only reads `t`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t, tCommon, activeCustomDefs, locale, sectionsQuery.data],
+    [t, tCommon, activeCustomDefs, locale, sectionsQuery.data, vehicleTypeLabel],
   );
 
   const filterContext = useMemo(
@@ -614,6 +616,9 @@ function DriversPageContent() {
       fixed("vehicle", t("colVehicle")),
       fixed("section", t("colSection")),
       { id: "partner", label: t("colProject") },
+      { id: "employee_status", label: t("groupEmployeeStatus") },
+      { id: "project", label: t("groupProject") },
+      { id: "nationality_category", label: t("groupNationalityCategory") },
       fixed("driverId", t("colDriverId")),
       fixed("clientName", t("colClientName")),
       fixed("todayDeliveries", t("colTodayDeliveries")),
@@ -657,6 +662,20 @@ function DriversPageContent() {
     ],
     [t],
   );
+  const listToolbar = (
+    <TableToolbar
+      prefs={prefs}
+      entity={t("title")}
+      columns={toolbarColumns}
+      rowKind="dynamic"
+      entityList
+      filteredCount={filteredTotal}
+      totalCount={tabTotal}
+      onExport={filteredTotal > 0 ? () => setExportOpen(true) : undefined}
+      onAdd={canCreate ? () => setAddOpen(true) : undefined}
+      addLabel={t("addDriver")}
+    />
+  );
 
   return (
     <AppPage className="space-y-4">
@@ -683,31 +702,7 @@ function DriversPageContent() {
 
       <AppListCard
         toolbar={
-          <AppListControls
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder={t("searchPlaceholder")}
-            searchAriaLabel={t("searchPlaceholder")}
-            clearSearchLabel={t("clearSearch")}
-            singleRow
-            groupBy={prefs.groupBy}
-            onGroupByChange={(value) => updateListPrefs({ groupBy: value })}
-            groupByLabel={t("groupBy")}
-            groupByOptions={[
-              { value: "none", label: t("groupNone") },
-              { value: "zone", label: t("groupZone") },
-              { value: "partner", label: t("groupPartner") },
-              { value: "employee_status", label: t("groupEmployeeStatus") },
-              { value: "project", label: t("groupProject") },
-              { value: "section", label: t("groupSection") },
-              { value: "nationality_category", label: t("groupNationalityCategory") },
-            ]}
-            viewMode={prefs.viewMode}
-            onViewModeChange={(value) => updateListPrefs({ viewMode: value })}
-            tableViewLabel={t("viewTable")}
-            cardsViewLabel={t("viewCards")}
-            filterSlot={
-              <>
+          <div className="flex flex-wrap items-center gap-2">
                 <Select
                   items={tabSelectItems}
                   value={tabFilter}
@@ -774,20 +769,6 @@ function DriversPageContent() {
                     </span>
                   </Button>
                 ) : null}
-                <AppTableColumnPicker
-                  options={columnPickerOptions}
-                  isVisible={isColumnVisible}
-                  onToggle={toggleColumn}
-                  onMove={moveColumn}
-                  onReorder={reorderColumns}
-                  onReset={resetColumns}
-                  sourceLabel={columnSourceLabel}
-                  hiddenCount={hiddenToggleableCount}
-                  iconOnly
-                />
-              </>
-            }
-            trailing={
             <div className="flex shrink-0 items-center gap-1.5">
               <Tooltip>
                 <TooltipTrigger
@@ -808,24 +789,6 @@ function DriversPageContent() {
                   }
                 />
                 <TooltipContent>{t("refresh")}</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
-                      onClick={() => setExportOpen(true)}
-                      disabled={filteredTotal === 0}
-                      aria-label={t("export")}
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  }
-                />
-                <TooltipContent>{t("export")}</TooltipContent>
               </Tooltip>
               {canArchive && tabFilter !== "archived" ? (
                 <Tooltip>
@@ -868,30 +831,11 @@ function DriversPageContent() {
               ) : null}
               <ClearAllModuleButton entity="drivers" compact />
               <ClearFilteredModuleButton entity="drivers" compact />
-              {canCreate ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        type="button"
-                        size="icon"
-                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
-                        onClick={() => setAddOpen(true)}
-                        aria-label={t("addDriver")}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>{t("addDriver")}</TooltipContent>
-                </Tooltip>
-              ) : null}
-              {prefs.viewMode !== "cards" ? (
+              {prefs.view !== "grid" ? (
                 <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} inline />
               ) : null}
             </div>
-            }
-          />
+          </div>
         }
       >
         {isLoading ? (
@@ -916,8 +860,9 @@ function DriversPageContent() {
               </Button>
             ) : null}
           </div>
-        ) : prefs.viewMode === "cards" ? (
+        ) : prefs.view === "grid" ? (
           <CardContent className="p-4">
+            {listToolbar}
             <GroupedSections groups={groupedDrivers} paged resetKey={selectionResetKey}>
               {(rows) => (
                 <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -977,6 +922,7 @@ function DriversPageContent() {
         ) : (
           <CardContent className="p-0">
             <AppDataTable
+              toolbar={listToolbar}
               columns={tableColumns}
               headerRowClassName="bg-primary/5 hover:bg-primary/5"
               empty={
@@ -1068,9 +1014,7 @@ function DriversPageContent() {
                         <VisibleTableCell columnId="name" isVisible={isColumnVisible}>
                           <div className="min-w-0">
                             <span className="inline-flex min-w-0 items-center gap-1.5">
-                              <span className="truncate font-medium text-foreground">
-                                {driver.full_name}
-                              </span>
+                              <TableNameCell name={driver.full_name} />
                               <DriverLevelBadge level={levelIndex.data?.get(driver.id)?.level} />
                             </span>
                             <Link
@@ -1101,11 +1045,14 @@ function DriversPageContent() {
                         </VisibleTableCell>
                         <VisibleTableCell columnId="vehicle" isVisible={isColumnVisible}>
                           <DriverVehicleCell
-                            vehicleTypeKey={driver.vehicle_type_key}
+                            vehicleTypeKey={driver.assigned_vehicle_type_key ?? driver.vehicle_type_key}
                             vehicleLabel={driver.vehicle_label}
                             bikeLabel={t("vehicleBike")}
                             carLabel={t("vehicleCar")}
                             emptyLabel={t("vehicleNone")}
+                            typeLabel={vehicleTypeLabel(
+                              driver.assigned_vehicle_type_key ?? driver.vehicle_type_key,
+                            )}
                           />
                         </VisibleTableCell>
                         <VisibleTableCell
@@ -1124,7 +1071,24 @@ function DriversPageContent() {
                           isVisible={isColumnVisible}
                           className="text-sm text-muted-foreground"
                         >
-                          {driver.partner_name || "—"}
+                          {driver.partner_name ? driver.partner_name : <EmptyCell />}
+                        </VisibleTableCell>
+                        <VisibleTableCell columnId="employee_status" isVisible={isColumnVisible}>
+                          {driver.employee_status_key ? (
+                            <EmployeeStatusBadge
+                              statusKey={driver.employee_status_key}
+                              rows={statusesQuery.data ?? []}
+                              locale={locale}
+                            />
+                          ) : (
+                            <EmptyCell />
+                          )}
+                        </VisibleTableCell>
+                        <VisibleTableCell columnId="project" isVisible={isColumnVisible}>
+                          {driverProjectLabel(driver.project_key) ?? <EmptyCell />}
+                        </VisibleTableCell>
+                        <VisibleTableCell columnId="nationality_category" isVisible={isColumnVisible}>
+                          {driver.nationality_category_keys.join(", ")}
                         </VisibleTableCell>
                         <VisibleTableCell
                           columnId="driverId"

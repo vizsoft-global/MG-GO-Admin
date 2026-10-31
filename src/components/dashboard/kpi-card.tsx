@@ -5,9 +5,22 @@ import {
   NEUTRAL_TILE,
   TONE_STYLES,
 } from "@/lib/ui/tone-styles";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export type KpiAccent = "default" | "success" | "warning" | "danger" | "primary";
+
+export type PortalKpiAccent = "ink" | "green" | "blue" | "red" | "ochre" | "grey" | "plum";
+
+const PORTAL_ACCENT: Record<PortalKpiAccent, string> = {
+  ink: "bg-[var(--portal-ink)]",
+  green: "bg-[var(--portal-badge-green-fg)]",
+  blue: "bg-[var(--portal-badge-blue-fg)]",
+  red: "bg-[var(--portal-badge-red-fg)]",
+  ochre: "bg-[var(--portal-badge-ochre-fg)]",
+  grey: "bg-[var(--portal-badge-grey-fg)]",
+  plum: "bg-[var(--portal-badge-plum-fg)]",
+};
 
 export function KpiCard({
   label,
@@ -19,6 +32,8 @@ export function KpiCard({
   compact = false,
   selected = false,
   onClick,
+  layout = "default",
+  portalAccent = "ink",
 }: {
   label: string;
   value: string | number;
@@ -31,6 +46,8 @@ export function KpiCard({
   compact?: boolean;
   selected?: boolean;
   onClick?: () => void;
+  layout?: "default" | "portal";
+  portalAccent?: PortalKpiAccent;
 }) {
   const toneStyle = TONE_STYLES[accentToTone(accent)];
   const Comp = onClick ? "button" : "div";
@@ -41,14 +58,29 @@ export function KpiCard({
       onClick={onClick}
       className={cn(
         "group relative flex items-start gap-3 overflow-hidden rounded-xl text-start",
-        compact ? "items-center gap-2 px-3 py-1.5" : "p-4",
-        NEUTRAL_TILE,
-        toneStyle.accentBar,
+        layout === "portal"
+          ? "flex-col gap-1.5 border border-[var(--portal-border)] bg-[var(--portal-canvas)] px-5 py-[18px]"
+          : compact
+            ? "items-center gap-2 px-3 py-1.5"
+            : "p-4",
+        layout === "default" && NEUTRAL_TILE,
+        layout === "default" && toneStyle.accentBar,
         onClick && "cursor-pointer",
         selected && (accent === "success" ? "ring-1 ring-success" : "ring-1 ring-primary"),
         className,
       )}
     >
+      {layout === "portal" ? (
+        <>
+          <p className="flex items-center gap-2 text-[13px] font-medium text-[var(--portal-muted)]">
+            <span className={cn("size-2 shrink-0 rounded-[2px]", PORTAL_ACCENT[portalAccent])} />
+            {label}
+          </p>
+          <p className="text-[28px] leading-[34px] font-bold tabular-nums text-[var(--portal-ink)]">{value}</p>
+          {caption ? <p className="text-xs text-[var(--portal-muted)]">{caption}</p> : null}
+        </>
+      ) : (
+      <>
       {Icon ? (
         <span
           className={cn(
@@ -61,9 +93,16 @@ export function KpiCard({
         </span>
       ) : null}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <p className="whitespace-normal break-words text-xs font-semibold text-muted-foreground">
+                {label}
+              </p>
+            }
+          />
+          <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
         {compact ? (
           <p className="flex min-w-0 items-baseline gap-1.5">
             <span className="text-xl font-semibold tabular-nums tracking-tight text-foreground">
@@ -84,6 +123,8 @@ export function KpiCard({
           </>
         )}
       </div>
+      </>
+      )}
     </Comp>
   );
 }

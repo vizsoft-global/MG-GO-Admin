@@ -60,9 +60,12 @@ export function matchesColumnFilter(
   value: string | number | null,
   filter: ColumnFilterValue | undefined,
   numeric = false,
+  textValue?: string,
 ): boolean {
   if (!columnFilterActive(filter) || !filter) return true;
-  if (filter.kind === "text") return textMatches(String(value ?? ""), filter.text);
+  // A column can print something other than its stored value (Efficiency shows
+  // `87.1%`), so Text mode is matched against the printed string.
+  if (filter.kind === "text") return textMatches(textValue ?? String(value ?? ""), filter.text);
   if (filter.kind === "list") return listMatches(String(value ?? ""), filter.values);
   const parsed = typeof value === "number" ? value : Number(value ?? Number.NaN);
   if (!Number.isFinite(parsed)) return false;
@@ -75,10 +78,12 @@ export function rowMatchesColumnFilters(
   row: Record<string, string | number | null>,
   filters: ColumnFilters,
   numericColumns: ReadonlySet<string> = new Set(),
+  textOf?: (columnId: string, value: string | number | null) => string,
 ): boolean {
   for (const [columnId, filter] of Object.entries(filters)) {
     if (!columnFilterActive(filter)) continue;
-    if (!matchesColumnFilter(row[columnId] ?? null, filter, numericColumns.has(columnId))) {
+    const value = row[columnId] ?? null;
+    if (!matchesColumnFilter(value, filter, numericColumns.has(columnId), textOf?.(columnId, value))) {
       return false;
     }
   }
@@ -211,6 +216,8 @@ export function PayrollColumnHeader({
   className,
   style,
   heading,
+  sortPair = false,
+  listLabel,
 }: {
   label: string;
   columnId: string;
@@ -225,6 +232,16 @@ export function PayrollColumnHeader({
   className?: string;
   style?: CSSProperties;
   heading?: ReactNode;
+  /**
+   * Draw the ▲▼ pair in the header and cycle asc → desc → none. Combined Payroll
+   * asks for the sort to be a target of its own, next to the funnel.
+   */
+  sortPair?: boolean;
+  /**
+   * How List mode prints a stored value. The tick still stores the raw value, so
+   * a `74.0%` label keeps filtering on the number.
+   */
+  listLabel?: (value: string) => string;
 }) {
   const t = useTranslations("pages.payroll.columnFilter");
   const [open, setOpen] = useState(false);
@@ -300,6 +317,13 @@ export function PayrollColumnHeader({
     setPicked((prev) => (pool.length > 0 && pool.every((value) => prev.includes(value)) ? [] : [...pool]));
   }
 
+  /** asc → desc → none, so a third click clears the sort. */
+  function cycleSort() {
+    if (sorted === "asc") onSort({ columnId, dir: "desc" });
+    else if (sorted === "desc") onSort(null);
+    else onSort({ columnId, dir: "asc" });
+  }
+
   const allTicked =
     (search.trim() ? visibleValues : uniqueValues).length > 0 &&
     (search.trim() ? visibleValues : uniqueValues).every((value) => picked.includes(value));
@@ -308,6 +332,22 @@ export function PayrollColumnHeader({
     <th className={cn("whitespace-nowrap px-2 py-2 text-start align-bottom", className)} style={style}>
       <span className="inline-flex items-center gap-1">
         {heading ?? <span>{label}</span>}
+        {sortPair ? (
+          <button
+            type="button"
+            onClick={cycleSort}
+            aria-label={t("sortPair", { column: label })}
+            aria-pressed={Boolean(sorted)}
+            className={cn(
+              "inline-flex size-5 shrink-0 items-center justify-center rounded-sm transition-colors",
+              sorted
+                ? "bg-primary/10 text-primary ring-1 ring-primary/40"
+                : "text-muted-foreground/60 hover:bg-muted hover:text-foreground",
+            )}
+          >
+            {sorted === "desc" ? <ArrowDownAZ className="size-3" /> : <ArrowUpAZ className="size-3" />}
+          </button>
+        ) : null}
         <Popover open={open} onOpenChange={openChanged}>
           <PopoverTrigger
             className={cn(
@@ -394,7 +434,7 @@ export function PayrollColumnHeader({
                         >
                           {ticked ? <Check className="size-2.5" /> : null}
                         </span>
-                        <span className="min-w-0 flex-1 truncate">{value || t("blank")}</span>
+                        <span className="min-w-0 flex-1 truncate">{listLabel ? listLabel(value) || t("blank") : value || t("blank")}</span>
                         <span className="tabular-nums text-muted-foreground">{count}</span>
                       </button>
                     );

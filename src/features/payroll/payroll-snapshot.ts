@@ -1,5 +1,6 @@
 import { countryLabel } from "@/lib/geo/countries";
 import { partnerLabel } from "@/features/performance/performance-ops-format";
+import { payrollPartnerLabel } from "./payroll-assign";
 import {
   applyCover,
   assertPayrollMonth,
@@ -719,6 +720,7 @@ export function assemblePayrollSnapshot(input: {
         totalHours: Math.round(totalHours * 100) / 100,
         actualHours: Math.round(actualHours * 100) / 100,
         unjustified,
+        clientName: client?.name ?? null,
       });
     })
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -763,6 +765,7 @@ function riderRow(input: {
   totalHours: number;
   actualHours: number;
   unjustified: number;
+  clientName?: string | null;
 }): PayrollRiderRow {
   const count = (status: DayStatus) => input.days.filter((s) => s === status).length;
   const r = input.r;
@@ -783,7 +786,7 @@ function riderRow(input: {
     zoneEfficiency: input.metric?.efficiency ?? null,
     zoneDpd: input.metric?.dpd ?? null,
     zoneOrders: input.metric ? input.metric.orders : null,
-    partner: partnerLabel(r.projectKey),
+    partner: payrollPartnerLabel(r.projectKey, input.clientName),
     projectKey: r.projectKey,
     nationality: r.nationality ? countryLabel(r.nationality) : "—",
     nationalityCode: r.nationality,
@@ -1129,6 +1132,9 @@ export function snapshotFromRpc(
       totalHours: Math.round(totalHours * 100) / 100,
       actualHours: Math.round(actualHours * 100) / 100,
       unjustified,
+      clientName:
+        client?.name?.trim() ||
+        (row.partner && row.partner !== "—" ? row.partner : null),
     });
   });
 

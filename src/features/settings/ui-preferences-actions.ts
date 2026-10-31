@@ -157,6 +157,8 @@ function preferenceFromValue(value: unknown): ListColumnPreference | null {
   const record = value as DocumentData;
   if (!Array.isArray(record.order) || !Array.isArray(record.visible)) return null;
   const sort = record.sort;
+  const groupBy = record.groupBy;
+  const viewMode = record.viewMode;
   return {
     order: record.order.map(String),
     visible: record.visible.map(String),
@@ -167,6 +169,8 @@ function preferenceFromValue(value: unknown): ListColumnPreference | null {
             dir: (sort as { dir?: string }).dir === "desc" ? "desc" : "asc",
           }
         : null,
+    ...(groupBy === null || typeof groupBy === "string" ? { groupBy } : {}),
+    ...(viewMode === "list" || viewMode === "grid" ? { viewMode } : {}),
   };
 }
 

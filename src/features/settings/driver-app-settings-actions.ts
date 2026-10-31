@@ -730,9 +730,9 @@ export async function getDriverAppInstallStats(): Promise<DriverAppInstallStats>
     byCode.set(code, entry);
   }
   const versionList = [...byCode.values()].sort((a, b) => {
-    if (a.versionCode == null) return -1;
-    if (b.versionCode == null) return 1;
-    return a.versionCode - b.versionCode;
+    if (a.versionCode == null) return 1;
+    if (b.versionCode == null) return -1;
+    return b.versionCode - a.versionCode;
   });
   return { total: rows.length, versions: versionList, loadFailed: false, sentry };
 }

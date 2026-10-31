@@ -4,7 +4,17 @@ import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Award, Loader2, Trophy } from "lucide-react";
 import { AppEmptyState } from "@/components/app";
-import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  AppDataTable,
+  AppDataTableRow,
+  TableCell,
+} from "@/components/app/app-data-table";
+import {
+  EmptyCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { Button } from "@/components/ui/button";
 import { PerformanceComponentBreakdown } from "@/features/performance/performance-component-breakdown";
 import { PerformanceRatingPanel } from "@/features/performance/performance-rating-panel";
@@ -18,6 +28,7 @@ import {
   PERFORMANCE_RANGE_PRESETS,
   type PerformanceRangePreset,
 } from "@/features/performance/performance-formulas";
+import type { PerformanceComponentKey } from "@/features/performance/performance-types";
 import {
   useDriverPerformanceDaily,
   useDriverPerformanceList,
@@ -105,6 +116,24 @@ export function DriverPerformanceTab({
       ? catalog.components
       : (list?.components ?? daily?.components ?? []);
   const dailyRows = daily?.rows ?? [];
+  const trendColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "date", label: tDriver("performanceColDate"), locked: true },
+      { id: "compliance", label: t("kpiCompliance") },
+      ...components.map((component) => ({
+        id: component.key,
+        label: locale.startsWith("ar") ? component.label_ar : component.label_en,
+      })),
+    ],
+    [components, locale, t, tDriver],
+  );
+  const trendPrefs = useTablePrefs(`driver-performance-${driverId}`, trendColumns);
+  const filteredDays = useMemo(() => {
+    const query = trendPrefs.appliedQuery.trim().toLowerCase();
+    if (!query) return dailyRows;
+    return dailyRows.filter((day) => day.log_date.toLowerCase().includes(query));
+  }, [dailyRows, trendPrefs.appliedQuery]);
+  const shownTrend = trendPrefs.orderedColumns.filter((column) => trendPrefs.isVisible(column.id));
 
   if (listLoading) {
     return (
@@ -228,66 +257,62 @@ export function DriverPerformanceTab({
           <div className="flex justify-center py-6">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : dailyRows.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            {tDriver("performanceTrendEmpty")}
-          </p>
         ) : (
-          <div className="max-h-[320px] overflow-auto">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-card">
-                <tr className="border-b border-border">
-                  <th className={cn(TABLE_HEAD_CLASS, "px-2 py-1.5 text-start")}>
-                    {tDriver("performanceColDate")}
-                  </th>
-                  <th className={cn(TABLE_HEAD_CLASS, "px-2 py-1.5 text-end")}>
-                    {t("kpiCompliance")}
-                  </th>
-                  {components.map((component) => (
-                    <th
-                      key={component.key}
-                      className={cn(TABLE_HEAD_CLASS, "px-2 py-1.5 text-end")}
+          <AppDataTable
+            toolbar={
+              <TableToolbar
+                prefs={trendPrefs}
+                entity={tDriver("performanceColDate")}
+                columns={trendColumns}
+                rowKind="aggregate"
+                filteredCount={filteredDays.length}
+                totalCount={dailyRows.length}
+              />
+            }
+            columns={shownTrend.map((column) => ({
+              id: column.id,
+              label: column.label,
+              className: column.id === "date" ? "text-start" : "text-end",
+            }))}
+            empty={
+              filteredDays.length === 0 ? (
+                <p className="px-4 py-6 text-xs text-muted-foreground">{tDriver("performanceTrendEmpty")}</p>
+              ) : undefined
+            }
+          >
+            {filteredDays.map((day) => (
+              <AppDataTableRow key={day.log_date}>
+                {shownTrend.map((column) => {
+                  if (column.id === "date") {
+                    return (
+                      <TableCell key={column.id} className="text-xs tabular-nums">
+                        {day.log_date}
+                      </TableCell>
+                    );
+                  }
+                  if (column.id === "compliance") {
+                    return (
+                      <TableCell key={column.id} className="text-end text-xs font-semibold tabular-nums">
+                        {day.compliance_score == null ? <EmptyCell /> : scorePct(day.compliance_score)}
+                      </TableCell>
+                    );
+                  }
+                  const value = componentPct(day.component_scores, column.id as PerformanceComponentKey);
+                  return (
+                    <TableCell
+                      key={column.id}
+                      className={cn(
+                        "text-end text-xs tabular-nums",
+                        value == null ? "text-muted-foreground" : undefined,
+                      )}
                     >
-                      {locale.startsWith("ar")
-                        ? component.label_ar
-                        : component.label_en}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {dailyRows.map((day) => (
-                  <tr key={day.log_date} className="border-b border-border/60">
-                    <td className="px-2 py-1.5 tabular-nums">{day.log_date}</td>
-                    <td className="px-2 py-1.5 text-end font-semibold tabular-nums">
-                      {day.compliance_score == null
-                        ? "—"
-                        : scorePct(day.compliance_score)}
-                    </td>
-                    {components.map((component) => {
-                      const value = componentPct(
-                        day.component_scores,
-                        component.key,
-                      );
-                      return (
-                        <td
-                          key={component.key}
-                          className={cn(
-                            "px-2 py-1.5 text-end tabular-nums",
-                            value == null
-                              ? "text-muted-foreground"
-                              : undefined,
-                          )}
-                        >
-                          {value == null ? "—" : scorePct(value)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      {value == null ? <EmptyCell /> : scorePct(value)}
+                    </TableCell>
+                  );
+                })}
+              </AppDataTableRow>
+            ))}
+          </AppDataTable>
         )}
       </div>
     </div>

@@ -1,10 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { SimpleConfirmDialog } from "@/components/simple-confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -89,6 +97,37 @@ export function CategoriesSettingsPanel() {
     });
   }
 
+  const categoryColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "key", label: t("key"), locked: true },
+      { id: "labelEn", label: t("labelEn"), locked: true },
+      { id: "labelAr", label: t("labelAr") },
+      { id: "active", label: t("active"), categorical: true },
+      { id: "remove", label: t("remove"), locked: true },
+    ],
+    [t],
+  );
+  const tablePrefs = useTablePrefs("requests.categories", categoryColumns);
+  const shownColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
+  const filteredRows = useMemo(() => {
+    const query = tablePrefs.appliedQuery.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) =>
+      [row.key, row.label_en, row.label_ar ?? ""].join(" ").toLowerCase().includes(query),
+    );
+  }, [rows, tablePrefs.appliedQuery]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filteredRows,
+        tablePrefs.groupBy,
+        { active: (row) => (row.is_active ? t("activeOn") : t("activeOff")) },
+        {},
+        "—",
+      ),
+    [filteredRows, t, tablePrefs.groupBy],
+  );
+
   function confirmDelete() {
     if (!deleteTarget) return;
     startTransition(async () => {
@@ -144,6 +183,14 @@ export function CategoriesSettingsPanel() {
           </div>
         </div>
 
+        <TableToolbar
+          prefs={tablePrefs}
+          entity={t("title")}
+          columns={categoryColumns}
+          rowKind="dynamic"
+          filteredCount={filteredRows.length}
+          totalCount={rows.length}
+        />
         {loading ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -154,38 +201,56 @@ export function CategoriesSettingsPanel() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("key")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("labelEn")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("labelAr")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("active")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS} />
+                {shownColumns.map((column) => (
+                  <TableHead key={column.id} className={TABLE_HEAD_CLASS}>
+                    {column.id === "remove" ? null : column.label}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="font-mono text-xs">{row.key}</TableCell>
-                  <TableCell>{row.label_en}</TableCell>
-                  <TableCell>{row.label_ar ?? "—"}</TableCell>
-                  <TableCell>
-                    <ToggleChip selected={row.is_active} onClick={() => toggleActive(row)}>
-                      {row.is_active ? t("activeOn") : t("activeOff")}
-                    </ToggleChip>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 text-destructive hover:bg-destructive/10"
-                      onClick={() => setDeleteTarget(row)}
-                    >
-                      <Trash2 className="mr-1 h-3.5 w-3.5" />
-                      {t("remove")}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {grouped.flatMap((group) => [
+                ...(tablePrefs.groupBy !== "none"
+                  ? [
+                      <TableRow key={`g-${group.key}`}>
+                        <TableCell colSpan={shownColumns.length} className="text-xs font-semibold">
+                          {group.label} · {group.rows.length}
+                        </TableCell>
+                      </TableRow>,
+                    ]
+                  : []),
+                ...group.rows.map((row) => {
+                  const cells: Record<string, ReactNode> = {
+                    key: <span className="font-mono text-xs">{row.key}</span>,
+                    labelEn: <TableNameCell name={row.label_en} />,
+                    labelAr: row.label_ar ? row.label_ar : <EmptyCell />,
+                    active: (
+                      <ToggleChip selected={row.is_active} onClick={() => toggleActive(row)}>
+                        {row.is_active ? t("activeOn") : t("activeOff")}
+                      </ToggleChip>
+                    ),
+                    remove: (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-destructive hover:bg-destructive/10"
+                        onClick={() => setDeleteTarget(row)}
+                      >
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />
+                        {t("remove")}
+                      </Button>
+                    ),
+                  };
+                  return (
+                    <TableRow key={row.id}>
+                      {shownColumns.map((column) => (
+                        <TableCell key={column.id}>{cells[column.id] ?? <EmptyCell />}</TableCell>
+                      ))}
+                    </TableRow>
+                  );
+                }),
+              ])}
             </TableBody>
           </Table>
         )}

@@ -1,10 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { AppEmptyState } from "@/components/app";
+import { groupRows } from "@/components/app/app-list-controls";
 import { AppDataTable, AppDataTableRow, TableCell } from "@/components/app/app-data-table";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -63,6 +72,43 @@ export function EsignIndividualSentPanel() {
   const { data: templatesData } = useEsignTemplates();
   const { data: batchesData } = useEsignBatches();
   const rows = data?.rows ?? [];
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "code", label: t("colCode"), locked: true },
+      { id: "driver", label: t("colDriver"), locked: true },
+      { id: "title", label: t("colTitle"), locked: true },
+      { id: "category", label: t("colCategory"), categorical: true },
+      { id: "batch", label: t("colBatch") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "sent", label: t("colSent") },
+      { id: "due", label: t("colDue") },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("esign.individualSent", columns);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+  const filtered = useMemo(() => {
+    const q = prefs.appliedQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) =>
+      [row.request_code, row.driver_name, row.driver_code, row.title, row.category_label, row.batch_code]
+        .some((value) => (value ?? "").toLowerCase().includes(q)),
+    );
+  }, [prefs.appliedQuery, rows]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filtered,
+        prefs.groupBy,
+        {
+          category: (row) => row.category_label ?? "",
+          status: (row) => tCommon(`status.${row.status}`),
+        },
+        {},
+        "—",
+      ),
+    [filtered, prefs.groupBy, tCommon],
+  );
 
   return (
     <div className="grid min-w-0 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
@@ -125,63 +171,98 @@ export function EsignIndividualSentPanel() {
       </aside>
 
       <div className="min-w-0">
+        <TableToolbar
+          prefs={prefs}
+          entity={tTracker("scopeIndividual")}
+          columns={columns}
+          rowKind="dynamic"
+          entityList
+          filteredCount={filtered.length}
+          totalCount={rows.length}
+        />
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
+        ) : prefs.view === "grid" ? (
+          <TableGridCards
+            rows={filtered.map((row) => ({
+              id: row.request_code,
+              name: row.title || row.driver_name,
+              fields: [
+                { label: t("colDriver"), value: row.driver_name },
+                { label: t("colCategory"), value: row.category_label || "—" },
+                { label: t("colStatus"), value: tCommon(`status.${row.status}`) },
+                { label: t("colSent"), value: row.created_at ? formatDay(row.created_at) : "—" },
+              ],
+              onOpen: () => router.push(`/requests/esign/${row.id}`),
+            }))}
+          />
         ) : (
-          <AppDataTable
-            columns={[
-              { id: "code", label: t("colCode") },
-              { id: "driver", label: t("colDriver") },
-              { id: "title", label: t("colTitle") },
-              { id: "category", label: t("colCategory") },
-              { id: "batch", label: t("colBatch") },
-              { id: "status", label: t("colStatus") },
-              { id: "sent", label: t("colSent") },
-              { id: "due", label: t("colDue") },
-            ]}
-          >
-            {rows.map((row) => (
-              <AppDataTableRow
-                key={row.id}
-                className="cursor-pointer"
-                onClick={() => router.push(`/requests/esign/${row.id}`)}
-              >
-                <TableCell className="font-mono text-xs">
-                  {row.request_code}
-                  <Link
-                    href={`/requests/esign/${row.id}`}
-                    className="mt-0.5 flex items-center gap-1 font-sans text-xs text-primary hover:underline"
-                    onClick={(e) => e.stopPropagation()}
+          <AppDataTable columns={shown.map((column) => ({ id: column.id, label: column.label }))}>
+            {grouped.flatMap((group) => [
+              ...(prefs.groupBy !== "none"
+                ? [
+                    <AppDataTableRow key={`g-${group.key}`}>
+                      <TableCell colSpan={shown.length} className="text-xs font-semibold">
+                        {group.label} · {group.rows.length}
+                      </TableCell>
+                    </AppDataTableRow>,
+                  ]
+                : []),
+              ...group.rows.map((row) => {
+                const cells: Record<string, ReactNode> = {
+                  code: (
+                    <>
+                      <span className="font-mono text-xs">{row.request_code}</span>
+                      <Link
+                        href={`/requests/esign/${row.id}`}
+                        className="mt-0.5 flex items-center gap-1 font-sans text-xs text-primary hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        {t("viewDetails")}
+                      </Link>
+                    </>
+                  ),
+                  driver: (
+                    <>
+                      <div>{row.driver_name || <EmptyCell />}</div>
+                      <div className="text-xs text-muted-foreground">{row.driver_code}</div>
+                    </>
+                  ),
+                  title: row.title ? <TableNameCell name={row.title} /> : <EmptyCell />,
+                  category: row.category_label || <EmptyCell />,
+                  batch: row.batch_code ? (
+                    <span className="font-mono text-xs">{row.batch_code}</span>
+                  ) : (
+                    <EmptyCell />
+                  ),
+                  status: (
+                    <StatusPill variant={statusVariant(row.status)}>
+                      {tCommon(`status.${row.status}`)}
+                    </StatusPill>
+                  ),
+                  sent: row.created_at ? formatDay(row.created_at) : <EmptyCell />,
+                  due: row.due_at ? formatDay(row.due_at) : <EmptyCell />,
+                };
+                return (
+                  <AppDataTableRow
+                    key={row.id}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/requests/esign/${row.id}`)}
                   >
-                    <ExternalLink className="h-3 w-3" />
-                    {t("viewDetails")}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-sm">
-                  <div>{row.driver_name}</div>
-                  <div className="text-xs text-muted-foreground">{row.driver_code}</div>
-                </TableCell>
-                <TableCell
-                  className="max-w-[320px] truncate text-sm font-medium"
-                  title={row.title ?? undefined}
-                >
-                  {row.title}
-                </TableCell>
-                <TableCell className="text-sm">{row.category_label ?? "—"}</TableCell>
-                <TableCell className="font-mono text-xs">{row.batch_code ?? "—"}</TableCell>
-                <TableCell>
-                  <StatusPill variant={statusVariant(row.status)}>
-                    {tCommon(`status.${row.status}`)}
-                  </StatusPill>
-                </TableCell>
-                <TableCell className="text-sm tabular-nums">{formatDay(row.created_at)}</TableCell>
-                <TableCell className="text-sm tabular-nums">{formatDay(row.due_at)}</TableCell>
-              </AppDataTableRow>
-            ))}
+                    {shown.map((column) => (
+                      <TableCell key={column.id} className="text-sm">
+                        {cells[column.id]}
+                      </TableCell>
+                    ))}
+                  </AppDataTableRow>
+                );
+              }),
+            ])}
           </AppDataTable>
         )}
       </div>

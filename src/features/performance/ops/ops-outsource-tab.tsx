@@ -10,6 +10,12 @@ import {
   TableCell,
 } from "@/components/app/app-data-table";
 import {
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
+import {
   companyRowsFromRiders,
   dimMetricValue,
   formatOpsTrendLabel,
@@ -43,6 +49,18 @@ export function OpsOutsourceTab({
   granularity: OpsGranularity;
 }) {
   const t = useTranslations("pages.performance.ops");
+  const companyColumns = useMemo((): TableToolbarColumn[] => [
+    { id: "company", label: t("col.company"), locked: true },
+    { id: "orders", label: t("col.orders") },
+    { id: "riders", label: t("col.riders") },
+    { id: "active", label: t("col.activeRiders") },
+    { id: "dpd", label: t("col.dpd") },
+    { id: "dpdEff", label: t("col.dpdEff") },
+    { id: "tgt", label: t("col.tgtEff") },
+    { id: "utr", label: t("col.utr") },
+    { id: "avg", label: t("col.avgDelivery") },
+  ], [t]);
+  const companyPrefs = useTablePrefs("ops-outsource-companies", companyColumns);
   const seriesName = t(`viewBy.${metric}`);
   const series = [{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }];
   const companies = useMemo(
@@ -145,80 +163,51 @@ export function OpsOutsourceTab({
       <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold">{t("companyTable")}</h3>
-          <button
-            type="button"
-            className="text-xs text-primary hover:underline"
-            onClick={() =>
-              downloadCsv(
-                "ops-outsource-companies",
-                toCsv(
-                  [
-                    t("col.company"),
-                    t("col.orders"),
-                    t("col.riders"),
-                    t("col.activeRiders"),
-                    t("col.dpd"),
-                    t("col.dpdEff"),
-                    t("col.tgtEff"),
-                    t("col.utr"),
-                    t("col.avgDelivery"),
-                  ],
-                  companies.map((r) => [
-                    labelCompany(r.key),
-                    r.orders,
-                    r.riders,
-                    r.active_riders,
-                    r.dpd,
-                    r.dpd_eff,
-                    r.tgt_eff,
-                    r.utr,
-                    r.avg_delivery_min,
-                  ]),
-                ),
-              )
-            }
-          >
-            {t("exportTab")}
-          </button>
         </div>
         <AppDataTable
-          columns={[
-            { id: "company", label: t("col.company") },
-            { id: "orders", label: t("col.orders"), className: "text-end" },
-            { id: "riders", label: t("col.riders"), className: "text-end" },
-            { id: "active", label: t("col.activeRiders"), className: "text-end" },
-            { id: "dpd", label: t("col.dpd"), className: "text-end" },
-            { id: "dpdEff", label: t("col.dpdEff"), className: "text-end" },
-            { id: "tgt", label: t("col.tgtEff"), className: "text-end" },
-            { id: "utr", label: t("col.utr"), className: "text-end" },
-            { id: "avg", label: t("col.avgDelivery"), className: "text-end" },
-          ]}
+          toolbar={
+            <TableToolbar
+              prefs={companyPrefs}
+              entity={t("companyTable")}
+              columns={companyColumns}
+              rowKind="dynamic"
+              filteredCount={companies.filter((r) => {
+                const needle = companyPrefs.appliedQuery.trim().toLowerCase();
+                return !needle || labelCompany(r.key).toLowerCase().includes(needle);
+              }).length}
+              totalCount={companies.length}
+              onExport={() => downloadCsv(
+                "ops-outsource-companies",
+                toCsv(
+                  [t("col.company"), t("col.orders"), t("col.riders"), t("col.activeRiders"), t("col.dpd"), t("col.dpdEff"), t("col.tgtEff"), t("col.utr"), t("col.avgDelivery")],
+                  companies.map((r) => [labelCompany(r.key), r.orders, r.riders, r.active_riders, r.dpd, r.dpd_eff, r.tgt_eff, r.utr, r.avg_delivery_min]),
+                ),
+              )}
+            />
+          }
+          columns={companyPrefs.orderedColumns.filter((column) => companyPrefs.isVisible(column.id)).map((column) => ({
+            id: column.id,
+            label: column.label,
+            className: column.id === "company" ? undefined : "text-end",
+          }))}
         >
-          {companies.map((r) => (
+          {companies.filter((r) => {
+            const needle = companyPrefs.appliedQuery.trim().toLowerCase();
+            return !needle || labelCompany(r.key).toLowerCase().includes(needle);
+          }).map((r) => (
             <AppDataTableRow key={r.key}>
-              <TableCell className="text-sm">{labelCompany(r.key)}</TableCell>
-              <TableCell className="text-end tabular-nums text-sm">
-                {formatInt(r.orders)}
-              </TableCell>
-              <TableCell className="text-end tabular-nums text-sm">
-                {formatInt(r.riders)}
-              </TableCell>
-              <TableCell className="text-end tabular-nums text-sm">
-                {formatInt(r.active_riders ?? r.riders)}
-              </TableCell>
-              <TableCell className="text-end tabular-nums text-sm">
-                {formatDpd(r.dpd)}
-              </TableCell>
-              <TableCell className="text-end tabular-nums text-sm">
-                {formatPct(r.dpd_eff)}
-              </TableCell>
-              <TableCell className="text-end tabular-nums text-sm">
-                {formatPct(r.tgt_eff)}
-              </TableCell>
-              <TableCell className="text-end tabular-nums text-sm">{formatUtr(r.utr)}</TableCell>
-              <TableCell className="text-end tabular-nums text-sm">
-                {formatMinutes(r.avg_delivery_min)}
-              </TableCell>
+              {companyPrefs.orderedColumns.filter((column) => companyPrefs.isVisible(column.id)).map((column) => {
+                const end = "text-end tabular-nums text-sm";
+                if (column.id === "company") return <TableCell key={column.id} className="text-sm"><TableNameCell name={labelCompany(r.key)} /></TableCell>;
+                if (column.id === "orders") return <TableCell key={column.id} className={end}>{formatInt(r.orders)}</TableCell>;
+                if (column.id === "riders") return <TableCell key={column.id} className={end}>{formatInt(r.riders)}</TableCell>;
+                if (column.id === "active") return <TableCell key={column.id} className={end}>{formatInt(r.active_riders ?? r.riders)}</TableCell>;
+                if (column.id === "dpd") return <TableCell key={column.id} className={end}>{formatDpd(r.dpd)}</TableCell>;
+                if (column.id === "dpdEff") return <TableCell key={column.id} className={end}>{formatPct(r.dpd_eff)}</TableCell>;
+                if (column.id === "tgt") return <TableCell key={column.id} className={end}>{formatPct(r.tgt_eff)}</TableCell>;
+                if (column.id === "utr") return <TableCell key={column.id} className={end}>{formatUtr(r.utr)}</TableCell>;
+                return <TableCell key={column.id} className={end}>{formatMinutes(r.avg_delivery_min)}</TableCell>;
+              })}
             </AppDataTableRow>
           ))}
         </AppDataTable>

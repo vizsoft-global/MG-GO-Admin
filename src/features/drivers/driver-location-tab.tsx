@@ -10,14 +10,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Table,
-  TableBody,
+  AppDataTable,
+  AppDataTableEmpty,
+  AppDataTableRow,
   TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+} from "@/components/app/app-data-table";
+import {
+  GroupTableHeaderRow,
+  groupRows,
+  useGroupedListView,
+} from "@/components/app/app-list-controls";
+import {
+  EmptyCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { ArchiveLoadPrompt } from "@/features/locations/archive-load-prompt";
 import { DriverLocationsMap } from "@/features/locations/driver-locations-map";
 import {
@@ -130,6 +138,47 @@ export function DriverLocationTab({
     const key = locationEventStatusKey(event);
     return tLoc(locationEventStatusMessageKey(key));
   };
+  const eventColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "time", label: t("colTime") },
+      { id: "status", label: t("colStatus"), categorical: true },
+      { id: "zone", label: t("colZone"), categorical: true },
+      { id: "accuracy", label: t("colAccuracy") },
+      { id: "delivery", label: t("colDelivery") },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs(`driver-location-${profileDriverId}`, eventColumns);
+  const filteredEvents = useMemo(() => {
+    const query = prefs.appliedQuery.trim().toLowerCase();
+    if (!query) return events;
+    return events.filter((event) =>
+      [eventStatusLabel(event), zoneLabel(event.zoneStatus), event.deliveryId ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [eventStatusLabel, events, prefs.appliedQuery, zoneLabel]);
+  const groupedEvents = useMemo(
+    () =>
+      groupRows(
+        filteredEvents,
+        prefs.groupBy,
+        {
+          status: (event) => eventStatusLabel(event),
+          zone: (event) => zoneLabel(event.zoneStatus),
+        },
+        {},
+        "—",
+      ),
+    [eventStatusLabel, filteredEvents, prefs.groupBy, zoneLabel],
+  );
+  const listView = useGroupedListView(
+    groupedEvents,
+    prefs.groupBy !== "none",
+    `${prefs.groupBy}\u0001${prefs.appliedQuery}\u0001${date}`,
+  );
+  const shownColumns = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
 
   return (
     <div className="space-y-4">
@@ -178,52 +227,96 @@ export function DriverLocationTab({
             <div className="flex h-32 items-center justify-center">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-          ) : events.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-muted-foreground">{t("noEvents")}</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/30 hover:bg-muted/30">
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colTime")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colZone")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colAccuracy")}</TableHead>
-                  <TableHead className={TABLE_HEAD_CLASS}>{t("colDelivery")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {events.map((event: DriverLocationEvent) => (
-                  <TableRow key={event.id} className="hover:bg-muted/40">
-                    <TableCell className="text-sm">
-                      {new Date(event.recordedAt).toLocaleTimeString()}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      <StatusPill variant={statusVariantForEvent(event)}>
-                        {eventStatusLabel(event)}
-                      </StatusPill>
-                    </TableCell>
-                    <TableCell className="text-sm">{zoneLabel(event.zoneStatus)}</TableCell>
-                    <TableCell className="text-sm">
-                      {event.accuracyMeters != null
-                        ? `${Math.round(event.accuracyMeters)} m`
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {event.deliveryId ? (
-                        <Link
-                          href={`/deliveries?highlight=${event.deliveryId}`}
-                          className="text-primary hover:underline"
-                        >
-                          {t("viewDelivery")}
-                        </Link>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <AppDataTable
+              toolbar={
+                <TableToolbar
+                  prefs={prefs}
+                  entity={t("eventsTitle")}
+                  columns={eventColumns}
+                  rowKind="dynamic"
+                  filteredCount={filteredEvents.length}
+                  totalCount={events.length}
+                />
+              }
+              columns={shownColumns.map((column) => ({ id: column.id, label: column.label }))}
+              empty={
+                filteredEvents.length === 0 ? (
+                  <AppDataTableEmpty>{t("noEvents")}</AppDataTableEmpty>
+                ) : undefined
+              }
+            >
+              {listView.sections.flatMap((section) => [
+                section.showHeader ? (
+                  <GroupTableHeaderRow
+                    key={`g-${section.key}`}
+                    colSpan={shownColumns.length}
+                    label={section.label}
+                    total={section.total}
+                    open={section.open}
+                    page={section.page}
+                    showPager={section.showPager}
+                    onToggle={() => listView.toggle(section.key)}
+                    onStep={(dir) => listView.step(section.key, dir)}
+                  />
+                ) : null,
+                ...section.visibleRows.map((event) => (
+                  <AppDataTableRow key={event.id}>
+                    {shownColumns.map((column) => {
+                      switch (column.id) {
+                        case "time":
+                          return (
+                            <TableCell key={column.id} className="text-sm">
+                              {new Date(event.recordedAt).toLocaleTimeString()}
+                            </TableCell>
+                          );
+                        case "status":
+                          return (
+                            <TableCell key={column.id} className="text-sm">
+                              <StatusPill variant={statusVariantForEvent(event)}>
+                                {eventStatusLabel(event)}
+                              </StatusPill>
+                            </TableCell>
+                          );
+                        case "zone":
+                          return (
+                            <TableCell key={column.id} className="text-sm">
+                              {event.zoneStatus ? zoneLabel(event.zoneStatus) : <EmptyCell />}
+                            </TableCell>
+                          );
+                        case "accuracy":
+                          return (
+                            <TableCell key={column.id} className="text-sm">
+                              {event.accuracyMeters != null ? (
+                                `${Math.round(event.accuracyMeters)} m`
+                              ) : (
+                                <EmptyCell />
+                              )}
+                            </TableCell>
+                          );
+                        case "delivery":
+                          return (
+                            <TableCell key={column.id} className="text-sm">
+                              {event.deliveryId ? (
+                                <Link
+                                  href={`/deliveries?highlight=${event.deliveryId}`}
+                                  className="text-primary hover:underline"
+                                >
+                                  {t("viewDelivery")}
+                                </Link>
+                              ) : (
+                                <EmptyCell />
+                              )}
+                            </TableCell>
+                          );
+                        default:
+                          return null;
+                      }
+                    })}
+                  </AppDataTableRow>
+                )),
+              ])}
+            </AppDataTable>
           )}
         </CardContent>
       </Card>

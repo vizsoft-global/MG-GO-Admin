@@ -1,11 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { groupRows } from "@/components/app/app-list-controls";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import {
+  EmptyCell,
+  TableGridCards,
+  TableNameCell,
+  TableToolbar,
+  useTablePrefs,
+  type TableToolbarColumn,
+} from "@/components/app/table-toolbar";
 import { SimpleConfirmDialog } from "@/components/simple-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,6 +86,44 @@ export function EsignCategoriesShell() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const columns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: t("colCategory"), locked: true },
+      { id: "description", label: t("description") },
+      { id: "signed", label: t("colSigned") },
+      { id: "screenshots", label: t("colScreenshots"), categorical: true },
+      { id: "active", label: t("colActive"), categorical: true },
+      { id: "actions", label: "", locked: true },
+    ],
+    [t],
+  );
+  const prefs = useTablePrefs("esign.categories", columns);
+  const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
+  const filtered = useMemo(() => {
+    const q = prefs.appliedQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) =>
+      [row.label_en, row.key, row.description].some((value) =>
+        (value ?? "").toLowerCase().includes(q),
+      ),
+    );
+  }, [prefs.appliedQuery, rows]);
+  const grouped = useMemo(
+    () =>
+      groupRows(
+        filtered,
+        prefs.groupBy,
+        {
+          screenshots: (row) =>
+            row.screenshot_restricted ? t("screenshotBlocked") : t("screenshotAllowed"),
+          active: (row) => (row.is_active ? t("activeOn") : t("activeOff")),
+        },
+        {},
+        "—",
+      ),
+    [filtered, prefs.groupBy, t],
+  );
 
   function resetForm() {
     setEditing(null);
@@ -269,89 +316,134 @@ export function EsignCategoriesShell() {
         </div>
         ) : null}
 
+        <TableToolbar
+          prefs={prefs}
+          entity={t("title")}
+          columns={columns}
+          rowKind="dynamic"
+          entityList
+          filteredCount={filtered.length}
+          totalCount={rows.length}
+        />
         {loading ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground">
             <Loader2 className="me-2 h-4 w-4 animate-spin" />
           </div>
         ) : rows.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">{t("empty")}</p>
+        ) : prefs.view === "grid" ? (
+          <TableGridCards
+            rows={filtered.map((row) => ({
+              id: row.key,
+              name: row.label_en,
+              fields: [
+                { label: t("description"), value: row.description || "—" },
+                { label: t("colSigned"), value: String(row.signed_count) },
+                {
+                  label: t("colScreenshots"),
+                  value: row.screenshot_restricted ? t("screenshotBlocked") : t("screenshotAllowed"),
+                },
+                { label: t("colActive"), value: row.is_active ? t("activeOn") : t("activeOff") },
+              ],
+            }))}
+          />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colCategory")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("description")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colSigned")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colScreenshots")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS}>{t("colActive")}</TableHead>
-                <TableHead className={TABLE_HEAD_CLASS} />
+                {shown.map((column) => (
+                  <TableHead key={column.id} className={TABLE_HEAD_CLASS}>
+                    {column.label}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold text-white ${slotTint(row.key)}`}
-                      >
-                        {slotLabel(row)}
+              {grouped.flatMap((group) => [
+                ...(prefs.groupBy !== "none"
+                  ? [
+                      <TableRow key={`g-${group.key}`}>
+                        <TableCell colSpan={shown.length} className="text-xs font-semibold">
+                          {group.label} · {group.rows.length}
+                        </TableCell>
+                      </TableRow>,
+                    ]
+                  : []),
+                ...group.rows.map((row) => {
+                  const cells: Record<string, ReactNode> = {
+                    name: (
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs font-semibold text-white ${slotTint(row.key)}`}
+                        >
+                          {slotLabel(row)}
+                        </span>
+                        <TableNameCell name={row.label_en} />
+                      </div>
+                    ),
+                    description: row.description ? (
+                      <span className="block max-w-[240px] truncate text-muted-foreground">
+                        {row.description}
                       </span>
-                      <span className="text-sm font-medium">{row.label_en}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="max-w-[240px] truncate text-sm text-muted-foreground">
-                    {row.description ?? "—"}
-                  </TableCell>
-                  <TableCell className="tabular-nums text-sm">{row.signed_count}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {/* Figma reads the switch as "screenshots allowed" — green on = Allowed. */}
+                    ) : (
+                      <EmptyCell />
+                    ),
+                    signed: <span className="tabular-nums">{row.signed_count}</span>,
+                    screenshots: (
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={!row.screenshot_restricted}
+                          onCheckedChange={() => toggleScreenshot(row)}
+                          aria-label={t("colScreenshots")}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {row.screenshot_restricted ? t("screenshotBlocked") : t("screenshotAllowed")}
+                        </span>
+                      </div>
+                    ),
+                    active: (
                       <Switch
-                        checked={!row.screenshot_restricted}
-                        onCheckedChange={() => toggleScreenshot(row)}
-                        aria-label={t("colScreenshots")}
+                        checked={row.is_active}
+                        onCheckedChange={() => toggleActive(row)}
+                        aria-label={t("colActive")}
                       />
-                      <span className="text-xs text-muted-foreground">
-                        {row.screenshot_restricted
-                          ? t("screenshotBlocked")
-                          : t("screenshotAllowed")}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={row.is_active}
-                      onCheckedChange={() => toggleActive(row)}
-                      aria-label={t("colActive")}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8"
-                        onClick={() => startEdit(row)}
-                      >
-                        <Pencil className="me-1 h-3.5 w-3.5" />
-                        {t("edit")}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                        aria-label={t("remove")}
-                        onClick={() => setDeleteTarget(row)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    ),
+                    actions: (
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={() => startEdit(row)}
+                        >
+                          <Pencil className="me-1 h-3.5 w-3.5" />
+                          {t("edit")}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          aria-label={t("remove")}
+                          onClick={() => setDeleteTarget(row)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ),
+                  };
+                  return (
+                    <TableRow key={row.id}>
+                      {shown.map((column) => (
+                        <TableCell key={column.id} className="text-sm">
+                          {cells[column.id]}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  );
+                }),
+              ])}
             </TableBody>
           </Table>
         )}

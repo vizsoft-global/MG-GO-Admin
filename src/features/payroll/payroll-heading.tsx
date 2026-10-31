@@ -165,6 +165,17 @@ export function PayrollColumnsMenu({
   );
 }
 
+/**
+ * Master data. MG ID, Driver ID and Name are read-only everywhere and carry no
+ * pencil — not the identity-edit pencil and not the heading-rename one
+ * (SOP §7 "MG ID lock" and §11 "no pencil icon").
+ */
+export const MASTER_DATA_COLUMNS = ["amId", "mgId", "name"] as const;
+
+export function isMasterDataColumn(columnId: string): boolean {
+  return (MASTER_DATA_COLUMNS as readonly string[]).includes(columnId);
+}
+
 export function stickyIdentityStyle(
   columnId: string,
   offset: number,

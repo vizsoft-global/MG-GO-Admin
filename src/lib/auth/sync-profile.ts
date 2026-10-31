@@ -31,7 +31,15 @@ export async function syncAdminProfile(
   }
 
   const allowlistSnap = await db.collection(COLLECTIONS.adminAllowlist).doc(email).get();
-  const allowlistRole = (allowlistSnap.data()?.role as string | undefined) ?? null;
+  const encodedEmail = encodeURIComponent(email);
+  const encodedSnap =
+    encodedEmail === email
+      ? null
+      : await db.collection(COLLECTIONS.adminAllowlist).doc(encodedEmail).get();
+  const allowlistRole =
+    (allowlistSnap.data()?.role as string | undefined) ??
+    (encodedSnap?.data()?.role as string | undefined) ??
+    null;
 
   const isExistingApproved = existing?.approval_status === "approved" && existing.admin_role_id;
 

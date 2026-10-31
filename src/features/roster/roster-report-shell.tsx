@@ -5,6 +5,8 @@ import { FileBarChart } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
+import { TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
+import { ListToolbar, rowMatches } from "@/features/roster/table-kit";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { kuwaitToday } from "@/features/driver-tracking/kuwait-time";
@@ -50,6 +52,51 @@ function resultTone(status: RosterDutyStatus): string {
 
 export function RosterReportShell() {
   const t = useTranslations("pages.roster");
+  const shiftColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "date", label: t("date") },
+      { id: "rider", label: t("rider"), locked: true },
+      { id: "restaurant", label: t("restaurant") },
+      { id: "shift", label: t("shiftCol") },
+      { id: "scheduled", label: t("scheduledHours") },
+      { id: "actual", label: t("actualWindow") },
+      { id: "late", label: t("minLate") },
+      { id: "left", label: t("minLeft") },
+      { id: "result", label: t("result") },
+    ],
+    [t],
+  );
+  const dropColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "date", label: t("date") },
+      { id: "order", label: t("order"), locked: true },
+      { id: "rider", label: t("rider"), locked: true },
+      { id: "restaurant", label: t("restaurant") },
+      { id: "picked", label: t("pickedUp") },
+      { id: "delivered", label: t("delivered") },
+      { id: "from", label: t("fromRestaurant") },
+      { id: "proof", label: t("pickupProof") },
+      { id: "rules", label: t("rulesHit") },
+    ],
+    [t],
+  );
+  const totalColumns = useMemo<TableToolbarColumn[]>(
+    () => [
+      { id: "name", label: t("rider"), locked: true },
+      { id: "rows", label: t("rowsRead") },
+      { id: "scheduled", label: t("scheduledHours") },
+      { id: "worked", label: t("workedHours") },
+      { id: "pct", label: t("workedPct") },
+      { id: "late", label: t("statuses.late") },
+      { id: "early", label: t("leftEarly") },
+      { id: "noshow", label: t("statuses.no_show") },
+      { id: "drop", label: t("earlyTab") },
+    ],
+    [t],
+  );
+  const shiftPrefs = useTablePrefs("roster.reportShifts", shiftColumns);
+  const dropPrefs = useTablePrefs("roster.reportDrops", dropColumns);
+  const totalPrefs = useTablePrefs("roster.reportTotals", totalColumns);
   const locale = useLocale();
   const today = kuwaitToday();
   const lastWeek = rangeForPreset("lastWeek", today);
@@ -261,6 +308,7 @@ export function RosterReportShell() {
       </div>
       {tab === "shifts" ? (
         <div className={cn(rosterCard, "overflow-x-auto")}>
+          <ListToolbar prefs={shiftPrefs} entity={t("rider")} columns={shiftColumns} rowKind="dynamic" filteredCount={rows.filter((row) => rowMatches(shiftPrefs.appliedQuery, [row.driverName, row.employeeId, row.restaurantName, row.status])).length} totalCount={rows.length} />
           <table className="w-full">
             <thead>
               <tr className="border-b border-[#E2DCD8]">
@@ -270,10 +318,10 @@ export function RosterReportShell() {
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, 200).map((row) => (
+              {rows.filter((row) => rowMatches(shiftPrefs.appliedQuery, [row.driverName, row.employeeId, row.restaurantName, row.status])).slice(0, 200).map((row) => (
                 <tr key={`${row.driverId}-${row.date}`} className="border-b border-[#E2DCD8]">
                   <td className={rosterTd}>{formatDayLabel(row.date, locale)}</td>
-                  <td className={rosterTd}>{row.driverName} {row.employeeId ? `#${row.employeeId}` : ""}</td>
+                  <td className={rosterTd}><TableNameCell name={row.driverName} /> {row.employeeId ? `#${row.employeeId}` : ""}</td>
                   <td className={rosterTd}>{row.restaurantName || "—"}</td>
                   <td className={rosterTd}>{row.off ? t("offDay") : "1 of 1"}</td>
                   <td className={rosterTd}>{row.off ? "—" : `${clock12(row.scheduledStart)} – ${clock12(row.scheduledEnd)}`}</td>
@@ -291,6 +339,7 @@ export function RosterReportShell() {
       ) : null}
       {tab === "drops" ? (
         <div className={cn(rosterCard, "overflow-x-auto")}>
+          <ListToolbar prefs={dropPrefs} entity={t("order")} columns={dropColumns} rowKind="dynamic" filteredCount={rows.filter((row) => row.earlyDrops.some((drop) => rowMatches(dropPrefs.appliedQuery, [row.driverName, row.restaurantName, drop.orderId]))).length} totalCount={rows.length} />
           <table className="w-full">
             <thead>
               <tr className="border-b border-[#E2DCD8]">
@@ -300,11 +349,11 @@ export function RosterReportShell() {
               </tr>
             </thead>
             <tbody>
-              {rows.flatMap((row) => row.earlyDrops.map((drop) => (
+              {rows.filter((row) => row.earlyDrops.some((drop) => rowMatches(dropPrefs.appliedQuery, [row.driverName, row.restaurantName, drop.orderId]))).flatMap((row) => row.earlyDrops.filter((drop) => rowMatches(dropPrefs.appliedQuery, [row.driverName, row.restaurantName, drop.orderId])).map((drop) => (
                 <tr key={drop.deliveryId} className="border-b border-[#E2DCD8]">
                   <td className={rosterTd}>{formatDayLabel(row.date, locale)}</td>
                   <td className={rosterTd}>{drop.orderId || drop.deliveryId}</td>
-                  <td className={rosterTd}>{row.driverName}</td>
+                  <td className={rosterTd}><TableNameCell name={row.driverName} /></td>
                   <td className={rosterTd}>{row.restaurantName || "—"}</td>
                   <td className={rosterTd}>{formatKuwaitTime(drop.pickupAt)}</td>
                   <td className={rosterTd}>{formatKuwaitTime(drop.deliveredAt)}</td>
@@ -327,6 +376,7 @@ export function RosterReportShell() {
             ))}
           </div>
           <div className={cn(rosterCard, "overflow-x-auto")}>
+            <ListToolbar prefs={totalPrefs} entity={t("rider")} columns={totalColumns} rowKind="aggregate" filteredCount={grouped.filter(([name]) => rowMatches(totalPrefs.appliedQuery, [name])).length} totalCount={grouped.length} />
             <table className="w-full">
               <thead>
                 <tr className="border-b border-[#E2DCD8]">
@@ -336,9 +386,9 @@ export function RosterReportShell() {
                 </tr>
               </thead>
               <tbody>
-                {grouped.slice(0, 80).map(([name, bucket]) => (
+                {grouped.filter(([name]) => rowMatches(totalPrefs.appliedQuery, [name])).slice(0, 80).map(([name, bucket]) => (
                   <tr key={name} className="border-b border-[#E2DCD8]">
-                    <td className={rosterTd}>{name}</td>
+                    <td className={rosterTd}><TableNameCell name={name} /></td>
                     <td className={rosterTd}>{bucket.count}</td>
                     <td className={rosterTd}>{hours(bucket.scheduled)}</td>
                     <td className={rosterTd}>{hours(bucket.worked)}</td>

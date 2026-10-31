@@ -380,6 +380,7 @@ export async function resolveDriverImportPreview(
     { data: nationalityCategoryRows },
     { data: bankRows },
     { data: sponsorshipRows },
+    { data: vehicleTypeRows },
     { data: assetRows },
   ] = await Promise.all([
     db.from("partners").select("id, name"),
@@ -406,9 +407,15 @@ export async function resolveDriverImportPreview(
     db.from("nationality_categories").select("key, label_en, label_ar, is_active"),
     db.from("bank_codes").select("key, label_en, label_ar, is_active"),
     db.from("sponsorships").select("key, label_en, label_ar, is_active"),
+    db.from("vehicle_types").select("key, label_en, label_ar, is_active"),
     db.from("asset_catalog").select("id, name, code, is_active"),
   ]);
   const companies: SourceCompany[] = companyRows ?? [];
+  const vehicleTypeCatalog = (vehicleTypeRows ?? []).map((row) => ({
+    key: String(row.key ?? "").trim().toLowerCase(),
+    label_en: row.label_en ?? null,
+    label_ar: row.label_ar ?? null,
+  }));
   const catalog = (rows: Array<{ key: string; label_en: string; label_ar: string }> | null) =>
     (rows ?? []).map((row) => ({
       key: row.key,
@@ -446,10 +453,10 @@ export async function resolveDriverImportPreview(
 
   const vehicleByLabel = new Map<
     string,
-    { id: string; typeKey: "bike" | "car" | null }
+    { id: string; typeKey: string | null }
   >();
   for (const v of vehicles ?? []) {
-    const entry = { id: v.id, typeKey: parseImportVehicleType(v.vehicle_type_key) };
+    const entry = { id: v.id, typeKey: parseImportVehicleType(v.vehicle_type_key, vehicleTypeCatalog) };
     const bike = v.bike_id?.trim().toLowerCase() ?? "";
     if (bike) vehicleByLabel.set(bike, entry);
     const reg = v.reg_number?.trim().toLowerCase() ?? "";
@@ -527,7 +534,7 @@ export async function resolveDriverImportPreview(
     let zone_id: string | null = null;
     let zone_name: string | null = null;
     let vehicle_id: string | null = null;
-    let vehicle_type_key: "bike" | "car" | null = null;
+    let vehicle_type_key: string | null = null;
     let restaurant_ids: string[] = [];
     let restaurant_names: string[] = [];
     let nationality: string | null = null;
@@ -613,7 +620,7 @@ export async function resolveDriverImportPreview(
       if (row.cleared?.vehicle_type) {
         vehicle_type_key = null;
       } else if (row.vehicle_type?.trim()) {
-        const parsed = parseImportVehicleType(row.vehicle_type);
+        const parsed = parseImportVehicleType(row.vehicle_type, vehicleTypeCatalog);
         if (!parsed) status = "invalid_vehicle_type";
         else vehicle_type_key = parsed;
       }
