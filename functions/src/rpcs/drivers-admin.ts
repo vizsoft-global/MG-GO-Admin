@@ -805,9 +805,17 @@ export const archiveDriverIntake = onCall(async (request) => {
 
     const driverRef = linked ? db.collection(COLLECTIONS.drivers).doc(linked) : null;
     const driverSnap = driverRef ? await tx.get(driverRef) : null;
+    const profileRef = linked ? db.collection(COLLECTIONS.profiles).doc(linked) : null;
+    const profileSnap = profileRef ? await tx.get(profileRef) : null;
 
     const owners = new Set([intakeId, ...(linked ? [linked] : [])]);
     const locks = lockValues(intake);
+    // The profile can hold a different number than the intake (it was edited on the
+    // rider side), and that one reserves the phone just as hard.
+    const profilePhone = profileSnap?.exists ? textOrNull(dataOf(profileSnap)["phone"]) : null;
+    if (profilePhone && !locks.some((lock) => lock.field === "phone" && lock.value === profilePhone)) {
+      locks.push({ field: "phone", value: profilePhone });
+    }
     const lockSnaps = locks.length
       ? await tx.getAll(...locks.map((lock) => lockRef(db, lock.field, lock.value)))
       : [];
@@ -824,6 +832,13 @@ export const archiveDriverIntake = onCall(async (request) => {
     if (driverRef && driverSnap?.exists && dataOf(driverSnap)["archived_at"] == null) {
       tx.update(driverRef, { archived_at: now, updated_at: now, archive_reason: archiveReason });
       driverArchived = true;
+    }
+
+    // An archived rider cannot sign in, so the number must not stay reserved on their
+    // profile: this is what lets a suspended or cancelled rider be archived and the
+    // replacement employee created with the same mobile number. `restore` puts it back.
+    if (profileRef && profilePhone) {
+      tx.update(profileRef, { phone: null, archived_phone: profilePhone, updated_at: now });
     }
 
     lockSnaps.forEach((snap) => {
@@ -856,8 +871,16 @@ export const restoreDriverIntake = onCall(async (request) => {
 
     const linked = textOrNull(intake["linked_profile_id"]);
     const isLinked = intake["linked"] === true || linked !== null;
+    const profileRef = linked ? db.collection(COLLECTIONS.profiles).doc(linked) : null;
+    const profileSnap = profileRef ? await tx.get(profileRef) : null;
+    const archivedPhone = profileSnap?.exists ? textOrNull(dataOf(profileSnap)["archived_phone"]) : null;
     const owners = new Set([intakeId, ...(linked ? [linked] : [])]);
     const locks = lockValues(intake);
+    // Archiving moved the profile's number into `archived_phone` so the replacement
+    // employee could take it; restoring has to claim it again with the rest.
+    if (archivedPhone && !locks.some((lock) => lock.field === "phone" && lock.value === archivedPhone)) {
+      locks.push({ field: "phone", value: archivedPhone });
+    }
     const lockSnaps = locks.length
       ? await tx.getAll(...locks.map((lock) => lockRef(db, lock.field, lock.value)))
       : [];
@@ -877,6 +900,13 @@ export const restoreDriverIntake = onCall(async (request) => {
       tx.set(
         db.collection(COLLECTIONS.drivers).doc(linked),
         { archived_at: null, updated_at: now },
+        { merge: true },
+      );
+    }
+    if (profileRef && archivedPhone) {
+      tx.set(
+        profileRef,
+        { phone: archivedPhone, archived_phone: null, updated_at: now },
         { merge: true },
       );
     }

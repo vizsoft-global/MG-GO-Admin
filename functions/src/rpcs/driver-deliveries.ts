@@ -1180,7 +1180,10 @@ export const driverGetDeliveryProximityContext = onCall(async (request) => {
     zoneData &&
     zoneDescribesWorkArea({
       zone: { geometry: zoneData["geometry"] ?? null, zone_type: zoneData["zone_type"] ?? null },
-      stores: restaurants.map((row) => ({ lat: row.latitude, lng: row.longitude })),
+      stores: restaurants.map((row) => ({
+        lat: typeof row.latitude === "number" ? row.latitude : null,
+        lng: typeof row.longitude === "number" ? row.longitude : null,
+      })),
     })
       ? zoneData
       : null;

@@ -6,6 +6,7 @@ import { callAdminFunction } from "@/lib/firebase/callable";
 import { UNIQ_COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { digitsOnly, lowerText, prefixBounds, stampSearchFields, tokenPrefixMatch } from "@/lib/search/prefix";
+import { lockOwnerIsStale } from "./identity-holder";
 
 /** PostgREST-shaped error so `error.code` / `error.message` keep mapping. */
 export class DbError extends Error {
@@ -710,6 +711,40 @@ async function relatedOwners(
   return cache.get(selfId) === ownerId || cache.get(ownerId) === selfId;
 }
 
+/**
+ * A lock's owner no longer holds the identity it reserved.
+ *
+ * Cached per owner, because one write can claim several identities (MG ID, phone,
+ * civil ID) held by the same rider, and every `tx.get` has to happen before the
+ * first write anyway.
+ */
+async function ownerLockIsStale(
+  tx: FirebaseFirestore.Transaction,
+  db: Firestore,
+  ownerId: string,
+  cache: Map<string, boolean>,
+): Promise<boolean> {
+  const cached = cache.get(ownerId);
+  if (cached !== undefined) return cached;
+  const [intake, driver, profile] = await Promise.all(
+    ["driver_intakes", "drivers", "profiles"].map((collection) =>
+      tx.get(db.collection(collection).doc(ownerId)),
+    ),
+  );
+  const stale = lockOwnerIsStale({
+    found: Boolean(intake?.exists || driver?.exists || profile?.exists),
+    intakeArchived: Boolean(intake?.exists && intake.data()?.archived_at != null),
+    driver: driver?.exists
+      ? {
+          archivedAt: (driver.data()?.archived_at as string | null | undefined) ?? null,
+          hasProfile: profile?.exists === true,
+        }
+      : null,
+  });
+  cache.set(ownerId, stale);
+  return stale;
+}
+
 async function writeLocked(
   db: Firestore,
   table: string,
@@ -757,13 +792,18 @@ async function writeLocked(
     );
     const lockSnaps = await Promise.all(lockRefs.map((lockRef) => tx.get(lockRef)));
     const cache = new Map<string, string | null>();
+    const staleCache = new Map<string, boolean>();
     for (let i = 0; i < unique.length; i += 1) {
       const plan = unique[i]!;
       if (plan.type !== "claim") continue;
       const owner = lockSnaps[i]?.data()?.owner_id;
-      if (typeof owner === "string" && !(await relatedOwners(tx, db, id, owner, cache))) {
-        throw duplicate(plan.lock.label);
-      }
+      if (typeof owner !== "string") continue;
+      if (await relatedOwners(tx, db, id, owner, cache)) continue;
+      // A lock left behind by a record that was deleted, archived, or never got a
+      // profile is not a duplicate key — it is debris. Taking it over is what lets
+      // a cancelled rider's MG ID and phone be handed to the new employee.
+      if (await ownerLockIsStale(tx, db, owner, staleCache)) continue;
+      throw duplicate(plan.lock.label);
     }
     for (let i = 0; i < unique.length; i += 1) {
       const plan = unique[i]!;
@@ -1221,6 +1261,29 @@ export async function fetchAllIn<T>(
   return part.data ?? [];
 }
 
+/**
+ * Drops driver rows that no longer hold the identity they still carry.
+ *
+ * `drivers` keeps a row after a refused approval (no `profiles/{id}`, so it cannot
+ * sign in) and after an archive. Both must stay readable for history, but neither
+ * may reserve an MG ID, phone, civil ID or passport against a new employee — the
+ * approval callable applies the same rule (`releasableIdentityHolders`), so the
+ * pre-check must not refuse what the approval would accept.
+ */
+async function liveIdentityHolders<T extends { id: string; archived_at?: string | null }>(
+  db: StaffClient,
+  rows: readonly T[] | null | undefined,
+): Promise<T[]> {
+  const candidates = (rows ?? []).filter((row) => row.archived_at == null);
+  if (candidates.length === 0) return [];
+  const profiles = await fetchAllIn(
+    candidates.map((row) => row.id),
+    (ids) => db.from("profiles").select("id").in("id", [...ids]),
+  );
+  const withProfile = new Set((profiles ?? []).map((row) => String(row.id)));
+  return candidates.filter((row) => withProfile.has(row.id));
+}
+
 /** True when another non-archived intake or linked driver already uses this civil ID. */
 export async function civilIdExists(
   civilId: string,
@@ -1242,14 +1305,15 @@ export async function civilIdExists(
   // holds the MG ID IS that rider, so its civil ID cannot be somebody else's.
   const { data: driverHits } = await db
     .from("drivers")
-    .select("id, employee_id")
+    .select("id, employee_id, archived_at")
     .eq("civil_id", civilId)
     .is("archived_at", null);
-  if (!driverHits?.length) return false;
+  const liveHits = await liveIdentityHolders(db, driverHits);
+  if (liveHits.length === 0) return false;
   if (!excludeIntakeId && !sameEmployeeId) return true;
 
   const ownerKey = sameEmployeeId ? lowerText(sameEmployeeId) : null;
-  for (const driver of driverHits) {
+  for (const driver of liveHits) {
     if (ownerKey && lowerText(driver.employee_id) === ownerKey) continue;
     if (!excludeIntakeId) return true;
     const { data: linkedIntake } = await db
@@ -1281,14 +1345,15 @@ export async function passportExists(
 
   const { data: driverHits } = await db
     .from("drivers")
-    .select("id, employee_id")
+    .select("id, employee_id, archived_at")
     .eq("passport_number", passport)
     .is("archived_at", null);
-  if (!driverHits?.length) return false;
+  const liveHits = await liveIdentityHolders(db, driverHits);
+  if (liveHits.length === 0) return false;
   if (!excludeIntakeId && !sameEmployeeId) return true;
 
   const ownerKey = sameEmployeeId ? lowerText(sameEmployeeId) : null;
-  for (const driver of driverHits) {
+  for (const driver of liveHits) {
     if (ownerKey && lowerText(driver.employee_id) === ownerKey) continue;
     if (!excludeIntakeId) return true;
     const { data: linkedIntake } = await db
@@ -1318,13 +1383,14 @@ export async function employeeIdExists(employeeId: string, excludeIntakeId?: str
   // they must not block a fresh intake either — the approval callable re-adopts the row.
   const { data: driverHits } = await db
     .from("drivers")
-    .select("id")
+    .select("id, archived_at")
     .ilike("employee_id", employeeId)
     .is("archived_at", null);
-  if (!driverHits?.length) return false;
+  const liveHits = await liveIdentityHolders(db, driverHits);
+  if (liveHits.length === 0) return false;
   if (!excludeIntakeId) return true;
 
-  for (const driver of driverHits) {
+  for (const driver of liveHits) {
     const { data: linkedIntake } = await db
       .from("driver_intakes")
       .select("id, archived_at")

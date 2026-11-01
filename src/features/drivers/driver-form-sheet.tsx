@@ -22,7 +22,9 @@ import {
   type DriverFormErrors,
   type DriverFormField,
 } from "./driver-form-validation";
-import { createDriverIntake, getDriverUploadStorageStatus, updateDriverIntake } from "./drivers-actions";
+import { createDriverIntake, findDriverIdentityConflict, getDriverUploadStorageStatus, updateDriverIntake } from "./drivers-actions";
+import { DriverIdentityConflictDialog } from "./driver-identity-conflict-dialog";
+import type { IdentityConflict } from "./driver-delete";
 import { workflowFromAccountStatus } from "./driver-operations-status";
 import {
   DOCUMENT_TYPES,
@@ -124,6 +126,7 @@ export function DriverFormSheet({
   const [isPending, startTransition] = useTransition();
   const [r2Ready, setR2Ready] = useState(true);
   const [canViewBank, setCanViewBank] = useState(false);
+  const [identityConflict, setIdentityConflict] = useState<IdentityConflict | null>(null);
   const statusesQuery = useEmployeeStatuses();
   const sectionsQuery = useEmployeeSections();
   const nationsQuery = useNationalityCategories();
@@ -604,6 +607,24 @@ export function DriverFormSheet({
         const result = await createDriverIntake(formData);
         if (result.error) {
           toast.error(driverErrorToast(tNew, result.error));
+          // Name the record that holds it; it can be an unfinished profile the
+          // Employees list never shows.
+          if (
+            result.error === "employee_id_exists" ||
+            result.error === "phone_exists" ||
+            result.error === "civil_id_exists" ||
+            result.error === "passport_exists"
+          ) {
+            try {
+              const found = await findDriverIdentityConflict({
+                employeeId: employeeId || null,
+                phone: phone || null,
+              });
+              if (found) setIdentityConflict(found);
+            } catch {
+              /* the toast already explains the refusal */
+            }
+          }
           return;
         }
         if (result.driver_code) {
@@ -921,6 +942,10 @@ export function DriverFormSheet({
           onSave={submit}
         />
       </DialogContent>
+      <DriverIdentityConflictDialog
+        conflict={identityConflict}
+        onClose={() => setIdentityConflict(null)}
+      />
     </Dialog>
   );
 }
