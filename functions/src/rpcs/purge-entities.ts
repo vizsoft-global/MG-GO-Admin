@@ -241,12 +241,27 @@ export const adminPurgeDrivers = onCall(async (request) => {
   const manifest: Array<{ auth_user_id: string; driver_id: string }> = [];
   const stores = await assignedStoreIds(ids);
 
+  // The intake is keyed by its own document id, which is not the driver id: deleting
+  // `driverIntakes` by driver id (what this did) removed nothing and left the intake
+  // holding the MG ID and the phone after the rider was purged. That orphan then
+  // blocked the next employee with "already assigned", invisible in Employees because
+  // the list reads `driver_intakes` by `archived_at`.
+  const intakeIds: string[] = [];
   for (const id of ids) {
     const snap = await db.collection(COLLECTIONS.drivers).doc(id).get();
     if (snap.exists) {
       collectStorageKeys("drivers", COLLECTIONS.drivers, snap.data() ?? {}, storageKeys);
     }
     manifest.push({ auth_user_id: id, driver_id: id });
+
+    const linked = await db
+      .collection(COLLECTIONS.driverIntakes)
+      .where("linked_profile_id", "==", id)
+      .get();
+    for (const doc of linked.docs) {
+      intakeIds.push(doc.id);
+      collectStorageKeys("drivers", COLLECTIONS.driverIntakes, doc.data() ?? {}, storageKeys);
+    }
   }
 
   await releaseForeignKeyGuards("drivers");
@@ -266,7 +281,7 @@ export const adminPurgeDrivers = onCall(async (request) => {
   }
 
   await deleteByIds(COLLECTIONS.drivers, ids);
-  await deleteByIds(COLLECTIONS.driverIntakes, ids);
+  await deleteByIds(COLLECTIONS.driverIntakes, intakeIds);
   await deleteByIds(COLLECTIONS.profiles, ids);
   await refreshStores(stores);
 

@@ -5,6 +5,7 @@ import { queryKeys } from "@/lib/query/query-keys";
 import {
   archiveDriverIntake,
   archiveDriverIntakes,
+  deleteDriverPermanently,
   restoreDriverIntake,
   fetchDriverDetail,
   fetchDriverDeviceOverview,
@@ -107,6 +108,20 @@ export function useArchiveDriverIntake() {
     },
     onSuccess: async (_data, { intakeId }) => {
       await invalidateDriverCaches(queryClient, { intakeId });
+    },
+  });
+}
+
+export function useDeleteDriverPermanently() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { intakeId?: string | null; driverId?: string | null; confirm: string }) => {
+      const result = await deleteDriverPermanently(input);
+      if ("error" in result) throw new Error(result.error);
+      return result;
+    },
+    onSuccess: async () => {
+      await invalidateDriverCaches(queryClient);
     },
   });
 }
