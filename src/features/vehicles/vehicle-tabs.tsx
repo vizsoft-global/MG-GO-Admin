@@ -44,7 +44,6 @@ import { isLegacyVehicleDocType, VEHICLE_DOC_TYPE_VALUES } from "./vehicle-doc-t
 import type { VehicleListRow } from "./types";
 import {
   assignVehicleAsset,
-  createVehicleAccident,
   createVehicleDocument,
   createVehicleHandover,
   listVehicleAccidents,
@@ -58,13 +57,6 @@ import {
 type TabId = "handover" | "accident" | "documents" | "service" | "assets";
 
 const DOC_TYPE_VALUES = VEHICLE_DOC_TYPE_VALUES;
-
-/** Local "now" in the `datetime-local` wire format, used as an input `max`. */
-function localDateTimeInputMax(): string {
-  const now = new Date();
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-}
 
 export function VehicleDetailTabs({
   tab,
@@ -181,8 +173,7 @@ function HandoverTab({ vehicleId, canManage }: { vehicleId: string; canManage: b
 
 function AccidentTab({ vehicleId, canManage }: { vehicleId: string; canManage: boolean }) {
   const t = useTranslations("pages.vehicleDetail");
-  const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const router = useRouter();
   const list = useQuery({
     queryKey: queryKeys.vehicles.tabs(vehicleId, "accident"),
     queryFn: () => listVehicleAccidents(vehicleId),
@@ -204,7 +195,16 @@ function AccidentTab({ vehicleId, canManage }: { vehicleId: string; canManage: b
         tableId={`vehicle-accident-${vehicleId}`}
         entity={t("addAccident")}
         columns={columns}
-        onAdd={canManage ? () => setOpen(true) : undefined}
+        /*
+         * Add opens the case page. The dialog that used to live here was a second
+         * writer of the same collection; `createVehicleAccident` now delegates to
+         * the one shared payload builder, and the screen is the case form.
+         */
+        onAdd={
+          canManage
+            ? () => router.push(`/fleet/accident/new?vehicleId=${vehicleId}`)
+            : undefined
+        }
         addLabel={t("addAccident")}
         empty={<AppEmptyState title={t("emptyAccident")} />}
         rows={rows.map((row) => ({
@@ -220,55 +220,6 @@ function AccidentTab({ vehicleId, canManage }: { vehicleId: string; canManage: b
           },
         }))}
       />
-      <LedgerDialog
-        open={open}
-        title={t("addAccident")}
-        subtitle={t("accidentSubtitle")}
-        successMessage={t("accidentSaved")}
-        onClose={() => setOpen(false)}
-        onSubmit={async (form) => {
-          form.set("vehicleId", vehicleId);
-          const result = await createVehicleAccident(form);
-          if (result.error) return result.error;
-          void queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.tabs(vehicleId, "accident") });
-          setOpen(false);
-          return null;
-        }}
-      >
-        <label className="space-y-1 text-xs">
-          {t("colWhen")}
-          <Input
-            name="occurredAt"
-            type="datetime-local"
-            required
-            max={open ? localDateTimeInputMax() : undefined}
-            className="h-9"
-          />
-        </label>
-        <label className="space-y-1 text-xs">
-          <span>
-            {t("colLocation")}
-            <span className="text-destructive"> *</span>
-          </span>
-          <Input name="locationText" required className="h-9" />
-        </label>
-        <label className="space-y-1 text-xs">
-          {t("colSeverity")}
-          <select name="severity" defaultValue="medium" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-            <option value="low">{t("severity.low")}</option>
-            <option value="medium">{t("severity.medium")}</option>
-            <option value="high">{t("severity.high")}</option>
-          </select>
-        </label>
-        <label className="space-y-1 text-xs">
-          {t("colNotes")}
-          <Input name="notes" className="h-9" />
-        </label>
-        <label className="space-y-1 text-xs">
-          {t("colFile")}
-          <Input name="file" type="file" className="h-9" />
-        </label>
-      </LedgerDialog>
     </div>
   );
 }

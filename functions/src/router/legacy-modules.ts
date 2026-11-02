@@ -403,6 +403,10 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
     "driverGetAssignedVehicle",
     "driverReportFuelFill"
   ],
+  "./rpcs/accidents": [
+    "driverReportAccident",
+    "driverListMyAccidents"
+  ],
   "./rpcs/driver-telemetry": [
     "driverIngestTelemetry"
   ],

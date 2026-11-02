@@ -11,6 +11,7 @@ export const DRIVER_UPLOAD_ENTITY_TYPES = [
   "esign_signature",
   "esign_attachment",
   "request_attachment",
+  "accident_attachment",
 ] as const;
 
 export type DriverUploadEntityType = (typeof DRIVER_UPLOAD_ENTITY_TYPES)[number];
@@ -54,6 +55,14 @@ const ENTITY_RULES: Record<
   request_attachment: {
     maxBytes: 10 * 1024 * 1024,
     allowedMimePrefixes: ["image/", "application/pdf"],
+  },
+  /**
+   * Accident evidence. Video is named explicitly rather than `video/`, so an
+   * unexpected container is refused instead of accepted by prefix.
+   */
+  accident_attachment: {
+    maxBytes: 50 * 1024 * 1024,
+    allowedMimePrefixes: ["image/", "application/pdf", "video/mp4", "video/quicktime"],
   },
 };
 
@@ -131,7 +140,8 @@ export function buildDriverObjectKey(params: {
     case "driver_selfie":
     case "order_proof":
     case "login_verification":
-    case "request_attachment": {
+    case "request_attachment":
+    case "accident_attachment": {
       const date = new Date().toISOString().slice(0, 10);
       const ext = extensionFromFilename(params.originalFilename);
       return `drivers/${params.driverId}/${params.entityType}/${date}/${randomUUID()}.${ext}`;

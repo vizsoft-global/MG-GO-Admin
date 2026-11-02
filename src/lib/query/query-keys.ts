@@ -171,6 +171,12 @@ export const queryKeys = {
     fleetLedger: (kind: "service" | "handover" | "accident") =>
       ["vehicles", "fleet-ledger", kind] as const,
   },
+  accidents: {
+    all: () => ["accidents"] as const,
+    list: () => ["accidents", "list"] as const,
+    detail: (id: string) => ["accidents", "detail", id] as const,
+    vehicles: () => ["accidents", "vehicles"] as const,
+  },
   service: {
     all: () => ["service"] as const,
     records: () => ["service", "records"] as const,

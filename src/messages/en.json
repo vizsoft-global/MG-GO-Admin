@@ -277,6 +277,180 @@
     }
   },
   "pages": {
+    "fleetAccidents": {
+      "title": "Accidents",
+  "subtitle": "Every case, its reference and its state — Close, Pending or Delay.",
+      "legacyRow": "Legacy row",
+      "caseChanged": "Case updated",
+      "saved": "Accident saved",
+      "created": "Accident recorded",
+      "showing": "{shown} of {total}",
+      "emptyTitle": "No accident cases",
+      "emptyHint": "Record an accident to open a case, or change the filters.",
+      "attachmentsHint": "Attachments open from the case",
+      "actions": {
+        "add": "Add accident",
+        "edit": "Edit",
+        "cancel": "Cancel",
+        "save": "Save"
+      },
+      "kpi": {
+        "open": "Open cases",
+        "riderAwaiting": "Rider reports awaiting completion",
+        "total": "All cases"
+      },
+      "filters": {
+        "any": "Any",
+        "all": "All cases",
+        "from": "From",
+        "to": "To",
+        "vehicle": "Vehicle",
+        "source": "Source"
+      },
+      "cols": {
+        "reference": "Reference",
+        "date": "Date",
+        "vehicle": "Vehicle",
+        "driver": "Driver",
+        "case": "Case",
+        "driverFault": "Driver fault",
+        "vehicleCase": "Vehicle status",
+        "insuranceClaim": "Insurance claim",
+        "policeReport": "Police report",
+        "amount": "Amount (KWD)",
+        "documents": "Documents",
+        "source": "Source",
+        "insuranceCompany": "Insurance company",
+        "vehicleCompany": "Vehicle company",
+        "fleetComment": "Fleet comment",
+        "location": "Location",
+        "otherParty": "Other party"
+      },
+      "caseStatus": {
+        "close": "Close",
+        "pending": "Pending",
+        "delay": "Delay"
+      },
+      "driverFault": {
+        "yes": "Yes",
+        "no": "No"
+      },
+      "vehicleCaseStatus": {
+        "in_operation": "Vehicle in Operation",
+        "maintenance_replaced": "In Maintenance & Replaced",
+        "total_loss_replaced": "Total Loss & Replaced",
+        "case_check": "Case Check"
+      },
+      "insuranceClaimStatus": {
+        "none": "None",
+        "submitted": "Submitted",
+        "pending": "Pending",
+        "approved": "Approved",
+        "rejected": "Rejected"
+      },
+      "policeReportStatus": {
+        "not_filed": "Not filed",
+        "filed": "Filed",
+        "received": "Received",
+        "not_required": "Not required"
+      },
+      "source": {
+        "admin": "Admin",
+        "rider": "Rider"
+      },
+      "severity": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
+      "form": {
+        "titleNew": "New accident",
+        "titleEdit": "Edit accident",
+        "subtitleNew": "Record the incident, the other party and the case outcome.",
+        "subtitleEdit": "Update the case. The vehicle and driver stay as reported.",
+        "sectionIncident": "Incident",
+        "sectionIncidentHint": "The vehicle, the driver and where it happened.",
+        "sectionOtherParty": "Other party & insurance",
+        "sectionOtherPartyHint": "Both are free text — no catalog exists yet.",
+        "sectionCase": "Case",
+        "sectionCaseHint": "Close, Pending or Delay, and what happened to the vehicle.",
+        "sectionAttachments": "Attachments",
+        "sectionAttachmentsHint": "Photos, PDF and video — the evidence for the case.",
+        "selectVehicle": "Select a vehicle",
+        "searchVehicle": "Search plate, model or driver",
+        "noVehicle": "No vehicle found",
+        "vehicleHint": "Locked once the case exists.",
+        "noDriver": "No driver assigned",
+        "snapshotHint": "Frozen at report time.",
+        "dateHint": "A future date is refused. A historical date is allowed.",
+        "latitude": "Latitude",
+        "longitude": "Longitude",
+        "modelYear": "Model year",
+        "replacementPlate": "Replacement plate",
+        "otherPartyPlate": "Other party plate",
+        "otherPartyPhone": "Other party phone",
+        "phoneHint": "7 to 15 digits.",
+        "amount": "Amount (KWD)",
+        "description": "Description",
+        "reportedBy": "Reported by",
+        "severity": "Severity (legacy)",
+        "severityHint": "Optional. An older row keeps its own value.",
+        "vehicleCaseHint": "The case records the outcome only. The fleet team moves the vehicle itself.",
+        "footerNew": "Record accident",
+        "footerEdit": "Save changes",
+        "footerHint": "The reference is allocated on save."
+      },
+      "detail": {
+        "caseTitle": "Case",
+        "otherPartyTitle": "Other party & insurance",
+        "notesTitle": "Notes",
+        "reviewedAt": "Reviewed at",
+        "reviewedBy": "Reviewed by",
+        "reviewNote": "Review note"
+      },
+      "attachments": {
+        "limit": "{count} of {max} · up to {mb} MB each",
+        "add": "Add files",
+        "empty": "No attachments",
+        "open": "Open",
+        "remove": "Remove",
+        "openFailed": "The file could not be opened.",
+        "errors": {
+          "too_many_attachments": "A case holds at most 10 files.",
+          "file_empty": "That file is empty.",
+          "file_too_large": "That file is larger than 50 MB.",
+          "invalid_content_type": "Only images, PDF, MP4 and MOV are accepted.",
+          "missing_vehicle": "Choose a vehicle first.",
+          "invalid_attachment": "That file reference is not valid.",
+          "uploadFailed": "The file could not be uploaded."
+        }
+      },
+      "errors": {
+        "notAuthorized": "You do not have permission to change accident cases.",
+        "notConfigured": "The database is not configured.",
+        "missingVehicle": "Choose a vehicle.",
+        "missingFields": "Fill the required fields.",
+        "locationRequired": "A location is required.",
+        "invalidDate": "That date is not valid.",
+        "futureDate": "An accident cannot be in the future.",
+        "invalidLocation": "The coordinates are out of range.",
+        "invalidDriverFault": "Driver fault is Yes or No.",
+        "invalidCaseStatus": "Choose Close, Pending or Delay.",
+        "invalidVehicleCaseStatus": "Choose a valid vehicle status.",
+        "invalidInsuranceStatus": "Choose a valid insurance claim status.",
+        "invalidPoliceStatus": "Choose a valid police report status.",
+        "invalidAmount": "The amount must be zero or more.",
+        "invalidPhone": "The phone number must be 7 to 15 digits.",
+        "replacementPlateRequired": "A replacement plate is required for that outcome.",
+        "tooManyAttachments": "A case holds at most 10 files.",
+        "invalidAttachment": "That file reference is not valid.",
+        "attachmentClaimed": "One of the files already belongs to another case.",
+        "fileTooLarge": "That file is too large.",
+        "uploadFailed": "The file could not be uploaded.",
+        "notFound": "That case no longer exists.",
+        "saveFailed": "Something went wrong. Nothing was saved."
+      }
+    },
     "esign": {
       "accident": {
         "requestKind": "Request kind",

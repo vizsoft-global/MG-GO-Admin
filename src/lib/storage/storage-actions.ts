@@ -9,12 +9,26 @@ import { isAllowedStorageKey } from "@/lib/storage/r2-keys";
 const LOGIN_VERIFICATION_KEY =
   /^drivers\/[0-9a-f-]{36}\/login_verification\//i;
 
+/**
+ * `drivers/{uid}/accident_attachment/...` — a rider's own accident evidence.
+ * Readable with the fleet permission, because the accident case is a fleet
+ * record: an operator with `vehicles.view` must be able to open the photo the
+ * rider filed without also being granted `drivers.manage`.
+ */
+const ACCIDENT_ATTACHMENT_KEY = /^drivers\/[A-Za-z0-9_-]{1,128}\/accident_attachment\//;
+
 function canReadStorageKey(
   key: string,
   permissions: Set<string>,
   isSuperAdmin: boolean,
 ): boolean {
   if (key.startsWith("drivers/")) {
+    if (ACCIDENT_ATTACHMENT_KEY.test(key)) {
+      return (
+        hasPermissionInSet(permissions, "vehicles.view", isSuperAdmin) ||
+        hasPermissionInSet(permissions, "vehicles.manage", isSuperAdmin)
+      );
+    }
     if (LOGIN_VERIFICATION_KEY.test(key)) {
       return (
         hasPermissionInSet(permissions, "drivers.view", isSuperAdmin) ||
