@@ -442,6 +442,10 @@ const OPERATIONS_HUB_GROUP_ID = "group-operationshub";
  * are hidden and stripped by `relocateFleetItems`, which runs after this
  * collection so a hub item parked in Fleet is not dropped with the group.
  *
+ * `source-companies` and `sponsorships` are deliberately **not** collected: both
+ * moved to Settings as employee-record catalogs, so a saved copy left in this
+ * group would be pulled back out of Settings on every render.
+ *
  * It deliberately runs **before** `relocateFleetItems`: that function rebuilds
  * the Fleet group from the registry, so an item parked there whose
  * `defaultGroup` is no longer `Fleet` would be dropped on the floor before this
@@ -460,7 +464,6 @@ const OPERATIONS_HUB_IDS = [
   "incentive-rules",
   "driver-fields",
   "attendance-settings",
-  "source-companies",
   "earnings",
 ] as const;
 
