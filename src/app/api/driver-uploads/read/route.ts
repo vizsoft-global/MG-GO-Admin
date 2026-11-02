@@ -70,6 +70,34 @@ async function esignReadJson(request: Request, objectKey: string): Promise<Respo
   });
 }
 
+/**
+ * Accident evidence the rider filed: the key is listed on their own case.
+ *
+ * The upload row is the primary proof, but it expires after 24 hours, so a rider
+ * would lose the ability to re-open their own photo days later. The accident
+ * record is the durable link.
+ */
+async function riderOwnsAccidentObject(
+  db: Firestore,
+  driverId: string,
+  objectKey: string,
+): Promise<boolean> {
+  const owns = (doc: { get: (field: string) => unknown }) =>
+    doc.get("driver_id") === driverId || doc.get("reported_by") === driverId;
+  const listed = await db
+    .collection(COLLECTIONS.vehicleAccidents)
+    .where("attachment_keys", "array-contains", objectKey)
+    .limit(5)
+    .get();
+  if (listed.docs.some(owns)) return true;
+  const legacy = await db
+    .collection(COLLECTIONS.vehicleAccidents)
+    .where("storage_key", "==", objectKey)
+    .limit(5)
+    .get();
+  return legacy.docs.some(owns);
+}
+
 async function riderOwnsEsignObject(
   db: Firestore,
   driverId: string,
@@ -178,8 +206,11 @@ async function handler(request: Request): Promise<Response> {
     const ownsAvatar =
       driver.get("avatar_object_key") === objectKey ||
       isDriverOwnedAvatarKey(auth.driverId, objectKey);
+    const ownsAccident = ownsUpload
+      ? false
+      : await riderOwnsAccidentObject(db, auth.driverId, objectKey);
 
-    if (!ownsUpload && !ownsAvatar) {
+    if (!ownsUpload && !ownsAvatar && !ownsAccident) {
       const ownsEsign = await riderOwnsEsignObject(db, auth.driverId, objectKey);
       if (!ownsEsign) {
         return NextResponse.json({ error: "forbidden" }, { status: 403 });

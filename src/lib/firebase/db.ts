@@ -135,6 +135,12 @@ export const COLLECTIONS = {
   serviceTypes: "service_types",
   /** One odometer reading per service-done or manual edit. */
   vehicleOdometerReadings: "vehicle_odometer_readings",
+  /**
+   * Accident cases. One collection, two writers — the admin `createAccident`
+   * action and the rider `driverReportAccident` callable — both filing the same
+   * field contract. Reads: `/fleet/accident` and the vehicle detail Accident tab.
+   */
+  vehicleAccidents: "vehicle_accidents",
   /** Preventive-maintenance rules, per vehicle or per make/model. */
   vehicleMaintenanceSchedules: "vehicle_maintenance_schedules",
   /** The single `current` doc holding the (provisional) fleet-default intervals. */

@@ -10,6 +10,7 @@ import { staffDb } from "@/lib/firebase/staff-db";
 import { putObject } from "@/lib/storage/r2-client";
 import { buildVehicleFileKey, extensionFromMime } from "@/lib/storage/r2-keys";
 import { syncIntakeAssetAssignments } from "@/features/assets/assets-actions";
+import { createAccident } from "@/features/fleet/accidents/accident-actions";
 import { isVehicleDocType } from "./vehicle-doc-types";
 import type { DocumentData, Firestore } from "firebase-admin/firestore";
 
@@ -144,12 +145,6 @@ async function requireVehicles(permission: "vehicles.view" | "vehicles.manage") 
 
 function empty(value: FormDataEntryValue | null): string {
   return String(value ?? "").trim();
-}
-
-function isFutureDateTime(value: string): boolean {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return false;
-  return parsed.getTime() > Date.now() + 60_000;
 }
 
 async function uploadOptional(
@@ -553,19 +548,25 @@ export async function createVehicleHandover(formData: FormData): Promise<{ error
   return {};
 }
 
+/**
+ * The vehicle-detail Accident tab no longer writes its own row.
+ *
+ * It is the same case as `/fleet/accident/new`, so this entry point keeps its
+ * signature and delegates: it parses the legacy form into an `AccidentInput` and
+ * calls the single writer. It holds no field list, no defaults and no `insertRow`
+ * of its own — `accidentWritePayload` is the only function that builds an accident
+ * document, so the two paths cannot produce different shapes.
+ */
 export async function createVehicleAccident(formData: FormData): Promise<{ error?: string }> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireVehicles("vehicles.manage");
   if ("error" in auth) return auth;
+
   const vehicleId = empty(formData.get("vehicleId"));
   const occurredAt = empty(formData.get("occurredAt"));
-  const severity = empty(formData.get("severity")) || "medium";
   if (!vehicleId || !occurredAt) return { error: "missing_fields" };
-  if (isFutureDateTime(occurredAt)) return { error: "future_date" };
-  const locationText = empty(formData.get("locationText"));
-  if (!locationText) return { error: "location_required" };
-  if (!["low", "medium", "high"].includes(severity)) return { error: "missing_fields" };
+
   const file = formData.get("file");
   const uploaded = await uploadOptional(
     vehicleId,
@@ -574,25 +575,33 @@ export async function createVehicleAccident(formData: FormData): Promise<{ error
     auth.session.id,
   );
   if ("error" in uploaded) return { error: uploaded.error };
-  try {
-    await insertRow(ACCIDENTS, {
-      vehicle_id: vehicleId,
-      occurred_at: new Date(occurredAt),
-      location_text: locationText,
-      severity,
-      notes: empty(formData.get("notes")) || null,
-      storage_key: uploaded.key,
-      created_by: auth.session.id,
-    });
-  } catch {
-    return { error: "save_failed" };
-  }
-  void logAdminMutation({
-    action: "create",
-    entityType: "vehicle_accident",
-    entityId: vehicleId,
-    routeName: "/vehicles",
+
+  const notes = empty(formData.get("notes"));
+  const result = await createAccident({
+    vehicleId,
+    occurredAt,
+    locationText: empty(formData.get("locationText")),
+    locationLat: null,
+    locationLng: null,
+    driverFault: "",
+    caseStatus: "pending",
+    vehicleCaseStatus: "",
+    insuranceCompany: "",
+    insuranceClaimStatus: "",
+    policeReportStatus: "",
+    amountKwd: null,
+    otherPartyName: "",
+    otherPartyPlate: "",
+    otherPartyPhone: "",
+    description: notes,
+    fleetComment: "",
+    replacementPlate: "",
+    // The legacy column is written only when the operator picked one.
+    severity: empty(formData.get("severity")),
+    notes,
+    attachmentKeys: uploaded.key ? [uploaded.key] : [],
   });
+  if ("error" in result) return { error: result.error };
   return {};
 }
 

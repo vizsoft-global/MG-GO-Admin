@@ -277,6 +277,180 @@
     }
   },
   "pages": {
+    "fleetAccidents": {
+      "title": "الحوادث",
+  "subtitle": "كل حالة ومرجعها وحالتها — مغلق أو قيد الانتظار أو متأخر.",
+      "legacyRow": "سجل قديم",
+      "caseChanged": "تم تحديث الحالة",
+      "saved": "تم حفظ الحادث",
+      "created": "تم تسجيل الحادث",
+      "showing": "{shown} من {total}",
+      "emptyTitle": "لا توجد حالات حوادث",
+      "emptyHint": "سجّل حادثًا لفتح حالة، أو غيّر عوامل التصفية.",
+      "attachmentsHint": "تُفتح المرفقات من الحالة",
+      "actions": {
+        "add": "إضافة حادث",
+        "edit": "تعديل",
+        "cancel": "إلغاء",
+        "save": "حفظ"
+      },
+      "kpi": {
+        "open": "الحالات المفتوحة",
+        "riderAwaiting": "تقارير السائقين بانتظار الإنجاز",
+        "total": "كل الحالات"
+      },
+      "filters": {
+        "any": "الكل",
+        "all": "كل الحالات",
+        "from": "من",
+        "to": "إلى",
+        "vehicle": "المركبة",
+        "source": "المصدر"
+      },
+      "cols": {
+        "reference": "المرجع",
+        "date": "التاريخ",
+        "vehicle": "المركبة",
+        "driver": "السائق",
+        "case": "الحالة",
+        "driverFault": "خطأ السائق",
+        "vehicleCase": "حالة المركبة",
+        "insuranceClaim": "مطالبة التأمين",
+        "policeReport": "تقرير الشرطة",
+        "amount": "المبلغ (د.ك)",
+        "documents": "المستندات",
+        "source": "المصدر",
+        "insuranceCompany": "شركة التأمين",
+        "vehicleCompany": "شركة المركبة",
+        "fleetComment": "ملاحظة الأسطول",
+        "location": "الموقع",
+        "otherParty": "الطرف الآخر"
+      },
+      "caseStatus": {
+        "close": "مغلق",
+        "pending": "قيد الانتظار",
+        "delay": "متأخر"
+      },
+      "driverFault": {
+        "yes": "نعم",
+        "no": "لا"
+      },
+      "vehicleCaseStatus": {
+        "in_operation": "المركبة قيد التشغيل",
+        "maintenance_replaced": "في الصيانة وتم الاستبدال",
+        "total_loss_replaced": "تلف كلي وتم الاستبدال",
+        "case_check": "فحص الحالة"
+      },
+      "insuranceClaimStatus": {
+        "none": "لا يوجد",
+        "submitted": "تم التقديم",
+        "pending": "قيد الانتظار",
+        "approved": "تمت الموافقة",
+        "rejected": "مرفوض"
+      },
+      "policeReportStatus": {
+        "not_filed": "لم يُحرر",
+        "filed": "تم تحريره",
+        "received": "تم استلامه",
+        "not_required": "غير مطلوب"
+      },
+      "source": {
+        "admin": "الإدارة",
+        "rider": "السائق"
+      },
+      "severity": {
+        "low": "منخفضة",
+        "medium": "متوسطة",
+        "high": "عالية"
+      },
+      "form": {
+        "titleNew": "حادث جديد",
+        "titleEdit": "تعديل الحادث",
+        "subtitleNew": "سجّل الواقعة والطرف الآخر ونتيجة الحالة.",
+        "subtitleEdit": "حدّث الحالة. تبقى المركبة والسائق كما ورد في التقرير.",
+        "sectionIncident": "الواقعة",
+        "sectionIncidentHint": "المركبة والسائق ومكان الحادث.",
+        "sectionOtherParty": "الطرف الآخر والتأمين",
+        "sectionOtherPartyHint": "كلاهما نص حر — لا يوجد كتالوج بعد.",
+        "sectionCase": "الحالة",
+        "sectionCaseHint": "مغلق أو قيد الانتظار أو متأخر، وما حدث للمركبة.",
+        "sectionAttachments": "المرفقات",
+        "sectionAttachmentsHint": "صور وPDF وفيديو — أدلة الحالة.",
+        "selectVehicle": "اختر مركبة",
+        "searchVehicle": "ابحث باللوحة أو الطراز أو السائق",
+        "noVehicle": "لا توجد مركبة",
+        "vehicleHint": "يُقفل بعد إنشاء الحالة.",
+        "noDriver": "لا يوجد سائق معيّن",
+        "snapshotHint": "مُثبّت وقت التقرير.",
+        "dateHint": "يُرفض التاريخ المستقبلي. التاريخ السابق مسموح.",
+        "latitude": "خط العرض",
+        "longitude": "خط الطول",
+        "modelYear": "سنة الصنع",
+        "replacementPlate": "لوحة البديل",
+        "otherPartyPlate": "لوحة الطرف الآخر",
+        "otherPartyPhone": "هاتف الطرف الآخر",
+        "phoneHint": "من 7 إلى 15 رقمًا.",
+        "amount": "المبلغ (د.ك)",
+        "description": "الوصف",
+        "reportedBy": "أبلغ عنه",
+        "severity": "الخطورة (قديم)",
+        "severityHint": "اختياري. يحتفظ السجل القديم بقيمته.",
+        "vehicleCaseHint": "تسجّل الحالة النتيجة فقط. فريق الأسطول هو من يحرّك المركبة.",
+        "footerNew": "تسجيل الحادث",
+        "footerEdit": "حفظ التغييرات",
+        "footerHint": "يُخصّص المرجع عند الحفظ."
+      },
+      "detail": {
+        "caseTitle": "الحالة",
+        "otherPartyTitle": "الطرف الآخر والتأمين",
+        "notesTitle": "ملاحظات",
+        "reviewedAt": "تمت المراجعة في",
+        "reviewedBy": "تمت المراجعة بواسطة",
+        "reviewNote": "ملاحظة المراجعة"
+      },
+      "attachments": {
+        "limit": "{count} من {max} · حتى {mb} ميجابايت لكل ملف",
+        "add": "إضافة ملفات",
+        "empty": "لا توجد مرفقات",
+        "open": "فتح",
+        "remove": "إزالة",
+        "openFailed": "تعذّر فتح الملف.",
+        "errors": {
+          "too_many_attachments": "تحتوي الحالة على 10 ملفات كحد أقصى.",
+          "file_empty": "الملف فارغ.",
+          "file_too_large": "حجم الملف أكبر من 50 ميجابايت.",
+          "invalid_content_type": "تُقبل الصور وPDF وMP4 وMOV فقط.",
+          "missing_vehicle": "اختر مركبة أولًا.",
+          "invalid_attachment": "مرجع الملف غير صالح.",
+          "uploadFailed": "تعذّر رفع الملف."
+        }
+      },
+      "errors": {
+        "notAuthorized": "ليس لديك صلاحية لتعديل حالات الحوادث.",
+        "notConfigured": "قاعدة البيانات غير مهيأة.",
+        "missingVehicle": "اختر مركبة.",
+        "missingFields": "أكمل الحقول المطلوبة.",
+        "locationRequired": "الموقع مطلوب.",
+        "invalidDate": "التاريخ غير صالح.",
+        "futureDate": "لا يمكن أن يكون الحادث في المستقبل.",
+        "invalidLocation": "الإحداثيات خارج النطاق.",
+        "invalidDriverFault": "خطأ السائق نعم أو لا.",
+        "invalidCaseStatus": "اختر مغلق أو قيد الانتظار أو متأخر.",
+        "invalidVehicleCaseStatus": "اختر حالة مركبة صالحة.",
+        "invalidInsuranceStatus": "اختر حالة مطالبة تأمين صالحة.",
+        "invalidPoliceStatus": "اختر حالة تقرير شرطة صالحة.",
+        "invalidAmount": "يجب أن يكون المبلغ صفرًا أو أكثر.",
+        "invalidPhone": "يجب أن يكون رقم الهاتف من 7 إلى 15 رقمًا.",
+        "replacementPlateRequired": "لوحة البديل مطلوبة لهذه النتيجة.",
+        "tooManyAttachments": "تحتوي الحالة على 10 ملفات كحد أقصى.",
+        "invalidAttachment": "مرجع الملف غير صالح.",
+        "attachmentClaimed": "أحد الملفات مرتبط بحالة أخرى.",
+        "fileTooLarge": "الملف كبير جدًا.",
+        "uploadFailed": "تعذّر رفع الملف.",
+        "notFound": "لم تعد هذه الحالة موجودة.",
+        "saveFailed": "حدث خطأ. لم يتم حفظ أي شيء."
+      }
+    },
     "esign": {
       "accident": {
         "requestKind": "نوع الطلب",

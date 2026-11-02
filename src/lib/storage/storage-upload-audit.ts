@@ -7,7 +7,13 @@ import { syncDriverAvatarKey } from "@/lib/storage/sync-driver-avatar";
 export const STORAGE_UPLOADS = "storage_uploads";
 
 export type StorageUploadVia = "admin" | "driver_presigned" | "driver_proxy";
-export type StorageUploadStatus = "pending" | "completed" | "failed" | "expired";
+export type StorageUploadStatus =
+  | "pending"
+  | "completed"
+  | "failed"
+  | "expired"
+  /** A confirmed accident upload that no accident ever referenced (swept). */
+  | "orphaned";
 
 export type RecordUploadParams = {
   objectKey: string;
@@ -227,4 +233,85 @@ export async function markExpiredPendingUploads(): Promise<{
   }
 
   return { expired: rows.length, deletedFromR2 };
+}
+
+/** An accident upload is only kept once a case references it. */
+const ORPHAN_ACCIDENT_AGE_MS = 24 * 60 * 60 * 1000;
+const ACCIDENT_ATTACHMENT_ENTITY = "accident_attachment";
+
+/**
+ * Second pass of the same nightly cleanup: a *confirmed* accident upload that no
+ * accident ever referenced.
+ *
+ * The rider's flow is presign → PUT → confirm → report. A rider who uploads and
+ * then abandons the report leaves a confirmed object behind, and nothing else
+ * removes it. One `array-contains` query per candidate decides whether the file is
+ * evidence or litter.
+ *
+ * This is a storage cleanup, not an alert, and it sends nothing.
+ */
+export async function sweepOrphanAccidentUploads(): Promise<{
+  scanned: number;
+  orphaned: number;
+  deletedFromR2: number;
+}> {
+  const db = await getFirebaseFirestore();
+  if (!db) return { scanned: 0, orphaned: 0, deletedFromR2: 0 };
+
+  const cutoff = Date.now() - ORPHAN_ACCIDENT_AGE_MS;
+  const snap = await db
+    .collection(STORAGE_UPLOADS)
+    .where("status", "==", "completed")
+    .where("entity_type", "==", ACCIDENT_ATTACHMENT_ENTITY)
+    .limit(500)
+    .get();
+
+  const candidates = snap.docs.filter((doc) => {
+    const uploaded = millis(doc.get("uploaded_at") ?? doc.get("confirmed_at"));
+    return Number.isFinite(uploaded) && uploaded < cutoff;
+  });
+
+  if (candidates.length === 0) return { scanned: snap.size, orphaned: 0, deletedFromR2: 0 };
+
+  const referenced = new Set<string>();
+  for (const doc of candidates) {
+    const key = doc.get("object_key");
+    if (typeof key !== "string" || !key) continue;
+    const hit = await db
+      .collection("vehicle_accidents")
+      .where("attachment_keys", "array-contains", key)
+      .limit(1)
+      .get();
+    if (!hit.empty) referenced.add(key);
+  }
+
+  const orphans = candidates.filter((doc) => {
+    const key = doc.get("object_key");
+    return typeof key === "string" && key.length > 0 && !referenced.has(key);
+  });
+  if (orphans.length === 0) return { scanned: snap.size, orphaned: 0, deletedFromR2: 0 };
+
+  for (let index = 0; index < orphans.length; index += 400) {
+    const batch = db.batch();
+    for (const doc of orphans.slice(index, index + 400)) {
+      batch.update(doc.ref, { status: "orphaned", orphaned_at: new Date() });
+    }
+    await batch.commit();
+  }
+
+  // r2-client imports recordStorageUpload from this file, so a static import cycles.
+  const r2 = await import("@/lib/storage/r2-client");
+  let deletedFromR2 = 0;
+  for (const doc of orphans) {
+    const objectKey = doc.get("object_key");
+    if (typeof objectKey !== "string" || !objectKey) continue;
+    try {
+      await r2.deleteObject(objectKey);
+      deletedFromR2 += 1;
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  return { scanned: snap.size, orphaned: orphans.length, deletedFromR2 };
 }
