@@ -514,7 +514,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     href: "/fleet/service",
     defaultGroup: "Fleet",
     defaultOrder: 4,
-    permission: "vehicles.view",
+    permission: "service.view",
     hidden: true,
   },
   {
@@ -795,6 +795,16 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     hidden: true,
   },
   {
+    id: "service-types",
+    defaultLabel: "Service types",
+    defaultIcon: "ListChecks",
+    href: "/settings/service-types",
+    defaultGroup: "Fleet",
+    defaultOrder: 9,
+    permission: "service.manage",
+    hidden: true,
+  },
+  {
     id: "vehicle-uses",
     defaultLabel: "Vehicle uses",
     defaultIcon: "Route",
@@ -1068,6 +1078,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   branding: "branding",
   "driver-app": "driverApp",
   "vehicle-types": "vehicleTypes",
+  "service-types": "serviceTypes",
   "vehicle-uses": "vehicleUses",
   "vehicle-companies": "vehicleCompanies",
   "source-companies": "sourceCompanies",

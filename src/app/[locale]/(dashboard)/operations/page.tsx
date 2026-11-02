@@ -12,6 +12,7 @@ import {
   Landmark,
   Layers,
   LayoutGrid,
+  ListChecks,
   ListTree,
   MapPin,
   UsersRound,
@@ -78,6 +79,12 @@ const CARDS: ReadonlyArray<{
   { key: "deliveryRules", href: "/delivery-rules", icon: ListTree, permission: "earnings.view" },
   { key: "incentiveRules", href: "/incentive-rules", icon: Wallet, permission: "earnings.view" },
   { key: "driverFields", href: "/settings/driver-fields", icon: FormInput, permission: "drivers.manage" },
+  {
+    key: "serviceTypes",
+    href: "/settings/service-types",
+    icon: ListChecks,
+    permission: "service.manage",
+  },
   {
     key: "attendanceSettings",
     href: "/settings/attendance",

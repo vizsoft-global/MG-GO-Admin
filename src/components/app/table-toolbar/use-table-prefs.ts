@@ -46,25 +46,47 @@ export function useTablePrefs(tableId: string, columns: TableToolbarColumn[]) {
     [columns],
   );
 
+  /**
+   * The read below is a server action, and a server action is addressed to the
+   * route that is mounted when it is sent. Depending on object identity
+   * (`knownIds` / `system`) made the effect fire on every render, so a render
+   * that landed after a `router.push()` posted the action to the *new* route —
+   * where it is not registered, so the server answered `application/json` `{}`
+   * and the router threw "An unexpected response was received from the
+   * server." A signature string only changes when the table itself changes.
+   */
+  const preferenceSignature = `${knownIds.join("|")}::${system.visible.join("|")}`;
+
   const urlQuery = searchParams.get(qKey) ?? "";
   const [draftQuery, setDraftQuery] = useState(urlQuery);
   const [appliedQuery, setAppliedQuery] = useState(urlQuery);
   const [preference, setPreference] = useState<ListColumnPreference>(system);
 
-  useEffect(() => {
+  // Keep the search box in step with the URL (back/forward, or another page
+  // writing the same key) during render rather than in an effect — a
+  // synchronous `setState` inside an effect cascades an extra render.
+  const [syncedUrlQuery, setSyncedUrlQuery] = useState(urlQuery);
+  if (urlQuery !== syncedUrlQuery) {
+    setSyncedUrlQuery(urlQuery);
     setDraftQuery(urlQuery);
-  }, [urlQuery]);
+  }
 
   useEffect(() => {
     let cancelled = false;
-    void getEffectiveUiPreference(`table.${tableId}`, knownIds, system).then((result) => {
-      if (cancelled) return;
-      setPreference(result.effective);
-    });
+    void getEffectiveUiPreference(`table.${tableId}`, knownIds, system)
+      .then((result) => {
+        if (!cancelled) setPreference(result.effective);
+      })
+      // The stored preference is a convenience; the system defaults render
+      // either way, so a failed read must not raise a page error.
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [tableId, knownIds, system]);
+    // `preferenceSignature` stands in for `knownIds` / `system` so re-creating
+    // those arrays cannot re-send the action.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableId, preferenceSignature]);
 
   const writeUrl = useCallback(
     (mutate: (params: URLSearchParams) => void) => {

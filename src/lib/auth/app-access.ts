@@ -171,6 +171,23 @@ export const APP_ACCESS_CATALOG: readonly AppAccessEntry[] = [
       { id: "fuel", labelKey: "subViews.fuel", slugs: ["fuel.view"] },
       { id: "fuelRequests", labelKey: "subViews.fuelRequests", slugs: ["fuel_requests.view"] },
       { id: "fuelRefunds", labelKey: "subViews.fuelRefunds", slugs: ["fuel_refunds.view"] },
+      // Fleet Service. Read-only ticks; `service.manage` / `service.export` are
+      // granted from Roles & Permissions, never by ticking a tab.
+      {
+        id: "serviceRecords",
+        labelKey: "subViews.serviceRecords",
+        slugs: ["service.view"],
+      },
+      {
+        id: "serviceReports",
+        labelKey: "subViews.serviceReports",
+        slugs: ["service.view"],
+      },
+      {
+        id: "serviceMaintenance",
+        labelKey: "subViews.serviceMaintenance",
+        slugs: ["service.view"],
+      },
     ],
   },
   {

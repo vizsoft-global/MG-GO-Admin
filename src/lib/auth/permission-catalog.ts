@@ -81,6 +81,14 @@ export const PERMISSION_CATALOG: readonly PermissionCatalogEntry[] = [
   { slug: "vehicles.manage", label: "Manage vehicles", category: "vehicles" },
   { slug: "fuel.view", label: "View fuel log", category: "fleet" },
   { slug: "fuel.manage", label: "Manage fuel log", category: "fleet" },
+  /**
+   * Fleet Service. Deliberately their own slugs: reading the ledger, moving a
+   * record and downloading an export are three different amounts of trust, and
+   * none of them is "may edit a vehicle".
+   */
+  { slug: "service.view", label: "View fleet service records", category: "fleet" },
+  { slug: "service.manage", label: "Manage fleet service records", category: "fleet" },
+  { slug: "service.export", label: "Export fleet service reports", category: "fleet" },
   {
     slug: "fuel_requests.view",
     label: "View fuel requests",
