@@ -118,6 +118,252 @@ export type LiveFleetZone = {
   geometry: unknown;
 };
 
+type OpenPickup = { id: string; pickupAt: Date | null; createdAt: Date | null };
+
+type FleetDriverRowInput = {
+  driver: Row;
+  location: Row;
+  profile: Row;
+  open: OpenPickup | null;
+  shift: Dict | undefined;
+  onDuty: boolean;
+  online: boolean;
+  blocked: boolean;
+  onDutySince: Date | null;
+  zone: Row | undefined;
+  partner: Row | undefined;
+  restaurant: Row | undefined;
+  vehicle: Row | undefined;
+  deliveriesToday: number;
+  deliveriesCompletedToday: number;
+  cutoffMs: number;
+};
+
+/**
+ * One driver's row, exactly as the live rail reads it.
+ *
+ * Shared by `buildLiveFleetSnapshot` and `buildDriverSnapshot` so the whole-fleet
+ * read and the single-driver read cannot describe the same rider differently.
+ * Returns null when the rider is not eligible for the rail.
+ */
+export function fleetDriverRow(input: FleetDriverRowInput) {
+  const { driver, location, profile, open, shift } = input;
+  if (
+    !fleetRowIsEligible({
+      isOnDuty: input.onDuty,
+      isOnline: input.online,
+      isBlocked: input.blocked,
+      activeDeliveryId: open?.id ?? null,
+      lastSeenAt: asDate(location.last_seen_at),
+      lastReportAt: asDate(location.last_report_at),
+      cutoffMs: input.cutoffMs,
+    })
+  ) {
+    return null;
+  }
+
+  const zone = input.zone;
+  const partner = input.partner;
+  const restaurant = input.restaurant;
+  const vehicle = input.vehicle;
+  const fullName = typeof profile.full_name === "string" ? profile.full_name.trim() : "";
+  const shiftType = shift ? (shift.shift_type as string | null) ?? null : null;
+
+  return {
+    driver_id: String(driver.id),
+    driver_name: fullName.length ? fullName : (driver.driver_code as string | null) ?? null,
+    driver_code: (driver.driver_code as string | null) ?? null,
+    employee_id: (driver.employee_id as string | null) ?? null,
+    avatar_object_key: (driver.avatar_object_key as string | null) ?? null,
+    avatar_updated_at: iso(driver.avatar_updated_at),
+    avatar_url: (profile.avatar_url as string | null) ?? null,
+    phone: (profile.phone as string | null) ?? null,
+    account_status: (driver.status as string | null) ?? null,
+    is_on_duty: input.onDuty,
+    is_blocked: input.blocked,
+    zone_id: (driver.zone_id as string | null) ?? null,
+    zone_name: zone ? (zone.name as string | null) ?? null : null,
+    zone_color: zone ? (zone.color as string | null) ?? null : null,
+    partner_id: (driver.partner_id as string | null) ?? null,
+    partner_name: partner ? (partner.name as string | null) ?? null : null,
+    restaurant_id: (driver.restaurant_id as string | null) ?? null,
+    restaurant_name: restaurant ? (restaurant.name as string | null) ?? null : null,
+    vehicle_id: (driver.vehicle_id as string | null) ?? null,
+    vehicle_reg_number: vehicle ? (vehicle.reg_number as string | null) ?? null : null,
+    vehicle_bike_id: vehicle ? (vehicle.bike_id as string | null) ?? null : null,
+    vehicle_type_key:
+      (vehicle?.vehicle_type_key as string | null) ??
+      (driver.vehicle_type_key as string | null) ??
+      "bike",
+    latitude: num(location.latitude),
+    longitude: num(location.longitude),
+    speed_mps: num(location.speed_mps),
+    heading_deg: num(location.heading_deg),
+    accuracy_meters: num(location.accuracy_meters),
+    battery_pct: num(location.battery_pct),
+    is_mocked: typeof location.is_mocked === "boolean" ? location.is_mocked : null,
+    tracking_status: (location.tracking_status as string | null) ?? null,
+    zone_status: (location.zone_status as string | null) ?? null,
+    out_of_zone_since: iso(location.out_of_zone_since),
+    distance_today_meters: num(location.distance_today_meters),
+    active_delivery_id: open ? open.id : null,
+    last_seen_at: iso(location.last_seen_at),
+    last_report_at: iso(location.last_report_at),
+    is_online: input.online,
+    on_duty_since: iso(input.onDutySince),
+    deliveries_today: input.deliveriesToday,
+    deliveries_completed_today: input.deliveriesCompletedToday,
+    shift: shift
+      ? {
+          shift_date: (shift.shift_date as string | null) ?? null,
+          shift_type: shiftType,
+          session1_start_at: iso(shift.session1_start),
+          session1_end_at: iso(shift.session1_end),
+          session2_start_at: iso(shift.session2_start),
+          session2_end_at: iso(shift.session2_end),
+          submitted_at: iso(shift.submitted_at),
+        }
+      : null,
+  };
+}
+
+export type LiveFleetDriverRow = NonNullable<ReturnType<typeof fleetDriverRow>>;
+
+/**
+ * One driver, read directly.
+ *
+ * `buildLiveFleetSnapshot` answers the admin rail: a whole-fleet answer, and it
+ * costs every driver's row plus every delivery of the day. That is the right
+ * shape for one poll every 60s and the wrong shape for the edge room, which
+ * needs a single rider at the moment they start reporting and used to call the
+ * full snapshot for it — 6,000-8,000 reads each time a batch arrived from a
+ * rider the roster did not hold.
+ *
+ * This reads exactly this rider: the driver, profile and location docs, today's
+ * shift, attendance and session rows, their open pickup, and two counts. Twelve
+ * reads instead of thousands, and the row itself comes from the same
+ * `fleetDriverRow` the full snapshot uses.
+ */
+export async function buildDriverSnapshot(
+  driverId: string,
+  seenWithinMinutes: number,
+): Promise<{ driver: LiveFleetDriverRow | null; settings: Dict }> {
+  const seenWithin = Math.max(Math.trunc(seenWithinMinutes || 30), 1);
+  const now = new Date();
+  const day = kuwaitDayString(now);
+  const dayStart = kuwaitDayStart(day);
+  const dayEnd = kuwaitDayEnd(day);
+  const db = getFirestore();
+
+  const [driverSnap, profile, location, shiftSnap, attendanceSnap, sessionSnap, openSnap, createdCount, deliveredCount, settings] =
+    await Promise.all([
+      db.collection(COLLECTIONS.drivers).doc(driverId).get(),
+      loadDocMap(COLLECTIONS.profiles, [driverId]),
+      loadDocMap(COLLECTIONS.driverLocations, [driverId]),
+      db
+        .collection(COLLECTIONS.driverDailyShifts)
+        .where("driver_id", "==", driverId)
+        .where("shift_date", "==", day)
+        .limit(1)
+        .get(),
+      db
+        .collection(COLLECTIONS.attendanceLogs)
+        .where("driver_id", "==", driverId)
+        .where("log_date", "==", day)
+        .get(),
+      db
+        .collection(COLLECTIONS.driverSessions)
+        .where("driver_id", "==", driverId)
+        .where("is_online", "==", true)
+        .limit(1)
+        .get(),
+      db
+        .collection(COLLECTIONS.deliveries)
+        .where("driver_id", "==", driverId)
+        .where("status", "==", "in_transit")
+        .limit(5)
+        .get(),
+      db
+        .collection(COLLECTIONS.deliveries)
+        .where("driver_id", "==", driverId)
+        .where("created_at", ">=", dayStart)
+        .where("created_at", "<", dayEnd)
+        .count()
+        .get(),
+      db
+        .collection(COLLECTIONS.deliveries)
+        .where("driver_id", "==", driverId)
+        .where("delivered_at", ">=", dayStart)
+        .where("delivered_at", "<", dayEnd)
+        .count()
+        .get(),
+      fleetSettings(),
+    ]);
+
+  if (!driverSnap.exists) return { driver: null, settings };
+  const driver = { ...(driverSnap.data() as Dict), id: driverSnap.id } as Row;
+
+  // Today's attendance decides "on duty" even when the driver flag is stale, so
+  // the same rule as the full snapshot applies here.
+  let onDutySince: Date | null = null;
+  for (const doc of attendanceSnap.docs) {
+    const checkIn = asDate((doc.data() as Dict).check_in_at);
+    if (checkIn && (!onDutySince || checkIn.getTime() > onDutySince.getTime())) onDutySince = checkIn;
+  }
+  const online = !sessionSnap.empty;
+
+  // The latest open pickup, the same tie-break the fleet read uses.
+  let open: OpenPickup | null = null;
+  for (const doc of openSnap.docs) {
+    const row = doc.data() as Dict;
+    const candidate: OpenPickup = {
+      id: doc.id,
+      pickupAt: asDate(row.pickup_at),
+      createdAt: asDate(row.created_at),
+    };
+    const better =
+      !open ||
+      (candidate.pickupAt ?? new Date(0)).getTime() > (open.pickupAt ?? new Date(0)).getTime() ||
+      ((candidate.pickupAt ?? new Date(0)).getTime() === (open.pickupAt ?? new Date(0)).getTime() &&
+        (candidate.createdAt ?? new Date(0)).getTime() > (open.createdAt ?? new Date(0)).getTime());
+    if (better) open = candidate;
+  }
+
+  const [zone, partner, restaurant, vehicle] = await Promise.all([
+    driver.zone_id ? loadDocMap(COLLECTIONS.zones, [String(driver.zone_id)]) : Promise.resolve(new Map()),
+    driver.partner_id
+      ? loadDocMap(COLLECTIONS.partners, [String(driver.partner_id)])
+      : Promise.resolve(new Map()),
+    driver.restaurant_id
+      ? loadDocMap(COLLECTIONS.restaurants, [String(driver.restaurant_id)])
+      : Promise.resolve(new Map()),
+    driver.vehicle_id
+      ? loadDocMap(COLLECTIONS.vehicles, [String(driver.vehicle_id)])
+      : Promise.resolve(new Map()),
+  ]);
+
+  const row = fleetDriverRow({
+    driver,
+    location: location.get(driverId) ?? EMPTY_ROW,
+    profile: profile.get(driverId) ?? EMPTY_ROW,
+    open,
+    shift: shiftSnap.empty ? undefined : ((shiftSnap.docs[0].data() ?? {}) as Dict),
+    onDuty: Boolean(driver.is_on_duty) || onDutySince !== null,
+    online,
+    blocked: Boolean(driver.is_blocked) || freezeActive(driver, now),
+    onDutySince,
+    zone: driver.zone_id ? zone.get(String(driver.zone_id)) : undefined,
+    partner: driver.partner_id ? partner.get(String(driver.partner_id)) : undefined,
+    restaurant: driver.restaurant_id ? restaurant.get(String(driver.restaurant_id)) : undefined,
+    vehicle: driver.vehicle_id ? vehicle.get(String(driver.vehicle_id)) : undefined,
+    deliveriesToday: createdCount.data().count,
+    deliveriesCompletedToday: deliveredCount.data().count,
+    cutoffMs: now.getTime() - seenWithin * 60 * 1000,
+  });
+
+  return { driver: row, settings };
+}
+
 export async function buildLiveFleetSnapshot(
   seenWithinMinutes: number,
   options?: { unscoped?: boolean },
@@ -231,96 +477,26 @@ export async function buildLiveFleetSnapshot(
     .map((doc) => {
       const driver = { ...(doc.data() as Dict), id: doc.id } as Row;
       const location = locationById.get(doc.id) ?? EMPTY_ROW;
-      const open = openByDriver.get(doc.id) ?? null;
-      const blocked = Boolean(driver.is_blocked) || freezeActive(driver, now);
-      const lastSeenAt = asDate(location.last_seen_at);
-      const lastReportAt = asDate(location.last_report_at);
-      const onDuty = Boolean(driver.is_on_duty) || attendanceByDriver.has(doc.id);
-      const online = onlineDrivers.has(doc.id);
-      if (
-        !fleetRowIsEligible({
-          isOnDuty: onDuty,
-          isOnline: online,
-          isBlocked: blocked,
-          activeDeliveryId: open?.id ?? null,
-          lastSeenAt,
-          lastReportAt,
-          cutoffMs: cutoff.getTime(),
-        })
-      ) {
-        return null;
-      }
-
-      const profile = profileById.get(doc.id) ?? EMPTY_ROW;
-      const zone = driver.zone_id ? zoneById.get(String(driver.zone_id)) : undefined;
-      const partner = driver.partner_id ? partnerById.get(String(driver.partner_id)) : undefined;
-      const restaurant = driver.restaurant_id
-        ? restaurantById.get(String(driver.restaurant_id))
-        : undefined;
-      const vehicle = driver.vehicle_id ? vehicleById.get(String(driver.vehicle_id)) : undefined;
-      const fullName =
-        typeof profile.full_name === "string" ? profile.full_name.trim() : "";
-      const shift = shiftByDriver.get(doc.id);
-      const shiftType = shift ? (shift.shift_type as string | null) ?? null : null;
-      const session1Start = shift ? shift.session1_start : null;
-      const session1End = shift ? shift.session1_end : null;
-
-      return {
-        driver_id: doc.id,
-        driver_name: fullName.length ? fullName : (driver.driver_code as string | null) ?? null,
-        driver_code: (driver.driver_code as string | null) ?? null,
-        employee_id: (driver.employee_id as string | null) ?? null,
-        avatar_object_key: (driver.avatar_object_key as string | null) ?? null,
-        avatar_updated_at: iso(driver.avatar_updated_at),
-        avatar_url: (profile.avatar_url as string | null) ?? null,
-        phone: (profile.phone as string | null) ?? null,
-        account_status: (driver.status as string | null) ?? null,
-        is_on_duty: onDuty,
-        is_blocked: blocked,
-        zone_id: (driver.zone_id as string | null) ?? null,
-        zone_name: zone ? (zone.name as string | null) ?? null : null,
-        zone_color: zone ? (zone.color as string | null) ?? null : null,
-        partner_id: (driver.partner_id as string | null) ?? null,
-        partner_name: partner ? (partner.name as string | null) ?? null : null,
-        restaurant_id: (driver.restaurant_id as string | null) ?? null,
-        restaurant_name: restaurant ? (restaurant.name as string | null) ?? null : null,
-        vehicle_id: (driver.vehicle_id as string | null) ?? null,
-        vehicle_reg_number: vehicle ? (vehicle.reg_number as string | null) ?? null : null,
-        vehicle_bike_id: vehicle ? (vehicle.bike_id as string | null) ?? null : null,
-        vehicle_type_key:
-          (vehicle?.vehicle_type_key as string | null) ??
-          (driver.vehicle_type_key as string | null) ??
-          "bike",
-        latitude: num(location.latitude),
-        longitude: num(location.longitude),
-        speed_mps: num(location.speed_mps),
-        heading_deg: num(location.heading_deg),
-        accuracy_meters: num(location.accuracy_meters),
-        battery_pct: num(location.battery_pct),
-        is_mocked: typeof location.is_mocked === "boolean" ? location.is_mocked : null,
-        tracking_status: (location.tracking_status as string | null) ?? null,
-        zone_status: (location.zone_status as string | null) ?? null,
-        out_of_zone_since: iso(location.out_of_zone_since),
-        distance_today_meters: num(location.distance_today_meters),
-        active_delivery_id: open ? open.id : null,
-        last_seen_at: iso(location.last_seen_at),
-        last_report_at: iso(location.last_report_at),
-        is_online: onlineDrivers.has(doc.id),
-        on_duty_since: iso(attendanceByDriver.get(doc.id) ?? null),
-        deliveries_today: createdToday.get(doc.id) ?? 0,
-        deliveries_completed_today: deliveredToday.get(doc.id) ?? 0,
-        shift: shift
-          ? {
-              shift_date: (shift.shift_date as string | null) ?? null,
-              shift_type: shiftType,
-              session1_start_at: iso(session1Start),
-              session1_end_at: iso(session1End),
-              session2_start_at: iso(shift.session2_start),
-              session2_end_at: iso(shift.session2_end),
-              submitted_at: iso(shift.submitted_at),
-            }
-          : null,
-      };
+      return fleetDriverRow({
+        driver,
+        location,
+        profile: profileById.get(doc.id) ?? EMPTY_ROW,
+        open: openByDriver.get(doc.id) ?? null,
+        shift: shiftByDriver.get(doc.id),
+        onDuty: Boolean(driver.is_on_duty) || attendanceByDriver.has(doc.id),
+        online: onlineDrivers.has(doc.id),
+        blocked: Boolean(driver.is_blocked) || freezeActive(driver, now),
+        onDutySince: attendanceByDriver.get(doc.id) ?? null,
+        zone: driver.zone_id ? zoneById.get(String(driver.zone_id)) : undefined,
+        partner: driver.partner_id ? partnerById.get(String(driver.partner_id)) : undefined,
+        restaurant: driver.restaurant_id
+          ? restaurantById.get(String(driver.restaurant_id))
+          : undefined,
+        vehicle: driver.vehicle_id ? vehicleById.get(String(driver.vehicle_id)) : undefined,
+        deliveriesToday: createdToday.get(doc.id) ?? 0,
+        deliveriesCompletedToday: deliveredToday.get(doc.id) ?? 0,
+        cutoffMs: cutoff.getTime(),
+      });
     })
     .filter((row): row is NonNullable<typeof row> => row !== null)
     .sort((a, b) => (iso(b.last_seen_at) ?? "").localeCompare(iso(a.last_seen_at) ?? ""));

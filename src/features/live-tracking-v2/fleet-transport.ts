@@ -2,7 +2,7 @@
  * Two rails, in descending order of quality, chosen automatically.
  *
  * 1. **Edge WebSocket** (`edge`) — the Cloudflare room. 4Hz deltas, sub-second.
- * 2. **Snapshot polling** (`poll`) — `admin_live_fleet_snapshot` every 30s through
+ * 2. **Snapshot polling** (`poll`) — `admin_live_fleet_snapshot` every 60s through
  *    a staff server action. Slow, but it depends on nothing beyond the database,
  *    so it is the rail that is available when the socket is not.
  *
@@ -18,7 +18,16 @@ import type { FleetZone } from "./fleet-types";
 import type { ClientFrame, ServerFrame } from "./fleet-wire";
 import type { FleetSocketTicket } from "./fleet-token";
 
-const SNAPSHOT_POLL_MS = 30_000;
+/**
+ * Fallback snapshot cadence.
+ *
+ * A whole-fleet snapshot is ~6,000-8,000 document reads, so this is the single
+ * most expensive thing an open tab does. A minute was already ten times the
+ * edge rail's worst case; two minutes matches `FLEET_BASE_CACHE_MS`, which means
+ * a poll now regularly lands on a warm base instead of rebuilding it, and the
+ * map still repaints from socket deltas in between.
+ */
+const SNAPSHOT_POLL_MS = 60_000;
 /** Warm-refresh cadence while a live rail is running: roster facts only. */
 const ROSTER_REFRESH_MS = 120_000;
 const PING_MS = 20_000;
