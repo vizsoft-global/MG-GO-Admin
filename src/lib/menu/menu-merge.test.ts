@@ -114,6 +114,38 @@ describe("stripStaffAccessItem", () => {
 });
 
 describe("relocateOperationsHubItems", () => {
+  it("leaves Companies and Sponsorships in Settings", () => {
+    // Both are employee-record catalogs. The OperationsHub relocator used to
+    // collect `source-companies` and drop it into the hub, which pulled it back
+    // out of Settings on every render and left Sponsorships only in the hub's
+    // card grid. Neither may be collected here.
+    const { tree } = mergeMenu([]);
+    const settingsIds = (tree.find((node) => node.id === "group-settings")?.children ?? []).map(
+      (child) => child.id,
+    );
+    assert.ok(settingsIds.includes("source-companies"), "Companies belongs in Settings");
+    assert.ok(settingsIds.includes("sponsorships"), "Sponsorships belongs in Settings");
+  });
+
+  it("appends both to Settings when a saved config predates them", () => {
+    const strip = (nodes: ReturnType<typeof mergeMenu>["tree"]): ReturnType<typeof mergeMenu>["tree"] =>
+      nodes.map((node) => ({
+        ...node,
+        children: node.children
+          ? strip(node.children).filter(
+              (child) => child.id !== "source-companies" && child.id !== "sponsorships",
+            )
+          : undefined,
+      }));
+    const saved = strip(mergeMenu([]).tree);
+    const { tree } = mergeMenu(saved);
+    const settingsIds = (tree.find((node) => node.id === "group-settings")?.children ?? []).map(
+      (child) => child.id,
+    );
+    assert.ok(settingsIds.includes("source-companies"));
+    assert.ok(settingsIds.includes("sponsorships"));
+  });
+
   const legacyConfig = [
     {
       id: "group-overview",

@@ -32,11 +32,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/auth-context";
+import { Link, useRouter } from "@/i18n/navigation";
 import { queryKeys } from "@/lib/query/query-keys";
 import { getSignedStorageUrl } from "@/lib/storage/storage-actions";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { toKuwaitYmd } from "@/features/fleet/fleet-labels";
 import { AssetFormSheet } from "@/features/assets/asset-form-sheet";
+import { listServiceRecordsForVehicle } from "@/features/fleet/service/service-actions";
+import { ServiceOdometerDialog } from "@/features/fleet/service/service-odometer-dialog";
 import { isLegacyVehicleDocType, VEHICLE_DOC_TYPE_VALUES } from "./vehicle-doc-types";
 import type { VehicleListRow } from "./types";
 import {
@@ -44,13 +47,11 @@ import {
   createVehicleAccident,
   createVehicleDocument,
   createVehicleHandover,
-  createVehicleService,
   listVehicleAccidents,
   listVehicleAssignedAssets,
   listVehicleAssetCatalog,
   listVehicleDocuments,
   listVehicleHandovers,
-  listVehicleServices,
   listVehicleTabDrivers,
 } from "./vehicle-tabs-actions";
 
@@ -77,7 +78,7 @@ export function VehicleDetailTabs({
   if (tab === "handover") return <HandoverTab vehicleId={vehicle.id} canManage={canManage} />;
   if (tab === "accident") return <AccidentTab vehicleId={vehicle.id} canManage={canManage} />;
   if (tab === "documents") return <DocumentsTab vehicle={vehicle} canManage={canManage} />;
-  if (tab === "service") return <ServiceTab vehicleId={vehicle.id} canManage={canManage} />;
+  if (tab === "service") return <ServiceTab vehicle={vehicle} canManage={canManage} />;
   return <AssetsTab vehicle={vehicle} />;
 }
 
@@ -424,97 +425,106 @@ function DocumentsTab({ vehicle, canManage }: { vehicle: VehicleListRow; canMana
   );
 }
 
-function ServiceTab({ vehicleId, canManage }: { vehicleId: string; canManage: boolean }) {
+function ServiceTab({ vehicle, canManage }: { vehicle: VehicleListRow; canManage: boolean }) {
   const t = useTranslations("pages.vehicleDetail");
-  const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const tService = useTranslations("pages.fleetService");
+  const tStage = useTranslations("pages.fleetService.stages");
+  const { can } = useAuth();
+  const router = useRouter();
+  const vehicleId = vehicle.id;
+  const canService = can("service.manage");
+  const canViewService = can("service.view");
+  const [odometerOpen, setOdometerOpen] = useState(false);
   const list = useQuery({
     queryKey: queryKeys.vehicles.tabs(vehicleId, "service"),
-    queryFn: () => listVehicleServices(vehicleId),
+    queryFn: () => listServiceRecordsForVehicle(vehicleId),
+    enabled: canViewService,
   });
   const rows = list.data ?? [];
   const columns = useMemo<TableToolbarColumn[]>(
     () => [
       { id: "when", label: t("colWhen") },
-      { id: "kind", label: t("colKind"), categorical: true },
+      { id: "type", label: tService("cols.type"), categorical: true },
+      { id: "stage", label: tService("cols.stage"), categorical: true },
       { id: "odometer", label: t("colOdometer") },
       { id: "vendor", label: t("colVendor") },
       { id: "cost", label: t("colCost") },
-      { id: "notes", label: t("colNotes") },
+      { id: "description", label: tService("cols.description") },
     ],
-    [t],
+    [t, tService],
   );
+
+  if (!canViewService) {
+    return <AppEmptyState title={t("emptyService")} description={tService("errors.notAuthorized")} />;
+  }
+
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9"
+          onClick={() => setOdometerOpen(true)}
+          disabled={!canService}
+        >
+          {tService("actions.updateOdometer")}
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          {vehicle.current_odometer_km == null
+            ? tService("maintenance.unknown")
+            : tService("odometer.current", { km: vehicle.current_odometer_km })}
+        </span>
+      </div>
       <TabTable
         tableId={`vehicle-service-${vehicleId}`}
         entity={t("addService")}
         columns={columns}
-        onAdd={canManage ? () => setOpen(true) : undefined}
+        onAdd={
+          canManage && canService
+            ? () => router.push(`/fleet/service/records/new?vehicleId=${vehicleId}`)
+            : undefined
+        }
         addLabel={t("addService")}
         empty={<AppEmptyState title={t("emptyService")} />}
         rows={rows.map((row) => ({
           id: row.id,
-          search: [row.serviced_at, row.kind, row.odometer, row.vendor, row.cost_kwd, row.notes]
+          search: [
+            row.serviced_at,
+            row.service_type_label,
+            row.stage,
+            row.odometer_km,
+            row.vendor,
+            row.cost_kwd,
+            row.description,
+          ]
             .filter((value) => value != null && value !== "")
             .join(" "),
-          group: { kind: row.kind || "" },
+          group: { type: row.service_type_label ?? row.kind ?? "", stage: row.stage },
           cells: {
             when: row.serviced_at.slice(0, 10),
-            kind: row.kind || <EmptyCell />,
-            odometer: row.odometer == null ? <EmptyCell /> : String(row.odometer),
+            type: (
+              <Link
+                href={`/fleet/service/records/${row.id}`}
+                className="text-primary hover:underline"
+              >
+                {row.service_type_label ?? row.kind ?? tService("detail.serviceType")}
+              </Link>
+            ),
+            stage: tStage(row.stage),
+            odometer: row.odometer_km == null ? <EmptyCell /> : String(row.odometer_km),
             vendor: row.vendor || <EmptyCell />,
             cost: row.cost_kwd == null ? <EmptyCell /> : String(row.cost_kwd),
-            notes: row.notes || <EmptyCell />,
+            description: row.description || <EmptyCell />,
           },
         }))}
       />
-      <LedgerDialog
-        open={open}
-        title={t("addService")}
-        subtitle={t("serviceSubtitle")}
-        successMessage={t("serviceSaved")}
-        onClose={() => setOpen(false)}
-        onSubmit={async (form) => {
-          form.set("vehicleId", vehicleId);
-          const result = await createVehicleService(form);
-          if (result.error) return result.error;
-          void queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.tabs(vehicleId, "service") });
-          setOpen(false);
-          return null;
-        }}
-      >
-        <label className="space-y-1 text-xs">
-          {t("colWhen")}
-          <Input
-            name="servicedAt"
-            type="date"
-            required
-            max={open ? kuwaitTodayYmd() : undefined}
-            className="h-9"
-          />
-        </label>
-        <label className="space-y-1 text-xs">
-          {t("colKind")}
-          <Input name="kind" defaultValue="service" className="h-9" />
-        </label>
-        <label className="space-y-1 text-xs">
-          {t("colOdometer")}
-          <Input name="odometer" type="number" min={0} className="h-9" />
-        </label>
-        <label className="space-y-1 text-xs">
-          {t("colVendor")}
-          <Input name="vendor" className="h-9" />
-        </label>
-        <label className="space-y-1 text-xs">
-          {t("colCost")}
-          <Input name="costKwd" type="number" min={0} step="0.001" className="h-9" />
-        </label>
-        <label className="space-y-1 text-xs">
-          {t("colNotes")}
-          <Input name="notes" className="h-9" />
-        </label>
-      </LedgerDialog>
+      <ServiceOdometerDialog
+        vehicleId={vehicleId}
+        currentKm={vehicle.current_odometer_km}
+        open={odometerOpen}
+        onOpenChange={setOdometerOpen}
+      />
     </div>
   );
 }

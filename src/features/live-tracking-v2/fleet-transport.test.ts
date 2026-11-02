@@ -15,7 +15,7 @@ import { FleetTransport } from "./fleet-transport";
  * is the observable contract: no request while hidden, and exactly one catch-up on return.
  */
 
-const POLL_MS = 10_000;
+const POLL_MS = 60_000;
 const ROSTER_MS = 120_000;
 
 const snapshotCalls: string[] = [];

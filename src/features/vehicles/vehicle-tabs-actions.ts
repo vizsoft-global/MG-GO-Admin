@@ -146,10 +146,6 @@ function empty(value: FormDataEntryValue | null): string {
   return String(value ?? "").trim();
 }
 
-function isFutureYmd(ymd: string): boolean {
-  return ymd.localeCompare(kuwaitTodayYmd()) > 0;
-}
-
 function isFutureDateTime(value: string): boolean {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return false;
@@ -640,37 +636,10 @@ export async function createVehicleDocument(formData: FormData): Promise<{ error
   return {};
 }
 
-export async function createVehicleService(formData: FormData): Promise<{ error?: string }> {
-  const mutationAuth = await requireMutationAuth();
-  if ("error" in mutationAuth) return { error: mutationAuth.error };
-  const auth = await requireVehicles("vehicles.manage");
-  if ("error" in auth) return auth;
-  const vehicleId = empty(formData.get("vehicleId"));
-  const servicedAt = empty(formData.get("servicedAt"));
-  const kind = empty(formData.get("kind")) || "service";
-  if (!vehicleId || !servicedAt) return { error: "missing_fields" };
-  if (isFutureYmd(servicedAt)) return { error: "future_date" };
-  const odometerRaw = empty(formData.get("odometer"));
-  const costRaw = empty(formData.get("costKwd"));
-  try {
-    await insertRow(SERVICES, {
-      vehicle_id: vehicleId,
-      serviced_at: new Date(servicedAt),
-      kind,
-      odometer: odometerRaw ? Number(odometerRaw) : null,
-      vendor: empty(formData.get("vendor")) || null,
-      cost_kwd: costRaw ? Number(costRaw) : null,
-      notes: empty(formData.get("notes")) || null,
-      created_by: auth.session.id,
-    });
-  } catch {
-    return { error: "save_failed" };
-  }
-  void logAdminMutation({
-    action: "create",
-    entityType: "vehicle_service",
-    entityId: vehicleId,
-    routeName: "/vehicles",
-  });
-  return {};
-}
+/**
+ * Removed on purpose. A service row is created only through the Fleet Service
+ * module (`createServiceRecord` in `src/features/fleet/service/service-actions`),
+ * which writes the stage, the service type, the parts and the vehicle snapshot.
+ * A second, thinner writer here would let a row exist that the ledger cannot read.
+ */
+

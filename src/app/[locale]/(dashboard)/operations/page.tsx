@@ -1,17 +1,16 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import {
   Bike,
-  Building2,
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
   FormInput,
   Globe,
   Handshake,
-  ScrollText,
   Landmark,
   Layers,
   LayoutGrid,
+  ListChecks,
   ListTree,
   MapPin,
   UsersRound,
@@ -79,6 +78,12 @@ const CARDS: ReadonlyArray<{
   { key: "incentiveRules", href: "/incentive-rules", icon: Wallet, permission: "earnings.view" },
   { key: "driverFields", href: "/settings/driver-fields", icon: FormInput, permission: "drivers.manage" },
   {
+    key: "serviceTypes",
+    href: "/settings/service-types",
+    icon: ListChecks,
+    permission: "service.manage",
+  },
+  {
     key: "attendanceSettings",
     href: "/settings/attendance",
     icon: ClipboardCheck,
@@ -89,12 +94,6 @@ const CARDS: ReadonlyArray<{
     href: "/settings/vehicle-types",
     icon: Bike,
     permission: "vehicles.manage",
-  },
-  {
-    key: "sourceCompanies",
-    href: "/settings/source-companies",
-    icon: Building2,
-    permission: "companies.view",
   },
   {
     key: "employeeStatuses",
@@ -112,12 +111,6 @@ const CARDS: ReadonlyArray<{
     key: "nationalityCategories",
     href: "/settings/nationality-categories",
     icon: Globe,
-    permission: "drivers.manage",
-  },
-  {
-    key: "sponsorships",
-    href: "/settings/sponsorships",
-    icon: ScrollText,
     permission: "drivers.manage",
   },
   {

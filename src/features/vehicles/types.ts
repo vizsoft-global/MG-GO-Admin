@@ -63,6 +63,8 @@ export type VehicleListRow = {
   assigned_on_duty: boolean;
   /** The rider's current shift, e.g. `10:00–14:00`. Annotation on the On Duty badge only. */
   assigned_shift_label?: string | null;
+  /** `vehicles.current_odometer_km` — null is "unknown", never `0`. */
+  current_odometer_km: number | null;
   created_at: string;
 };
 

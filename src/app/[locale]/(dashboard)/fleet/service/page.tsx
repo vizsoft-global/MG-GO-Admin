@@ -1,5 +1,6 @@
 import { setRequestLocale } from "next-intl/server";
-import { FleetLedgerListShell } from "@/features/fleet/fleet-ledger-list-shell";
+import { ServiceShell } from "@/features/fleet/service/service-shell";
+import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/require-permission";
 
 export default async function FleetServicePage({
@@ -9,6 +10,13 @@ export default async function FleetServicePage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  await requirePermission(locale, "vehicles.view");
-  return <FleetLedgerListShell kind="service" />;
+  const session = await requirePermission(locale, "service.view");
+
+  return (
+    <ServiceShell
+      canManage={hasPermissionInSet(session.permissions, "service.manage", session.isSuperAdmin)}
+      canExport={hasPermissionInSet(session.permissions, "service.export", session.isSuperAdmin)}
+    />
+  );
 }
+

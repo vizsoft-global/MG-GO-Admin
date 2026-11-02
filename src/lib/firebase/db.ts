@@ -129,6 +129,16 @@ export const COLLECTIONS = {
   bankCodes: "bank_codes",
   sponsorships: "sponsorships",
   vehicleTypes: "vehicle_types",
+  /** Workshop ledger. Additive fields live beside the legacy ones; nothing renamed. */
+  vehicleServices: "vehicle_services",
+  /** The Service Type catalog (`service.view` module). */
+  serviceTypes: "service_types",
+  /** One odometer reading per service-done or manual edit. */
+  vehicleOdometerReadings: "vehicle_odometer_readings",
+  /** Preventive-maintenance rules, per vehicle or per make/model. */
+  vehicleMaintenanceSchedules: "vehicle_maintenance_schedules",
+  /** The single `current` doc holding the (provisional) fleet-default intervals. */
+  serviceMaintenanceSettings: "service_maintenance_settings",
   menuConfigs: "menu_configs",
   locales: "locales",
   supportThreads: "support_threads",

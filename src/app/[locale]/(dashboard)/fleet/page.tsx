@@ -6,6 +6,7 @@ import {
   Car,
   FileX,
   Fuel,
+  ListChecks,
   Package,
   Tags,
   Waypoints,
@@ -30,6 +31,8 @@ const FLEET_HUB_PERMISSIONS = [
   "fuel_refunds.view",
   "assets.view",
   "asset_requests.view",
+  "service.view",
+  "service.manage",
 ] as const satisfies readonly Permission[];
 
 const CARDS: ReadonlyArray<{
@@ -52,7 +55,7 @@ const CARDS: ReadonlyArray<{
     icon: Package,
     requireAny: ["assets.view", "asset_requests.view"],
   },
-  { key: "service", href: "/fleet/service", icon: Wrench, permission: "vehicles.view" },
+  { key: "service", href: "/fleet/service", icon: Wrench, permission: "service.view" },
   { key: "handover", href: "/fleet/handover", icon: ArrowLeftRight, permission: "vehicles.view" },
   { key: "accident", href: "/fleet/accident", icon: AlertTriangle, permission: "vehicles.view" },
   {
@@ -62,6 +65,12 @@ const CARDS: ReadonlyArray<{
     requireAny: ["fuel.view", "fuel_requests.view", "fuel_refunds.view", "asset_requests.view"],
   },
   { key: "vehicleTypes", href: "/settings/vehicle-types", icon: Tags, permission: "vehicles.manage" },
+  {
+    key: "serviceTypes",
+    href: "/settings/service-types",
+    icon: ListChecks,
+    permission: "service.manage",
+  },
   { key: "vehicleUses", href: "/settings/vehicle-uses", icon: Waypoints, permission: "vehicles.manage" },
   {
     key: "vehicleCompanies",

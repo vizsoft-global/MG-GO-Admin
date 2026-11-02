@@ -202,6 +202,8 @@ type VehicleDbRow = {
   make: string | null;
   model: string | null;
   model_year: number | null;
+  /** Written by the Fleet Service module; null/absent means "unknown". */
+  current_odometer_km?: number | null;
   project_type: VehicleProjectType;
   status: VehicleStatus;
   vehicle_type_key: string;
@@ -413,6 +415,10 @@ export async function listVehicles(): Promise<VehicleListRow[]> {
         hasOpenAttendance: Boolean(driver && openAttendance.has(driver.id)),
       }),
       assigned_shift_label: driver ? vehicleShiftLabel(activeShiftByDriver.get(driver.id)) : null,
+      current_odometer_km:
+        typeof row.current_odometer_km === "number" && Number.isFinite(row.current_odometer_km)
+          ? row.current_odometer_km
+          : null,
       created_at: row.created_at,
     };
   });
