@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import {
@@ -123,6 +123,22 @@ export function OrderReconPageShell() {
 
   const range = comparisonPeriod(preset, today, appliedCustom);
   const overSpan = spanDays(range.from, range.to) > 93;
+
+  /**
+   * A day cell and a column filter belong to the range they were picked in.
+   *
+   * Both are indexes into that range's day list and that range's values, so
+   * carrying them across a period change filtered every row out: picking a day
+   * in October and then opening a shorter month left `dayIndex` past the end of
+   * `diffDays` (read as "difference 0"), and a restaurant that only traded last
+   * month hid every row of the new month. The table then said "No rows in this
+   * filter" over a month that did have data, which is exactly how "the previous
+   * date shows nothing" was reported.
+   */
+  useEffect(() => {
+    setDayIndex(null);
+    setColumnFilters({});
+  }, [range.from, range.to]);
 
   const query = useQuery({
     queryKey: queryKeys.orderRecon.comparison(range.from, range.to),
@@ -312,8 +328,10 @@ export function OrderReconPageShell() {
       {overSpan ? (
         <p className="text-sm text-destructive">{t("errors.range_too_large")}</p>
       ) : query.isLoading ? (
-        <div className="flex justify-center p-6">
+        <div className="flex flex-col items-center gap-2 p-6">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          {/* A month is a real scan: ~86k AM rows plus ~176k deliveries. */}
+          <p className="text-xs text-muted-foreground">{t("scanningMonth")}</p>
         </div>
       ) : query.isError ? (
         <p className="text-sm text-destructive">

@@ -177,7 +177,8 @@
     "fleetRj": "مرفوض",
     "orderExceptions": "استثناءات الطلبات",
     "system": "النظام",
-    "sponsorships": "الكفالات"
+    "sponsorships": "الكفالات",
+    "serviceTypes": "أنواع الصيانة"
   },
   "appNavGroups": {
     "overview": "نظرة عامة",
@@ -3422,6 +3423,7 @@
       "compareTitle": "مقارنة الطلبات — AM مقابل MGGO",
       "subtitle": "قارن أعداد ملف AM مع طلبات MGGO المسجّلة (قيد الانتظار أو قيد التوصيل أو متحققة — يوم التسليم الكويتي). المطابقة على MG ID فقط.",
       "matchNote": "المطابقة على MG ID فقط",
+      "scanningMonth": "جارٍ مسح ورقة AM وطلبات التطبيق لهذا النطاق. أول فتح للشهر قد يستغرق حتى دقيقتين، ثم تُعاد النتيجة نفسها لمدة خمس دقائق.",
       "upload": "رفع إكسل",
       "uploadAm": "رفع ملف AM",
       "filteredCsv": "العرض المصفّى (CSV)",
@@ -8475,7 +8477,10 @@
           "payrollAppAttendance": "تبويب حضور التطبيق",
           "payrollRequests": "تبويب الطلبات",
           "payrollSettings": "تبويب الإعدادات",
-          "payrollHrPayroll": "تبويب رواتب الموارد البشرية"
+          "payrollHrPayroll": "تبويب رواتب الموارد البشرية",
+          "serviceRecords": "سجلات الصيانة",
+          "serviceReports": "تحليل تكلفة الصيانة",
+          "serviceMaintenance": "الصيانة الوقائية"
         },
         "errors": {
           "loadFailed": "تعذر تحميل صلاحيات الموظفين.",
@@ -9422,6 +9427,54 @@
         "previewDeduction": "الخصم",
         "previewNet": "الصافي",
         "companyConfigNote": "هذا الهدف والمخطط ينطبقان على السائقين الخارجيين في هذه الشركة فقط. السائقون الداخليون يبقون على قواعد توصيل المطعم."
+      },
+      "serviceTypes": {
+        "title": "أنواع الصيانة",
+        "subtitle": "الكتالوج الذي يُسجّل تحته سجل الصيانة مع فئته. تُكتب العربية يدوياً — والتسمية الفارغة ترجع إلى الإنجليزية.",
+        "tableTitle": "أنواع الصيانة ({count})",
+        "key": "المفتاح",
+        "labelEn": "التسمية الإنجليزية",
+        "labelAr": "التسمية العربية",
+        "category": "الفئة",
+        "records": "السجلات",
+        "colSort": "ترتيب العرض",
+        "colActive": "مفعل",
+        "activeHint": "النوع غير المفعل يبقى على السجلات التي تستخدمه ويُخفى من القوائم.",
+        "arabicHint": "اتركها فارغة حتى تتوفر الصياغة العربية المعتمدة؛ تعرض الواجهة التسمية الإنجليزية.",
+        "keyLocked": "يُحدد المفتاح عند إنشاء السجل.",
+        "keyHint": "حروف صغيرة وأرقام وشرطة سفلية.",
+        "search": "ابحث بالمفتاح أو الإنجليزي أو العربي أو الفئة",
+        "add": "إضافة نوع صيانة",
+        "edit": "تعديل نوع الصيانة",
+        "save": "حفظ",
+        "cancel": "إلغاء",
+        "saved": "تم حفظ نوع الصيانة",
+        "empty": "لا أنواع صيانة بعد",
+        "noMatches": "لا نوع صيانة يطابق البحث",
+        "import": "استيراد",
+        "importApply": "تطبيق الاستيراد",
+        "importHint": "ارفع ملف العميل. يُبلّغ عن الاسم المكرر مع رقم صفه ويُتخطى، ولا يُهمل أبداً.",
+        "importEmpty": "اختر ملفاً للمعاينة.",
+        "importTruncated": "يُحتفظ بأول 1000 صف فقط.",
+        "importParseFailed": "تعذّرت قراءة الملف.",
+        "imported": "{created} إنشاء، {updated} تحديث، {skipped} متخطى",
+        "downloadTemplate": "تنزيل القالب",
+        "countTotal": "{count} صفوف",
+        "sheetRow": "الصف",
+        "status": "الحالة",
+        "statusCreate": "إنشاء",
+        "statusUpdate": "تحديث",
+        "statusDuplicate": "مكرر",
+        "statusError": "خطأ",
+        "status_create": "إنشاء",
+        "status_update": "تحديث",
+        "status_duplicate": "مكرر",
+        "status_error": "خطأ",
+        "duplicateOf": "(نفس الصف {row})",
+        "errors": {
+          "invalid_key": "يُسمح بالحروف الصغيرة والأرقام والشرطة السفلية فقط.",
+          "missing_fields": "التسمية الإنجليزية مطلوبة."
+        }
       }
     },
     "auditLogs": {
@@ -10655,6 +10708,8 @@
         "unassignedCompany": "شركة غير معيّنة",
         "emptyZones": "لا سائقون بمنطقة معيّنة ولديهم طلبات في هذه الفترة",
         "allTimeCapped": "كل الفترة تتجاوز 400 يوم — اختر نطاقاً أقصر. لن يُقص الاستعلام بهدوء.",
+        "refreshFullFailed": "لم يكتمل التحديث. تُعرض آخر الأرقام المحمّلة، وتعذّرت قراءة آخر {minutes} دقيقة.",
+        "refreshTailResult": "هذا النطاق أوسع من أن يُعاد بناؤه — تم تحديث آخر {minutes} دقيقة: {orders} طلباً من {riders} سائقاً. الإجماليات أعلاه لم تتغير.",
         "clearFilters": "مسح عوامل التصفية",
         "exportTab": "تصدير CSV",
         "exportBucket": "تصدير السائقين",
@@ -11761,18 +11816,248 @@
           "vehicleCompanies": {
             "title": "شركات المركبات",
             "body": "دليل الشركات الذي تُسجّل تحته المركبة."
+          },
+          "serviceTypes": {
+            "title": "أنواع الصيانة",
+            "body": "الكتالوج الذي تُسجّل تحته زيارة الورشة."
           }
         }
       }
     },
     "fleetService": {
-      "breadcrumb": "الصيانة",
+      "breadcrumb": {
+        "title": "الصيانة"
+      },
       "title": "الصيانة",
-      "subtitle": "زيارات الورشة عبر الأسطول.",
+      "subtitle": "سجلات الورشة وتحليل التكلفة والصيانة الوقائية لكل الأسطول.",
       "emptyTitle": "لا سجلات صيانة",
       "emptyHint": "تظهر صفوف الصيانة هنا بعد تسجيل زيارة على مركبة.",
       "colPlate": "اللوحة",
-      "viewVehicle": "عرض المركبة"
+      "viewVehicle": "عرض المركبة",
+      "showing": "عرض {shown} من {total}",
+      "saved": "تم الحفظ",
+      "created": "تم إنشاء سجل الصيانة",
+      "stageChanged": "تم النقل إلى {stage}",
+      "odometerSaved": "تم تحديث العداد",
+      "tabs": {
+        "records": "السجلات",
+        "reports": "تحليل التكلفة",
+        "maintenance": "الصيانة الوقائية"
+      },
+      "stages": {
+        "all": "الكل",
+        "new": "جديد",
+        "running": "قيد التنفيذ",
+        "done": "منتهي",
+        "cancelled": "ملغي"
+      },
+      "kpi": {
+        "total": "إجمالي السجلات",
+        "open": "مفتوح",
+        "doneThisMonth": "منتهي هذا الشهر",
+        "costThisMonth": "التكلفة هذا الشهر (د.ك)",
+        "types": "أنواع الصيانة",
+        "overdueLink": "الصيانة المتأخرة ←"
+      },
+      "cols": {
+        "date": "التاريخ",
+        "description": "الوصف",
+        "type": "نوع الصيانة",
+        "vehicle": "المركبة",
+        "driver": "السائق",
+        "vendor": "الورشة",
+        "company": "الشركة",
+        "cost": "التكلفة (د.ك)",
+        "odometer": "العداد (كم)",
+        "stage": "المرحلة"
+      },
+      "filters": {
+        "from": "من",
+        "to": "إلى",
+        "vehicle": "المركبة",
+        "type": "نوع الصيانة",
+        "category": "الفئة",
+        "vendor": "الورشة",
+        "any": "الكل"
+      },
+      "actions": {
+        "add": "سجل جديد",
+        "edit": "تعديل",
+        "save": "حفظ",
+        "cancel": "إلغاء",
+        "back": "عودة إلى السجلات",
+        "close": "إغلاق",
+        "export": "تصدير",
+        "schedules": "الجداول",
+        "updateOdometer": "تحديث العداد",
+        "moveTo": "نقل إلى {stage}",
+        "cancelReason": "سبب الإلغاء",
+        "cancelReasonPlaceholder": "لماذا تم إلغاء هذا السجل؟",
+        "confirmIntervals": "تأكيد الفترات",
+        "addSchedule": "إضافة جدول"
+      },
+      "categories": {
+        "engine": "المحرك",
+        "brakes": "الفرامل",
+        "ac": "التكييف",
+        "tyres": "الإطارات",
+        "suspension": "التعليق",
+        "body": "الهيكل",
+        "electrical": "الكهرباء",
+        "transmission": "ناقل الحركة",
+        "consumables": "المستهلكات",
+        "labour": "الأجرة",
+        "inspection": "الفحص",
+        "other": "أخرى"
+      },
+      "form": {
+        "titleNew": "سجل صيانة جديد",
+        "titleEdit": "تعديل سجل الصيانة",
+        "subtitleNew": "سجّل زيارة الورشة. يبدأ السجل بحالة جديد.",
+        "subtitleEdit": "يمكن تعديل السجل المفتوح فقط؛ المنتهي والملغي نهائيان.",
+        "footerHint": "تحويل السجل إلى منتهي هو ما يحدّث عداد المركبة.",
+        "sectionService": "الصيانة",
+        "sectionInvoice": "الفاتورة والورشة",
+        "sectionParts": "قطع الغيار",
+        "vehicle": "المركبة",
+        "selectVehicle": "اختر مركبة",
+        "searchVehicle": "ابحث باللوحة أو الشاسيه أو الطراز",
+        "noVehicles": "لا مركبات",
+        "serviceType": "نوع الصيانة",
+        "selectType": "اختر نوع الصيانة",
+        "searchType": "ابحث بالاسم أو الفئة",
+        "noTypes": "لا أنواع صيانة بعد",
+        "serviceTypeHint": "يُدار الكتالوج من الإعدادات ← أنواع الصيانة.",
+        "description": "الوصف",
+        "descriptionPlaceholder": "ما تم تنفيذه",
+        "odometerPlaceholder": "قراءة العداد وقت الصيانة",
+        "odometerHint": "تُملأ من المركبة. تُرفض القراءة الأقل من المخزنة عند تحويل السجل إلى منتهي.",
+        "driver": "السائق",
+        "noDriver": "لا سائق معيّن",
+        "notes": "ملاحظات",
+        "partName": "القطعة",
+        "partQty": "الكمية",
+        "partUnit": "سعر الوحدة (د.ك)",
+        "partTotal": "الإجمالي (د.ك)",
+        "addPart": "إضافة قطعة",
+        "removePart": "حذف القطعة"
+      },
+      "detail": {
+        "summary": "السجل",
+        "serviceType": "نوع الصيانة",
+        "description": "الوصف",
+        "driver": "السائق",
+        "invoiceNo": "رقم الفاتورة",
+        "invoiceDate": "تاريخ الفاتورة",
+        "parts": "قطع الغيار",
+        "partsTotal": "إجمالي القطع: {total} د.ك",
+        "noParts": "لا قطع غيار على هذا السجل.",
+        "history": "مسار المراحل",
+        "noHistory": "لا مسار مراحل بعد."
+      },
+      "reports": {
+        "loading": "جار التحميل…",
+        "noDataTitle": "لا سجلات صيانة بعد",
+        "noData": "تحليل التكلفة يقرأ سجلات الصيانة المنتهية فقط.",
+        "empty": "لا بيانات في هذا النطاق.",
+        "totalSpend": "إجمالي المصروف (د.ك)",
+        "records": "السجلات",
+        "avgPerRecord": "المتوسط للسجل (د.ك)",
+        "topVehicle": "أعلى مركبة تكلفة",
+        "topPart": "أكثر قطعة استبدالاً",
+        "year": "السنة",
+        "chartTitle": "المصروف الشهري",
+        "contract": "بعقد",
+        "service": "خدمة",
+        "contractHint": "مركبات مستأجرة",
+        "serviceHint": "مركبات مملوكة للشركة",
+        "byCategory": "حسب الفئة",
+        "byServiceType": "حسب نوع الصيانة",
+        "byVendor": "حسب الورشة",
+        "byVehicle": "حسب المركبة",
+        "partsTitle": "قطع الغيار",
+        "partsHint": "كل البنود على سجلات هذا النطاق.",
+        "partQty": "الكمية",
+        "partAvg": "متوسط الوحدة (د.ك)",
+        "partTotal": "الإجمالي (د.ك)"
+      },
+      "maintenance": {
+        "unknown": "غير معروف",
+        "provisionalBanner": "الفترات مؤقتة — بانتظار موافقة العميل. كل الأرقام أدناه محسوبة بهذه القيم غير المعتمدة.",
+        "provisionalTag": "مؤقت",
+        "confirmedTag": "معتمد",
+        "confirmed": "تم تأكيد الفترات",
+        "defaultsTitle": "الفترات الافتراضية للأسطول",
+        "defaultsHint": "تُستخدم للمركبة التي ليس لها جدول خاص. التأكيد يسجل من اعتمدها ومتى.",
+        "kmInterval": "فترة الكيلومترات",
+        "dayInterval": "فترة الأيام",
+        "alertKm": "تنبيه عند (كم)",
+        "alertDays": "تنبيه عند (أيام)",
+        "schedulesTitle": "الجداول",
+        "noSchedules": "لا جدول بعد — كل المركبات تستخدم الافتراضيات.",
+        "scopeLabel": "ينطبق على",
+        "scope": {
+          "vehicle": "مركبة واحدة",
+          "model": "صنع / طراز"
+        },
+        "makeModel": "الصنع / الطراز",
+        "filters": {
+          "zone": "المنطقة",
+          "type": "نوع المركبة",
+          "model": "الطراز",
+          "driver": "السائق"
+        },
+        "cols": {
+          "plate": "اللوحة",
+          "model": "الطراز",
+          "condition": "الحالة",
+          "driver": "السائق",
+          "currentKm": "العداد الحالي",
+          "lastKm": "عداد آخر صيانة",
+          "lastDate": "تاريخ آخر صيانة",
+          "nextKm": "عداد الصيانة القادمة",
+          "remainingKm": "المتبقي (كم)",
+          "daysSince": "أيام منذ",
+          "nextDate": "تاريخ الصيانة القادمة",
+          "remainingDays": "الأيام المتبقية",
+          "status": "الحالة"
+        },
+        "emptyTitle": "لا مركبات في هذا العرض",
+        "emptyHint": "أزل أحد الفلاتر لرؤية بقية الأسطول.",
+        "statuses": {
+          "normal": "طبيعي",
+          "due_soon": "قريب الاستحقاق",
+          "due": "مستحق",
+          "overdue": "متأخر",
+          "unknown": "غير معروف"
+        }
+      },
+      "odometer": {
+        "title": "تحديث العداد",
+        "placeholder": "القراءة بالكيلومتر",
+        "unknown": "لا يوجد عداد مخزّن لهذه المركبة بعد.",
+        "current": "القراءة المخزنة: {km} كم"
+      },
+      "errors": {
+        "notAuthorized": "لا تملك صلاحية لهذا الإجراء.",
+        "notConfigured": "لم يتم إعداد الخادم.",
+        "futureDate": "التاريخ المستقبلي غير مسموح.",
+        "invalidDate": "أدخل تاريخاً صحيحاً.",
+        "missingVehicle": "اختر مركبة.",
+        "missingType": "اختر نوع الصيانة أو اكتب وصفاً.",
+        "missingModel": "اختر الصنع / الطراز.",
+        "missingFields": "أكمل الحقول المطلوبة.",
+        "invalidKey": "يُسمح بالحروف الصغيرة والأرقام والشرطة السفلية فقط.",
+        "invalidOdometer": "أدخل قراءة عداد صحيحة.",
+        "invalidCost": "أدخل تكلفة صحيحة.",
+        "invalidPart": "تحتاج القطعة إلى اسم وكمية أكبر من صفر وسعر وحدة.",
+        "odometerBelowCurrent": "القراءة الأقل من {km} كم المخزنة مرفوضة. صحّح الرقم أو سجل المركبة.",
+        "invalidTransition": "تغيير المرحلة هذا غير مسموح.",
+        "noteRequired": "يلزم سبب لإلغاء السجل.",
+        "recordLocked": "لا يمكن تعديل السجل المنتهي أو الملغي؛ سجّل سجلاً جديداً.",
+        "notFound": "السجل غير موجود.",
+        "saveFailed": "حدث خطأ. حاول مرة أخرى."
+      }
     },
     "fleetHandover": {
       "breadcrumb": "التسليم",
@@ -11919,6 +12204,10 @@
           "bankCodes": {
             "title": "رموز البنوك",
             "body": "بنوك الكويت لتفاصيل دفع الموظف."
+          },
+          "serviceTypes": {
+            "title": "أنواع الصيانة",
+            "body": "الكتالوج الذي تُسجّل تحته زيارة الورشة."
           }
         }
       }

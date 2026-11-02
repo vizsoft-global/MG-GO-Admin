@@ -189,6 +189,23 @@ export type OpsQueryInput = {
   outsourceOnly: boolean;
 };
 
+/**
+ * The last few minutes of counted orders, returned by the Refresh path.
+ *
+ * Deliberately a small block rather than a partial `OpsSnapshot`: a refresh does
+ * not re-derive riders, stores or the previous period, it answers whether the
+ * fleet is still logging orders.
+ */
+export type OpsRecentTail = {
+  minutes: number;
+  from: string;
+  to: string;
+  orders: number;
+  riders: number;
+  avgMinutes: number | null;
+  orderStatus: string;
+};
+
 export type OpsChromeState = {
   preset: OpsRangePreset;
   granularity: OpsGranularity;
