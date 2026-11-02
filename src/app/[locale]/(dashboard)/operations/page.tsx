@@ -1,14 +1,12 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import {
   Bike,
-  Building2,
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
   FormInput,
   Globe,
   Handshake,
-  ScrollText,
   Landmark,
   Layers,
   LayoutGrid,
@@ -98,12 +96,6 @@ const CARDS: ReadonlyArray<{
     permission: "vehicles.manage",
   },
   {
-    key: "sourceCompanies",
-    href: "/settings/source-companies",
-    icon: Building2,
-    permission: "companies.view",
-  },
-  {
     key: "employeeStatuses",
     href: "/settings/employee-statuses",
     icon: ClipboardList,
@@ -119,12 +111,6 @@ const CARDS: ReadonlyArray<{
     key: "nationalityCategories",
     href: "/settings/nationality-categories",
     icon: Globe,
-    permission: "drivers.manage",
-  },
-  {
-    key: "sponsorships",
-    href: "/settings/sponsorships",
-    icon: ScrollText,
     permission: "drivers.manage",
   },
   {
