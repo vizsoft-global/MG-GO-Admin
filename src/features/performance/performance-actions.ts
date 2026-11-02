@@ -59,7 +59,9 @@ import type {
   OpsKpis,
   OpsOptions,
   OpsQueryInput,
+  OpsRecentTail,
   OpsRiderRow,
+  OpsSlicers,
   OpsSnapshot,
   OpsStoreRow,
   OpsTrendPoint,
@@ -1928,6 +1930,48 @@ export async function fetchPerformanceOpsSnapshot(
   });
   if (error) throw new Error(rpcErrorCode(error));
   return parseOpsSnapshot(data);
+}
+
+/**
+ * The last `minutes` of counted orders, for the Performance page's Refresh.
+ *
+ * A whole-window rebuild is what the page already does on a timer, and on a
+ * month or a year it reads the entire window's deliveries. Refresh asks a
+ * smaller question — "is the number still moving" — so it reads only this
+ * bounded slice. The server answers it before it parses the window, so nothing
+ * about the selected range is read.
+ */
+export async function fetchPerformanceOpsTail(
+  minutes: number,
+  slicers: OpsSlicers,
+  orderStatus: string,
+  outsourceOnly: boolean,
+): Promise<OpsRecentTail> {
+  await requirePerformanceView();
+  const { data, error } = await callRpc("admin_performance_ops_snapshot", {
+    p_since_minutes: minutes,
+    p_order_status: orderStatus,
+    p_project_keys: emptyToUndef(slicers.projectKeys),
+    p_zone_ids: emptyToUndef(slicers.zoneIds),
+    p_vehicle_keys: emptyToUndef(slicers.vehicleKeys),
+    p_nationalities: emptyToUndef(slicers.nationalities),
+    p_source_types: outsourceOnly ? undefined : emptyToUndef(slicers.sourceTypes),
+    p_source_companies: emptyToUndef(slicers.sourceCompanies),
+    p_restaurant_ids: emptyToUndef(slicers.restaurantIds),
+    p_outsource_only: outsourceOnly,
+    p_granularity: "daily",
+  });
+  if (error) throw new Error(rpcErrorCode(error));
+  const recent = ((data ?? {}) as Record<string, unknown>).recent as Record<string, unknown> | undefined;
+  return {
+    minutes: numOrNull(recent?.minutes) ?? minutes,
+    from: String(recent?.from ?? ""),
+    to: String(recent?.to ?? ""),
+    orders: asInt(recent?.orders),
+    riders: asInt(recent?.riders),
+    avgMinutes: numOrNull(recent?.avg_minutes),
+    orderStatus: String(recent?.order_status ?? orderStatus),
+  };
 }
 
 export async function fetchPerformanceTargetDpd(): Promise<TargetDpdRow[]> {

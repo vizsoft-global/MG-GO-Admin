@@ -1500,10 +1500,105 @@ function bucketKey(day: string, bucket: "day" | "week" | "month"): string {
   return day;
 }
 
+/**
+ * The last N minutes of counted orders, for the Performance page's Refresh.
+ *
+ * Rebuilding the whole selected window on every click costs the entire window's
+ * deliveries — a month is ~110k documents and a year is over a million. When the
+ * window is too wide to rebuild affordably the page refreshes only the most
+ * recent half hour instead, which is what an operator actually wants from a
+ * Refresh: "is the number still moving". This reads one bounded slice and
+ * returns a small block, so a click is tens of documents rather than tens of
+ * thousands.
+ */
+async function buildRecentOpsTail(data: Dict, minutes: number): Promise<Dict> {
+  const clamped = Math.min(Math.max(Math.trunc(minutes), 1), 24 * 60);
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - clamped * 60_000);
+  const statuses = countedStatuses(data.order_status ?? data.orderStatus);
+  const db = getFirestore();
+
+  const delivered = statuses.filter((status) => status !== "in_transit");
+  const wantsOpen = statuses.includes("in_transit");
+  const day = kuwaitDayString(now);
+
+  // `in_transit` has no `delivered_at`, so an order still running is counted on
+  // `pickup_at`; a delivered-but-unverified one is counted on `delivered_at`
+  // exactly like the verified slice, or the tail would read zero until an admin
+  // approves the next batch.
+  const [deliveredSnap, openSnap] = await Promise.all([
+    delivered.length
+      ? db
+          .collection(COLLECTIONS.deliveries)
+          .where(FIELDS.deliveries.deliveredAt, ">=", cutoff)
+          .select("status", "driver_id", "delivered_at", "pickup_at", "started_to_restaurant_at")
+          .get()
+      : Promise.resolve(null),
+    wantsOpen
+      ? db
+          .collection(COLLECTIONS.deliveries)
+          .where("status", "==", "in_transit")
+          .where(FIELDS.deliveries.pickupAt, ">=", cutoff)
+          .select("status", "driver_id", "delivered_at", "pickup_at", "started_to_restaurant_at")
+          .get()
+      : Promise.resolve(null),
+  ]);
+
+  const allowed = new Set(statuses);
+  const dayDrivers = new Set<string>();
+  let orders = 0;
+  let minutesTotal = 0;
+  let timed = 0;
+
+  const consume = (doc: { data: () => Dict }) => {
+    const row = doc.data();
+    const status = typeof row.status === "string" ? row.status : "";
+    if (!allowed.has(status)) return;
+    const driverId = parseId(row.driver_id);
+    if (!driverId) return;
+    orders += 1;
+    dayDrivers.add(driverId);
+    const end = asDate(row.delivered_at);
+    const start = asDate(row.started_to_restaurant_at) ?? asDate(row.pickup_at);
+    if (end && start) {
+      const span = (end.getTime() - start.getTime()) / 60_000;
+      if (span > 0) {
+        minutesTotal += span;
+        timed += 1;
+      }
+    }
+  };
+
+  for (const doc of deliveredSnap?.docs ?? []) consume(doc);
+  for (const doc of openSnap?.docs ?? []) consume(doc);
+
+  return {
+    recent: {
+      minutes: clamped,
+      from: cutoff.toISOString(),
+      to: now.toISOString(),
+      kuwait_day: day,
+      orders,
+      riders: dayDrivers.size,
+      avg_minutes: timed > 0 ? minutesTotal / timed : null,
+      order_status: typeof data.order_status === "string" ? data.order_status : "verified",
+      scanned: (deliveredSnap?.size ?? 0) + (openSnap?.size ?? 0),
+    },
+  };
+}
+
 export const adminPerformanceOpsSnapshot = measureOnCall("adminPerformanceOpsSnapshot", async (request) => {
   await requireStaff(request);
 
   const data = (request.data ?? {}) as Dict;
+
+  // The Refresh path. Answered before the window is even parsed, because the
+  // whole point is not to read the window.
+  const sinceMinutes = num(data.since_minutes ?? data.sinceMinutes ?? data.p_since_minutes);
+  if (sinceMinutes !== null && sinceMinutes > 0) {
+    return buildRecentOpsTail(data, sinceMinutes);
+  }
+
   const args = readOpsArgs(data);
   const roll = await buildRoll(args);
 

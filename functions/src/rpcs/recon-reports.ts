@@ -33,7 +33,17 @@ import { stampStoredRow } from "../core/search-text";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RECON_MAX_SPAN_DAYS = 93;
 const REPORT_MAX_SPAN_DAYS = 366;
-const RECON_ROW_SCAN_CAP = 50_000;
+/**
+ * AM rows per month outgrew the old 50k ceiling: October 2026 holds **85,878**
+ * rows over 31 days, because the same rider-day is re-uploaded by several runs
+ * and each run is kept. At 50k a single month answered `scan_cap_exceeded`, so
+ * "This Month", the previous-month chip and any custom range longer than about
+ * seventeen days all came back empty with no rows to explain why.
+ *
+ * The ceiling is now a cost guard for an oversized window rather than for the
+ * window the page itself allows: 93 days at October's rate is ~258k.
+ */
+const RECON_ROW_SCAN_CAP = 300_000;
 /**
  * One comparison month is ~111k deliveries in production (October 2026), two
  * months ~242k and the full 93-day span ~257k. The old 100k ceiling refused
@@ -42,6 +52,18 @@ const RECON_ROW_SCAN_CAP = 50_000;
  * oversized window, not for any window the page itself allows.
  */
 const RECON_DELIVERY_SCAN_CAP = 300_000;
+/**
+ * Only the columns the comparison reads. The row scan was pulling whole
+ * documents, which on an 85k-row month is the difference between a payload that
+ * streams and one that pushes the callable toward its timeout.
+ */
+const RECON_ROW_FIELDS = [
+  "run_id",
+  "employee_id",
+  "employee_name",
+  "work_date",
+  "excel_orders",
+] as const;
 const REPORT_DELIVERY_SCAN_CAP = 200_000;
 const DRIVER_SCAN_CAP = 10_000;
 const RECONCILE_WRITE_CAP = 450;
@@ -143,6 +165,42 @@ async function loadDeliveriesByDay(
   return snap.docs.map((doc) => ({ id: doc.id, data: (doc.data() ?? {}) as Dict }));
 }
 
+/**
+ * Days per delivery slice, and how many slices may be in flight at once.
+ *
+ * One `deliveries` range query for a month spent most of its life waiting on a
+ * single index stream: October 2026 (~176k rows / ~223k documents) measured
+ * **181s** end to end, which is past the scan lane's 120s timeout. Slicing the
+ * same window into day blocks and running several at once keeps the total read
+ * identical while overlapping the waiting, and `cap` is still enforced over the
+ * sum so an oversized window answers `scan_cap_exceeded` rather than being
+ * silently short.
+ */
+const DELIVERY_CHUNK_DAYS = 5;
+const DELIVERY_CHUNK_CONCURRENCY = 6;
+
+async function loadDeliveriesByDayChunked(
+  fromDay: string,
+  toDay: string,
+  cap: number,
+): Promise<Array<{ id: string; data: Dict }>> {
+  const slices: Array<{ from: string; to: string }> = [];
+  for (let day = fromDay; day <= toDay; day = addDays(day, DELIVERY_CHUNK_DAYS)) {
+    const last = addDays(day, DELIVERY_CHUNK_DAYS - 1);
+    slices.push({ from: day, to: last > toDay ? toDay : last });
+  }
+  const out: Array<{ id: string; data: Dict }> = [];
+  for (let i = 0; i < slices.length; i += DELIVERY_CHUNK_CONCURRENCY) {
+    const batch = slices.slice(i, i + DELIVERY_CHUNK_CONCURRENCY);
+    const results = await Promise.all(
+      batch.map((slice) => loadDeliveriesByDay(slice.from, slice.to, cap)),
+    );
+    for (const rows of results) out.push(...rows);
+    if (out.length > cap) throw new HttpsError("out-of-range", "scan_cap_exceeded");
+  }
+  return out;
+}
+
 /** `MIN(name)` over a driver's restaurants, optionally only published ones. */
 function firstRestaurantName(
   driver: Dict | undefined,
@@ -181,12 +239,21 @@ export const adminOrderComparisonSnapshot = onCall(async (request) => {
 
   const db = getFirestore();
 
-  const rowsSnap = await db
-    .collection(COLLECTIONS.orderReconRows)
-    .where("work_date", ">=", from)
-    .where("work_date", "<=", to)
-    .limit(RECON_ROW_SCAN_CAP + 1)
-    .get();
+  // The two scans are independent, and together they are nearly all of this
+  // call's wall time: one month is ~86k AM rows plus ~176k deliveries. Running
+  // them back to back put a legal month within a second of the scan lane's
+  // 120s ceiling; started together the call costs the longer of the two.
+  const [rowsSnap, deliveries] = await Promise.all([
+    db
+      .collection(COLLECTIONS.orderReconRows)
+      .where("work_date", ">=", from)
+      .where("work_date", "<=", to)
+      .select(...RECON_ROW_FIELDS)
+      .limit(RECON_ROW_SCAN_CAP + 1)
+      .get(),
+    loadDeliveriesByDayChunked(from, to, RECON_DELIVERY_SCAN_CAP),
+  ]);
+
   // A cap is a "too many rows" answer, not a span answer: the page must suggest
   // a shorter range, not "Date span cannot exceed 93 days".
   if (rowsSnap.size > RECON_ROW_SCAN_CAP) throw new HttpsError("out-of-range", "scan_cap_exceeded");
@@ -241,7 +308,6 @@ export const adminOrderComparisonSnapshot = onCall(async (request) => {
     amByKey.set(key, row);
   }
 
-  const deliveries = await loadDeliveriesByDay(from, to, RECON_DELIVERY_SCAN_CAP);
   const deliveryDriverIds = new Set<string>();
   for (const { data: d } of deliveries) {
     const driverId = str(d.driver_id);

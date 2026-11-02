@@ -5,6 +5,7 @@ import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import type { DocumentSnapshot } from "firebase-admin/firestore";
 import { callAdminFunction } from "@/lib/firebase/callable";
+import { bumpOrderComparisonSnapshot } from "./bump-comparison-snapshot";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { failureCode } from "./order-comparison-errors";
@@ -393,6 +394,10 @@ export async function commitOrderRecon(
     await batch.commit();
   }
 
+  // The comparison page serves a cached snapshot for five minutes; without this
+  // the sheet just imported would not appear until that cache expired.
+  await bumpOrderComparisonSnapshot(db);
+
   return {
     run: {
       id: run.id,
@@ -571,6 +576,10 @@ async function replayReconImport(direction: "undo" | "redo"): Promise<{ error?: 
   } catch {
     return { error: "save_failed" };
   }
+
+  // Undo and redo move a run in or out of the applied set, which is exactly
+  // what the comparison reads; the cached snapshot has to go with it.
+  await bumpOrderComparisonSnapshot(db);
 
   void logAdminMutation({
     action: "update",

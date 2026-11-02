@@ -32,7 +32,7 @@ import {
   type OpsSlicers,
 } from "./performance-ops-types";
 import { enrichOpsRider } from "./performance-ops-format";
-import { usePerformanceOpsBounds, usePerformanceOpsSnapshot } from "./use-performance";
+import { usePerformanceOpsBounds, usePerformanceOpsSnapshot, usePerformanceOpsTail } from "./use-performance";
 import {
   OpsGranularityPills,
   OpsRangePills,
@@ -46,6 +46,14 @@ import { OpsRidersTab } from "./ops/ops-riders-tab";
 import { OpsTopBottomTab } from "./ops/ops-top-bottom-tab";
 import { OpsOutsourceTab } from "./ops/ops-outsource-tab";
 import { cn } from "@/lib/utils";
+
+/**
+ * A window this size is small enough to rebuild whole on a click: one month of
+ * deliveries. Anything wider refreshes only the latest slice.
+ */
+const REFRESH_FULL_MAX_DAYS = 31;
+/** The slice a wide window refreshes instead of rebuilding. */
+const REFRESH_TAIL_MINUTES = 30;
 
 export function PerformancePageShell() {
   const t = useTranslations("pages.performance");
@@ -62,7 +70,6 @@ export function PerformancePageShell() {
   const [topBottomShow, setTopBottomShow] =
     useState<TopBottomShowSelection>(DEFAULT_TOP_BOTTOM_SHOW);
   const [filterResetKey, setFilterResetKey] = useState(0);
-
   const boundsQuery = usePerformanceOpsBounds();
   const today = boundsQuery.data?.today ?? todayFallback;
   const firstDelivery = boundsQuery.data?.first_delivery_date ?? null;
@@ -159,6 +166,57 @@ export function PerformancePageShell() {
   const isError = boundsQuery.isError || snapshotQuery.isError || trendQuery.isError;
   const errorMessage =
     snapshotQuery.error instanceof Error ? snapshotQuery.error.message : null;
+
+  /**
+   * Refresh.
+   *
+   * A full rebuild reads every delivery in the selected window — a month is
+   * ~110k documents and a year is over a million — so the button only does that
+   * for a window it can afford (up to a month). Anything wider refreshes the
+   * most recent half hour instead and says so, which is what the operator is
+   * asking anyway: "did another order land just now".
+   */
+  const rangeDays = useMemo(() => {
+    const from = Date.parse(`${range.from}T00:00:00Z`);
+    const to = Date.parse(`${range.to}T00:00:00Z`);
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return 1;
+    return Math.max(1, Math.round((to - from) / 86_400_000) + 1);
+  }, [range.from, range.to]);
+  const canFullRefresh = rangeDays <= REFRESH_FULL_MAX_DAYS;
+  const tailQuery = usePerformanceOpsTail(
+    REFRESH_TAIL_MINUTES,
+    slicers,
+    slicers.orderStatus ?? "verified",
+    tab === "outsource",
+  );
+  const [refreshNote, setRefreshNote] = useState<string | null>(null);
+  const refreshing =
+    snapshotQuery.isFetching || trendQuery.isFetching || tailQuery.isFetching;
+
+  async function onRefresh() {
+    setRefreshNote(null);
+    if (canFullRefresh) {
+      await Promise.all([
+        boundsQuery.refetch(),
+        snapshotQuery.refetch(),
+        trendDiffers ? trendQuery.refetch() : Promise.resolve(null),
+      ]);
+      return;
+    }
+    const result = await tailQuery.refetch();
+    const tail = result.data;
+    if (!tail) {
+      setRefreshNote(t("ops.refreshFullFailed", { minutes: REFRESH_TAIL_MINUTES }));
+      return;
+    }
+    setRefreshNote(
+      t("ops.refreshTailResult", {
+        minutes: REFRESH_TAIL_MINUTES,
+        orders: tail.orders,
+        riders: tail.riders,
+      }),
+    );
+  }
 
   function exportTab() {
     if (!data) return;
@@ -261,10 +319,10 @@ export function PerformancePageShell() {
               <button
                 type="button"
                 className="text-xs text-white/90 hover:underline"
-                onClick={() => void snapshotQuery.refetch()}
-                disabled={snapshotQuery.isFetching}
+                onClick={() => void onRefresh()}
+                disabled={refreshing}
               >
-                {snapshotQuery.isFetching ? t("refreshing") : t("refresh")}
+                {refreshing ? t("refreshing") : t("refresh")}
               </button>
               <Link
                 href="/performance/settings"
@@ -324,6 +382,9 @@ export function PerformancePageShell() {
         </div>
         {overCap && preset !== "all" ? (
           <p className="text-xs text-muted-foreground">{t("ops.allTimeCapped")}</p>
+        ) : null}
+        {refreshNote ? (
+          <p className="text-xs text-muted-foreground">{refreshNote}</p>
         ) : null}
 
         <OpsSlicerBar

@@ -171,6 +171,18 @@ export const queryKeys = {
     fleetLedger: (kind: "service" | "handover" | "accident") =>
       ["vehicles", "fleet-ledger", kind] as const,
   },
+  service: {
+    all: () => ["service"] as const,
+    records: () => ["service", "records"] as const,
+    record: (id: string) => ["service", "record", id] as const,
+    vehicles: () => ["service", "vehicles"] as const,
+    types: () => ["service", "types"] as const,
+    typeUsage: () => ["service", "type-usage"] as const,
+    reports: () => ["service", "reports"] as const,
+    maintenance: () => ["service", "maintenance"] as const,
+    schedules: () => ["service", "schedules"] as const,
+    models: () => ["service", "models"] as const,
+  },
   fuel: {
     all: () => ["fuel"] as const,
     list: (filters: Record<string, unknown> = {}) => ["fuel", "list", filters] as const,
@@ -279,6 +291,8 @@ export const queryKeys = {
       ["performance", "trend", filters] as const,
     opsSnapshot: (filters: Record<string, unknown> = {}) =>
       ["performance", "ops-snapshot", filters] as const,
+    opsRecentTail: (minutes: number, filters: Record<string, unknown> = {}) =>
+      ["performance", "ops-recent-tail", minutes, filters] as const,
     opsBounds: () => ["performance", "ops-bounds"] as const,
     targetDpd: () => ["performance", "target-dpd"] as const,
   },

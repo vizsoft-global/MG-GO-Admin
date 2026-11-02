@@ -177,7 +177,8 @@
     "fleetRj": "RJ",
     "orderExceptions": "Order exceptions",
     "system": "System",
-    "sponsorships": "Sponsorships"
+    "sponsorships": "Sponsorships",
+    "serviceTypes": "Service types"
   },
   "appNavGroups": {
     "overview": "Overview",
@@ -3422,6 +3423,7 @@
       "compareTitle": "Order Comparison — AM vs MGGO",
       "subtitle": "Compare AM file counts with MGGO logged orders (pending, in transit, or verified — Kuwait delivered day). Matched on MG ID only.",
       "matchNote": "Matched on MG ID only",
+      "scanningMonth": "Scanning the AM sheet and the app's deliveries for this range. The first open of a month can take up to two minutes; the result is then reused for five minutes.",
       "upload": "Upload Excel",
       "uploadAm": "Upload AM file",
       "filteredCsv": "Filtered view (CSV)",
@@ -8475,7 +8477,10 @@
           "payrollAppAttendance": "Application attendance tab",
           "payrollRequests": "Requests tab",
           "payrollSettings": "Settings tab",
-          "payrollHrPayroll": "HR Payroll tab"
+          "payrollHrPayroll": "HR Payroll tab",
+          "serviceRecords": "Service records",
+          "serviceReports": "Service cost analysis",
+          "serviceMaintenance": "Service maintenance"
         },
         "errors": {
           "loadFailed": "Could not load staff access.",
@@ -9422,6 +9427,54 @@
         "previewDeduction": "Deduction",
         "previewNet": "Net",
         "companyConfigNote": "This target and scheme apply only to outsourced riders on this company. In-house riders keep restaurant delivery rules."
+      },
+      "serviceTypes": {
+        "title": "Service types",
+        "subtitle": "The catalog a service record is filed under, with its category. Arabic is entered by hand — an empty Arabic label falls back to English.",
+        "tableTitle": "Service types ({count})",
+        "key": "Key",
+        "labelEn": "English label",
+        "labelAr": "Arabic label",
+        "category": "Category",
+        "records": "Records",
+        "colSort": "Sort order",
+        "colActive": "Active",
+        "activeHint": "An inactive type stays on the records that already use it and is hidden from the pickers.",
+        "arabicHint": "Leave blank until the approved Arabic wording is available; the UI prints the English label.",
+        "keyLocked": "The key is set when the row is created.",
+        "keyHint": "Lowercase letters, digits and underscores.",
+        "search": "Search key, English, Arabic or category",
+        "add": "Add service type",
+        "edit": "Edit service type",
+        "save": "Save",
+        "cancel": "Cancel",
+        "saved": "Service type saved",
+        "empty": "No service types yet",
+        "noMatches": "No service type matches that search",
+        "import": "Import",
+        "importApply": "Apply import",
+        "importHint": "Upload the client's sheet. A duplicate name is reported with its sheet row and skipped, never silently dropped.",
+        "importEmpty": "Choose a workbook to preview.",
+        "importTruncated": "Only the first 1,000 rows are kept.",
+        "importParseFailed": "That file could not be read.",
+        "imported": "{created} created, {updated} updated, {skipped} skipped",
+        "downloadTemplate": "Download template",
+        "countTotal": "{count} rows",
+        "sheetRow": "Row",
+        "status": "Status",
+        "statusCreate": "Create",
+        "statusUpdate": "Update",
+        "statusDuplicate": "Duplicate",
+        "statusError": "Error",
+        "status_create": "Create",
+        "status_update": "Update",
+        "status_duplicate": "Duplicate",
+        "status_error": "Error",
+        "duplicateOf": "(same as row {row})",
+        "errors": {
+          "invalid_key": "The key may only use lowercase letters, digits and underscores.",
+          "missing_fields": "An English label is required."
+        }
       }
     },
     "auditLogs": {
@@ -10655,6 +10708,8 @@
         "unassignedCompany": "Unassigned company",
         "emptyZones": "No zone-assigned riders with orders in this period",
         "allTimeCapped": "All time is over 400 days — pick a shorter range. The query will not silently truncate.",
+        "refreshFullFailed": "The refresh did not return. Showing the last loaded figures; the {minutes}-minute slice could not be read.",
+        "refreshTailResult": "This range is too wide to rebuild — refreshed the last {minutes} minutes: {orders} orders from {riders} riders. The totals above are unchanged.",
         "clearFilters": "Clear filters",
         "exportTab": "Export CSV",
         "exportBucket": "Export riders",
@@ -11761,18 +11816,248 @@
           "vehicleCompanies": {
             "title": "Vehicle companies",
             "body": "The company catalog a vehicle is filed under."
+          },
+          "serviceTypes": {
+            "title": "Service types",
+            "body": "The catalog a workshop visit is filed under."
           }
         }
       }
     },
     "fleetService": {
-      "breadcrumb": "Service",
+      "breadcrumb": {
+        "title": "Service"
+      },
       "title": "Service",
-      "subtitle": "Workshop visits across the fleet.",
+      "subtitle": "Workshop records, cost analysis and preventive maintenance across the fleet.",
       "emptyTitle": "No service records",
       "emptyHint": "Service rows appear here after a visit is logged on a vehicle.",
       "colPlate": "Plate",
-      "viewVehicle": "View vehicle"
+      "viewVehicle": "View vehicle",
+      "showing": "Showing {shown} of {total}",
+      "saved": "Saved",
+      "created": "Service record created",
+      "stageChanged": "Moved to {stage}",
+      "odometerSaved": "Odometer updated",
+      "tabs": {
+        "records": "Records",
+        "reports": "Cost analysis",
+        "maintenance": "Maintenance"
+      },
+      "stages": {
+        "all": "All",
+        "new": "New",
+        "running": "Running",
+        "done": "Done",
+        "cancelled": "Cancelled"
+      },
+      "kpi": {
+        "total": "Total records",
+        "open": "Open",
+        "doneThisMonth": "Done this month",
+        "costThisMonth": "Cost this month (KWD)",
+        "types": "Service types",
+        "overdueLink": "Overdue maintenance →"
+      },
+      "cols": {
+        "date": "Date",
+        "description": "Description",
+        "type": "Service type",
+        "vehicle": "Vehicle",
+        "driver": "Driver",
+        "vendor": "Vendor",
+        "company": "Company",
+        "cost": "Cost (KWD)",
+        "odometer": "Odometer (km)",
+        "stage": "Stage"
+      },
+      "filters": {
+        "from": "From",
+        "to": "To",
+        "vehicle": "Vehicle",
+        "type": "Service type",
+        "category": "Category",
+        "vendor": "Vendor",
+        "any": "All"
+      },
+      "actions": {
+        "add": "New record",
+        "edit": "Edit",
+        "save": "Save",
+        "cancel": "Cancel",
+        "back": "Back to records",
+        "close": "Close",
+        "export": "Export",
+        "schedules": "Schedules",
+        "updateOdometer": "Update odometer",
+        "moveTo": "Move to {stage}",
+        "cancelReason": "Reason for cancelling",
+        "cancelReasonPlaceholder": "Why is this record cancelled?",
+        "confirmIntervals": "Confirm intervals",
+        "addSchedule": "Add schedule"
+      },
+      "categories": {
+        "engine": "Engine",
+        "brakes": "Brakes",
+        "ac": "A/C",
+        "tyres": "Tyres",
+        "suspension": "Suspension",
+        "body": "Body",
+        "electrical": "Electrical",
+        "transmission": "Transmission",
+        "consumables": "Consumables",
+        "labour": "Labour",
+        "inspection": "Inspection",
+        "other": "Other"
+      },
+      "form": {
+        "titleNew": "New service record",
+        "titleEdit": "Edit service record",
+        "subtitleNew": "Log a workshop visit. The record starts as New.",
+        "subtitleEdit": "Only an open record can be edited; Done and Cancelled are final.",
+        "footerHint": "Marking the record Done is what advances the vehicle odometer.",
+        "sectionService": "Service",
+        "sectionInvoice": "Invoice & vendor",
+        "sectionParts": "Spare parts",
+        "vehicle": "Vehicle",
+        "selectVehicle": "Select a vehicle",
+        "searchVehicle": "Search plate, chassis or model",
+        "noVehicles": "No vehicles",
+        "serviceType": "Service type",
+        "selectType": "Select a service type",
+        "searchType": "Search name or category",
+        "noTypes": "No service types yet",
+        "serviceTypeHint": "The catalog is managed in Settings → Service types.",
+        "description": "Description",
+        "descriptionPlaceholder": "What was done",
+        "odometerPlaceholder": "Reading at service time",
+        "odometerHint": "Prefilled from the vehicle. A reading below the stored one is refused when the record is marked Done.",
+        "driver": "Driver",
+        "noDriver": "No rider assigned",
+        "notes": "Notes",
+        "partName": "Part",
+        "partQty": "Qty",
+        "partUnit": "Unit (KWD)",
+        "partTotal": "Total (KWD)",
+        "addPart": "Add part",
+        "removePart": "Remove part"
+      },
+      "detail": {
+        "summary": "Record",
+        "serviceType": "Service type",
+        "description": "Description",
+        "driver": "Driver",
+        "invoiceNo": "Invoice number",
+        "invoiceDate": "Invoice date",
+        "parts": "Spare parts",
+        "partsTotal": "Parts total: {total} KWD",
+        "noParts": "No spare parts on this record.",
+        "history": "Stage history",
+        "noHistory": "No stage history yet."
+      },
+      "reports": {
+        "loading": "Loading…",
+        "noDataTitle": "No service records yet",
+        "noData": "Cost analysis reads Done service records only.",
+        "empty": "Nothing in this slice.",
+        "totalSpend": "Total spend (KWD)",
+        "records": "Records",
+        "avgPerRecord": "Average per record (KWD)",
+        "topVehicle": "Most expensive vehicle",
+        "topPart": "Most replaced part",
+        "year": "Year",
+        "chartTitle": "Monthly spend",
+        "contract": "Contract",
+        "service": "Service",
+        "contractHint": "leased / rented vehicles",
+        "serviceHint": "company-owned vehicles",
+        "byCategory": "By category",
+        "byServiceType": "By service type",
+        "byVendor": "By vendor",
+        "byVehicle": "By vehicle",
+        "partsTitle": "Spare parts",
+        "partsHint": "Every line item on the records in this slice.",
+        "partQty": "Qty",
+        "partAvg": "Average unit (KWD)",
+        "partTotal": "Total (KWD)"
+      },
+      "maintenance": {
+        "unknown": "Unknown",
+        "provisionalBanner": "Intervals are provisional — awaiting client approval. Every figure below is computed with these unapproved defaults.",
+        "provisionalTag": "Provisional",
+        "confirmedTag": "Confirmed",
+        "confirmed": "Intervals confirmed",
+        "defaultsTitle": "Fleet default intervals",
+        "defaultsHint": "Used by a vehicle that has no schedule of its own. Confirming stamps who approved them and when.",
+        "kmInterval": "Km interval",
+        "dayInterval": "Day interval",
+        "alertKm": "Alert at (km)",
+        "alertDays": "Alert at (days)",
+        "schedulesTitle": "Schedules",
+        "noSchedules": "No schedule yet — every vehicle uses the fleet defaults.",
+        "scopeLabel": "Applies to",
+        "scope": {
+          "vehicle": "One vehicle",
+          "model": "A make / model"
+        },
+        "makeModel": "Make / model",
+        "filters": {
+          "zone": "Zone",
+          "type": "Vehicle type",
+          "model": "Model",
+          "driver": "Driver"
+        },
+        "cols": {
+          "plate": "Plate",
+          "model": "Model",
+          "condition": "Condition",
+          "driver": "Driver",
+          "currentKm": "Current km",
+          "lastKm": "Last service km",
+          "lastDate": "Last service date",
+          "nextKm": "Next service km",
+          "remainingKm": "Remaining km",
+          "daysSince": "Days since",
+          "nextDate": "Next service date",
+          "remainingDays": "Remaining days",
+          "status": "Status"
+        },
+        "emptyTitle": "No vehicles in this view",
+        "emptyHint": "Clear a filter to see the rest of the fleet.",
+        "statuses": {
+          "normal": "Normal",
+          "due_soon": "Due soon",
+          "due": "Due",
+          "overdue": "Overdue",
+          "unknown": "Unknown"
+        }
+      },
+      "odometer": {
+        "title": "Update odometer",
+        "placeholder": "Reading in km",
+        "unknown": "No odometer is stored for this vehicle yet.",
+        "current": "Stored reading: {km} km"
+      },
+      "errors": {
+        "notAuthorized": "You do not have permission for this.",
+        "notConfigured": "The server is not configured.",
+        "futureDate": "A date in the future is not allowed.",
+        "invalidDate": "Enter a valid date.",
+        "missingVehicle": "Choose a vehicle.",
+        "missingType": "Choose a service type or write a description.",
+        "missingModel": "Choose a make / model.",
+        "missingFields": "Fill the required fields.",
+        "invalidKey": "The key may only use lowercase letters, digits and underscores.",
+        "invalidOdometer": "Enter a valid odometer reading.",
+        "invalidCost": "Enter a valid cost.",
+        "invalidPart": "A part needs a name, a quantity above zero and a unit cost.",
+        "odometerBelowCurrent": "A reading below the stored {km} km is refused. Correct the number or the vehicle record.",
+        "invalidTransition": "That stage change is not allowed.",
+        "noteRequired": "A reason is required to cancel a record.",
+        "recordLocked": "Done and Cancelled records cannot be edited; log a new record instead.",
+        "notFound": "Record not found.",
+        "saveFailed": "Something went wrong. Please try again."
+      }
     },
     "fleetHandover": {
       "breadcrumb": "Handover",
@@ -11919,6 +12204,10 @@
           "bankCodes": {
             "title": "Bank codes",
             "body": "Kuwait banks used for employee payment details."
+          },
+          "serviceTypes": {
+            "title": "Service types",
+            "body": "The catalog a workshop visit is filed under."
           }
         }
       }
