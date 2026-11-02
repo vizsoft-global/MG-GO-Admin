@@ -829,10 +829,12 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Companies",
     defaultIcon: "Building",
     href: "/settings/source-companies",
-    defaultGroup: OPERATIONS_HUB_GROUP,
-    defaultOrder: 10,
+    // Companies and Sponsorships are employee-record catalogs, not operational
+    // rule tables, so they sit in Settings with the other catalogs. They used to
+    // be `hidden` rows reachable only from the OperationsHub card grid.
+    defaultGroup: "Settings",
+    defaultOrder: 8,
     permission: "companies.view",
-    hidden: true,
   },
   {
     id: "attendance-settings",
@@ -889,10 +891,9 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     defaultLabel: "Sponsorships",
     defaultIcon: "Building2",
     href: "/settings/sponsorships",
-    defaultGroup: OPERATIONS_HUB_GROUP,
-    defaultOrder: 15,
+    defaultGroup: "Settings",
+    defaultOrder: 9,
     permission: "drivers.manage",
-    hidden: true,
   },
   {
     id: "bank-codes",
