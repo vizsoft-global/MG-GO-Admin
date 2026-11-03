@@ -32,7 +32,7 @@ describe("launcher modules", () => {
     assert.equal(LAUNCHER_TILE_IDS[0], "dashboard-ops");
     assert.equal(
       LAUNCHER_TILE_IDS[LAUNCHER_TILE_IDS.indexOf("assets") + 1],
-      "operations-dashboard",
+      "vehicles",
     );
     assert.ok(LAUNCHER_TILE_IDS.includes("restaurants"));
     assert.ok(LAUNCHER_TILE_IDS.includes("driver-app"));
@@ -131,8 +131,6 @@ describe("launcher modules", () => {
     }
     for (const id of [
       "dashboard-ops",
-      "operations-dashboard",
-      "client-portal",
       "payroll",
       "assistant",
       "assets",

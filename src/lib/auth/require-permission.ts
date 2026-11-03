@@ -102,14 +102,14 @@ export async function requireAnyPermission(
 }
 
 /** The client/partner login's only landing page. */
-export const PARTNER_HOME = "/client-portal";
+export const PARTNER_HOME = "/client-portal-v2";
 
 /**
  * Areas a partner login may open. Everything else renders through
  * `requireNotPartner`, so a page that never asked for a permission is still
  * closed to a client that types its URL.
  */
-export const PARTNER_AREA_PREFIXES = ["/client-portal", "/operations-dashboard"] as const;
+export const PARTNER_AREA_PREFIXES = ["/client-portal-v2", "/operations-dashboard-v2"] as const;
 
 /**
  * Guard for every area outside the client portal. A partner session is sent

@@ -102,6 +102,8 @@ export type RosterRow = {
   statuses: RosterStatus[];
   joined: string;
   phone: string;
+  /** `drivers.employee_status_key`; the Accident card filters on it. */
+  employeeStatus?: string;
 };
 
 export const DASHBOARD_PERIODS = ["today", "yesterday", "thisWeek", "last7", "thisMonth", "lastMonth", "custom"] as const;
@@ -417,6 +419,7 @@ function readRoster(raw: unknown): RosterRow[] {
       statuses: readStatuses(row.statuses, statusRaw),
       joined: text(pick(row, ["joined", "work_start_date", "workStart"])),
       phone: text(pick(row, ["phone"])),
+      employeeStatus: text(pick(row, ["employeeStatus", "employee_status"])),
     });
   }
   return rows;

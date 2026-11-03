@@ -478,3 +478,8 @@ svg.lucide {
   stroke-width: 2;
   fill: none;
 }
+
+/* The display face from the Figma frames (Montserrat, falling back to the brand Gotham stack). */
+.font-display {
+  font-family: var(--font-display);
+}

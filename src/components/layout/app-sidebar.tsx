@@ -232,8 +232,8 @@ function SidebarCollapseTrigger({ className }: { className?: string }) {
 }
 
 function superAdminPortalHref(id: string, href: string, isSuperAdmin: boolean): string {
-  if (isSuperAdmin && (id === "client-portal" || href === "/client-portal")) {
-    return "/client-portal/clients";
+  if (isSuperAdmin && (id === "client-portal-v2" || href === "/client-portal-v2")) {
+    return "/client-portal-v2/clients";
   }
   return href;
 }

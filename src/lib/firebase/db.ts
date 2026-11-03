@@ -155,6 +155,8 @@ export const COLLECTIONS = {
   adminRolePermissions: "admin_role_permissions",
   adminUserPermissions: "admin_user_permissions",
   driverLeavePlans: "driver_leave_plans",
+  /** One portal configuration per project key (`keeta`, `americana`, …). */
+  clientPortals: "client_portals",
   adminAllowlist: "admin_allowlist",
   adminActivityLogs: "admin_activity_logs",
   adminCostSamples: "admin_cost_samples",
