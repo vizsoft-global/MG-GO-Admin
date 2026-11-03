@@ -47,7 +47,27 @@ export function incomingPendingTotal(
   );
 }
 
-export type IncomingHubFilter = "all" | "due" | "forwarded";
+export type IncomingHubFilter =
+  | "all"
+  | "due"
+  | "forwarded"
+  | "new"
+  | "in_review"
+  | "clarification";
+
+/** Which rows the client keeps for a status filter (the fetch is the same). */
+export function incomingStatusMatch(status: string, filter: IncomingHubFilter): boolean {
+  switch (filter) {
+    case "new":
+      return status === "submitted" || status === "pending";
+    case "in_review":
+      return status === "in_review";
+    case "clarification":
+      return status === "needs_clarification";
+    default:
+      return true;
+  }
+}
 
 export function incomingHubListFlags(filter: IncomingHubFilter): {
   assignedToMe: boolean;

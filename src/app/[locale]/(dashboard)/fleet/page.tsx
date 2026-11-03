@@ -12,10 +12,7 @@ import {
   Waypoints,
   Wrench,
 } from "lucide-react";
-import { AppPage } from "@/components/app/app-page";
-import { AppPageHeader } from "@/components/app/app-page-header";
-import { Card, CardContent } from "@/components/ui/card";
-import { Link } from "@/i18n/navigation";
+import { AppHubShell, HUB_GLYPH_TINTS, type HubGroup } from "@/components/app/app-hub-shell";
 import {
   hasAnyPermissionInSet,
   hasPermissionInSet,
@@ -23,6 +20,14 @@ import {
 } from "@/lib/auth/permissions";
 import { requireAnyPermission } from "@/lib/auth/require-permission";
 
+/**
+ * Fleet Hub — the same Figma shell as Visit bookings (`AppHubShell`).
+ *
+ * The design's two-panel split maps straight onto this hub: the fleet you run
+ * day to day on the start panel, the catalogs that shape it on the end panel.
+ * Each tile is filtered by **its own** permission, so a tile is never an
+ * advertisement for a page that answers /unauthorized.
+ */
 const FLEET_HUB_PERMISSIONS = [
   "vehicles.view",
   "vehicles.manage",
@@ -35,61 +40,100 @@ const FLEET_HUB_PERMISSIONS = [
   "service.manage",
 ] as const satisfies readonly Permission[];
 
-const CARDS: ReadonlyArray<{
+type FleetTile = {
   key: string;
   href: string;
   icon: typeof Car;
+  tint: (typeof HUB_GLYPH_TINTS)[keyof typeof HUB_GLYPH_TINTS];
   permission?: Permission;
   requireAny?: readonly Permission[];
-}> = [
-  { key: "vehicles", href: "/vehicles", icon: Car, permission: "vehicles.view" },
+};
+
+const MANAGE_TILES: FleetTile[] = [
+  { key: "vehicles", href: "/vehicles", icon: Car, tint: HUB_GLYPH_TINTS.teal, permission: "vehicles.view" },
   {
     key: "fuel",
     href: "/fuel",
     icon: Fuel,
+    tint: HUB_GLYPH_TINTS.gold,
     requireAny: ["fuel.view", "fuel_requests.view", "fuel_refunds.view"],
   },
   {
     key: "assets",
     href: "/assets",
     icon: Package,
+    tint: HUB_GLYPH_TINTS.olive,
     requireAny: ["assets.view", "asset_requests.view"],
   },
-  { key: "service", href: "/fleet/service", icon: Wrench, permission: "service.view" },
-  { key: "handover", href: "/fleet/handover", icon: ArrowLeftRight, permission: "vehicles.view" },
-  { key: "accident", href: "/fleet/accident", icon: AlertTriangle, permission: "vehicles.view" },
+  {
+    key: "service",
+    href: "/fleet/service",
+    icon: Wrench,
+    tint: HUB_GLYPH_TINTS.rose,
+    permission: "service.view",
+  },
+  {
+    key: "handover",
+    href: "/fleet/handover",
+    icon: ArrowLeftRight,
+    tint: HUB_GLYPH_TINTS.navy,
+    permission: "vehicles.view",
+  },
+  {
+    key: "accident",
+    href: "/fleet/accident",
+    icon: AlertTriangle,
+    tint: HUB_GLYPH_TINTS.rust,
+    permission: "vehicles.view",
+  },
   {
     key: "rj",
     href: "/fleet/rj",
     icon: FileX,
+    tint: HUB_GLYPH_TINTS.brown,
     requireAny: ["fuel.view", "fuel_requests.view", "fuel_refunds.view", "asset_requests.view"],
   },
-  { key: "vehicleTypes", href: "/settings/vehicle-types", icon: Tags, permission: "vehicles.manage" },
+];
+
+const CONFIGURE_TILES: FleetTile[] = [
+  {
+    key: "vehicleTypes",
+    href: "/settings/vehicle-types",
+    icon: Tags,
+    tint: HUB_GLYPH_TINTS.teal,
+    permission: "vehicles.manage",
+  },
   {
     key: "serviceTypes",
     href: "/settings/service-types",
     icon: ListChecks,
+    tint: HUB_GLYPH_TINTS.rose,
     permission: "service.manage",
   },
-  { key: "vehicleUses", href: "/settings/vehicle-uses", icon: Waypoints, permission: "vehicles.manage" },
+  {
+    key: "vehicleUses",
+    href: "/settings/vehicle-uses",
+    icon: Waypoints,
+    tint: HUB_GLYPH_TINTS.olive,
+    permission: "vehicles.manage",
+  },
   {
     key: "vehicleCompanies",
     href: "/settings/vehicle-companies",
     icon: Building2,
+    tint: HUB_GLYPH_TINTS.navy,
     permission: "vehicles.manage",
   },
 ];
 
-function cardVisible(
-  card: (typeof CARDS)[number],
+function visible(
+  tile: FleetTile,
   permissions: ReadonlySet<string>,
   isSuperAdmin: boolean,
 ): boolean {
-  if (card.requireAny) {
-    return hasAnyPermissionInSet(permissions, card.requireAny, isSuperAdmin);
-  }
-  if (!card.permission) return false;
-  return hasPermissionInSet(permissions, card.permission, isSuperAdmin);
+  if (tile.requireAny) return hasAnyPermissionInSet(permissions, tile.requireAny, isSuperAdmin);
+  if (!tile.permission) return false;
+  return hasPermissionInSet(permissions, tile.permission, isSuperAdmin);
 }
 
 export default async function FleetHubPage({
@@ -102,40 +146,42 @@ export default async function FleetHubPage({
   const session = await requireAnyPermission(locale, FLEET_HUB_PERMISSIONS);
   const t = await getTranslations("pages.fleetHub.hub");
 
-  const cards = CARDS.filter((card) =>
-    cardVisible(card, session.permissions, session.isSuperAdmin),
-  );
+  const groups: HubGroup[] = [
+    {
+      id: "manage",
+      heading: t("manageHeading"),
+      hint: t("manageHint"),
+      tiles: MANAGE_TILES.filter((tile) =>
+        visible(tile, session.permissions, session.isSuperAdmin),
+      ).map((tile) => ({
+        href: tile.href,
+        label: t(`cards.${tile.key}.title`),
+        icon: tile.icon,
+        tint: tile.tint,
+      })),
+    },
+    {
+      id: "configure",
+      heading: t("configureHeading"),
+      hint: t("configureHint"),
+      tiles: CONFIGURE_TILES.filter((tile) =>
+        visible(tile, session.permissions, session.isSuperAdmin),
+      ).map((tile) => ({
+        href: tile.href,
+        label: t(`cards.${tile.key}.title`),
+        icon: tile.icon,
+        tint: tile.tint,
+      })),
+    },
+  ].filter((group) => group.tiles.length > 0);
 
   return (
-    <AppPage className="space-y-4">
-      {/* The H1 is already "Fleet Hub" — a same-named breadcrumb above it was
-          the duplicate the panel reported. */}
-      <AppPageHeader title={t("title")} description={t("subtitle")} />
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Link key={card.key} href={card.href} className="group">
-              <Card className="h-full rounded-xl border-border bg-card shadow-sm transition-colors group-hover:border-primary/40">
-                <CardContent className="flex items-start gap-3 p-4">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                    <Icon className="size-4" aria-hidden />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground">
-                      {t(`cards.${card.key}.title`)}
-                    </p>
-                    <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
-                      {t(`cards.${card.key}.body`)}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
-    </AppPage>
+    <AppHubShell
+      title={t("title")}
+      subtitle={t("subtitle")}
+      breadcrumbHome={t("breadcrumbHome")}
+      titleTile={{ icon: Car, tint: HUB_GLYPH_TINTS.teal }}
+      groups={groups}
+    />
   );
 }

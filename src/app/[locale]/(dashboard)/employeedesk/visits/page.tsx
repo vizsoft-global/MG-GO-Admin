@@ -1,5 +1,7 @@
 import { setRequestLocale } from "next-intl/server";
 import { requirePermission } from "@/lib/auth/require-permission";
+import { kuwaitClockMinutes } from "@/lib/date/kuwait-clock";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { VisitsHubShell } from "@/features/visits/visits-hub-shell";
 
 /**
@@ -17,5 +19,6 @@ export default async function EmployeeDeskVisitsPage({
   const { locale } = await params;
   setRequestLocale(locale);
   await requirePermission(locale, "visits.view");
-  return <VisitsHubShell />;
+  // Same server clock as `/visit-bookings`, so both aliases paint identically.
+  return <VisitsHubShell today={kuwaitTodayYmd()} nowMinutes={kuwaitClockMinutes()} />;
 }

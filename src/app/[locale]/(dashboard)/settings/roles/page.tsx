@@ -3,7 +3,8 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { logAdminPageView } from "@/lib/audit/log-admin-activity";
 import { getAllAdminRoles } from "@/lib/auth/get-role-permissions";
 import { syncAdminPermissionsFromCatalog } from "@/lib/auth/sync-admin-permissions";
-import { redirect } from "@/i18n/navigation";
+import { PERMISSION_CATALOG } from "@/lib/auth/permission-catalog";
+import { getRoleUsageCounts } from "@/features/settings/roles-actions";
 import {
   listRequestTypeOptions,
   listStaffAccess,
@@ -23,19 +24,15 @@ export default async function RolesPermissionsPage({
   await requirePermission(locale, "roles.manage");
   void logAdminPageView("/settings/roles", "RolesPermissionsPage");
 
-  if (query.tab === "roles") {
-    redirect({
-      href: query.user ? `/settings/roles?user=${query.user}` : "/settings/roles",
-      locale,
-    });
-  }
+  const tab: "staff" | "roles" = query.tab === "roles" ? "roles" : "staff";
 
   await syncAdminPermissionsFromCatalog();
 
-  const [allRoles, listed, requestTypes] = await Promise.all([
+  const [allRoles, listed, requestTypes, usageCounts] = await Promise.all([
     getAllAdminRoles(),
     listStaffAccess(),
     listRequestTypeOptions(),
+    tab === "roles" ? getRoleUsageCounts() : Promise.resolve([]),
   ]);
 
   return (
@@ -46,6 +43,10 @@ export default async function RolesPermissionsPage({
         loadError={listed.error}
         roles={allRoles}
         requestTypes={requestTypes.rows ?? []}
+        tab={tab}
+        permissions={tab === "roles" ? PERMISSION_CATALOG.map((entry) => ({ ...entry })) : []}
+        usageCounts={usageCounts}
+        nowMs={Date.now()}
       />
     </div>
   );

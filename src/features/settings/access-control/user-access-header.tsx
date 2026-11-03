@@ -19,14 +19,20 @@ import {
 import type { StaffLastChanged } from "@/features/settings/staff-access-actions";
 import type { AdminRoleRow } from "@/lib/auth/get-role-permissions";
 import { cn } from "@/lib/utils";
+import { AccessAvatar } from "./access-parts";
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
-}
+const KINDS: { id: StaffAccessKind; labelKey: string }[] = [
+  { id: "manager", labelKey: "fullAccessManager" },
+  { id: "user", labelKey: "kindUser" },
+  { id: "partner", labelKey: "kindPartner" },
+];
 
+/**
+ * The editable twin of `Person Header` (7104:17998): same avatar, name and meta
+ * line, with the role / access-kind controls the editor needs.
+ */
 export function UserAccessHeader({
+  id,
   name,
   email,
   roleName,
@@ -43,6 +49,7 @@ export function UserAccessHeader({
   disabled,
   kindDisabled,
 }: {
+  id: string;
   name: string;
   email: string | null;
   roleName: string | null;
@@ -86,32 +93,29 @@ export function UserAccessHeader({
           }),
         })
       : t("lastChangedNever");
-  const roleTag = [department ? t(`dept.${department}`) : null, roleName]
-    .filter(Boolean)
-    .join(" · ");
+  const roleTag = department ? t(`dept.${department}`) : roleName;
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#ECECEE] bg-white px-4 pt-4 pb-3.5">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="flex size-[46px] shrink-0 items-center justify-center rounded-full bg-[#FDE68A] text-sm font-semibold text-[#4F3F01]">
-          {initials(name)}
-        </span>
-        <div className="min-w-0">
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-4">
+        <AccessAvatar id={id} name={name} size={56} />
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center gap-2">
-            <p className="truncate text-base font-bold text-[#111827]">{name}</p>
+            <h2 className="truncate text-xl font-bold leading-7 text-[#27273f]">{name}</h2>
             {roleTag ? (
-              <span className="shrink-0 rounded-md bg-[#F4F4F5] px-[7px] py-[3px] text-xs font-medium text-[#52525B]">
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#eeebef] py-[3px] ps-2 pe-2.5 text-xs font-medium text-[#6e6a7c]">
+                <span className="size-1.5 rounded-full bg-[#6e6a7c]" aria-hidden />
                 {roleTag}
               </span>
             ) : null}
           </div>
-          <p className="mt-0.5 truncate text-xs text-[#71717A]">
+          <p className="truncate text-[13px] leading-[18px] text-[#5e5e72]">
             {[email, changed].filter(Boolean).join(" · ")}
           </p>
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-start gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {roles.length > 0 ? (
           <Select
             items={roleItems}
@@ -121,7 +125,7 @@ export function UserAccessHeader({
             }}
             disabled={disabled}
           >
-            <SelectTrigger className="h-9 w-[184px] rounded-lg border-[#E4E4E7] bg-white text-xs">
+            <SelectTrigger className="h-9 w-[184px] rounded-lg border-[#e4ddd9] bg-white text-xs">
               <SelectValue placeholder={t("role")} />
             </SelectTrigger>
             <SelectContent>
@@ -133,15 +137,9 @@ export function UserAccessHeader({
             </SelectContent>
           </Select>
         ) : null}
-        <div className="flex flex-col items-end gap-2">
-        <div className="flex h-9 items-center gap-px rounded-lg bg-[#F1F3F5] p-[3px]">
-          {(
-            [
-              { id: "manager" as const, label: t("fullAccessManager") },
-              { id: "user" as const, label: t("kindUser") },
-              { id: "partner" as const, label: t("kindPartner") },
-            ]
-          ).map((seg) => {
+
+        <div className="flex h-9 items-center gap-px rounded-lg bg-[#f1eeec] p-[3px]">
+          {KINDS.map((seg) => {
             const active = accessKind === seg.id;
             return (
               <button
@@ -153,15 +151,16 @@ export function UserAccessHeader({
                 className={cn(
                   "inline-flex h-[30px] cursor-pointer items-center rounded-md px-2.5 text-xs transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
                   active
-                    ? "bg-[#18181B] font-medium text-white"
-                    : "text-[#6B7280] hover:text-[#18181B]",
+                    ? "bg-[#27273f] font-medium text-white"
+                    : "text-[#5e5e72] hover:text-[#27273f]",
                 )}
               >
-                {seg.label}
+                {t(seg.labelKey)}
               </button>
             );
           })}
         </div>
+
         {accessKind === "partner" ? (
           <Select
             items={projectItems}
@@ -172,7 +171,7 @@ export function UserAccessHeader({
             }}
             disabled={disabled || kindDisabled}
           >
-            <SelectTrigger className="h-9 w-[184px] rounded-lg border-[#E4E4E7] bg-white text-xs">
+            <SelectTrigger className="h-9 w-[184px] rounded-lg border-[#e4ddd9] bg-white text-xs">
               <SelectValue placeholder="Keeta" />
             </SelectTrigger>
             <SelectContent>
@@ -184,7 +183,6 @@ export function UserAccessHeader({
             </SelectContent>
           </Select>
         ) : null}
-        </div>
       </div>
     </div>
   );

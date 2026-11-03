@@ -2,8 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { ChevronRight, Download, RefreshCw, Trash2 } from "lucide-react";
-import { Logo } from "@/components/brand/logo";
+import { ChevronRight, Download, RefreshCw, Trash2, Users } from "lucide-react";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -63,7 +62,8 @@ const LEAVE_TYPES = ["annual", "emergency", "sick", "unpaid"] as const;
 const HEADER_BTN = "h-9 cursor-pointer";
 const SELECT_TRIGGER = "h-9 min-h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)] text-[var(--portal-ink)]";
 const DENSE_TABLE = "text-xs [&_td]:px-2 [&_td]:py-1 [&_th]:h-8";
-const SECTION_BAND = "mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--portal-ink)] px-3 py-2 text-[var(--portal-canvas)]";
+const SECTION_BAND =
+  "mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--portal-border)] pb-2";
 
 type Translator = ReturnType<typeof useTranslations<"pages.operationsDashboard">>;
 
@@ -107,8 +107,10 @@ function dailyColor(key: string): string {
   }
 }
 
-function legendColor(key: string): string {
-  return dailyColor(key);
+/** A part as a 0-100 percentage of the whole; 0 when the whole is unknown. */
+function share(part: number | undefined, whole: number | undefined): number {
+  if (!part || !whole) return 0;
+  return (part / whole) * 100;
 }
 
 function statusBadgeVariant(key: string): "portal-green" | "portal-blue" | "portal-red" | "portal-ochre" | "portal-grey" | "portal-plum" {
@@ -562,25 +564,39 @@ export function OperationsDashboardShell() {
   const rosterRef = useRef<HTMLElement | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const bounds = periodBounds(period, today, customFrom, customTo);
-    const result = await fetchOperationsDashboard({
-      projectKey,
-      month,
-      from: bounds.from,
-      to: bounds.to,
-      zoneId: zoneId || undefined,
-      vehicle: vehicle || undefined,
-    });
-    setDashboard(result.dashboard);
-    setFailed(result.failed);
-    setLoading(false);
-  }, [projectKey, month, period, customFrom, customTo, today, zoneId, vehicle]);
+  const load = useCallback(
+    () => {
+      const bounds = periodBounds(period, today, customFrom, customTo);
+      return fetchOperationsDashboard({
+        projectKey,
+        month,
+        from: bounds.from,
+        to: bounds.to,
+        zoneId: zoneId || undefined,
+        vehicle: vehicle || undefined,
+      });
+    },
+    [projectKey, month, period, customFrom, customTo, today, zoneId, vehicle],
+  );
+
+  const applyResult = useCallback(
+    (result: Awaited<ReturnType<typeof fetchOperationsDashboard>>) => {
+      setDashboard(result.dashboard);
+      setFailed(result.failed);
+      setLoading(false);
+    },
+    [],
+  );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void load().then((result) => {
+      if (!cancelled) applyResult(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [load, applyResult]);
 
   const data = dashboard;
   const plans = outlook && data ? data.outlook[outlook] : data?.leavePlans ?? [];
@@ -591,8 +607,9 @@ export function OperationsDashboardShell() {
   );
 
   const reload = () => {
+    setLoading(true);
     startTransition(() => {
-      void load();
+      void load().then(applyResult);
     });
   };
 
@@ -740,138 +757,177 @@ export function OperationsDashboardShell() {
 
   return (
     <AppPage className="space-y-4 bg-[var(--portal-canvas)]">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Logo framed size="lg" className="size-11 rounded-lg border border-[var(--portal-border)] bg-[var(--portal-canvas)] p-1" />
-          <div>
-            <h1 className="type-h1 text-[var(--portal-ink)]">{t("title")}</h1>
-            <p className="text-sm text-[var(--portal-muted)]">
-              {rangeActive
-                ? t.rich("showingRange", {
-                    name: projectName,
-                    from: formatDay(shownFrom),
-                    to: formatDay(shownTo),
-                    b: (chunks) => <span className="font-semibold text-[var(--portal-ink)]">{chunks}</span>,
-                  })
-                : t.rich("showing", {
-                    name: projectName,
-                    date: dateLabel,
-                    b: (chunks) => <span className="font-semibold text-[var(--portal-ink)]">{chunks}</span>,
-                  })}
-            </p>
-          </div>
+      <header className="flex flex-wrap items-center gap-4">
+        <span
+          className="grid size-12 shrink-0 place-items-center rounded-xl bg-[#3d7070]"
+          aria-hidden
+        >
+          <Users className="size-6 text-white" strokeWidth={2} />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <nav className="flex items-center gap-1.5 text-xs text-[var(--portal-muted)]">
+            <span>{t("breadcrumbApps")}</span>
+            <span aria-hidden>›</span>
+            <span className="font-medium text-[var(--portal-ink)]">{t("title")}</span>
+          </nav>
+          <h1 className="text-2xl font-bold leading-8 text-[var(--portal-ink)]">{t("title")}</h1>
+          <p className="text-sm text-[var(--portal-muted)]">
+            {rangeActive
+              ? t.rich("showingRange", {
+                  name: projectName,
+                  from: formatDay(shownFrom),
+                  to: formatDay(shownTo),
+                  b: (chunks) => <span className="font-semibold text-[var(--portal-ink)]">{chunks}</span>,
+                })
+              : t.rich("showing", {
+                  name: projectName,
+                  date: dateLabel,
+                  b: (chunks) => <span className="font-semibold text-[var(--portal-ink)]">{chunks}</span>,
+                })}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="portal" className={HEADER_BTN} disabled={loading || pending} onClick={reload}>
-            <RefreshCw className="size-5" />
+          <Button
+            variant="portal-secondary"
+            className={HEADER_BTN}
+            disabled={loading || pending}
+            onClick={reload}
+          >
+            <RefreshCw className="size-4" />
             {t("refresh")}
           </Button>
-          <Button variant="portal-secondary" className={HEADER_BTN} onClick={() => openRoster("all")}>
-            {rosterFilter === "all" ? t("showingList") : t("allRiders")}
-          </Button>
-          <Button variant="portal-secondary" className={HEADER_BTN} onClick={() => { setOutlook("pendingApproval"); scrollToLeave(); }}>
+          <Button
+            variant="portal-secondary"
+            className={HEADER_BTN}
+            onClick={() => {
+              setOutlook("pendingApproval");
+              scrollToLeave();
+            }}
+          >
             {t("leaveRequests")}
           </Button>
           <Button
-            variant="portal-neutral"
+            variant="portal-secondary"
             className={HEADER_BTN}
             disabled={!data}
             onClick={() => {
               if (data) exportDashboard(data, t, projectName, periodLabel(period, t), dateLabel);
             }}
           >
-            <Download className="size-5" />
+            <Download className="size-4" />
             {t("exportDashboard")}
           </Button>
+          <Button variant="portal" className={HEADER_BTN} onClick={() => openRoster("all")}>
+            {rosterFilter === "all" ? t("showingList") : t("allRiders")}
+          </Button>
         </div>
-      </div>
+      </header>
 
-      <div>
-        <p className="mb-2 text-xs text-[var(--text-secondary)]">{t("colProject")}</p>
-        <div className="flex flex-wrap gap-2">
-          {readOnly ? null : (
-            <ProjectPill active={!projectKey} label={t("allProjects")} onClick={() => setProjectKey(undefined)} />
-          )}
-          {(data?.byProject ?? []).map((project) => (
-            <ProjectPill
-              key={project.key}
-              active={activeProject === project.key}
-              label={project.label}
-              onClick={() => {
-                if (!readOnly) setProjectKey(project.key);
-              }}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <p className="mb-2 text-xs text-[var(--text-secondary)]">{t("periodLabel")}</p>
-        <div className="flex flex-wrap gap-2">
-          {DASHBOARD_PERIODS.map((item) => (
-            <ProjectPill key={item} active={period === item} label={periodLabel(item, t)} onClick={() => setPeriod(item)} />
-          ))}
-        </div>
-        {period === "custom" ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <label className="block text-xs text-[var(--portal-muted)]">
-              {t("customFrom")}
-              <Input className="mt-1 h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)]" type="date" max={today} value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} />
-            </label>
-            <label className="block text-xs text-[var(--portal-muted)]">
-              {t("customTo")}
-              <Input className="mt-1 h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)]" type="date" max={today} value={customTo} onChange={(event) => setCustomTo(event.target.value)} />
-            </label>
+      <section className={card}>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="min-w-0">
+            <p className="mb-2 text-xs font-medium text-[var(--portal-muted)]">{t("colProject")}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {readOnly ? null : (
+                <ProjectPill active={!projectKey} label={t("allProjects")} onClick={() => setProjectKey(undefined)} />
+              )}
+              {(data?.byProject ?? []).map((project) => (
+                <ProjectPill
+                  key={project.key}
+                  active={activeProject === project.key}
+                  label={`${project.label} ${project.assigned}`.trim()}
+                  onClick={() => {
+                    if (!readOnly) setProjectKey(project.key);
+                  }}
+                />
+              ))}
+            </div>
           </div>
-        ) : null}
+
+          <div className="min-w-0">
+            <p className="mb-2 text-xs font-medium text-[var(--portal-muted)]">{t("periodLabel")}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {DASHBOARD_PERIODS.map((item) => (
+                <ProjectPill key={item} active={period === item} label={periodLabel(item, t)} onClick={() => setPeriod(item)} />
+              ))}
+            </div>
+            {period === "custom" ? (
+              <div className="mt-2 grid gap-2">
+                <label className="block text-xs text-[var(--portal-muted)]">
+                  {t("customFrom")}
+                  <Input className="mt-1 h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)]" type="date" max={today} value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} />
+                </label>
+                <label className="block text-xs text-[var(--portal-muted)]">
+                  {t("customTo")}
+                  <Input className="mt-1 h-9 border-[var(--portal-border)] bg-[var(--portal-canvas)]" type="date" max={today} value={customTo} onChange={(event) => setCustomTo(event.target.value)} />
+                </label>
+              </div>
+            ) : null}
+          </div>
+
+          <FilterSelect label={t("filterZone")} value={zoneId || "all"} items={zoneItems} onChange={(value) => setZoneId(value === "all" ? "" : value)} />
+          <FilterSelect label={t("filterSupervisor")} value="all" items={[{ value: "all", label: t("supervisorAll") }]} onChange={() => undefined} disabled hint={tCommon("comingSoon")} />
+          <FilterSelect label={t("filterVehicle")} value={vehicle || "all"} items={[{ value: "all", label: t("vehicleAll") }, { value: "bike", label: t("vehicleBike") }, { value: "car", label: t("vehicleCar") }]} onChange={(value) => setVehicle(value === "all" ? "" : value)} />
+        </div>
         <p className="mt-3 text-xs text-[var(--portal-muted)]">
           {rangeActive
             ? t("numbersForRange", { from: formatDay(shownFrom), to: formatDay(shownTo) })
             : t("numbersFor", { date: dateLabel })}
         </p>
         {rangeActive ? <p className="text-xs text-[var(--portal-muted)]">{t("rangeHint")}</p> : null}
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          <FilterSelect label={t("filterZone")} value={zoneId || "all"} items={zoneItems} onChange={(value) => setZoneId(value === "all" ? "" : value)} />
-          <FilterSelect label={t("filterSupervisor")} value="all" items={[{ value: "all", label: t("supervisorAll") }]} onChange={() => undefined} disabled hint={tCommon("comingSoon")} />
-          <FilterSelect label={t("filterVehicle")} value={vehicle || "all"} items={[{ value: "all", label: t("vehicleAll") }, { value: "bike", label: t("vehicleBike") }, { value: "car", label: t("vehicleCar") }]} onChange={(value) => setVehicle(value === "all" ? "" : value)} />
-        </div>
-      </div>
+      </section>
 
       {failed ? <p className="text-sm text-destructive">{t("loadFailed")}</p> : null}
       {loading && !data ? <p className="text-sm text-[var(--portal-muted)]">{t("loading")}</p> : null}
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        <Tile accent="ink" label={t("kpiTotal")} value={data?.kpis.assigned ?? 0} action={rosterFilter === "all" ? t("showingList") : t("seeWho")} onAction={() => openRoster("all")} />
-        <Tile accent="green" label={t("kpiWorkingToday")} value={data?.kpis.working ?? 0} action={rosterFilter === "working" ? t("showingList") : t("seeWho")} onAction={() => openRoster("working")} />
-        <Tile accent="blue" label={t("kpiOnLeave")} value={data?.kpis.onLeave ?? 0} action={rosterFilter === "onLeave" ? t("showingList") : t("seeWho")} onAction={() => openRoster("onLeave")} />
-        <Tile accent="ochre" label={t("kpiSick")} value={data?.kpis.sick ?? 0} action={rosterFilter === "sick" ? t("showingList") : t("seeWho")} onAction={() => openRoster("sick")} />
-        <Tile accent="red" label={t("kpiAbsent")} value={data?.kpis.absent ?? 0} action={rosterFilter === "absent" ? t("showingList") : t("seeWho")} onAction={() => openRoster("absent")} />
-        <Tile accent="grey" label={t("kpiOther")} value={data?.kpis.other ?? 0} action={rosterFilter === "other" ? t("showingList") : t("seeWho")} onAction={() => openRoster("other")} />
-        <Tile accent="plum" label={t("kpiAccident")} value={data?.kpis.accident ?? 0} />
+        <Tile accent="ink" label={t("kpiTotal")} value={data?.kpis.assigned ?? 0} caption={t("acrossProjects", { count: data?.byProject.length ?? 0 })} onAction={() => openRoster("all")} />
+        <Tile accent="green" label={t("kpiWorkingToday")} value={data?.kpis.working ?? 0} caption={t("workingRateCaption", { pct: roundPercent(data?.kpis.workingRate ?? 0) })} onAction={() => openRoster("working")} />
+        <Tile accent="blue" label={t("kpiOnLeave")} value={data?.kpis.onLeave ?? 0} caption={t("returnThisWeekCaption", { count: data?.outlook.returningThisWeek.length ?? 0 })} onAction={() => openRoster("onLeave")} />
+        <Tile accent="ochre" label={t("kpiSick")} value={data?.kpis.sick ?? 0} caption={t("pctOfRidersCaption", { pct: roundPercent(share(data?.kpis.sick, data?.kpis.assigned)) })} onAction={() => openRoster("sick")} />
+        <Tile accent="red" label={t("kpiAbsent")} value={data?.kpis.absent ?? 0} caption={t("pctOfRidersCaption", { pct: roundPercent(share(data?.kpis.absent, data?.kpis.assigned)) })} onAction={() => openRoster("absent")} />
+        <Tile accent="grey" label={t("kpiOther")} value={data?.kpis.other ?? 0} caption={t("attendancePending")} onAction={() => openRoster("other")} />
+        <Tile accent="plum" label={t("kpiAccident")} value={data?.kpis.accident ?? 0} caption={t("noIncidentsToday")} />
       </div>
 
       <section className={card}>
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          {(["working", "onLeave", "absent", "sick", "other"] as const).map((key) => {
-            const count = data?.statusBar.find((item) => item.key === key)?.count ?? 0;
-            return (
-              <button key={key} type="button" className="inline-flex h-9 cursor-pointer items-center gap-1" style={{ color: legendColor(key) }} onClick={() => openRoster(key)}>
-                <span className="size-2.5 rounded-sm" style={{ background: dailyColor(key) }} />
-                {dailyLabel(key, t)} {count}
-              </button>
-            );
-          })}
-          <span className="ms-auto text-[var(--portal-ink)]">{t("totalRiders", { count: barTotal })}</span>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[15px] font-bold text-[var(--portal-ink)]">{t("statusMixTitle")}</p>
+          <p className="text-xs text-[var(--portal-muted)]">{t("totalRiders", { count: barTotal })}</p>
         </div>
         {mixTotal === 0 ? (
-          <p className="mt-2 text-sm text-[var(--portal-muted)]">{t("statusBarEmpty")}</p>
+          <p className="text-sm text-[var(--portal-muted)]">{t("statusBarEmpty")}</p>
         ) : (
-          <div className="mt-2 flex h-4 overflow-hidden rounded-md">
+          <div className="flex h-2.5 overflow-hidden rounded-full">
             {mixParts.map((item) => (
               <div key={item.key} style={{ backgroundColor: dailyColor(item.key), width: `${(item.count / mixTotal) * 100}%` }} title={`${dailyLabel(item.key, t)} ${item.count}`} />
             ))}
           </div>
         )}
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+          {(["working", "onLeave", "absent", "sick", "other", "accident"] as const).map((key) => {
+            const count = data?.statusBar.find((item) => item.key === key)?.count ?? 0;
+            const body = (
+              <>
+                <span className="size-2 rounded-full" style={{ background: dailyColor(key) }} />
+                {dailyLabel(key, t)}{" "}
+                <span className="font-semibold text-[var(--portal-ink)]">{count}</span>
+              </>
+            );
+            if (key === "accident") {
+              return (
+                <span key={key} className="inline-flex h-6 items-center gap-1.5 text-[var(--portal-muted)]">
+                  {body}
+                </span>
+              );
+            }
+            return (
+              <button key={key} type="button" className="inline-flex h-6 cursor-pointer items-center gap-1.5 text-[var(--portal-muted)] transition-colors duration-150 hover:text-[var(--portal-ink)]" onClick={() => openRoster(key)}>
+                {body}
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       {rosterFilter ? (
@@ -917,9 +973,9 @@ export function OperationsDashboardShell() {
       <div className="grid items-stretch gap-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(240px,0.85fr)]">
       <section className={`${card} h-full`}>
         <div className={SECTION_BAND}>
-          <p className="text-sm uppercase">{titled(t("byProjectTitle"))}</p>
+          <p className="text-[15px] font-bold text-[var(--portal-ink)]">{titled(t("byProjectTitle"))}</p>
           {projectKey && !readOnly ? (
-            <button type="button" className="cursor-pointer text-xs underline" onClick={() => setProjectKey(undefined)}>
+            <button type="button" className="cursor-pointer text-xs font-medium text-[var(--portal-btn)] hover:underline" onClick={() => setProjectKey(undefined)}>
               {t("showAllProjects")}
             </button>
           ) : null}
@@ -998,7 +1054,7 @@ export function OperationsDashboardShell() {
       </section>
       <section className={`${card} h-full`}>
         <div className={SECTION_BAND}>
-          <p className="text-sm uppercase">{t("outlookTitle")}</p>
+          <p className="text-[15px] font-bold text-[var(--portal-ink)]">{t("outlookTitle")}</p>
         </div>
         <ul className="divide-y divide-[var(--portal-border)]">
           {(["returningThisWeek", "startingThisWeek", "pendingApproval", "overdue", "newJoiners"] as const).map(
@@ -1047,8 +1103,8 @@ export function OperationsDashboardShell() {
 
       <section className={card}>
         <div className={SECTION_BAND}>
-          <p className="text-sm uppercase">{titled(t("employeeStatusTitle"))}</p>
-          <button type="button" className="cursor-pointer text-xs underline" onClick={() => router.push(employeesHref)}>
+          <p className="text-[15px] font-bold text-[var(--portal-ink)]">{titled(t("employeeStatusTitle"))}</p>
+          <button type="button" className="cursor-pointer text-xs font-medium text-[var(--portal-btn)] hover:underline" onClick={() => router.push(employeesHref)}>
             {t("viewEmployees")}
           </button>
         </div>
@@ -1097,7 +1153,7 @@ export function OperationsDashboardShell() {
 
       <section className={card}>
         <div className={SECTION_BAND}>
-          <p className="text-sm uppercase">{titled(t("leaveChartTitle"))}</p>
+          <p className="text-[15px] font-bold text-[var(--portal-ink)]">{titled(t("leaveChartTitle"))}</p>
           <div className="flex flex-wrap gap-2">
             <Select
               items={yearChoices.map((item) => ({ value: item, label: item }))}
@@ -1243,7 +1299,7 @@ export function OperationsDashboardShell() {
       <div className="grid items-stretch gap-2 lg:grid-cols-2">
       <section className={`${card} h-full`}>
         <div className={SECTION_BAND}>
-          <p className="text-sm uppercase">{titled(t("jobEndTitle"))}</p>
+          <p className="text-[15px] font-bold text-[var(--portal-ink)]">{titled(t("jobEndTitle"))}</p>
           <div className="flex flex-wrap gap-2">
             <Select
               items={[...jobWindowItems]}
@@ -1261,7 +1317,7 @@ export function OperationsDashboardShell() {
             </Select>
           <Button
             variant="portal-neutral"
-            className="h-9 cursor-pointer border-[var(--portal-canvas)] bg-transparent text-[var(--portal-canvas)] hover:bg-[var(--portal-canvas)]/10"
+            className="h-9 cursor-pointer border-[var(--portal-border)] bg-[var(--portal-canvas)] text-[var(--portal-ink)] hover:bg-[#faf8f7]"
             onClick={() =>
               downloadCsv(
                 "job-end.csv",
@@ -1300,11 +1356,11 @@ export function OperationsDashboardShell() {
       </section>
       <section className={`${card} h-full`}>
         <div className={SECTION_BAND}>
-          <p className="text-sm uppercase">{t("ridersOnLeaveTitle")}</p>
+          <p className="text-[15px] font-bold text-[var(--portal-ink)]">{t("ridersOnLeaveTitle")}</p>
           {leaveRiders.length > 8 ? (
             <Button
               variant="portal-secondary"
-              className="h-9 cursor-pointer border-[var(--portal-canvas)] bg-transparent text-[var(--portal-canvas)] hover:bg-[var(--portal-canvas)]/10"
+              className="h-9 cursor-pointer border-[var(--portal-border)] bg-[var(--portal-canvas)] text-[var(--portal-ink)] hover:bg-[#faf8f7]"
               onClick={() => setShowAllLeaveRiders((open) => !open)}
             >
               {showAllLeaveRiders ? t("viewLess") : t("viewAll")}
@@ -1464,13 +1520,13 @@ function Tile({
   label,
   value,
   accent = "ink",
-  action,
+  caption,
   onAction,
 }: {
   label: string;
   value: string | number;
   accent?: PortalKpiAccent;
-  action?: string;
+  caption?: string;
   onAction?: () => void;
 }) {
   return (
@@ -1479,7 +1535,7 @@ function Tile({
       portalAccent={accent}
       label={label}
       value={value}
-      caption={action}
+      caption={caption}
       onClick={onAction}
     />
   );

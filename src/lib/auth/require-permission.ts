@@ -100,3 +100,25 @@ export async function requireAnyPermission(
   }
   return session;
 }
+
+/** The client/partner login's only landing page. */
+export const PARTNER_HOME = "/client-portal";
+
+/**
+ * Areas a partner login may open. Everything else renders through
+ * `requireNotPartner`, so a page that never asked for a permission is still
+ * closed to a client that types its URL.
+ */
+export const PARTNER_AREA_PREFIXES = ["/client-portal", "/operations-dashboard"] as const;
+
+/**
+ * Guard for every area outside the client portal. A partner session is sent
+ * back to its own dashboard instead of rendering the page.
+ */
+export async function requireNotPartner(locale: string) {
+  const session = await requireAuth(locale);
+  if (session.accessKind === "partner") {
+    redirect({ href: PARTNER_HOME, locale });
+  }
+  return session;
+}

@@ -1,19 +1,16 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { BarChart3, FileSpreadsheet, Scale, Wallet } from "lucide-react";
-import { AppPage } from "@/components/app/app-page";
-import { AppPageHeader } from "@/components/app/app-page-header";
-import { Card, CardContent } from "@/components/ui/card";
-import { Link } from "@/i18n/navigation";
+import { AppHubShell, HUB_GLYPH_TINTS, type HubGroup } from "@/components/app/app-hub-shell";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { requireAnyPermission } from "@/lib/auth/require-permission";
 
 /**
- * PayrollHub — the three money surfaces that left OperationsHub.
+ * Payroll Hub — the same Figma shell as Visit bookings (`AppHubShell`).
  *
- * Performance, Order reconciliation and Payroll used to sit on `/operations`
- * beside the rule tables, which made the payroll conversation start one page
- * away from Payroll itself. They live here now, gated exactly as before, so a
- * card is still never an advertisement for a page that answers /unauthorized.
+ * Its two panels are the two halves of the money conversation: what happened
+ * (performance and the AM-vs-MGGO reconciliation) beside what is paid for it
+ * (Payroll and HR Payroll). Both were previously one flat card grid, which made
+ * the read order arbitrary.
  */
 const HUB_PERMISSIONS = [
   "payroll.view",
@@ -23,33 +20,48 @@ const HUB_PERMISSIONS = [
   "payroll.manage",
 ] as const;
 
-const CARDS: ReadonlyArray<{
+type PayrollTile = {
   key: string;
   href: string;
   icon: typeof Wallet;
+  tint: (typeof HUB_GLYPH_TINTS)[keyof typeof HUB_GLYPH_TINTS];
   permission: Permission;
-}> = [
-  { key: "performance", href: "/performance", icon: BarChart3, permission: "performance.view" },
+  /** HR Payroll also opens for `payroll.manage`, exactly as it does today. */
+  orManage?: boolean;
+};
+
+const REPORT_TILES: PayrollTile[] = [
+  {
+    key: "performance",
+    href: "/performance",
+    icon: BarChart3,
+    tint: HUB_GLYPH_TINTS.teal,
+    permission: "performance.view",
+  },
   {
     key: "orderReconciliation",
     href: "/deliveries/reconciliation",
     icon: Scale,
+    tint: HUB_GLYPH_TINTS.navy,
     permission: "order_recon.view",
   },
-  { key: "payroll", href: "/payroll", icon: Wallet, permission: "payroll.view" },
 ];
 
-const HR_CARDS: ReadonlyArray<{
-  key: string;
-  href: string;
-  icon: typeof Wallet;
-  permission: Permission;
-}> = [
+const PAYROLL_TILES: PayrollTile[] = [
+  {
+    key: "payroll",
+    href: "/payroll",
+    icon: Wallet,
+    tint: HUB_GLYPH_TINTS.gold,
+    permission: "payroll.view",
+  },
   {
     key: "hrPayroll",
     href: "/payroll/hr",
     icon: FileSpreadsheet,
+    tint: HUB_GLYPH_TINTS.rose,
     permission: "payroll.hr_payroll",
+    orManage: true,
   },
 ];
 
@@ -63,77 +75,43 @@ export default async function PayrollHubPage({
   const session = await requireAnyPermission(locale, HUB_PERMISSIONS);
   const t = await getTranslations("pages.payrollHub.hub");
 
-  const cards = CARDS.filter((card) =>
-    hasPermissionInSet(session.permissions, card.permission, session.isSuperAdmin),
-  );
-  const hrCards = HR_CARDS.filter(
-    (card) =>
-      hasPermissionInSet(session.permissions, card.permission, session.isSuperAdmin) ||
-      hasPermissionInSet(session.permissions, "payroll.manage", session.isSuperAdmin),
-  );
+  const can = (tile: PayrollTile): boolean =>
+    hasPermissionInSet(session.permissions, tile.permission, session.isSuperAdmin) ||
+    (tile.orManage === true &&
+      hasPermissionInSet(session.permissions, "payroll.manage", session.isSuperAdmin));
+
+  const groups: HubGroup[] = [
+    {
+      id: "reports",
+      heading: t("reportsHeading"),
+      hint: t("reportsHint"),
+      tiles: REPORT_TILES.filter(can).map((tile) => ({
+        href: tile.href,
+        label: t(`cards.${tile.key}.title`),
+        icon: tile.icon,
+        tint: tile.tint,
+      })),
+    },
+    {
+      id: "payroll",
+      heading: t("payrollHeading"),
+      hint: t("payrollHint"),
+      tiles: PAYROLL_TILES.filter(can).map((tile) => ({
+        href: tile.href,
+        label: t(`cards.${tile.key}.title`),
+        icon: tile.icon,
+        tint: tile.tint,
+      })),
+    },
+  ].filter((group) => group.tiles.length > 0);
 
   return (
-    <AppPage className="space-y-4">
-      <AppPageHeader
-        breadcrumbs={[{ label: t("breadcrumb") }]}
-        title={t("title")}
-        description={t("subtitle")}
-      />
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <Link key={card.key} href={card.href} className="group">
-              <Card className="h-full rounded-xl border-border bg-card shadow-sm transition-colors group-hover:border-primary/40">
-                <CardContent className="flex items-start gap-3 p-4">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                    <Icon className="size-4" aria-hidden />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground">
-                      {t(`cards.${card.key}.title`)}
-                    </p>
-                    <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
-                      {t(`cards.${card.key}.body`)}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
-
-      {hrCards.length > 0 ? (
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-foreground">{t("hrSection")}</h2>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {hrCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <Link key={card.key} href={card.href} className="group">
-                  <Card className="h-full rounded-xl border-border bg-card shadow-sm transition-colors group-hover:border-primary/40">
-                    <CardContent className="flex items-start gap-3 p-4">
-                      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                        <Icon className="size-4" aria-hidden />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground">
-                          {t(`cards.${card.key}.title`)}
-                        </p>
-                        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
-                          {t(`cards.${card.key}.body`)}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-    </AppPage>
+    <AppHubShell
+      title={t("title")}
+      subtitle={t("subtitle")}
+      breadcrumbHome={t("breadcrumbHome")}
+      titleTile={{ icon: Wallet, tint: HUB_GLYPH_TINTS.gold }}
+      groups={groups}
+    />
   );
 }
