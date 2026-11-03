@@ -593,6 +593,7 @@ function onLeaveNow(
     rows.push({
       name: driver.name,
       employee_id: driver.employeeId,
+      project_key: driver.project,
       start_date: startDate,
       end_date: endDate,
       zone: zoneLabel(driver.zoneId, zones),
@@ -733,6 +734,7 @@ function rosterRows(
       status,
       statuses: [...seen],
       joined: driver.workStart ?? "",
+      employeeStatus: driver.status,
     };
     if (includePhone) row.phone = driver.phone;
     rows.push(row);

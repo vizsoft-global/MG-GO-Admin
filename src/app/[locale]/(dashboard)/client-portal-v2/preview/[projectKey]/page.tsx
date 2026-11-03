@@ -1,10 +1,10 @@
 import { setRequestLocale } from "next-intl/server";
 import { redirect } from "@/i18n/navigation";
-import { ClientPortalShell } from "@/features/client-portal/client-portal-shell";
+import { ClientDashboardV2 } from "@/features/portal-v2/client-dashboard-v2";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { parsePartnerProjectKey } from "@/lib/auth/staff-access";
 
-export default async function ClientPortalPreviewPage({
+export default async function ClientPortalV2PreviewPage({
   params,
 }: {
   params: Promise<{ locale: string; projectKey: string }>;
@@ -14,7 +14,7 @@ export default async function ClientPortalPreviewPage({
   const session = await requirePermission(locale, "client_portal.view");
   if (!session.isSuperAdmin) {
     redirect({
-      href: session.accessKind === "partner" ? "/client-portal" : "/unauthorized",
+      href: session.accessKind === "partner" ? "/client-portal-v2" : "/unauthorized",
       locale,
     });
   }
@@ -23,9 +23,9 @@ export default async function ClientPortalPreviewPage({
     case "keeta":
     case "americana":
     case "unassigned":
-      return <ClientPortalShell preview={{ projectKey: key }} />;
+      return <ClientDashboardV2 preview={{ projectKey: key }} />;
     case null:
-      redirect({ href: "/client-portal/clients", locale });
+      redirect({ href: "/client-portal-v2/clients", locale });
       return null;
     default: {
       const neverKey: never = key;

@@ -161,7 +161,7 @@ export async function fetchClientPortalDocuments(input: {
       action: "view",
       entityType: "driver_document",
       entityId: intakeId,
-      pagePath: "/client-portal/employees",
+      pagePath: "/client-portal-v2/employees",
       context: {
         project: gate.locked,
         labels: documents.map((doc) => doc.labelKey ?? doc.label),
@@ -189,7 +189,7 @@ export async function logClientPortalDocument(input: {
     action: kind,
     entityType: "driver_document",
     entityId: intakeId,
-    pagePath: "/client-portal/employees",
+    pagePath: "/client-portal-v2/employees",
     context: { project: gate.locked, label: input.label.slice(0, 120) },
   });
   return { ok: true };
