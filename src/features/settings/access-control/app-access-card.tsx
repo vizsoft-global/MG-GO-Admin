@@ -1,6 +1,5 @@
 "use client";
 
-import { createElement } from "react";
 import { useTranslations } from "next-intl";
 import { Check, Plus } from "lucide-react";
 import {
@@ -9,12 +8,11 @@ import {
   type AppAccessItem,
   type AppAccessLevel,
 } from "@/lib/auth/app-access";
-import { launcherTileHex } from "@/lib/menu/module-colors";
-import { resolveIcon } from "@/lib/menu/menu-registry";
 import type { RequestTypeGrant, RequestTypeOption } from "@/features/settings/staff-access-actions";
 import type { EsignCategoryGrant } from "@/features/esign/esign-staff-access";
 import { OUTGOING_SENDER_KEYS } from "@/features/esign/outgoing-hub-categories";
 import { cn } from "@/lib/utils";
+import { AccessAppIcon, AccessLevelPill } from "./access-parts";
 
 const LEVEL_KEYS: Record<AppAccessLevel, string> = {
   none: "levelNone",
@@ -48,16 +46,16 @@ function SubViewChip({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border px-[7px] text-xs transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-[9px] py-1 text-xs font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
         active
-          ? "border-black/30 bg-[#F4F4F5] text-[#374151]"
-          : "border-[#E4E4E7] bg-white text-[#71717A] hover:bg-[#FAFAFA]",
+          ? "border-[#e4ddd9] bg-[#f8f5f3] text-[#27273f]"
+          : "border-[#e4ddd9] bg-white text-[#8c8798] hover:bg-[#faf8f7]",
       )}
     >
       {active ? (
-        <Check className="size-2.5 shrink-0 stroke-[3] text-[#18181B]" aria-hidden />
+        <Check className="size-3 shrink-0 stroke-[3] text-[#27273f]" aria-hidden />
       ) : (
-        <Plus className="size-2.5 shrink-0 stroke-[3] text-[#9CA3AF]" aria-hidden />
+        <Plus className="size-3 shrink-0 stroke-[3] text-[#8c8798]" aria-hidden />
       )}
       {label}
     </button>
@@ -102,20 +100,18 @@ export function AppAccessCard({
   return (
     <article
       className={cn(
-        "flex flex-col gap-3 rounded-xl border border-black/15 bg-white p-3",
+        "flex flex-col gap-3 rounded-xl border border-[#e4ddd9] bg-white p-4",
         entry.rcm && "md:col-span-2",
       )}
     >
-      <div className="flex items-center gap-2.5">
-        <span
-          className="flex size-6 shrink-0 items-center justify-center rounded-md"
-          style={{ backgroundColor: launcherTileHex(entry.appId) }}
-        >
-          {createElement(resolveIcon(iconName), { className: "size-3.5 text-white" })}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-xs font-semibold text-[#18181B]">{label}</p>
-          <p className="truncate text-xs text-[#71717A]">
+      <div className="flex items-start gap-2.5">
+        <AccessAppIcon appId={entry.appId} iconName={iconName} size={32} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-semibold text-[#27273f]">{label}</p>
+            <AccessLevelPill level={item.level} />
+          </div>
+          <p className="truncate text-xs text-[#8c8798]">
             {hidden
               ? t("hiddenFromUser")
               : t("subViewsSummary", {
@@ -127,7 +123,7 @@ export function AppAccessCard({
         </div>
       </div>
 
-      <div className="flex h-[30px] items-center gap-px rounded-lg bg-[#F1F3F5] p-[3px]">
+      <div className="flex h-[34px] items-center gap-px rounded-lg bg-[#f1eeec] p-[3px]">
         {APP_ACCESS_LEVELS.map((level) => {
           const active = item.level === level;
           return (
@@ -138,10 +134,10 @@ export function AppAccessCard({
               disabled={disabled}
               onClick={() => onLevel(level)}
               className={cn(
-                "h-6 flex-1 cursor-pointer rounded-md text-xs transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+                "h-7 flex-1 cursor-pointer rounded-md text-xs transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
                 active
-                  ? "bg-[#18181B] font-medium text-white"
-                  : "text-[#6B7280] hover:text-[#18181B]",
+                  ? "bg-[#27273f] font-medium text-white"
+                  : "text-[#5e5e72] hover:text-[#27273f]",
               )}
             >
               {t(LEVEL_KEYS[level])}
@@ -151,15 +147,15 @@ export function AppAccessCard({
       </div>
 
       {item.custom ? (
-        <p className="flex items-center gap-1.5 text-xs text-[#646464]">
-          <span className="size-1.5 shrink-0 rounded-full bg-[#646464]" aria-hidden />
+        <p className="flex items-center gap-1.5 text-xs text-[#8c8798]">
+          <span className="size-1.5 shrink-0 rounded-full bg-[#8c8798]" aria-hidden />
           {t("changedManually")}
         </p>
       ) : null}
 
       {!hidden && entry.subViews.length > 0 ? (
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
+          <p className="text-xs font-medium text-[#8c8798]">
             {t("visibleSubViews")}
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -178,7 +174,7 @@ export function AppAccessCard({
 
       {!hidden && entry.rcm && onSides ? (
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
+          <p className="text-xs font-medium text-[#8c8798]">
             {t("sides")}
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -200,7 +196,7 @@ export function AppAccessCard({
 
       {!hidden && entry.rcm && item.sender === true && onToggleEsign ? (
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
+          <p className="text-xs font-medium text-[#8c8798]">
             {t("outgoingCategoriesHeading")}
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -219,7 +215,7 @@ export function AppAccessCard({
 
       {!hidden && entry.rcm && item.receiver === true && requestTypes && onToggleType ? (
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs font-semibold uppercase tracking-[0.6px] text-[#9CA3AF]">
+          <p className="text-xs font-medium text-[#8c8798]">
             {t("requestTypes")}
           </p>
           <div className="flex flex-wrap gap-1.5">

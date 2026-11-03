@@ -6981,7 +6981,7 @@
       "title": "Visit bookings",
       "subtitle": "Head Office view · Operator check-in and visit catalog",
       "hub": {
-        "subtitle": "Pick a module to manage visit bookings, slots, and settings",
+        "subtitle": "Pick a module to manage visit bookings, slots and settings",
         "manageHeading": "Manage",
         "configureHeading": "Configure",
         "allVisits": "All visits",
@@ -6998,7 +6998,17 @@
         "branchesHint": "Visit locations",
         "reports": "Reports",
         "reportsHint": "Visit volume and outcomes",
-        "departmentsHeading": "Departments"
+        "departmentsHeading": "Departments",
+        "breadcrumbHome": "Home",
+        "visitsToday": "Visits today",
+        "waitingAtReception": "Waiting at reception",
+        "nextVisit": "Next visit",
+        "allDepartments": "All departments",
+        "departmentsFilterHint": "Filter every module by department",
+        "manageHint": "Day-to-day visits",
+        "configureHint": "Set up how bookings work",
+        "upcomingCount": "{count, plural, one {# upcoming visit} other {# upcoming visits}}",
+        "todayCount": "{count, plural, one {# visit today} other {# visits today}}"
       },
       "refresh": "Refresh",
       "viewDetails": "View details",

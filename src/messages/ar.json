@@ -6998,7 +6998,17 @@
         "branchesHint": "مواقع الزيارة",
         "reports": "التقارير",
         "reportsHint": "حجم الزيارات والنتائج",
-        "departmentsHeading": "الأقسام"
+        "departmentsHeading": "الأقسام",
+        "breadcrumbHome": "الرئيسية",
+        "visitsToday": "زيارات اليوم",
+        "waitingAtReception": "في انتظار الاستقبال",
+        "nextVisit": "الزيارة القادمة",
+        "allDepartments": "كل الأقسام",
+        "departmentsFilterHint": "تصفية كل وحدة حسب القسم",
+        "manageHint": "الزيارات اليومية",
+        "configureHint": "إعداد طريقة عمل الحجوزات",
+        "upcomingCount": "{count, plural, one {# زيارة قادمة} other {# زيارات قادمة}}",
+        "todayCount": "{count, plural, one {# زيارة اليوم} other {# زيارات اليوم}}"
       },
       "refresh": "تحديث",
       "viewDetails": "عرض التفاصيل",

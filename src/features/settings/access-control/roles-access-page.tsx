@@ -6,6 +6,7 @@ import type {
   StaffAccessListRow,
 } from "@/features/settings/staff-access-actions";
 import { AccessControlShell } from "./access-control-shell";
+import type { PermissionRow } from "@/features/settings/roles-permissions-panel";
 
 export function RolesAccessPage({
   userId,
@@ -13,12 +14,20 @@ export function RolesAccessPage({
   loadError,
   roles,
   requestTypes,
+  tab,
+  permissions,
+  usageCounts,
+  nowMs,
 }: {
   userId?: string | null;
   rows: StaffAccessListRow[];
   loadError?: string;
   roles: AdminRoleRow[];
   requestTypes: RequestTypeOption[];
+  tab?: "staff" | "roles";
+  permissions?: PermissionRow[];
+  usageCounts?: { roleId: string; userCount: number }[];
+  nowMs: number;
 }) {
   return (
     <AccessControlShell
@@ -27,6 +36,10 @@ export function RolesAccessPage({
       roles={roles}
       requestTypes={requestTypes}
       initialUserId={userId}
+      initialTab={tab ?? "staff"}
+      permissions={permissions}
+      usageCounts={usageCounts}
+      nowMs={nowMs}
     />
   );
 }

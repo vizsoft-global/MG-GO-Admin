@@ -1,8 +1,10 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown, Lock, Mail, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
+import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,7 +15,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { KpiCard } from "@/components/dashboard/kpi-card";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { EmptyCell, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
 import { groupBanner, groupRows, ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
@@ -22,12 +23,12 @@ import { EmptyState } from "@/components/app/empty-state";
 import { ErrorState } from "@/components/app/error-state";
 import { downloadCsv } from "@/lib/csv/client-download";
 import { defaultStartDate, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
-import { formatPct } from "@/lib/format/percent";
+import { roundPercent } from "@/lib/format/percent";
 import { selectOptions } from "@/lib/select-items";
 import { leaveExportRows, type LeaveMonthBar } from "@/features/operations-dashboard/shape";
 import { fetchClientPortalDashboard } from "./client-portal-actions";
 import { ClientPortalNav } from "./client-portal-nav";
-import type { ClientPortalDashboard } from "./shape";
+import { riderExportRows, type ClientPortalDashboard } from "./shape";
 
 type Translator = ReturnType<typeof useTranslations<"pages.clientPortal">>;
 
@@ -70,8 +71,34 @@ function dailyColor(key: TodayBarKey): string {
   }
 }
 
-function legendColor(key: TodayBarKey): string {
-  return dailyColor(key);
+/** `KPI Card` (7087:17428): accent square, 28px value and a caption line. */
+function PortalKpi({
+  accent,
+  label,
+  value,
+  caption,
+}: {
+  accent: string;
+  label: string;
+  value: number | string;
+  caption?: string;
+}) {
+  return (
+    <article className="flex flex-col gap-1.5 rounded-xl border border-[var(--portal-border)] bg-[var(--portal-canvas)] px-4 py-4">
+      <div className="flex items-center gap-2">
+        <span
+          className="size-2 shrink-0 rounded-[2px]"
+          style={{ backgroundColor: accent }}
+          aria-hidden
+        />
+        <p className="truncate text-[13px] font-medium text-[var(--portal-muted)]">{label}</p>
+      </div>
+      <p className="text-[28px] font-bold leading-[34px] text-[var(--portal-ink)]">{value}</p>
+      {caption ? (
+        <p className="truncate text-xs leading-4 text-[var(--portal-muted)]">{caption}</p>
+      ) : null}
+    </article>
+  );
 }
 
 function dailyLabel(key: TodayBarKey, t: Translator): string {
@@ -121,6 +148,7 @@ export function ClientPortalShell({
 } = {}) {
   const t = useTranslations("pages.clientPortal");
   const locale = useLocale();
+  const { fullName, email } = useAuth();
   const today = kuwaitTodayYmd();
   const yesterday = defaultStartDate(1);
   const [day, setDay] = useState(today);
@@ -133,20 +161,27 @@ export function ClientPortalShell({
   const effectiveProjectKey = preview?.projectKey ?? projectKey;
   const projectLabel = projectDisplayName(effectiveProjectKey, t);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const result = await fetchClientPortalDashboard({
-      day,
-      zoneId: zoneId || undefined,
-      projectKey: effectiveProjectKey,
-    });
-    setDashboard(result.dashboard);
-    setFailed(result.failed);
-    setLoading(false);
-  }, [day, zoneId, effectiveProjectKey]);
+  const load = useCallback(
+    () =>
+      fetchClientPortalDashboard({
+        day,
+        zoneId: zoneId || undefined,
+        projectKey: effectiveProjectKey,
+      }),
+    [day, zoneId, effectiveProjectKey],
+  );
 
   useEffect(() => {
-    void load();
+    let cancelled = false;
+    void load().then((result) => {
+      if (cancelled) return;
+      setDashboard(result.dashboard);
+      setFailed(result.failed);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   const data = dashboard;
@@ -183,103 +218,148 @@ export function ClientPortalShell({
     year: "numeric",
   });
   const clock = new Date().toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  const name = fullName ?? email ?? t("title");
+  const kuwaitHour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      hour12: false,
+      timeZone: "Asia/Kuwait",
+    }).format(new Date()),
+  );
+  const greetingKey =
+    kuwaitHour < 12 ? "greetingMorning" : kuwaitHour < 17 ? "greetingAfternoon" : "greetingEvening";
 
   return (
-    <div className="min-h-0 space-y-4 bg-[var(--portal-canvas)] p-3">
+    <div className="min-h-0 space-y-3 bg-[var(--portal-canvas)] p-3">
       {preview ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--portal-border)] bg-[var(--portal-badge-blue-bg)] px-4 py-2 text-sm text-[var(--portal-ink)]">
-          <span>
-            Super admin preview — viewing {projectDisplayName(preview.projectKey, t)} client portal.
-          </span>
-          <Link href="/client-portal/clients" className="font-medium text-[var(--portal-btn)] underline-offset-2 hover:underline">
-            Exit preview
-          </Link>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#27273f] px-4 py-2.5 text-white">
+          <p className="flex min-w-0 flex-wrap items-center gap-2 text-[13px]">
+            <span className="font-semibold">{t("previewMode")}</span>
+            <span className="text-white/75">
+              {t("previewNotice", { project: projectDisplayName(preview.projectKey, t) })}
+            </span>
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="inline-flex h-7 items-center gap-1.5 rounded-md bg-white/10 px-2.5 text-xs text-white/80">
+              {t("viewingAs")}
+              <span className="font-semibold text-white">
+                {projectDisplayName(preview.projectKey, t)}
+              </span>
+              <ChevronDown className="size-3.5" aria-hidden />
+            </span>
+            <Link
+              href="/client-portal/clients"
+              className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/40 px-2.5 text-xs font-medium text-white transition-colors duration-150 hover:bg-white/10"
+            >
+              <X className="size-3.5" aria-hidden />
+              {t("exitPreview")}
+            </Link>
+          </div>
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="type-h1 text-[var(--portal-ink)]">{t("title")}</h1>
-          <p className="text-sm text-[var(--portal-muted)]">{t("updatedLine", { date: dateLabel, time: clock })}</p>
+      <div className="overflow-hidden rounded-xl border border-[var(--portal-border)] bg-[var(--portal-canvas)]">
+        <ClientPortalNav
+          projectLabel={projectLabel}
+          previewProjectKey={preview ? effectiveProjectKey : undefined}
+          updatedAt={clock}
+        />
+        <div className="flex flex-wrap items-end justify-between gap-3 px-5 pt-4 pb-3">
+          <div className="min-w-0">
+            <h1 className="text-[28px] font-bold leading-9 text-[var(--portal-ink)]">
+              {t(greetingKey as "greetingMorning", { name: name.split(" ")[0] ?? name })}
+            </h1>
+            <p className="text-sm text-[var(--portal-muted)]">
+              {t("yourRidersToday")} · {dateLabel}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="space-y-1 text-xs text-[var(--portal-muted)]">
+              <span className="block">{t("zoneLabel")}</span>
+              <Select
+                items={zoneItems}
+                value={zoneId || "all"}
+                onValueChange={(value) => setZoneId(!value || value === "all" ? "" : value)}
+              >
+                <SelectTrigger className="h-9 w-44 border-[var(--portal-border)] bg-[var(--portal-canvas)]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {zoneItems.map((item) => (
+                    <SelectItem key={item.value || "all"} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <label className="space-y-1 text-xs text-[var(--portal-muted)]">
+              <span className="block">{t("periodLabel")}</span>
+              <Select
+                items={selectOptions([
+                  { value: "today", label: t("today") },
+                  { value: "yesterday", label: t("yesterday") },
+                  { value: "custom", label: t("pickDate") },
+                ])}
+                value={dateMode}
+                onValueChange={(value) => {
+                  if (value === "today") setDay(today);
+                  if (value === "yesterday") setDay(yesterday);
+                }}
+              >
+                <SelectTrigger className="h-9 w-36 border-[var(--portal-border)] bg-[var(--portal-canvas)]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">{t("today")}</SelectItem>
+                  <SelectItem value="yesterday">{t("yesterday")}</SelectItem>
+                  <SelectItem value="custom">{t("pickDate")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+            <label className="space-y-1 text-xs text-[var(--portal-muted)]">
+              <span className="sr-only">{t("pickDate")}</span>
+              <Input
+                className="h-9 w-36 border-[var(--portal-border)] bg-[var(--portal-canvas)]"
+                type="date"
+                openPickerOnFocus={false}
+                value={day}
+                onChange={(event) => {
+                  if (event.target.value) setDay(event.target.value);
+                }}
+              />
+            </label>
+            <Button
+              variant="portal-secondary"
+              className="h-9 cursor-pointer"
+              onClick={() =>
+                downloadCsv(
+                  "riders.csv",
+                  ["Employee ID", "Name", "Status", "Zone"],
+                  riderExportRows(data?.exportRiders ?? []),
+                )
+              }
+            >
+              {t("exportToExcel")}
+            </Button>
+          </div>
         </div>
-        <ClientPortalNav projectLabel={projectLabel} previewProjectKey={preview ? effectiveProjectKey : undefined} />
-      </div>
-
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="space-y-1 text-xs text-[var(--portal-muted)]">
-          <span className="block">{t("pickDate")}</span>
-          <Select
-            items={selectOptions([
-              { value: "today", label: t("today") },
-              { value: "yesterday", label: t("yesterday") },
-              { value: "custom", label: t("pickDate") },
-            ])}
-            value={dateMode}
-            onValueChange={(value) => {
-              if (value === "today") setDay(today);
-              if (value === "yesterday") setDay(yesterday);
-            }}
-          >
-            <SelectTrigger className="h-9 w-40 border-[var(--portal-border)] bg-[var(--portal-canvas)]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">{t("today")}</SelectItem>
-              <SelectItem value="yesterday">{t("yesterday")}</SelectItem>
-              <SelectItem value="custom">{t("pickDate")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </label>
-        <label className="space-y-1 text-xs text-[var(--portal-muted)]">
-          <span className="sr-only">{t("pickDate")}</span>
-          <Input
-            className="h-9 w-40 border-[var(--portal-border)] bg-[var(--portal-canvas)]"
-            type="date"
-            openPickerOnFocus={false}
-            value={day}
-            onChange={(event) => {
-              if (event.target.value) setDay(event.target.value);
-            }}
-          />
-        </label>
-        <label className="space-y-1 text-xs text-[var(--portal-muted)]">
-          <span className="block">{t("zoneLabel")}</span>
-          <Select
-            items={zoneItems}
-            value={zoneId || "all"}
-            onValueChange={(value) => setZoneId(!value || value === "all" ? "" : value)}
-          >
-            <SelectTrigger className="h-9 w-48 border-[var(--portal-border)] bg-[var(--portal-canvas)]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {zoneItems.map((item) => (
-                <SelectItem key={item.value || "all"} value={item.value}>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
       </div>
 
       {failed ? <ErrorState title={t("loadFailed")} /> : null}
       {loading && !data ? <p className="text-sm text-[var(--portal-muted)]">{t("loading")}</p> : null}
 
       <section className={card}>
-        <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">
-          {todayParts.map((part) => (
-            <span key={part.key} className="inline-flex items-center gap-1" style={{ color: legendColor(part.key) }}>
-              <span className="size-2.5 rounded-sm" style={{ background: dailyColor(part.key) }} />
-              {dailyLabel(part.key, t)} {part.count}
-            </span>
-          ))}
-          <span className="ms-auto text-[var(--portal-ink)]">{t("assignedLine", { count: data?.assignedToYou ?? 0 })}</span>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[15px] font-bold text-[var(--portal-ink)]">{t("todayBarTitle")}</p>
+          <p className="text-xs text-[var(--portal-muted)]">
+            {t("ridersCount", { count: data?.assignedToYou ?? todayTotal })}
+          </p>
         </div>
         {todayTotal === 0 ? (
           <EmptyState title={t("todayBarEmpty")} />
         ) : (
-          <div className="flex h-4 overflow-hidden rounded-md">
+          <div className="flex h-2.5 overflow-hidden rounded-full">
             {todayParts.map((part) => (
               <div
                 key={part.key}
@@ -289,18 +369,55 @@ export function ClientPortalShell({
             ))}
           </div>
         )}
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+          {todayParts.map((part) => (
+            <span key={part.key} className="inline-flex items-center gap-1.5 text-[var(--portal-muted)]">
+              <span className="size-2 rounded-full" style={{ background: dailyColor(part.key) }} />
+              {dailyLabel(part.key, t)}{" "}
+              <span className="font-semibold text-[var(--portal-ink)]">{part.count}</span>
+            </span>
+          ))}
+        </div>
       </section>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <KpiCard layout="portal" portalAccent="plum" label={t("kpiAssigned")} value={data?.kpis.assigned ?? 0} />
-        <KpiCard layout="portal" portalAccent="green" label={t("kpiWorking")} value={data?.kpis.working ?? 0} />
-        <KpiCard layout="portal" portalAccent="blue" label={t("kpiOnLeave")} value={data?.kpis.onLeave ?? 0} />
-        <KpiCard layout="portal" portalAccent="red" label={t("kpiAbsentSick")} value={data?.kpis.absentSick ?? 0} />
-        <KpiCard
-          layout="portal"
-          portalAccent="green"
-          label={t("kpiWorkingRate")}
-          value={formatPct(data?.kpis.workingRate ?? 0)}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <PortalKpi
+          accent="var(--portal-ink)"
+          label={t("kpiAssigned")}
+          value={data?.kpis.assigned ?? 0}
+          caption={t("ridersOfYours", { count: data?.kpis.assigned ?? 0 })}
+        />
+        <PortalKpi
+          accent="var(--portal-badge-green-fg)"
+          label={t("kpiWorking")}
+          value={data?.kpis.working ?? 0}
+          caption={t("ofYourRiders", { pct: roundPercent(data?.kpis.workingRate ?? 0) })}
+        />
+        <PortalKpi
+          accent="var(--portal-badge-blue-fg)"
+          label={t("kpiOnLeave")}
+          value={data?.kpis.onLeave ?? 0}
+          caption={t("todayBackLabel")}
+        />
+        <PortalKpi
+          accent="var(--portal-badge-red-fg)"
+          label={t("kpiAbsentSick")}
+          value={data?.kpis.absentSick ?? 0}
+          caption={t("absentSplit", {
+            absent: data?.todayBar.absent ?? 0,
+            sick: data?.todayBar.sick ?? 0,
+          })}
+        />
+        <PortalKpi
+          accent="var(--portal-badge-grey-fg)"
+          label={t("kpiNotMarked")}
+          value={data?.todayBar.other ?? 0}
+          caption={t("notMarkedCaption")}
+        />
+        <PortalKpi
+          accent="var(--portal-badge-plum-fg)"
+          label={t("kpiAccident")}
+          value={data?.kpis.accident ?? 0}
         />
       </div>
 
@@ -402,7 +519,21 @@ export function ClientPortalShell({
           ]}
         />
       </section>
-      <p className="text-sm text-[var(--portal-muted)]">{t("contactLine")}</p>
+      <footer className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--portal-border)] bg-[var(--portal-canvas)] px-4 py-3">
+        <div className="flex items-center gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--portal-badge-grey-bg)]">
+            <Mail className="size-4 text-[var(--portal-muted)]" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-[var(--portal-ink)]">{t("questionsTitle")}</p>
+            <p className="text-xs text-[var(--portal-muted)]">{t("contactLine")}</p>
+          </div>
+        </div>
+        <p className="flex items-center gap-1.5 text-xs text-[var(--portal-muted)]">
+          <Lock className="size-3.5" aria-hidden />
+          {t("viewOnlyFooter")}
+        </p>
+      </footer>
     </div>
   );
 }
