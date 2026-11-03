@@ -279,7 +279,7 @@
   "pages": {
     "fleetAccidents": {
       "title": "الحوادث",
-  "subtitle": "كل حالة ومرجعها وحالتها — مغلق أو قيد الانتظار أو متأخر.",
+      "subtitle": "كل حالة ومرجعها وحالتها — مغلق أو قيد الانتظار أو متأخر.",
       "legacyRow": "سجل قديم",
       "caseChanged": "تم تحديث الحالة",
       "saved": "تم حفظ الحادث",
@@ -12005,7 +12005,12 @@
             "title": "أنواع الصيانة",
             "body": "الكتالوج الذي تُسجّل تحته زيارة الورشة."
           }
-        }
+        },
+        "breadcrumbHome": "الرئيسية",
+        "manageHeading": "إدارة",
+        "manageHint": "الأسطول الذي تديره اليوم",
+        "configureHeading": "إعدادات",
+        "configureHint": "القوائم التي تُشكّله"
       }
     },
     "fleetService": {
@@ -12296,7 +12301,12 @@
             "title": "الكفالات",
             "body": "قائمة الكفالة المستخدمة في سجل الموظف والرواتب."
           }
-        }
+        },
+        "breadcrumbHome": "الرئيسية",
+        "reportsHeading": "التقارير",
+        "reportsHint": "ما حدث هذا الشهر",
+        "payrollHeading": "الرواتب",
+        "payrollHint": "ما يُدفع مقابله"
       }
     },
     "operationsHub": {
@@ -12393,7 +12403,12 @@
             "title": "أنواع الصيانة",
             "body": "الكتالوج الذي تُسجّل تحته زيارة الورشة."
           }
-        }
+        },
+        "breadcrumbHome": "الرئيسية",
+        "manageHeading": "إدارة",
+        "manageHint": "السجلات وقواعدها",
+        "configureHeading": "إعدادات",
+        "configureHint": "القوائم التي تغذيها"
       }
     },
     "roster": {

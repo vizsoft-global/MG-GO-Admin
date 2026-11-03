@@ -279,7 +279,7 @@
   "pages": {
     "fleetAccidents": {
       "title": "Accidents",
-  "subtitle": "Every case, its reference and its state — Close, Pending or Delay.",
+      "subtitle": "Every case, its reference and its state — Close, Pending or Delay.",
       "legacyRow": "Legacy row",
       "caseChanged": "Case updated",
       "saved": "Accident saved",
@@ -12005,7 +12005,12 @@
             "title": "Service types",
             "body": "The catalog a workshop visit is filed under."
           }
-        }
+        },
+        "breadcrumbHome": "Home",
+        "manageHeading": "Manage",
+        "manageHint": "The fleet you run today",
+        "configureHeading": "Configure",
+        "configureHint": "The catalogs that shape it"
       }
     },
     "fleetService": {
@@ -12296,7 +12301,12 @@
             "title": "Sponsorships",
             "body": "The sponsorship list used on the employee record and payroll."
           }
-        }
+        },
+        "breadcrumbHome": "Home",
+        "reportsHeading": "Reports",
+        "reportsHint": "What happened this month",
+        "payrollHeading": "Payroll",
+        "payrollHint": "What is paid for it"
       }
     },
     "operationsHub": {
@@ -12393,7 +12403,12 @@
             "title": "Service types",
             "body": "The catalog a workshop visit is filed under."
           }
-        }
+        },
+        "breadcrumbHome": "Home",
+        "manageHeading": "Manage",
+        "manageHint": "The ledgers and their rules",
+        "configureHeading": "Configure",
+        "configureHint": "The catalogs that feed them"
       }
     },
     "roster": {
