@@ -28,6 +28,7 @@ import {
   normaliseParts,
   odometerDecision,
   odometerOf,
+  partsTotal,
   positiveNumber,
   recordStage,
   SERVICE_DATE_RE,
@@ -42,7 +43,7 @@ import {
   serviceAttachmentKeyProblem,
   serviceUploadBlockReason,
 } from "./service-attachments-model";
-import { exclusionId } from "./service-maintenance-model";
+import { exclusionId, overrideId } from "./service-maintenance-model";
 import { previewBaselineImport, type BaselineFleetVehicle } from "./service-baseline-import";
 import { previewBikeImport, type BikeFleetVehicle } from "./service-bike-import";
 import {
@@ -114,6 +115,10 @@ export async function listServiceMaintenanceData(options?: {
 
 export async function listMaintenanceExclusions() {
   return reads.listMaintenanceExclusions();
+}
+
+export async function listMaintenanceOverrides() {
+  return reads.listMaintenanceOverrides();
 }
 
 export async function listVehicleDayDistances(day: string) {
@@ -217,7 +222,11 @@ async function prepareRecord(
       vendor: input.vendor.trim() || null,
       notes: input.notes.trim() || null,
       odometer_km: input.odometerKm,
-      cost_kwd: input.costKwd,
+      // Total Cost is the parts breakdown. Storing the derived figure keeps every
+      // reader — the list, the detail, the cost report, the workbook — on one
+      // number, and leaves the typed invoice figure only for a record with no
+      // breakdown at all.
+      cost_kwd: parts.length > 0 ? partsTotal(parts) : input.costKwd,
       parts,
       attachments,
     },
@@ -982,6 +991,120 @@ export async function clearMaintenanceExclusion(input: {
   void logAdminMutation({
     action: "delete",
     entityType: "vehicle_maintenance_exclusion",
+    entityId: id,
+    routeName: "/fleet/service",
+  });
+  revalidatePath("/fleet/service");
+  revalidatePath("/fleet/service/bikes");
+  return { ok: true };
+}
+
+/**
+ * `Next service` — a due point the fleet team sets by hand.
+ *
+ * The derived point is `last service + interval`, which is only as good as the
+ * baseline: a workshop told "next oil at 92,000" needs that recorded without
+ * rewriting the interval for every other vehicle of the same make. Each dimension
+ * is independent, so setting only the date leaves the kilometres on the rule, and
+ * clearing one restores the derived figure for that dimension alone.
+ *
+ * The derived values at the moment of writing are stored as `previous_*` so the
+ * audit reads as "it was 84,000, the fleet team moved it to 92,000".
+ */
+export async function saveMaintenanceOverride(input: {
+  vehicleId: string;
+  programKey: string;
+  /** Next service in kilometres, or `null` to leave that dimension on the rule. */
+  nextDueKm?: number | null;
+  /** Kuwait day `YYYY-MM-DD`, or `null` to leave that dimension on the rule. */
+  nextDueDate?: string | null;
+  previousKm?: number | null;
+  previousDate?: string | null;
+  reason?: string | null;
+}): Promise<{ ok: true } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+  const auth = await requireService("service.manage");
+  if ("error" in auth) return { error: "not_authorized" };
+
+  const vehicleId = input.vehicleId.trim();
+  const programKey = input.programKey.trim();
+  if (!vehicleId) return { error: "missing_vehicle" };
+  if (!programKey) return { error: "missing_program" };
+
+  const nextDueKm = input.nextDueKm == null ? null : Math.round(input.nextDueKm);
+  if (nextDueKm != null && (!Number.isFinite(nextDueKm) || nextDueKm < 0)) {
+    return { error: "invalid_odometer" };
+  }
+  const nextDueDate = (input.nextDueDate ?? "").trim() || null;
+  if (nextDueDate && !SERVICE_DATE_RE.test(nextDueDate)) return { error: "invalid_date" };
+  // A due point in the past is how a workshop records an overdue job, so only the
+  // impossible case — a year of slack — is refused.
+  if (!nextDueKm && !nextDueDate) return { error: "missing_fields" };
+
+  const db = await openDb();
+  const id = overrideId(vehicleId, programKey);
+  const now = new Date();
+  try {
+    await db
+      .collection(COLLECTIONS.vehicleMaintenanceOverrides)
+      .doc(id)
+      .set(
+        {
+          id,
+          vehicle_id: vehicleId,
+          program_key: programKey,
+          next_due_km: nextDueKm,
+          next_due_date: nextDueDate,
+          previous_km: input.previousKm == null ? null : Math.round(input.previousKm),
+          previous_due_date: (input.previousDate ?? "").trim() || null,
+          reason: (input.reason ?? "").trim() || null,
+          by: auth.session.id,
+          at: now,
+          updated_at: now,
+        },
+        { merge: true },
+      );
+  } catch {
+    return { error: "save_failed" };
+  }
+
+  void logAdminMutation({
+    action: "create",
+    entityType: "vehicle_maintenance_override",
+    entityId: id,
+    routeName: "/fleet/service",
+    before: {
+      next_due_km: input.previousKm ?? null,
+      next_due_date: input.previousDate ?? null,
+    },
+    after: { next_due_km: nextDueKm, next_due_date: nextDueDate },
+  });
+  revalidatePath("/fleet/service");
+  revalidatePath("/fleet/service/bikes");
+  return { ok: true };
+}
+
+/** Back to the interval-derived point for both dimensions. */
+export async function clearMaintenanceOverride(input: {
+  vehicleId: string;
+  programKey: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+  const auth = await requireService("service.manage");
+  if ("error" in auth) return { error: "not_authorized" };
+
+  const db = await openDb();
+  const id = overrideId(input.vehicleId.trim(), input.programKey.trim());
+  try {
+    await db.collection(COLLECTIONS.vehicleMaintenanceOverrides).doc(id).delete();
+  } catch {
+    return { error: "save_failed" };
+  }
+  void logAdminMutation({
+    action: "delete",
+    entityType: "vehicle_maintenance_override",
     entityId: id,
     routeName: "/fleet/service",
   });

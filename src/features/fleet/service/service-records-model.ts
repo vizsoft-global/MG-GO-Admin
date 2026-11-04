@@ -171,18 +171,21 @@ export function partsTotal(parts: readonly ServicePart[] | null | undefined): nu
 }
 
 /**
- * What the record cost. `cost_kwd` is the invoice figure the client types; the
- * parts grid is the same money broken down, so a record with an invoice value
- * must not be added to its own parts. A record that carries only priced parts
- * still contributes their total.
+ * What the record cost.
+ *
+ * **Total Cost = the sum of the spare parts**, which is the client's rule: a
+ * workshop invoice is the parts breakdown, so the two cannot be added and must not
+ * be able to disagree. A record with no parts yet keeps the invoice figure the
+ * operator typed, because an unexplained total is better than a silent zero while
+ * the breakdown is still being entered.
  */
 export function effectiveRecordCost(row: {
   cost_kwd?: number | null;
   parts?: readonly ServicePart[] | null;
 }): number {
-  const invoice = positiveNumber(row.cost_kwd);
-  if (invoice != null && invoice > 0) return invoice;
-  return partsTotal(row.parts);
+  const parts = row.parts ?? [];
+  if (parts.length > 0) return partsTotal(parts);
+  return positiveNumber(row.cost_kwd) ?? 0;
 }
 
 export type StageCounts = Record<ServiceStage | "all", number>;

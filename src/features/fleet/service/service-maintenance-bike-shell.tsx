@@ -27,6 +27,7 @@ import { useRouter } from "@/i18n/navigation";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { useLocale, useTranslations } from "next-intl";
 import { buildProgramRows, programCounts } from "./service-maintenance-model";
+import { curatedPrograms } from "./service-programs";
 import type { MaintenanceProgramRow, MaintenanceStatus } from "./types";
 import { downloadServiceMaintenanceXlsx } from "./service-maintenance-xlsx";
 import { ServiceBikeImportDialog } from "./service-bike-import-dialog";
@@ -69,6 +70,7 @@ export function ServiceBikeShell({
   const [recordOpen, setRecordOpen] = useState(false);
 
   const today = kuwaitTodayYmd();
+  const programs = data.data?.programs?.length ? data.data.programs : curatedPrograms();
   const rows = useMemo(
     () =>
       data.data
@@ -78,13 +80,15 @@ export function ServiceBikeShell({
             schedules: data.data.schedules,
             settings: data.data.settings,
             exclusions: data.data.exclusions,
+            overrides: data.data.overrides,
+            programs,
             distances: data.data.distances,
             vehicleTypeKeys: ["bike"],
             today,
             locale,
           })
         : [],
-    [data.data, today, locale],
+    [data.data, programs, today, locale],
   );
 
   const counts = programCounts(rows);

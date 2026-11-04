@@ -236,6 +236,9 @@ export type MaintenanceProgramRow = {
   daysSinceService: number | null;
   nextDueDate: string | null;
   remainingDays: number | null;
+  /** True when the figure came from a fleet-team override, not the interval. */
+  nextKmOverridden: boolean;
+  nextDateOverridden: boolean;
   kmInterval: number;
   dayInterval: number;
   status: MaintenanceStatus;
@@ -259,6 +262,31 @@ export type MaintenanceExclusion = {
   id: string;
   vehicleId: string;
   programKey: string;
+  reason: string | null;
+  by: string | null;
+  at: string | null;
+};
+
+/**
+ * A next-service point the fleet team set by hand — `vehicle_maintenance_overrides/{vehicleId}_{programKey}`.
+ *
+ * The derived point is `last service + interval`, which is only as good as the
+ * baseline. A workshop that is told "next oil at 92,000" has to be able to record
+ * that without editing the interval for every other vehicle of the same make,
+ * so the override wins over the derived figure and the two dimensions are
+ * independent: setting only the date leaves the kilometres on the rule.
+ */
+export type MaintenanceOverride = {
+  id: string;
+  vehicleId: string;
+  programKey: string;
+  /** `null` when the fleet team only set a date. */
+  nextDueKm: number | null;
+  /** Kuwait day `YYYY-MM-DD`, or `null` when only the kilometres were set. */
+  nextDueDate: string | null;
+  /** What the derived point was when the override was written, for the history. */
+  previousKm: number | null;
+  previousDate: string | null;
   reason: string | null;
   by: string | null;
   at: string | null;

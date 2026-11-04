@@ -87,6 +87,74 @@ export function isScheduledProgramKey(value: unknown): value is ScheduledProgram
   return typeof value === "string" && (SCHEDULED_PROGRAM_KEYS as readonly string[]).includes(value);
 }
 
+/**
+ * A program the maintenance tab draws. The five curated ones carry their own
+ * wording and vehicle-type gating; a program the fleet team added later comes
+ * from the catalog and its applicability is decided by its rules.
+ */
+export type MaintenanceProgram = {
+  key: string;
+  labelEn: string;
+  labelAr: string;
+  category: ServiceCategoryKey;
+  sortOrder: number;
+  /** `false` for a catalog program added after this module shipped. */
+  curated: boolean;
+};
+
+/** The five curated programs, in the shape the data-driven list uses. */
+export function curatedPrograms(): MaintenanceProgram[] {
+  return SCHEDULED_PROGRAMS.map((program) => ({
+    key: program.key,
+    labelEn: program.labelEn,
+    labelAr: program.labelAr,
+    category: program.category,
+    sortOrder: program.sortOrder,
+    curated: true,
+  }));
+}
+
+/**
+ * Every program the fleet team can schedule — the curated five plus any catalog
+ * row flagged `tracks_maintenance`.
+ *
+ * This is what makes "any additional maintenance service added in the future"
+ * true without a code change: marking a service type as tracked in
+ * `/settings/service-types` is the only step, and the interval rule the operator
+ * writes is what decides where it applies. A catalog row that reuses a curated
+ * key is folded into the curated entry so a program cannot appear twice under two
+ * labels.
+ */
+export function maintenanceProgramsFromCatalog(
+  types: readonly { key: string; label_en: string; label_ar?: string | null; category?: string | null; sort_order?: number; tracks_maintenance?: boolean }[],
+): MaintenanceProgram[] {
+  const byKey = new Map<string, MaintenanceProgram>();
+  for (const program of curatedPrograms()) byKey.set(program.key, program);
+  for (const row of types) {
+    if (!row.tracks_maintenance) continue;
+    const key = row.key.trim();
+    if (!key || byKey.has(key)) continue;
+    byKey.set(key, {
+      key,
+      labelEn: row.label_en || key,
+      labelAr: row.label_ar || "",
+      category: (row.category as ServiceCategoryKey) ?? "other",
+      sortOrder: row.sort_order ?? 100,
+      curated: false,
+    });
+  }
+  return [...byKey.values()].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.labelEn.localeCompare(b.labelEn),
+  );
+}
+
+/** The curated gating, when the program has one. A catalog program has none. */
+export function curatedVehicleTypes(programKey: string): readonly string[] | null {
+  const program = scheduledProgram(programKey);
+  return program ? program.vehicleTypes : null;
+}
+
+
 export function scheduledProgram(key: string | null | undefined): ScheduledProgram | null {
   if (!isScheduledProgramKey(key)) return null;
   return SCHEDULED_PROGRAMS.find((program) => program.key === key) ?? null;
@@ -105,13 +173,16 @@ export function vehicleTypeForPrograms(vehicleTypeKey: string | null | undefined
 }
 
 export function programApplies(
-  programKey: ScheduledProgramKey,
+  programKey: string,
   vehicleTypeKey: string | null | undefined,
 ): boolean {
   const type = vehicleTypeForPrograms(vehicleTypeKey);
   if (!type) return false;
   const program = scheduledProgram(programKey);
-  return program ? program.vehicleTypes.includes(type) : false;
+  // A curated program carries its own gating — the client does not change tyres on
+  // a motorbike. A program the fleet team added later has no curated gating at
+  // all, so the interval rule is what decides where it applies.
+  return program ? program.vehicleTypes.includes(type) : true;
 }
 
 /** The programs scheduled on one vehicle type, in display order. */
@@ -120,7 +191,6 @@ export function programsForVehicleType(
 ): ScheduledProgram[] {
   return SCHEDULED_PROGRAMS.filter((program) => programApplies(program.key, vehicleTypeKey));
 }
-
 /**
  * The client's approved alert window. **500 km or 5 days, whichever is reached
  * first** — it replaces the provisional 500 / 14 that shipped before approval.

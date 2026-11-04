@@ -85,7 +85,7 @@ export function ServiceRecordDetail({
     { label: t("detail.invoiceDate"), value: record.invoice_date ?? "—" },
     { label: t("cols.company"), value: record.company ?? "—" },
     { label: t("cols.vendor"), value: record.vendor ?? "—" },
-    { label: t("cols.cost"), value: kwd(record.cost_kwd ?? effectiveRecordCost(record)) },
+    { label: t("cols.cost"), value: kwd(effectiveRecordCost(record)) },
     { label: t("cols.odometer"), value: String(record.odometer_km ?? record.odometer ?? "—") },
   ];
 

@@ -157,10 +157,13 @@ describe("service record parts arithmetic", () => {
     assert.equal(partsTotal(parts), 10.5);
   });
 
-  it("does not add the parts to an invoice figure, but uses them when there is none", () => {
+  it("totals the spare parts, and falls back to the invoice when there are none", () => {
     const parts = normaliseParts([{ name: "Pad", qty: 2, unit_cost_kwd: 10 }]);
-    assert.equal(effectiveRecordCost({ cost_kwd: 45, parts }), 45);
+    // Total Cost = the parts breakdown; the invoice figure is not added to it.
+    assert.equal(effectiveRecordCost({ cost_kwd: 45, parts }), 20);
     assert.equal(effectiveRecordCost({ cost_kwd: null, parts }), 20);
+    // A record with no breakdown keeps the figure the operator typed.
+    assert.equal(effectiveRecordCost({ cost_kwd: 45, parts: [] }), 45);
     assert.equal(effectiveRecordCost({ cost_kwd: null, parts: [] }), 0);
   });
 });

@@ -23,7 +23,7 @@ import {
   saveMaintenanceSchedule,
   saveMaintenanceSettings,
 } from "./service-actions";
-import { SCHEDULED_PROGRAMS, type ScheduledProgramKey } from "./service-programs";
+import { curatedPrograms } from "./service-programs";
 import { makeKey, makeModelKey } from "./service-maintenance-model";
 import { serviceErrorKey } from "./use-service";
 import type {
@@ -32,11 +32,13 @@ import type {
 } from "./service-maintenance-model";
 import type {
   MaintenanceExclusion,
+  MaintenanceOverride,
   MaintenanceRuleScope,
   MaintenanceScheduleRow,
   MaintenanceSettings,
   VehicleDayDistance,
 } from "./types";
+import type { MaintenanceProgram } from "./service-programs";
 
 type MaintenanceData = {
   vehicles: MaintenanceVehicle[];
@@ -44,6 +46,8 @@ type MaintenanceData = {
   schedules: MaintenanceScheduleRow[];
   settings: MaintenanceSettings;
   exclusions: MaintenanceExclusion[];
+  overrides: MaintenanceOverride[];
+  programs: MaintenanceProgram[];
   distances: VehicleDayDistance[];
 };
 
@@ -84,7 +88,7 @@ export function ServiceScheduleDialog({
   const [saving, setSaving] = useState(false);
 
   // The add row.
-  const [programKey, setProgramKey] = useState<ScheduledProgramKey>("oil_change");
+  const [programKey, setProgramKey] = useState<string>("oil_change");
   const [scope, setScope] = useState<MaintenanceRuleScope>("vehicle_type");
   const [vehicleType, setVehicleType] = useState("car");
   const [target, setTarget] = useState("");
@@ -99,6 +103,15 @@ export function ServiceScheduleDialog({
       })),
     [data?.vehicles],
   );
+  // Every schedulable program: the curated five plus any catalog row flagged
+  // `tracks_maintenance`, so a service type the fleet team adds can be given an
+  // interval here without a code change.
+  const programs = useMemo(
+    () => (data?.programs?.length ? data.programs : curatedPrograms()),
+    [data],
+  );
+  const programLabelOf = (key: string) =>
+    programs.find((entry) => entry.key === key)?.labelEn ?? key;
   const makeItems = useMemo(() => {
     const set = new Set<string>();
     for (const vehicle of data?.vehicles ?? []) {
@@ -158,7 +171,7 @@ export function ServiceScheduleDialog({
 
   async function addRule() {
     setSaving(true);
-    const label = SCHEDULED_PROGRAMS.find((entry) => entry.key === programKey)?.labelEn ?? programKey;
+    const label = programLabelOf(programKey);
     const result = await saveMaintenanceSchedule({
       scope,
       vehicleId: scope === "vehicle" ? target : null,
@@ -294,8 +307,7 @@ export function ServiceScheduleDialog({
                   {(data?.schedules ?? []).map((row) => (
                     <tr key={row.id} className="border-t border-border">
                       <td className="px-2 py-1 font-medium">
-                        {SCHEDULED_PROGRAMS.find((entry) => entry.key === row.service_type_key)
-                          ?.labelEn ?? row.service_type_key}
+                        {programLabelOf(row.service_type_key)}
                       </td>
                       <td className="px-2 py-1 text-muted-foreground">
                         {t(`maintenance.scope.${row.scope}`)}
@@ -370,20 +382,18 @@ export function ServiceScheduleDialog({
               <label className="space-y-1 text-xs">
                 <span className="block text-muted-foreground">{t("maintenance.cols.program")}</span>
                 <Select
-                  items={SCHEDULED_PROGRAMS.map((entry) => ({
+                  items={programs.map((entry) => ({
                     value: entry.key,
                     label: entry.labelEn,
                   }))}
                   value={programKey}
-                  onValueChange={(next) =>
-                    setProgramKey((next ?? "oil_change") as ScheduledProgramKey)
-                  }
+                  onValueChange={(next) => setProgramKey(next ?? "oil_change")}
                 >
                   <SelectTrigger className="h-9 w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SCHEDULED_PROGRAMS.map((entry) => (
+                    {programs.map((entry) => (
                       <SelectItem key={entry.key} value={entry.key}>
                         {entry.labelEn}
                       </SelectItem>

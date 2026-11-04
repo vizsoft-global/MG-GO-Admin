@@ -259,9 +259,7 @@ export function ServiceRecordsShell({
         return row.company ? row.company : <EmptyCell />;
       case "cost":
         return (
-          <span className="tabular-nums">
-            {formatKwd(row.cost_kwd ?? effectiveRecordCost(row))}
-          </span>
+          <span className="tabular-nums">{formatKwd(effectiveRecordCost(row))}</span>
         );
       case "odometer":
         return <span className="tabular-nums">{row.odometer_km ?? row.odometer ?? "—"}</span>;

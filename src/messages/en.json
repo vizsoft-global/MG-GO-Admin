@@ -9727,7 +9727,11 @@
         "errors": {
           "invalid_key": "The key may only use lowercase letters, digits and underscores.",
           "missing_fields": "An English label is required."
-        }
+        },
+        "colScheduled": "Scheduled",
+        "tracksMaintenance": "Maintenance program",
+        "tracksHint": "On: this service gets an interval rule and a row on the maintenance tab. Off: it is a cost line only.",
+        "tracksLocked": "One of the five approved programs. It always stays scheduled; turn off its interval rule instead."
       }
     },
     "auditLogs": {
@@ -12207,7 +12211,9 @@
         "sectionAttachments": "Attachments",
         "attachmentsHint": "Invoices, receipts and photos",
         "companyAutoHint": "Taken from the employee record.",
-        "companyHint": "Used only when no employee is linked."
+        "companyHint": "Used only when no employee is linked.",
+        "costFromParts": "Total cost is the sum of the spare parts above.",
+        "costNoPartsHint": "Used until a spare part is added; after that the parts decide."
       },
       "detail": {
         "summary": "Record",
@@ -12344,7 +12350,19 @@
         "noRuleHint": "These vehicles are on the program but no approved interval covers them. Add a rule — nothing is guessed from a default.",
         "noRuleCount": "{count} vehicles",
         "setupAddRule": "Add rule",
-        "setupMissingRule": "no approved interval"
+        "setupMissingRule": "no approved interval",
+        "setNextDue": "Next service",
+        "nextDueKm": "Next service KM",
+        "nextDueKmPlaceholder": "Leave blank to keep the interval",
+        "nextDueDate": "Next service date",
+        "nextDueHint": "Leave a field blank to keep that dimension on the interval rule.",
+        "derivedKm": "From the interval",
+        "derivedDate": "From the interval",
+        "overriddenTag": "set by hand",
+        "lastServiceOn": "last service {day}",
+        "nextDueSaved": "Next service for {program} saved.",
+        "nextDueCleared": "Next service for {program} is back on the interval.",
+        "clearOverride": "Back to interval"
       },
       "odometer": {
         "title": "Update odometer",

@@ -16,6 +16,7 @@ import {
   type ServiceCategoryKey,
 } from "./service-types";
 import type { ServiceTypeImportItem } from "./service-type-import";
+import { isScheduledProgramKey } from "./service-programs";
 
 function str(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -50,6 +51,13 @@ export async function upsertServiceType(input: {
   category: string;
   isActive: boolean;
   sortOrder: number;
+  /**
+   * Whether this service type is a **schedulable maintenance program** — it gets
+   * an interval rule and a row on the maintenance tab. This is what lets the fleet
+   * team add a service later without a code change; the curated five are pinned on
+   * so a slip of the switch cannot delete a program the client approved.
+   */
+  tracksMaintenance: boolean;
 }): Promise<{ ok: true } | { error: string }> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
@@ -65,6 +73,7 @@ export async function upsertServiceType(input: {
     ? input.category
     : categoryForServiceType(labelEn);
   const sortOrder = Number.isFinite(input.sortOrder) ? Math.trunc(input.sortOrder) : 100;
+  const tracksMaintenance = isScheduledProgramKey(key) ? true : input.tracksMaintenance;
 
   const db = await openDb();
   const ref = db.collection(COLLECTIONS.serviceTypes).doc(key);
@@ -78,6 +87,7 @@ export async function upsertServiceType(input: {
     category,
     is_active: input.isActive,
     sort_order: sortOrder,
+    tracks_maintenance: tracksMaintenance,
     updated_at: new Date(),
   };
   try {
@@ -100,12 +110,20 @@ export async function upsertServiceType(input: {
           label_ar: str(snap.get("label_ar")),
           category: str(snap.get("category")),
           is_active: snap.get("is_active") !== false,
+          tracks_maintenance: snap.get("tracks_maintenance") === true,
         }
       : null,
-    after: { label_en: labelEn, label_ar: labelAr, category, is_active: input.isActive },
+    after: {
+      label_en: labelEn,
+      label_ar: labelAr,
+      category,
+      is_active: input.isActive,
+      tracks_maintenance: tracksMaintenance,
+    },
   });
   revalidatePath("/settings/service-types");
   revalidatePath("/fleet/service");
+  revalidatePath("/fleet/service/bikes");
   return { ok: true };
 }
 

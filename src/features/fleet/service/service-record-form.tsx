@@ -129,6 +129,10 @@ export function ServiceRecordForm({
   }
 
   const partsTotalValue = parts.reduce((sum, part) => sum + partTotal(part.qty, part.unit), 0);
+  // Total Cost is the spare-parts breakdown — the client's rule. While the
+  // breakdown is empty the invoice figure is still what gets stored, because a
+  // silent zero would be worse than an unexplained total.
+  const hasParts = parts.some((part) => part.name.trim().length > 0);
 
   async function submit() {
     setSaving(true);
@@ -144,7 +148,11 @@ export function ServiceRecordForm({
       vendor,
       notes,
       odometerKm: odometer.trim() === "" ? null : Number(odometer),
-      costKwd: cost.trim() === "" ? null : Number(cost),
+      costKwd: hasParts
+        ? partsTotalValue
+        : cost.trim() === ""
+          ? null
+          : Number(cost),
       attachments,
       parts: parts
         .filter((part) => part.name.trim())
@@ -285,14 +293,32 @@ export function ServiceRecordForm({
           </label>
           <label className="space-y-1 text-xs">
             <span className="block font-medium">{t("cols.cost")}</span>
-            <Input
-              type="number"
-              min={0}
-              step="0.001"
-              className="h-9 tabular-nums"
-              value={cost}
-              onChange={(event) => setCost(event.target.value)}
-            />
+            {hasParts ? (
+              <>
+                <Input
+                  className="h-9 cursor-default bg-muted/40 tabular-nums"
+                  value={formatKwd(partsTotalValue)}
+                  readOnly
+                />
+                <span className="block text-[10px] text-muted-foreground">
+                  {t("form.costFromParts")}
+                </span>
+              </>
+            ) : (
+              <>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.001"
+                  className="h-9 tabular-nums"
+                  value={cost}
+                  onChange={(event) => setCost(event.target.value)}
+                />
+                <span className="block text-[10px] text-muted-foreground">
+                  {t("form.costNoPartsHint")}
+                </span>
+              </>
+            )}
           </label>
           <label className="space-y-1 text-xs">
             <span className="block font-medium">{t("detail.invoiceNo")}</span>

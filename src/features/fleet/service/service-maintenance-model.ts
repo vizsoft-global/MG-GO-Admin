@@ -1,11 +1,13 @@
 import {
+  curatedPrograms,
+  curatedVehicleTypes,
   programApplies,
-  programsForVehicleType,
   vehicleTypeForPrograms,
-  type ScheduledProgramKey,
+  type MaintenanceProgram,
 } from "./service-programs";
 import type {
   MaintenanceExclusion,
+  MaintenanceOverride,
   MaintenanceProgramRow,
   MaintenanceRuleScope,
   MaintenanceScheduleRow,
@@ -111,7 +113,7 @@ export type ResolvedProgramRule = {
  */
 export function resolveProgramRule(
   vehicle: MaintenanceVehicle,
-  programKey: ScheduledProgramKey,
+  programKey: string,
   rules: readonly MaintenanceScheduleRow[],
 ): ResolvedProgramRule | null {
   if (!programApplies(programKey, vehicle.vehicleTypeKey)) return null;
@@ -239,6 +241,13 @@ export type MaintenanceBuildInput = {
   settings?: MaintenanceSettings;
   /** `vehicle_maintenance_exclusions` — the fleet team's opt-outs. */
   exclusions?: readonly MaintenanceExclusion[];
+  /** `vehicle_maintenance_overrides` — a next-service point set by hand. */
+  overrides?: readonly MaintenanceOverride[];
+  /**
+   * The programs to draw — the curated five plus any catalog row flagged
+   * `tracks_maintenance`. Defaults to the curated five.
+   */
+  programs?: readonly MaintenanceProgram[];
   /** `vehicle_day_distance` — the bike tab's "today" column. */
   distances?: readonly VehicleDayDistance[];
   /** Restrict the build to these vehicle types; the bike page passes `["bike"]`. */
@@ -251,6 +260,11 @@ export type MaintenanceBuildInput = {
 
 /** `vehicle_maintenance_exclusions` document id — one opt-out per vehicle × program. */
 export function exclusionId(vehicleId: string, programKey: string): string {
+  return `${vehicleId}_${programKey}`;
+}
+
+/** `vehicle_maintenance_overrides` document id — one hand-set point per vehicle × program. */
+export function overrideId(vehicleId: string, programKey: string): string {
   return `${vehicleId}_${programKey}`;
 }
 
@@ -282,7 +296,17 @@ function distanceFor(
 export function buildProgramRows(input: MaintenanceBuildInput): MaintenanceProgramRow[] {
   const rows: MaintenanceProgramRow[] = [];
   const exclusions = input.exclusions ?? [];
+  const overrides = input.overrides ?? [];
   const locale = input.locale ?? "en";
+  const programs =
+    input.programs && input.programs.length > 0 ? input.programs : curatedPrograms();
+  // Every program an active rule names. A program the fleet team added to the
+  // catalog is only scheduled somewhere a rule covers it, so it can never print
+  // `no_rule` — that state belongs to the curated five, whose applicability is a
+  // decision rather than an inference.
+  const ruledKeys = new Set(
+    input.schedules.filter((rule) => rule.is_active).map((rule) => rule.service_type_key),
+  );
   const allowTypes =
     input.vehicleTypeKeys && input.vehicleTypeKeys.length > 0
       ? new Set(input.vehicleTypeKeys.map((key) => key.trim().toLowerCase()))
@@ -293,8 +317,14 @@ export function buildProgramRows(input: MaintenanceBuildInput): MaintenanceProgr
     if (!typeKey) continue;
     if (allowTypes && !allowTypes.has(typeKey)) continue;
 
-    for (const program of programsForVehicleType(typeKey)) {
+    for (const program of programs) {
       const programKey = program.key;
+      const gatedTypes = curatedVehicleTypes(programKey);
+      // A curated program keeps its own gating (no chains on a car); a catalog
+      // program is decided by its rule, so nothing is filtered here for it.
+      if (gatedTypes && !gatedTypes.includes(typeKey)) continue;
+      if (!program.curated && !ruledKeys.has(programKey)) continue;
+
       const label = locale === "ar" ? program.labelAr || program.labelEn : program.labelEn;
       const todayMeters =
         typeKey === "bike" ? distanceFor(input.distances, vehicle.id, input.today) : null;
@@ -323,6 +353,8 @@ export function buildProgramRows(input: MaintenanceBuildInput): MaintenanceProgr
           daysSinceService: null,
           nextDueDate: null,
           remainingDays: null,
+          nextKmOverridden: false,
+          nextDateOverridden: false,
           kmInterval: 0,
           dayInterval: 0,
           status: "not_tracked",
@@ -340,9 +372,9 @@ export function buildProgramRows(input: MaintenanceBuildInput): MaintenanceProgr
 
       const rule = resolveProgramRule(vehicle, programKey, input.schedules);
       if (!rule) {
-        // The program is scheduled on this vehicle type but no approved interval
-        // covers this vehicle. That is a state with an action, not a number:
-        // printing a default-derived due date here would be a guess.
+        // The curated program is scheduled on this vehicle type but no approved
+        // interval covers this vehicle. That is a state with an action, not a
+        // number: printing a default-derived due date here would be a guess.
         rows.push({
           vehicleId: vehicle.id,
           plate: vehicle.plate,
@@ -363,6 +395,8 @@ export function buildProgramRows(input: MaintenanceBuildInput): MaintenanceProgr
           daysSinceService: null,
           nextDueDate: null,
           remainingDays: null,
+          nextKmOverridden: false,
+          nextDateOverridden: false,
           kmInterval: 0,
           dayInterval: 0,
           status: "no_rule",
@@ -378,8 +412,14 @@ export function buildProgramRows(input: MaintenanceBuildInput): MaintenanceProgr
         continue;
       }
 
-      const kmTracked = rule.kmInterval > 0;
-      const dayTracked = rule.dayInterval > 0;
+      const override =
+        overrides.find(
+          (row) => row.vehicleId === vehicle.id && row.programKey === programKey,
+        ) ?? null;
+      // A hand-set point makes that dimension tracked even when the rule says 0 —
+      // "next oil at 92,000 km" is a real instruction, not an interval.
+      const kmTracked = rule.kmInterval > 0 || override?.nextDueKm != null;
+      const dayTracked = rule.dayInterval > 0 || override?.nextDueDate != null;
       // A rule that tracks neither dimension says nothing, so no row is printed
       // — exactly like a program with no rule, because neither can ever be due.
       if (!kmTracked && !dayTracked) continue;
@@ -392,6 +432,7 @@ export function buildProgramRows(input: MaintenanceBuildInput): MaintenanceProgr
           kmTracked,
           dayTracked,
           todayMeters,
+          override,
         }),
       );
     }
@@ -408,6 +449,7 @@ type ProgramRowParts = {
   kmTracked: boolean;
   dayTracked: boolean;
   todayMeters: number | null;
+  override: MaintenanceOverride | null;
 };
 
 /** One vehicle × program, with each dimension judged on its own rule. */
@@ -421,16 +463,24 @@ function programRow(
   const lastServiceDate = baseline?.doneDay ?? null;
   const currentKm = vehicle.currentKm;
 
-  const nextDueKm =
+  const derivedNextKm =
     parts.kmTracked && lastServiceKm != null && Number.isFinite(lastServiceKm)
       ? lastServiceKm + parts.rule.kmInterval
       : null;
-  const remainingKm =
-    nextDueKm != null && currentKm != null ? Math.round(currentKm - nextDueKm) : null;
-  const nextDueDate =
+  const derivedNextDate =
     parts.dayTracked && lastServiceDate
       ? addDays(lastServiceDate, parts.rule.dayInterval)
       : null;
+
+  // A hand-set point wins over the derived one, per dimension: setting only the
+  // date leaves the kilometres on the rule, and clearing one restores it.
+  const overrideKm = parts.override?.nextDueKm ?? null;
+  const overrideDate = parts.override?.nextDueDate ?? null;
+  const nextDueKm = overrideKm ?? derivedNextKm;
+  const nextDueDate = overrideDate ?? derivedNextDate;
+
+  const remainingKm =
+    nextDueKm != null && currentKm != null ? Math.round(currentKm - nextDueKm) : null;
   const remainingDays = nextDueDate ? daysBetween(input.today, nextDueDate) : null;
   const daysSinceService = lastServiceDate ? daysBetween(lastServiceDate, input.today) : null;
 
@@ -465,12 +515,16 @@ function programRow(
     daysSinceService,
     nextDueDate,
     remainingDays,
+    nextKmOverridden: overrideKm != null,
+    nextDateOverridden: overrideDate != null,
     kmInterval: parts.rule.kmInterval,
     dayInterval: parts.rule.dayInterval,
     status: worstStatus([byKm, byTime]),
     byKm,
     byTime,
     needsSetup: byKm === "needs_baseline" || byTime === "needs_baseline",
+    // A hand-set point is not a reading — it does not need an odometer to be
+    // judged, so only a derived kilometre point can ask for one.
     needsOdometer: parts.kmTracked && nextDueKm != null && currentKm == null,
     odometerUpdatedAt: vehicle.odometerUpdatedAt ?? null,
     provisional: parts.rule.provisional,

@@ -145,6 +145,8 @@ export const COLLECTIONS = {
   vehicleMaintenanceSchedules: "vehicle_maintenance_schedules",
   /** `{vehicleId}_{programKey}` — a program the fleet team opted this vehicle out of. */
   vehicleMaintenanceExclusions: "vehicle_maintenance_exclusions",
+  /** `{vehicleId}_{programKey}` — a next-service point the fleet team set by hand. */
+  vehicleMaintenanceOverrides: "vehicle_maintenance_overrides",
   /** `{vehicleId}_{day}` — the bike's daily distance ledger behind the odometer. */
   vehicleDayDistance: "vehicle_day_distance",
   /** The single `current` doc holding the dashcam odometer feed configuration. */

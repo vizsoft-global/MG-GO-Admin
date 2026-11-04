@@ -26,6 +26,7 @@ import {
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
+import { Pencil } from "lucide-react";
 import {
   buildProgramRows,
   needsOdometerRows,
@@ -33,12 +34,13 @@ import {
   noRuleRows,
   programCounts,
 } from "./service-maintenance-model";
-import { SCHEDULED_PROGRAMS, programApplies } from "./service-programs";
+import { curatedPrograms, curatedVehicleTypes } from "./service-programs";
 import type { MaintenanceProgramRow, MaintenanceStatus } from "./types";
 import { downloadServiceMaintenanceXlsx } from "./service-maintenance-xlsx";
 import { ServiceScheduleDialog } from "./service-schedule-dialog";
 import { ServiceBaselineImportDialog } from "./service-baseline-import-dialog";
 import { ServiceNeedsSetupPanel } from "./service-needs-setup-panel";
+import { ServiceNextDueDialog } from "./service-next-due-dialog";
 import { ServiceOdometerSyncDialog } from "./service-odometer-sync-dialog";
 import { useServiceMaintenance } from "./use-service";
 
@@ -73,6 +75,7 @@ const COLUMNS = [
   "nextDate",
   "remainingDays",
   "status",
+  "actions",
 ] as const;
 
 type ColumnId = (typeof COLUMNS)[number];
@@ -108,8 +111,10 @@ export function ServiceMaintenanceTab({
   const [schedulesOpen, setSchedulesOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [syncOpen, setSyncOpen] = useState(false);
+  const [nextDue, setNextDue] = useState<MaintenanceProgramRow | null>(null);
 
   const today = kuwaitTodayYmd();
+  const programs = data.data?.programs?.length ? data.data.programs : curatedPrograms();
   const rows = useMemo(
     () =>
       data.data
@@ -119,12 +124,14 @@ export function ServiceMaintenanceTab({
             schedules: data.data.schedules,
             settings: data.data.settings,
             exclusions: data.data.exclusions,
+            overrides: data.data.overrides,
+            programs,
             distances: data.data.distances,
             vehicleTypeKeys: ["car"],
             today,
           })
         : [],
-    [data.data, today],
+    [data.data, programs, today],
   );
 
   const counts = programCounts(rows);
@@ -150,10 +157,15 @@ export function ServiceMaintenanceTab({
 
   // A program filter is what makes five rows per plate usable: "show me every
   // brake that is due" is a question the one-row-per-vehicle table could not
-  // answer at all.
+  // answer at all. The list is data-driven, so a program the fleet team added to
+  // the catalog appears here without a code change.
   const programOptions = useMemo(
-    () => SCHEDULED_PROGRAMS.filter((entry) => programApplies(entry.key, "car")),
-    [],
+    () =>
+      programs.filter((entry) => {
+        const gated = curatedVehicleTypes(entry.key);
+        return gated ? gated.includes("car") : true;
+      }),
+    [programs],
   );
 
   const filtered = useMemo(
@@ -189,7 +201,7 @@ export function ServiceMaintenanceTab({
         return row.lastServiceDate ?? "—";
       case "nextKm":
         // A dimension the rule does not track prints a dash, never "Unknown".
-        return row.kmInterval <= 0
+        return row.kmInterval <= 0 && !row.nextKmOverridden
           ? "—"
           : row.nextDueKm == null
             ? t("maintenance.unknown")
@@ -199,7 +211,9 @@ export function ServiceMaintenanceTab({
       case "daysSince":
         return row.daysSinceService == null ? "—" : String(row.daysSinceService);
       case "nextDate":
-        return row.dayInterval <= 0 ? "—" : row.nextDueDate ?? t("maintenance.unknown");
+        return row.dayInterval <= 0 && !row.nextDateOverridden
+          ? "—"
+          : row.nextDueDate ?? t("maintenance.unknown");
       case "remainingDays":
         return row.dayInterval <= 0 ? "—" : row.remainingDays == null ? "—" : String(row.remainingDays);
       default:
@@ -222,6 +236,7 @@ export function ServiceMaintenanceTab({
     nextDate: t("maintenance.cols.nextDate"),
     remainingDays: t("maintenance.cols.remainingDays"),
     status: t("maintenance.cols.status"),
+    actions: "",
   };
 
   const statusItems = STATUS_TABS.map((id) => ({
@@ -410,6 +425,24 @@ export function ServiceMaintenanceTab({
                     <Badge variant="outline" className={STATUS_TONE[row.status]}>
                       {tStatus(row.status)}
                     </Badge>
+                  ) : id === "actions" ? (
+                    // A hand-set due point is a per-vehicle decision, so its door
+                    // sits on the row it changes rather than in a toolbar.
+                    canManage ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-primary hover:bg-primary/10"
+                        aria-label={t("maintenance.setNextDue")}
+                        title={t("maintenance.setNextDue")}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setNextDue(row);
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : null
                   ) : (
                     <span
                       className={
@@ -435,6 +468,12 @@ export function ServiceMaintenanceTab({
 
       <ServiceBaselineImportDialog open={importOpen} onOpenChange={setImportOpen} />
       <ServiceOdometerSyncDialog open={syncOpen} onOpenChange={setSyncOpen} />
+      <ServiceNextDueDialog
+        row={nextDue}
+        onOpenChange={(open) => {
+          if (!open) setNextDue(null);
+        }}
+      />
     </div>
   );
 }

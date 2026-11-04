@@ -19,10 +19,12 @@ import {
   type MaintenanceDoneRecord,
   type MaintenanceVehicle,
 } from "./service-maintenance-model";
+import { maintenanceProgramsFromCatalog, type MaintenanceProgram } from "./service-programs";
 import { DEFAULT_ODOMETER_SYNC_CONFIG } from "./types";
 import { normaliseServiceAttachments } from "./service-attachments-model";
 import type {
   MaintenanceExclusion,
+  MaintenanceOverride,
   MaintenanceRuleScope,
   MaintenanceScheduleRow,
   MaintenanceSettings,
@@ -419,6 +421,27 @@ export async function listMaintenanceExclusions(): Promise<MaintenanceExclusion[
   }));
 }
 
+/** `vehicle_maintenance_overrides` — the next-service points set by hand. */
+export async function listMaintenanceOverrides(): Promise<MaintenanceOverride[]> {
+  const auth = await requireService("service.view");
+  if ("error" in auth) return [];
+  const rows = await allRows(COLLECTIONS.vehicleMaintenanceOverrides);
+  return rows
+    .map((row) => ({
+      id: row.id,
+      vehicleId: str(row.vehicle_id),
+      programKey: str(row.program_key),
+      nextDueKm: num(row.next_due_km),
+      nextDueDate: str(row.next_due_date) || null,
+      previousKm: num(row.previous_km),
+      previousDate: str(row.previous_due_date) || null,
+      reason: str(row.reason) || null,
+      by: str(row.by) || null,
+      at: str(row.at) || null,
+    }))
+    .filter((row) => row.vehicleId && row.programKey);
+}
+
 /**
  * `vehicle_day_distance` for one Kuwait day. The bike tab reads today's row; the
  * sweep reads a window. Rows outside the day are dropped here so the caller does
@@ -468,6 +491,8 @@ export async function listServiceMaintenanceData(options?: {
   schedules: MaintenanceScheduleRow[];
   settings: MaintenanceSettings;
   exclusions: MaintenanceExclusion[];
+  overrides: MaintenanceOverride[];
+  programs: MaintenanceProgram[];
   distances: VehicleDayDistance[];
 }> {
   const today = options?.today ?? kuwaitTodayYmd();
@@ -479,17 +504,22 @@ export async function listServiceMaintenanceData(options?: {
       schedules: [],
       settings: { ...DEFAULT_MAINTENANCE_SETTINGS },
       exclusions: [],
+      overrides: [],
+      programs: [],
       distances: [],
     };
   }
-  const [allVehicles, records, schedules, settings, exclusions, distances] = await Promise.all([
-    listServiceVehicleOptions(),
-    listServiceRecords(),
-    listMaintenanceSchedules(),
-    getMaintenanceSettings(),
-    listMaintenanceExclusions(),
-    listVehicleDayDistances(today),
-  ]);
+  const [allVehicles, records, schedules, settings, exclusions, overrides, types, distances] =
+    await Promise.all([
+      listServiceVehicleOptions(),
+      listServiceRecords(),
+      listMaintenanceSchedules(),
+      getMaintenanceSettings(),
+      listMaintenanceExclusions(),
+      listMaintenanceOverrides(),
+      listServiceTypes(),
+      listVehicleDayDistances(today),
+    ]);
   const allow =
     options?.vehicleTypeKeys && options.vehicleTypeKeys.length > 0
       ? new Set(options.vehicleTypeKeys.map((key) => key.trim().toLowerCase()))
@@ -529,6 +559,8 @@ export async function listServiceMaintenanceData(options?: {
     schedules,
     settings,
     exclusions: exclusions.filter((row) => visible.has(row.vehicleId)),
+    overrides: overrides.filter((row) => visible.has(row.vehicleId)),
+    programs: maintenanceProgramsFromCatalog(types),
     distances: distances.filter((row) => visible.has(row.vehicleId)),
   };
 }
