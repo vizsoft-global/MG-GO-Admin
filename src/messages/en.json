@@ -13511,7 +13511,20 @@
       "userExists": "That email is already invited.",
       "noPortals": "No client portal is configured yet.",
       "attentionNoUsers": "{project} has no client users yet.",
-      "attentionNoHeadcount": "{project} has no contracted headcount, so contract fill cannot be shown."
+      "attentionNoHeadcount": "{project} has no contracted headcount, so contract fill cannot be shown.",
+      "bucketWorking": "Working today",
+      "bucketOnLeave": "On leave",
+      "bucketSick": "Sick",
+      "bucketAbsent": "Absent",
+      "bucketNotMarked": "Not marked yet",
+      "colEmployee": "Employee ID",
+      "colBucket": "Today",
+      "clearWidget": "Clear",
+      "widgetEmpty": "No riders in this group.",
+      "ridersUnavailable": "This table needs the latest server build; reload after the next deploy.",
+      "pagerRange": "{from}–{to} of {total}",
+      "pagerPrev": "Previous",
+      "pagerNext": "Next"
     },
     "clientPortal": {
       "title": "Your Riders Today",

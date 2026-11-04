@@ -1018,6 +1018,31 @@ export const adminClientPortalDashboard = onCall(async (request) => {
       pct: liveCount === 0 ? 0 : (tile.count / liveCount) * 100,
     })),
     onLeaveNow: onLeaveNow(projectDrivers, byDriver, today, loaded.zones),
+    // The KPI cards above count a rider by what happened **today** — attendance,
+    // then a covering leave plan, then the account status (`classify`). The table
+    // each card opens has to select on that same bucket, not on `drivers.status`,
+    // or clicking "Working today 2" would list 209 riders. Computed here, in the
+    // same pass as `bar`, so the two cannot disagree.
+    riders: barDrivers
+      .filter((driver) => !driver.archived)
+      .map((driver) => ({
+        employeeId: driver.employeeId,
+        name: driver.name,
+        zone: zoneLabel(driver.zoneId, loaded.zones),
+        bucket: classify(
+          driver,
+          day,
+          todayYm,
+          byDriver.get(driver.id) ?? [],
+          loaded.checkedIn.has(driver.id),
+        ),
+        status: driver.status,
+      }))
+      .sort(
+        (left, right) =>
+          left.name.localeCompare(right.name) ||
+          left.employeeId.localeCompare(right.employeeId),
+      ),
     zones: [...zoneIds]
       .map((id) => ({ id, name: zoneLabel(id, loaded.zones) }))
       .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),

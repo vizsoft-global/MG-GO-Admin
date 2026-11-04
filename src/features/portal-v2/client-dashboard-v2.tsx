@@ -16,11 +16,10 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { downloadCsv } from "@/lib/csv/client-download";
-import { formatKuwaitDateLabel, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
-import { formatPct } from "@/lib/format/percent";
+import { formatKuwaitDateLabel, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";import { formatPct } from "@/lib/format/percent";
 import { selectOptions } from "@/lib/select-items";
 import { fetchClientPortalDashboard } from "@/features/client-portal/client-portal-actions";
-import type { ClientPortalDashboard } from "@/features/client-portal/shape";
+import type { ClientPortalDashboard, ClientPortalRider } from "@/features/client-portal/shape";
 import {
   MonthBars,
   TONE_FILL,
@@ -36,12 +35,24 @@ import {
 import { monthLabel, monthLongLabel } from "@/features/operations-dashboard-v2/helpers";
 import { fetchPortalExtras, type PortalExtras } from "./portal-v2-actions";
 import { PortalV2Nav } from "./portal-v2-nav";
+import {
+  bucketLabelKey,
+  filterRidersByWidget,
+  pageSlice,
+  pageWindow,
+  type RiderWidgetKey,
+} from "./portal-rider-widgets";
 import { v2WeekdayDate } from "./v2-format";
 
 const HEAD_BTN = "h-9 cursor-pointer";
 const SELECT = "h-9 min-h-9 border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-primary)]";
 const TABLE = "text-[13px] [&_thead_tr]:bg-[var(--surface-subtle)] [&_td]:px-3 [&_td]:py-2.5 [&_th]:h-9 [&_th]:px-3";
 const TH = "text-start text-[12px] font-medium text-[var(--text-secondary)]";
+/** Rows per page in the rider table a KPI card opens. */
+const RIDER_PAGE_SIZE = 8;
+const SELECTED_KPI = "ring-1 ring-[var(--accent-rust)]";
+/** Stable identity for "this read sent no riders", so the filter memo cannot re-run. */
+const NO_RIDERS: ClientPortalRider[] = [];
 
 function addDays(ymd: string, days: number): string {
   const date = new Date(`${ymd}T00:00:00Z`);
@@ -57,6 +68,48 @@ function kuwaitHourNow(): number {
   return Number(
     new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hour12: false, timeZone: "Asia/Kuwait" }).format(new Date()),
   );
+}
+
+/**
+ * The status distribution and the KPI cards are two views of the same five
+ * buckets, so a legend segment opens the card's table. `sick` and `absent` are
+ * separate segments but one card ("Absent / sick" adds them), which is why they
+ * map to the same widget rather than to a table of their own.
+ */
+function widgetForStatusPart(key: string): RiderWidgetKey | null {
+  switch (key) {
+    case "working":
+      return "working";
+    case "onLeave":
+      return "onLeave";
+    case "sick":
+    case "absent":
+      return "absentSick";
+    case "other":
+      return "notMarked";
+    default:
+      return null;
+  }
+}
+
+/** The card label reused as the drill-down table's heading. */
+function widgetTitleKey(widget: RiderWidgetKey): "kpiAssigned" | "kpiWorkingToday" | "kpiOnLeave" | "kpiAbsentSick" | "kpiNotMarked" {
+  switch (widget) {
+    case "assigned":
+      return "kpiAssigned";
+    case "working":
+      return "kpiWorkingToday";
+    case "onLeave":
+      return "kpiOnLeave";
+    case "absentSick":
+      return "kpiAbsentSick";
+    case "notMarked":
+      return "kpiNotMarked";
+    default: {
+      const never: never = widget;
+      return never;
+    }
+  }
 }
 
 export function ClientDashboardV2({
@@ -78,6 +131,13 @@ export function ClientDashboardV2({
   const [zoneId, setZoneId] = useState("");
   const [leaveMonth, setLeaveMonth] = useState("");
   const [showAllLeave, setShowAllLeave] = useState(false);
+  /**
+   * The KPI card (or status legend chip) the operator opened, and which page of
+   * its rider table is showing. Kept in local state rather than the URL: this is
+   * a drill-down inside one dashboard, not a destination.
+   */
+  const [riderWidget, setRiderWidget] = useState<RiderWidgetKey | null>(null);
+  const [riderPage, setRiderPage] = useState(0);
   const [data, setData] = useState<ClientPortalDashboard | null>(null);
   const [extras, setExtras] = useState<PortalExtras>({ onboarding: [], docAlerts: [] });
   const [failed, setFailed] = useState(false);
@@ -161,6 +221,27 @@ export function ClientDashboardV2({
     { key: "other", label: tOps("kpiNotMarked"), count: todayBar?.other ?? 0, tone: "neutral" as const },
   ];
   const statusTotal = statusParts.reduce((sum, part) => sum + part.count, 0);
+
+  /**
+   * The rider table behind a KPI card.
+   *
+   * `data.riders` carries the bucket the Cloud Function already computed for
+   * each rider, so the rows here are the same population the cards counted —
+   * the server fills both in one `classify` pass and they cannot drift. An old
+   * function build sends no `riders`; the table then says so instead of silently
+   * listing a different set.
+   */
+  const riderRows = data?.riders ?? NO_RIDERS;
+  const drillRows = useMemo(
+    () => filterRidersByWidget(riderRows, riderWidget),
+    [riderRows, riderWidget],
+  );
+  const drill = pageSlice(drillRows, riderPage, RIDER_PAGE_SIZE);
+
+  function openRiderWidget(widget: RiderWidgetKey) {
+    setRiderWidget((current) => (current === widget ? null : widget));
+    setRiderPage(0);
+  }
 
   const away = data?.onLeaveNow ?? [];
   const backThisWeek = away.filter((row) => row.end && row.end <= addDays(today, 7)).length;
@@ -292,6 +373,8 @@ export function ClientDashboardV2({
           label={t("kpiAssigned")}
           value={data?.kpis.assigned ?? 0}
           caption={t("captionContracted", { count: "—" })}
+          onClick={() => openRiderWidget("assigned")}
+          className={riderWidget === "assigned" ? SELECTED_KPI : undefined}
         />
         <KpiCard
           layout="portal"
@@ -299,6 +382,8 @@ export function ClientDashboardV2({
           label={t("kpiWorkingToday")}
           value={data?.kpis.working ?? 0}
           caption={t("captionWorkingRate", { pct: formatPct(data?.kpis.workingRate ?? 0) })}
+          onClick={() => openRiderWidget("working")}
+          className={riderWidget === "working" ? SELECTED_KPI : undefined}
         />
         <KpiCard
           layout="portal"
@@ -306,6 +391,8 @@ export function ClientDashboardV2({
           label={t("kpiOnLeave")}
           value={data?.kpis.onLeave ?? 0}
           caption={t("captionBackThisWeek", { count: backThisWeek })}
+          onClick={() => openRiderWidget("onLeave")}
+          className={riderWidget === "onLeave" ? SELECTED_KPI : undefined}
         />
         <KpiCard
           layout="portal"
@@ -313,6 +400,8 @@ export function ClientDashboardV2({
           label={t("kpiAbsentSick")}
           value={data?.kpis.absentSick ?? 0}
           caption={t("captionAbsentSick", { absent: todayBar?.absent ?? 0, sick: todayBar?.sick ?? 0 })}
+          onClick={() => openRiderWidget("absentSick")}
+          className={riderWidget === "absentSick" ? SELECTED_KPI : undefined}
         />
         <KpiCard
           layout="portal"
@@ -320,7 +409,11 @@ export function ClientDashboardV2({
           label={t("kpiNotMarked")}
           value={todayBar?.other ?? 0}
           caption={t("captionAttendancePending")}
+          onClick={() => openRiderWidget("notMarked")}
+          className={riderWidget === "notMarked" ? SELECTED_KPI : undefined}
         />
+        {/* Contracted count is not recorded anywhere yet, so this card opens
+            nothing rather than opening an empty table and implying it has rows. */}
         <KpiCard
           layout="portal"
           portalAccent="green"
@@ -349,17 +442,162 @@ export function ClientDashboardV2({
               ))}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-[var(--text-secondary)]">
-              {statusParts.map((part) => (
-                <span key={part.key} className="inline-flex items-center gap-1.5">
-                  <span className={`size-2 rounded-full ${TONE_FILL[part.tone]}`} aria-hidden />
-                  {part.label}
-                  <span className="font-semibold text-[var(--text-primary)]">{part.count}</span>
-                </span>
-              ))}
+              {statusParts.map((part) => {
+                const widget = widgetForStatusPart(part.key);
+                const active = widget != null && riderWidget === widget;
+                return (
+                  <button
+                    key={part.key}
+                    type="button"
+                    // The legend is the same five buckets as the cards, so it
+                    // drives the same table. `sick` and `absent` both open
+                    // "Absent / sick", which is the card that counts them.
+                    onClick={widget ? () => openRiderWidget(widget) : undefined}
+                    disabled={!widget}
+                    aria-pressed={widget ? active : undefined}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors duration-150 motion-reduce:transition-none ${
+                      widget ? "cursor-pointer hover:bg-[var(--surface-subtle)]" : ""
+                    } ${active ? "bg-[var(--surface-subtle)] font-semibold text-[var(--text-primary)]" : ""}`}
+                  >
+                    <span className={`size-2 rounded-full ${TONE_FILL[part.tone]}`} aria-hidden />
+                    {part.label}
+                    <span className="font-semibold text-[var(--text-primary)]">{part.count}</span>
+                  </button>
+                );
+              })}
             </div>
           </>
         )}
       </V2Card>
+
+      {riderWidget ? (
+        <V2Card className="mt-3 p-4 xl:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="font-display text-[17px] font-bold leading-6 text-[var(--text-primary)]">
+                {t(widgetTitleKey(riderWidget))}
+              </h2>
+              <p className="text-xs text-[var(--text-secondary)]">
+                {t("ridersCount", { count: drillRows.length })}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="portal-secondary"
+                className={HEAD_BTN}
+                disabled={drillRows.length === 0}
+                onClick={() =>
+                  downloadCsv(
+                    `riders-${riderWidget}-${day}.csv`,
+                    [t("colEmployee"), t("colRider"), t("colZone"), t("colBucket"), t("colStatus")],
+                    drillRows.map((row) => [
+                      row.employeeId,
+                      row.name,
+                      row.zone || "—",
+                      t(bucketLabelKey(row.bucket)),
+                      row.status,
+                    ]),
+                  )
+                }
+              >
+                <Download className="size-4" aria-hidden />
+                {t("exportExcel")}
+              </Button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRiderWidget(null);
+                  setRiderPage(0);
+                }}
+                className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--border-default)] px-3 text-xs font-medium text-[var(--text-primary)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] motion-reduce:transition-none"
+              >
+                <X className="size-3.5" aria-hidden />
+                {t("clearWidget")}
+              </button>
+            </div>
+          </div>
+
+          <V2TableShell className="mt-3">
+            <Table className={TABLE}>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className={TH}>{t("colEmployee")}</TableHead>
+                  <TableHead className={TH}>{t("colRider")}</TableHead>
+                  <TableHead className={TH}>{t("colZone")}</TableHead>
+                  <TableHead className={TH}>{t("colBucket")}</TableHead>
+                  <TableHead className={TH}>{t("colStatus")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {drill.slice.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-6 text-center text-[var(--text-secondary)]">
+                      {riderRows.length === 0 ? t("ridersUnavailable") : t("widgetEmpty")}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  drill.slice.map((row) => (
+                    <TableRow key={`${row.employeeId}-${row.name}`}>
+                      <TableCell className="tabular-nums">{row.employeeId || "—"}</TableCell>
+                      <TableCell className="font-medium">{row.name || "—"}</TableCell>
+                      <TableCell>{row.zone || "—"}</TableCell>
+                      <TableCell>{t(bucketLabelKey(row.bucket))}</TableCell>
+                      <TableCell className="text-[var(--text-secondary)]">{row.status || "—"}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </V2TableShell>
+
+          {drill.pageCount > 1 ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
+              <span>
+                {t("pagerRange", { from: drill.from, to: drill.to, total: drillRows.length })}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={drill.page === 0}
+                  onClick={() => setRiderPage(drill.page - 1)}
+                  className="inline-flex h-7 items-center rounded-md border border-[var(--border-default)] px-2 font-medium text-[var(--text-primary)] disabled:opacity-40"
+                >
+                  {t("pagerPrev")}
+                </button>
+                {pageWindow(drill.page, drill.pageCount).map((index, position) =>
+                  index == null ? (
+                    <span key={`gap-${position}`} className="px-1">
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={index}
+                      type="button"
+                      aria-current={index === drill.page ? "page" : undefined}
+                      onClick={() => setRiderPage(index)}
+                      className={`inline-flex h-7 min-w-7 items-center justify-center rounded-md border px-2 tabular-nums ${
+                        index === drill.page
+                          ? "border-[var(--accent-rust)] bg-[var(--accent-rust)] font-semibold text-white"
+                          : "border-[var(--border-default)] text-[var(--text-primary)]"
+                      }`}
+                    >
+                      {index + 1}
+                    </button>
+                  ),
+                )}
+                <button
+                  type="button"
+                  disabled={drill.page >= drill.pageCount - 1}
+                  onClick={() => setRiderPage(drill.page + 1)}
+                  className="inline-flex h-7 items-center rounded-md border border-[var(--border-default)] px-2 font-medium text-[var(--text-primary)] disabled:opacity-40"
+                >
+                  {t("pagerNext")}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </V2Card>
+      ) : null}
 
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
         <V2Card className="p-4 xl:p-5 lg:col-span-2">

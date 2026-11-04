@@ -16,10 +16,13 @@ import {
   type ClientPortalEmployee,
 } from "@/features/client-portal/client-portal-employees-actions";
 import { portalInitials } from "./portal-v2-nav";
+import { pageSlice, pageWindow } from "./portal-rider-widgets";
 
 const HEAD_BTN = "h-9 cursor-pointer";
 const TABLE = "text-[13px] [&_thead_tr]:bg-[var(--surface-subtle)] [&_td]:px-3 [&_td]:py-2.5 [&_th]:h-9 [&_th]:px-3";
 const TH = "text-start text-[12px] font-medium text-[var(--text-secondary)]";
+/** Rows per page. 8 is what the card was already showing, so the height holds. */
+const PAGE_SIZE = 8;
 
 function maskedCivil(civilId: string): string {
   if (!civilId) return "—";
@@ -41,6 +44,7 @@ export function ClientEmployeesV2({ project }: { project: string }) {
   const [selected, setSelected] = useState<ClientPortalEmployee | null>(null);
   const [query, setQuery] = useState("");
   const [revealCivil, setRevealCivil] = useState(false);
+  const [page, setPage] = useState(0);
 
   const projectLabel =
     project === "americana"
@@ -82,7 +86,14 @@ export function ClientEmployeesV2({ project }: { project: string }) {
     );
   }, [rows, query]);
 
-  const visible = filtered.slice(0, 8);
+  /**
+   * A real page over the loaded roster, not the old `slice(0, 8)`.
+   *
+   * `fetchClientPortalEmployees` already pages the whole project into `rows`, so
+   * this is a view over data the card had all along — the footer used to print
+   * `1–8 / 209` and stop, which reads as a pager that does nothing.
+   */
+  const paged = pageSlice(filtered, page, PAGE_SIZE);
 
   async function openDocument(doc: ClientPortalDocument, mode: "view" | "download") {
     if (!selected) return;
@@ -157,7 +168,12 @@ export function ClientEmployeesV2({ project }: { project: string }) {
               />
               <Input
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  // A search that shrinks the roster must not leave the view on
+                  // a page that no longer exists.
+                  setPage(0);
+                }}
                 placeholder={t("searchEmployees")}
                 className="h-9 w-60 border-[var(--border-default)] bg-[var(--surface-card)] ps-8"
               />
@@ -177,14 +193,14 @@ export function ClientEmployeesV2({ project }: { project: string }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {visible.length === 0 ? (
+                {paged.slice.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="py-6 text-center text-[var(--text-secondary)]">
                       {t("noDocuments")}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  visible.map((row) => (
+                  paged.slice.map((row) => (
                     <TableRow key={row.id} onClick={() => openEmployee(row)} className="cursor-pointer">
                       <TableCell className="tabular-nums">{row.mgId || "—"}</TableCell>
                       <TableCell className="tabular-nums">{row.clientId || "—"}</TableCell>
@@ -214,9 +230,54 @@ export function ClientEmployeesV2({ project }: { project: string }) {
               </TableBody>
             </Table>
           </div>
-          <p className="mt-3 text-xs text-[var(--text-secondary)]">
-            {filtered.length === 0 ? "0" : `1–${Math.min(filtered.length, 8)} / ${filtered.length}`}
-          </p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
+            <span>
+              {filtered.length === 0
+                ? "0"
+                : t("pagerRange", { from: paged.from, to: paged.to, total: filtered.length })}
+            </span>
+            {paged.pageCount > 1 ? (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={paged.page === 0}
+                  onClick={() => setPage(paged.page - 1)}
+                  className="inline-flex h-7 cursor-pointer items-center rounded-md border border-[var(--border-default)] px-2 font-medium text-[var(--text-primary)] disabled:cursor-default disabled:opacity-40"
+                >
+                  {t("pagerPrev")}
+                </button>
+                {pageWindow(paged.page, paged.pageCount).map((index, position) =>
+                  index == null ? (
+                    <span key={`gap-${position}`} className="px-1">
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={index}
+                      type="button"
+                      aria-current={index === paged.page ? "page" : undefined}
+                      onClick={() => setPage(index)}
+                      className={`inline-flex h-7 min-w-7 cursor-pointer items-center justify-center rounded-md border px-2 tabular-nums ${
+                        index === paged.page
+                          ? "border-[var(--accent-rust)] bg-[var(--accent-rust)] font-semibold text-white"
+                          : "border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--surface-subtle)]"
+                      }`}
+                    >
+                      {index + 1}
+                    </button>
+                  ),
+                )}
+                <button
+                  type="button"
+                  disabled={paged.page >= paged.pageCount - 1}
+                  onClick={() => setPage(paged.page + 1)}
+                  className="inline-flex h-7 cursor-pointer items-center rounded-md border border-[var(--border-default)] px-2 font-medium text-[var(--text-primary)] disabled:cursor-default disabled:opacity-40"
+                >
+                  {t("pagerNext")}
+                </button>
+              </div>
+            ) : null}
+          </div>
         </section>
 
         <section className="rounded-xl border border-[var(--border-default)] bg-[var(--surface-card)] p-4">

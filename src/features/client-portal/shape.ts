@@ -16,6 +16,34 @@ export type PortalKpis = {
   accident: number;
 };
 
+/**
+ * The bucket a rider lands in for **today**, as the Cloud Function computed it.
+ *
+ * Deliberately not `drivers.status`: the KPI cards count attendance first, then
+ * a covering leave plan, then the account status, so a rider can be `running`
+ * as an account and still sit in "Absent / sick" today. The table a card opens
+ * must select on this, or it disagrees with the number above it.
+ */
+export type RiderBucket = "working" | "onLeave" | "sick" | "absent" | "other";
+
+export type ClientPortalRider = {
+  employeeId: string;
+  name: string;
+  zone: string;
+  bucket: RiderBucket;
+  status: string;
+};
+
+export function isRiderBucket(value: unknown): value is RiderBucket {
+  return (
+    value === "working" ||
+    value === "onLeave" ||
+    value === "sick" ||
+    value === "absent" ||
+    value === "other"
+  );
+}
+
 export type TodayBar = {
   working: number;
   onLeave: number;
@@ -53,6 +81,8 @@ export type ClientPortalDashboard = {
   assignedToYou: number;
   kpis: PortalKpis;
   riderStatus: RiderStatusCard[];
+  /** One row per live rider with the KPI bucket it lands in. Empty on an old read. */
+  riders: ClientPortalRider[];
   leaveMonths: LeaveMonthBar[];
   turnover: Turnover;
   turnoverComparison: TurnoverComparison;
@@ -115,6 +145,7 @@ export function emptyClientPortal(): ClientPortalDashboard {
     assignedToYou: 0,
     kpis: { assigned: 0, working: 0, onLeave: 0, absentSick: 0, workingRate: 0, accident: 0 },
     riderStatus: RIDER_KEYS.map((key) => ({ key, count: 0, pct: 0 })),
+    riders: [],
     leaveMonths: [],
     turnover: { monthly: "", yearly: "", footnote: "" },
     turnoverComparison: { months: [], annualPct: 0, monthlyAvgPct: 0, departuresCount: 0, peakMonth: "" },
@@ -302,6 +333,27 @@ function plainRows(raw: unknown): PlainRow[] {
   return list(raw).map(record).filter((row): row is PlainRow => row != null);
 }
 
+function readRiders(raw: unknown): ClientPortalRider[] {
+  const rows: ClientPortalRider[] = [];
+  for (const item of list(raw)) {
+    const row = record(item);
+    if (!row) continue;
+    const bucket = pick(row, ["bucket"]);
+    // An older function build sends no `riders` at all, and a row with an
+    // unknown bucket is dropped rather than guessed at: a rider filed under the
+    // wrong card is worse than one missing from the table.
+    if (!isRiderBucket(bucket)) continue;
+    rows.push({
+      employeeId: text(pick(row, ["employeeId", "employee_id"])),
+      name: text(pick(row, ["name"])),
+      zone: text(pick(row, ["zone"])),
+      bucket,
+      status: text(pick(row, ["status"])),
+    });
+  }
+  return rows;
+}
+
 export function normalizeClientPortal(raw: unknown): ClientPortalDashboard {
   const row = record(raw) ?? {};
   const exported = record(row.exports) ?? {};
@@ -312,6 +364,7 @@ export function normalizeClientPortal(raw: unknown): ClientPortalDashboard {
     assignedToYou: kpis.assigned,
     kpis,
     riderStatus: readRiderStatus(pick(row, ["riderStatus", "rider_status"]), kpis.assigned),
+    riders: readRiders(pick(row, ["riders"])),
     leaveMonths: readMonths(pick(row, ["leaveMonths", "leave_months"])),
     turnover: readTurnover(pick(row, ["turnover"])),
     turnoverComparison: readComparison(pick(row, ["turnover"])),

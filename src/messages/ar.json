@@ -13511,7 +13511,20 @@
       "userExists": "هذا البريد مدعو بالفعل.",
       "noPortals": "لا توجد بوابة عميل مُهيّأة بعد.",
       "attentionNoUsers": "{project} ليس لديه مستخدمو عميل بعد.",
-      "attentionNoHeadcount": "{project} ليس لديه عدد تعاقدي، لذا لا يمكن عرض نسبة التعاقد."
+      "attentionNoHeadcount": "{project} ليس لديه عدد تعاقدي، لذا لا يمكن عرض نسبة التعاقد.",
+      "bucketWorking": "يعمل اليوم",
+      "bucketOnLeave": "في إجازة",
+      "bucketSick": "مرضية",
+      "bucketAbsent": "غائب",
+      "bucketNotMarked": "لم يُسجَّل بعد",
+      "colEmployee": "الرقم الوظيفي",
+      "colBucket": "اليوم",
+      "clearWidget": "مسح",
+      "widgetEmpty": "لا يوجد سائقون في هذه المجموعة.",
+      "ridersUnavailable": "هذا الجدول يحتاج أحدث نسخة من الخادم؛ أعد التحميل بعد النشر القادم.",
+      "pagerRange": "{from}–{to} من {total}",
+      "pagerPrev": "السابق",
+      "pagerNext": "التالي"
     },
     "clientPortal": {
       "title": "راكبوك اليوم",
