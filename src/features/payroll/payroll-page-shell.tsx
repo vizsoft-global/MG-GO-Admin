@@ -55,6 +55,7 @@ import {
 import { exportPayrollHubCsv } from "./payroll-csv";
 import { usePayrollColumnConfig, usePayrollRangeSnapshot } from "./use-payroll";
 import type { PayrollHubTab, PayrollSlicers } from "./payroll-types";
+import type { PayrollProjectView } from "./payroll-projects";
 
 const TABS: PayrollHubTab[] = [
   "payroll",
@@ -94,6 +95,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
   const [slicers, setSlicers] = useState<PayrollSlicers>(EMPTY_OPS_SLICERS);
   const [statusFilter, setStatusFilter] = useState<PayrollStatusFilter | null>(null);
   const [zoneCategory, setZoneCategory] = useState<PayrollZoneCategoryFilter | null>(null);
+  const [aoView, setAoView] = useState<PayrollProjectView>("americana");
   const [offOpen, setOffOpen] = useState(false);
   const combinedExport = useCombinedExportBridgeValue();
 
@@ -351,7 +353,7 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           )}
         />
       </div>
-      {data && tab !== "settings" ? (
+      {data && tab !== "settings" && !(tab === "attendance-orders" && aoView === "five_guys") ? (
         <PayrollLegend
           riders={data.riders}
           selected={statusFilter}
@@ -389,6 +391,14 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           canExport={canExport}
           canManage={canManage}
           today={today}
+          view={aoView}
+          onViewChange={(next) => {
+            setAoView(next);
+            // Five Guys has no day status, so a chip chosen on another project
+            // would filter nothing visible — clear it instead of leaving a filter
+            // the operator cannot see.
+            if (next === "five_guys") setStatusFilter(null);
+          }}
         />
       ) : tab === "app-attendance" ? (
         <ApplicationAttendanceTab

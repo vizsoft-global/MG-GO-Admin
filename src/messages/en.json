@@ -10624,7 +10624,8 @@
         "original": "Original (system)",
         "adjusted": "Adjusted",
         "reason": "Reason",
-        "empty": "No manual changes in this range."
+        "empty": "No manual changes in this range.",
+        "hintProject": "Every edit and upload for {project} is kept with user, date, time, old value, new value and reason. Read-only."
       },
       "ao": {
         "bannerTitle": "Payroll attendance and orders.",
@@ -10633,7 +10634,24 @@
         "ordersColumn": "Orders · day {day}",
         "payrollShort": "Payroll",
         "ordersShort": "Orders",
-        "footNote": "Payroll cells are editable. Orders stay read-only. A reason is required for every change."
+        "footNote": "Payroll cells are editable. Orders stay read-only. A reason is required for every change.",
+        "workingHoursShort": "Working hours",
+        "hoursShort": "Hours",
+        "workingHoursColumn": "Working hours · {day}",
+        "workedDaysShort": "Worked days",
+        "totalHoursShort": "Total hours",
+        "totalOrdersShort": "Total orders",
+        "kpiRiders": "Riders in payroll",
+        "kpiActive": "Total active riders",
+        "kpiOrders": "Total orders",
+        "kpiHours": "Total hours",
+        "kpiAvgOrders": "Avg orders per worked day",
+        "kpiAvgHours": "Avg hours per worked day",
+        "banner": {
+          "americana": "each day carries two figures: the credited Payroll day the rules produced and the reconciled Orders count behind it. Payroll cells are editable, Orders stay read-only.",
+          "keeta": "each day carries the credited Payroll day and the Working hours loaded for that day. Working hours replace Orders: they are uploaded daily and stay read-only. Payroll cells are editable, with a reason.",
+          "five_guys": "each day carries only the number of hours worked, nothing else. Hours are uploaded daily and can be edited with a reason."
+        }
       },
       "headings": {
         "columns": "Columns",
@@ -10895,7 +10913,59 @@
         "unexcused": "Unexcused Absence",
         "lessHours": "Less Hours",
         "lessOrders": "Less Orders"
-      }
+      },
+      "projects": {
+        "americana": "Americana",
+        "americanaSubtitle": "Payroll + Orders · own payroll and report",
+        "keeta": "Keeta",
+        "keetaSubtitle": "Payroll + Working hours · own payroll and report",
+        "fiveGuys": "Five Guys",
+        "fiveGuysSubtitle": "Hours only · own payroll and report",
+        "unassigned": "{count} riders have no project and are not shown on any card. Set their project on the employee record."
+      },
+      "upload": {
+        "open": "Upload daily {figure}",
+        "title": "Upload daily data · {project}",
+        "hint": "One CSV per project. Rows for riders of another project are rejected, so each project keeps its own data. Accepted rows are written to the manual changes record with the reason Daily upload.",
+        "chooseFile": "Choose CSV",
+        "downloadTemplate": "Download template",
+        "shape": "Columns: MG ID, Date, {value}. The date must be in this month and not in the future.",
+        "ordersColumn": "Orders",
+        "hoursColumn": "Hours",
+        "colLine": "Row",
+        "colId": "MG ID",
+        "colReason": "Reason",
+        "footerTitle": "Upload daily data",
+        "footerHint": "Nothing is written until you apply.",
+        "apply": "Apply {count} rows",
+        "applied": "{count} rows loaded.",
+        "partlyRejected": "{count} rows were rejected by the server.",
+        "failed": "The upload failed.",
+        "cancel": "Cancel",
+        "rejects": {
+          "row_missing_id": "No MG ID on this row.",
+          "row_unknown_id": "No rider with this MG ID.",
+          "row_other_project": "This rider belongs to another project.",
+          "row_invalid_date": "The date is not a valid day.",
+          "row_outside_month": "The date is outside the selected month.",
+          "row_future_date": "The date is in the future.",
+          "row_invalid_value": "The figure is not a number in range.",
+          "row_duplicate": "This rider and date already appear in the file."
+        }
+      },
+      "hoursEdit": {
+        "title": "Edit hours",
+        "hours": "Hours worked",
+        "placeholder": "Hours, e.g. 9.5",
+        "hint": "Zero to 24. Today is {today}; a future day is refused.",
+        "reason": "Reason (required)",
+        "reasonPlaceholder": "Why is this figure being changed?",
+        "saved": "Hours saved for {day}.",
+        "failed": "The hours could not be saved.",
+        "save": "Save",
+        "cancel": "Cancel"
+      },
+      "exportProject": "Export {project} report"
     },
     "performance": {
       "title": "Performance",

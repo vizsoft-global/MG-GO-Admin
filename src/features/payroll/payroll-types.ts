@@ -45,6 +45,13 @@ export type PayrollDayInfo = {
   ordersOverridden?: boolean;
   /** Kuwait check-in → check-out hours. */
   loggedHours: number;
+  /**
+   * Hours Operations loaded for this day (Keeta / Five Guys). `null` = nothing
+   * loaded yet, which the cell prints as `–` rather than `0`.
+   */
+  workingHours?: number | null;
+  /** True when an uploaded figure exists for this day. */
+  workingHoursOverridden?: boolean;
   source: DaySource;
   /** The rule that decided the day, when a rule did. */
   ruleLabel: string | null;

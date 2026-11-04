@@ -67,6 +67,8 @@ export const COLLECTIONS = {
   restaurantGeofences: "restaurant_geofences",
   payrollClients: "payroll_clients",
   payrollClientRules: "payroll_client_rules",
+  /** `{driverId}_{YYYY-MM-DD}` — hours loaded for a Keeta / Five Guys day. */
+  payrollDayHours: "payroll_day_hours",
   payrollZoneMetrics: "payroll_zone_metrics",
   payrollZoneSettings: "payroll_zone_settings",
   payrollManualAdjustments: "payroll_manual_adjustments",

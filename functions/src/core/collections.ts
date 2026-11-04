@@ -90,6 +90,13 @@ export const COLLECTIONS = {
   payrollZoneSettings: "payroll_zone_settings",
   payrollManualAdjustments: "payroll_manual_adjustments",
   payrollOrderOverrides: "payroll_order_overrides",
+  /**
+   * `{driverId}_{YYYY-MM-DD}` — hours Operations loaded for a Keeta / Five Guys
+   * day. Separate from `payroll_order_overrides` because hours and orders are
+   * different facts: an Americana rider keeps no hours here, and a Keeta rider
+   * keeps no orders anywhere.
+   */
+  payrollDayHours: "payroll_day_hours",
   payrollRiderStatuses: "payroll_rider_statuses",
   payrollColumnConfig: "payroll_column_config",
   /** `payroll_rule_audit_logs` — the before/after trail behind the Settings tab. */

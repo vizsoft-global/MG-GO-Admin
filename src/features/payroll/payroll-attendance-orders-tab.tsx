@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Download, Info, Redo2, Undo2 } from "lucide-react";
+import { Download, Info, Redo2, Undo2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TABLE_HEAD_CLASS } from "@/components/app";
 import { PayrollListToolbar, usePayrollListPrefs } from "./payroll-list-toolbar";
@@ -12,7 +12,7 @@ import {
   payrollRiderMatchesSearch,
   type PayrollPeriod,
 } from "./payroll-formulas";
-import { exportPayrollAttendanceOrdersCsv } from "./payroll-csv";
+import { exportPayrollAttendanceOrdersProjectCsv } from "./payroll-csv";
 import {
   activeFilterChips,
   columnFilterActive,
@@ -30,7 +30,28 @@ import {
   dayColumnId,
   dayOrdersColumnId,
   riderColumnValue,
+  workingHoursColumnId,
 } from "./payroll-rider-columns";
+import {
+  dayColumnLabelKey,
+  projectConfigOf,
+  projectCounts,
+  projectExportName,
+  projectKpis,
+  projectRowTotals,
+  ridersForProject,
+  unassignedProjectCount,
+  type PayrollProjectView,
+} from "./payroll-projects";
+import { PayrollProjectCards, PayrollProjectKpis } from "./payroll-project-cards";
+import { PayrollDailyUploadDialog } from "./payroll-daily-upload-dialog";
+import {
+  PayrollHoursCell,
+  PayrollHoursDialog,
+  type HoursEditTarget,
+} from "./payroll-hours-cell";
+import { PayrollManualChangesPanel } from "./payroll-manual-changes";
+import { usePayrollAdjustmentAudit } from "./use-payroll";
 import { dayClass, PayrollFillHandle, ZoneCategoryPill } from "./payroll-grid";
 import { payrollAssignField } from "./payroll-assign";
 import {
@@ -80,6 +101,8 @@ export function PayrollAttendanceOrdersTab({
   canExport,
   canManage = false,
   today,
+  view = "americana",
+  onViewChange,
 }: {
   month: PayrollPeriod;
   riders: readonly PayrollRiderRow[];
@@ -87,10 +110,21 @@ export function PayrollAttendanceOrdersTab({
   canManage?: boolean;
   /** Kuwait date the page calls today; drives the Rider Status column. */
   today: string;
+  /**
+   * The selected project card. Owned by the shell so it can hide the status chips
+   * for Five Guys — that project has no day status to filter on — while every
+   * other tab stays exactly as it was.
+   */
+  view?: PayrollProjectView;
+  onViewChange?: (next: PayrollProjectView) => void;
 }) {
   const t = useTranslations("pages.payroll");
   const statusList = usePayrollStatusFilterList();
   const [search, setSearch] = useState("");
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [hoursTarget, setHoursTarget] = useState<HoursEditTarget | null>(null);
+  const config = projectConfigOf(view);
+  const audit = usePayrollAdjustmentAudit({ from: month.from, to: month.to });
   const { prefs } = usePayrollListPrefs("payroll-ao");
   const [filters, setFilters] = useState<ColumnFilters>({});
   const [sort, setSort] = useState<ColumnSort>(null);
@@ -115,15 +149,51 @@ export function PayrollAttendanceOrdersTab({
   const headings = usePayrollColumnConfig();
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
   const columns = useMemo(
-    () => AO_LEAD_COLUMNS.filter((column) => !columnHiddenIn(column.id, "ao", headingConfig)),
-    [headingConfig],
+    () =>
+      AO_LEAD_COLUMNS.filter((column) => !columnHiddenIn(column.id, "ao", headingConfig)).filter(
+        // Keeta riders work from the pool: the SOP removes the Restaurant column
+        // rather than printing "(Pool)" on every row.
+        (column) => config.showRestaurant || column.id !== "restaurant",
+      ),
+    [headingConfig, config.showRestaurant],
   );
   const dates = month.dates;
   const editable = canManage;
 
+  /** The riders on the selected card, before search and the column funnels. */
+  const projectRiders = useMemo(() => ridersForProject(riders, view), [riders, view]);
+  const counts = useMemo(() => projectCounts(riders), [riders]);
+  const unassigned = useMemo(() => unassignedProjectCount(riders), [riders]);
+  const rowTotals = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof projectRowTotals>>();
+    for (const row of projectRiders) map.set(row.driverId, projectRowTotals(view, row));
+    return map;
+  }, [projectRiders, view]);
+  const kpis = useMemo(() => projectKpis(view, projectRiders), [projectRiders, view]);
+  const projectAuditRows = useMemo(() => {
+    const ids = new Set(projectRiders.map((row) => row.driverId));
+    return (audit.data ?? []).filter((row) => ids.has(row.driverId));
+  }, [audit.data, projectRiders]);
+
+  /**
+   * Switching the card re-scopes everything on it: the column funnels, the sort,
+   * the selection and the search belong to the project that was open, and carrying
+   * a Keeta filter onto Americana would hide rows for a reason the operator cannot
+   * see.
+   */
+  function changeView(next: PayrollProjectView) {
+    if (next === view) return;
+    setFilters({});
+    setSort(null);
+    setSearch("");
+    setRect(null);
+    setFillPreview(null);
+    onViewChange?.(next);
+  }
+
   const searched = useMemo(
-    () => riders.filter((r) => payrollRiderMatchesSearch(r, search)),
-    [riders, search],
+    () => projectRiders.filter((r) => payrollRiderMatchesSearch(r, search)),
+    [projectRiders, search],
   );
 
   const visibleRows = useMemo(() => {
@@ -133,6 +203,7 @@ export function PayrollAttendanceOrdersTab({
       for (let i = 0; i < dates.length; i += 1) {
         values[dayColumnId(i)] = riderColumnValue(row, dayColumnId(i));
         values[dayOrdersColumnId(i)] = riderColumnValue(row, dayOrdersColumnId(i));
+        values[workingHoursColumnId(i)] = riderColumnValue(row, workingHoursColumnId(i));
       }
       return rowMatchesColumnFilters(values, filters);
     });
@@ -144,11 +215,13 @@ export function PayrollAttendanceOrdersTab({
   const labelOf = (columnId: string) => {
     const riderColumn = AO_LEAD_COLUMNS.find((c) => c.id === columnId);
     if (riderColumn) return resolveColumnLabel(columnId, t(`riderCols.${riderColumn.labelKey}`), headingConfig);
-    const dayMatch = /^([do])(\d+)$/.exec(columnId);
+    const dayMatch = /^([dow])(\d+)$/.exec(columnId);
     if (dayMatch) {
       const date = dates[Number(dayMatch[2]) - 1];
       const label = date ? isoDayLabel(date) : columnId;
-      return dayMatch[1] === "o" ? t("ao.ordersColumn", { day: label }) : t("ao.payrollColumn", { day: label });
+      if (dayMatch[1] === "w") return t("ao.workingHoursColumn", { day: label });
+      if (dayMatch[1] === "o") return t("ao.ordersColumn", { day: label });
+      return t("ao.payrollColumn", { day: label });
     }
     return columnId;
   };
@@ -168,21 +241,27 @@ export function PayrollAttendanceOrdersTab({
     for (let i = 0; i < dates.length; i += 1) {
       const statusId = dayColumnId(i);
       const ordersId = dayOrdersColumnId(i);
+      const hoursId = workingHoursColumnId(i);
       const statusSet = new Set<string>();
       const orderSet = new Set<string>();
-      for (const row of riders) {
+      const hoursSet = new Set<string>();
+      for (const row of projectRiders) {
         const status = riderColumnValue(row, statusId);
         if (typeof status === "string" && status) statusSet.add(status);
         const orders = riderColumnValue(row, ordersId);
         if (orders !== null) orderSet.add(String(orders));
+        const hours = riderColumnValue(row, hoursId);
+        if (hours !== null) hoursSet.add(String(hours));
       }
       map.set(statusId, [...statusSet]);
       map.set(ordersId, [...orderSet]);
+      map.set(hoursId, [...hoursSet]);
     }
     return map;
-  }, [riders, dates.length]);
+  }, [projectRiders, dates.length]);
 
-  const columnCount = columns.length + dates.length * 2;
+  const dayColumnCount = config.dayColumns.length;
+  const columnCount = columns.length + dates.length * dayColumnCount + 2;
 
   const contextFor = useCallback(
     (row: PayrollRiderRow | undefined, dayIndex: number) => {
@@ -445,9 +524,16 @@ export function PayrollAttendanceOrdersTab({
 
   return (
     <div className="space-y-2">
+      <PayrollProjectCards view={view} counts={counts} onSelect={changeView} />
+      {unassigned > 0 ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          {t("projects.unassigned", { count: unassigned })}
+        </p>
+      ) : null}
+      <PayrollProjectKpis view={view} kpis={kpis} />
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-5 shadow-sm">
-          <b>{t("ao.bannerTitle")}</b> {t("ao.bannerBody")}
+          <b>{t("ao.bannerTitle")}</b> {t(`ao.banner.${view}`)}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {editable ? (
@@ -471,6 +557,17 @@ export function PayrollAttendanceOrdersTab({
             >
               <Redo2 className="size-3.5" />
               {t("adjust.redo")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9"
+              onClick={() => setUploadOpen(true)}
+            >
+              <Upload className="me-1 size-3.5" />
+              {t("upload.open", {
+                figure: config.usesUploadedHours ? t("upload.hoursColumn") : t("upload.ordersColumn"),
+              })}
             </Button>
             </>
           ) : null}
@@ -561,7 +658,7 @@ export function PayrollAttendanceOrdersTab({
                 {dates.map((date) => (
                   <th
                     key={date}
-                    colSpan={2}
+                    colSpan={dayColumnCount}
                     className={cn(TABLE_HEAD_CLASS, "border-s border-border px-2 py-1.5 text-center text-xs")}
                   >
                     {isoDayLabel(date)}
@@ -571,34 +668,46 @@ export function PayrollAttendanceOrdersTab({
               <tr className="border-b border-border">
                 {dates.map((date, i) => (
                   <Fragment key={date}>
-                    <th className={cn(TABLE_HEAD_CLASS, "border-s border-border px-1 py-1")}>
-                      <PayrollColumnHeader
-                        label={t("ao.payrollShort")}
-                        columnId={dayColumnId(i)}
-                        values={dayValues.get(dayColumnId(i)) ?? []}
-                        filter={filters[dayColumnId(i)]}
-                        onChange={(next) => setFilter(dayColumnId(i), next)}
-                        sort={sort}
-                        onSort={setSort}
-                        numeric={false}
-                        className="border-0 p-0"
-                      />
-                    </th>
-                    <th className={cn(TABLE_HEAD_CLASS, "px-1 py-1")}>
-                      <PayrollColumnHeader
-                        label={t("ao.ordersShort")}
-                        columnId={dayOrdersColumnId(i)}
-                        values={dayValues.get(dayOrdersColumnId(i)) ?? []}
-                        filter={filters[dayOrdersColumnId(i)]}
-                        onChange={(next) => setFilter(dayOrdersColumnId(i), next)}
-                        sort={sort}
-                        onSort={setSort}
-                        numeric
-                        className="border-0 p-0"
-                      />
-                    </th>
+                    {config.dayColumns.map((dayColumn, position) => {
+                      const columnId =
+                        dayColumn === "payroll"
+                          ? dayColumnId(i)
+                          : dayColumn === "orders"
+                            ? dayOrdersColumnId(i)
+                            : workingHoursColumnId(i);
+                      return (
+                        <th
+                          key={`${date}-${dayColumn}`}
+                          className={cn(
+                            TABLE_HEAD_CLASS,
+                            "px-1 py-1",
+                            position === 0 && "border-s border-border",
+                          )}
+                        >
+                          <PayrollColumnHeader
+                            label={t(dayColumnLabelKey(dayColumn))}
+                            columnId={columnId}
+                            values={dayValues.get(columnId) ?? []}
+                            filter={filters[columnId]}
+                            onChange={(next) => setFilter(columnId, next)}
+                            sort={sort}
+                            onSort={setSort}
+                            numeric={dayColumn !== "payroll"}
+                            className="border-0 p-0"
+                          />
+                        </th>
+                      );
+                    })}
                   </Fragment>
                 ))}
+                {/* The two row totals close every row, so they need a header of
+                    their own — the project decides which pair they are. */}
+                <th className={cn(TABLE_HEAD_CLASS, "border-s border-border px-2 py-1 text-end")}>
+                  {t("ao.workedDaysShort")}
+                </th>
+                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-1 text-end")}>
+                  {config.usesUploadedHours ? t("ao.totalHoursShort") : t("ao.totalOrdersShort")}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -655,94 +764,147 @@ export function PayrollAttendanceOrdersTab({
                       const selected = isSelected(rowIndex, i);
                       return (
                         <Fragment key={`${row.driverId}-${date}`}>
-                          <td
-                            data-r={rowIndex}
-                            data-c={i}
-                            className={cn(
-                              "relative border-s border-border/60 px-1 py-1 text-center select-none",
-                              selected && "ring-2 ring-inset ring-primary/60",
-                              isFillTarget(rowIndex, i) && "outline-dashed outline-1 outline-emerald-500",
-                            )}
-                            onContextMenu={
-                              editable
-                                ? (event) => {
-                                    event.preventDefault();
-                                    session.rememberAnchor(event.currentTarget);
-                                    setMenu({ x: event.clientX, y: event.clientY, driverId: row.driverId, date });
+                          {config.dayColumns.map((dayColumn, position) => {
+                            const borderStart = position === 0 ? "border-s border-border/60" : undefined;
+                            if (dayColumn === "payroll") {
+                              return (
+                                <td
+                                  key="payroll"
+                                  data-r={rowIndex}
+                                  data-c={i}
+                                  className={cn(
+                                    "relative border-s border-border/60 px-1 py-1 text-center select-none",
+                                    selected && "ring-2 ring-inset ring-primary/60",
+                                    isFillTarget(rowIndex, i) && "outline-dashed outline-1 outline-emerald-500",
+                                  )}
+                                  onContextMenu={
+                                    editable
+                                      ? (event) => {
+                                          event.preventDefault();
+                                          session.rememberAnchor(event.currentTarget);
+                                          setMenu({
+                                            x: event.clientX,
+                                            y: event.clientY,
+                                            driverId: row.driverId,
+                                            date,
+                                          });
+                                        }
+                                      : undefined
                                   }
-                                : undefined
-                            }
-                            onMouseDown={
-                              editable
-                                ? (event) => {
-                                    if (event.button !== 0) return;
-                                    event.preventDefault();
-                                    session.rememberAnchor(event.currentTarget);
-                                    const next = { r0: rowIndex, c0: i, r1: rowIndex, c1: i };
-                                    drag.current = {
-                                      mode: "select",
-                                      ...next,
-                                      rowIds: visibleRows.map((item) => item.driverId),
-                                    };
-                                    setRect(next);
-                                    setFillPreview(null);
-                                    beginEdgeDrag(event.currentTarget, i, event.clientX, event.clientY);
+                                  onMouseDown={
+                                    editable
+                                      ? (event) => {
+                                          if (event.button !== 0) return;
+                                          event.preventDefault();
+                                          session.rememberAnchor(event.currentTarget);
+                                          const next = { r0: rowIndex, c0: i, r1: rowIndex, c1: i };
+                                          drag.current = {
+                                            mode: "select",
+                                            ...next,
+                                            rowIds: visibleRows.map((item) => item.driverId),
+                                          };
+                                          setRect(next);
+                                          setFillPreview(null);
+                                          beginEdgeDrag(event.currentTarget, i, event.clientX, event.clientY);
+                                        }
+                                      : undefined
                                   }
-                                : undefined
-                            }
-                            onMouseEnter={
-                              editable
-                                ? () => {
-                                    applyHoverCell(rowIndex, i);
+                                  onMouseEnter={
+                                    editable
+                                      ? () => {
+                                          applyHoverCell(rowIndex, i);
+                                        }
+                                      : undefined
                                   }
-                                : undefined
+                                >
+                                  <span
+                                    className={cn(
+                                      "relative inline-flex min-w-8 justify-center rounded px-1.5 py-0.5 text-xs font-semibold",
+                                      dayClass(status, row.jobEndDescription),
+                                      adjusted && "outline outline-2 outline-orange-400",
+                                    )}
+                                  >
+                                    {cellParticular(row, i) || "—"}
+                                    {adjusted ? (
+                                      <span className="absolute end-0 top-0 size-0 border-e-[6px] border-t-[6px] border-e-transparent border-t-orange-500" />
+                                    ) : null}
+                                  </span>
+                                  {editable && selected && bounds?.bottom === rowIndex && bounds?.right === i ? (
+                                    <PayrollFillHandle
+                                      onMouseDown={(event) => {
+                                        if (event.button !== 0) return;
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        if (!bounds) return;
+                                        drag.current = {
+                                          mode: "fill",
+                                          r0: bounds.top,
+                                          c0: bounds.left,
+                                          r1: bounds.bottom,
+                                          c1: bounds.right,
+                                          rowIds: visibleRows.map((item) => item.driverId),
+                                        };
+                                        const cell = event.currentTarget.closest("td");
+                                        if (cell) beginEdgeDrag(cell, bounds.right, event.clientX, event.clientY);
+                                      }}
+                                    />
+                                  ) : null}
+                                </td>
+                              );
                             }
-                          >
-                            <span
-                              className={cn(
-                                "relative inline-flex min-w-8 justify-center rounded px-1.5 py-0.5 text-xs font-semibold",
-                                dayClass(status, row.jobEndDescription),
-                                adjusted && "outline outline-2 outline-orange-400",
-                              )}
-                            >
-                              {cellParticular(row, i) || "—"}
-                              {adjusted ? (
-                                <span className="absolute end-0 top-0 size-0 border-e-[6px] border-t-[6px] border-e-transparent border-t-orange-500" />
-                              ) : null}
-                            </span>
-                            {editable && selected && bounds?.bottom === rowIndex && bounds?.right === i ? (
-                              <PayrollFillHandle
-                                onMouseDown={(event) => {
-                                  if (event.button !== 0) return;
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  if (!bounds) return;
-                                  drag.current = {
-                                    mode: "fill",
-                                    r0: bounds.top,
-                                    c0: bounds.left,
-                                    r1: bounds.bottom,
-                                    c1: bounds.right,
-                                    rowIds: visibleRows.map((item) => item.driverId),
-                                  };
-                                  const cell = event.currentTarget.closest("td");
-                                  if (cell) beginEdgeDrag(cell, bounds.right, event.clientX, event.clientY);
-                                }}
-                              />
-                            ) : null}
-                          </td>
-                          <td className="px-1 py-1 text-center tabular-nums">
-                            <PayrollOrderCell
-                              driverId={row.driverId}
-                              date={date}
-                              orders={info?.ordersOverridden ? (info.displayOrders ?? info.orders) : orders}
-                              overridden={Boolean(info?.ordersOverridden)}
-                              canEdit={editable}
-                            />
-                          </td>
+                            if (dayColumn === "orders") {
+                              return (
+                                <td key="orders" className="px-1 py-1 text-center tabular-nums">
+                                  <PayrollOrderCell
+                                    driverId={row.driverId}
+                                    date={date}
+                                    orders={
+                                      info?.ordersOverridden
+                                        ? (info.displayOrders ?? info.orders)
+                                        : orders
+                                    }
+                                    overridden={Boolean(info?.ordersOverridden)}
+                                    canEdit={editable}
+                                  />
+                                </td>
+                              );
+                            }
+                            return (
+                              <td
+                                key={dayColumn}
+                                className={cn("px-1 py-1 text-center tabular-nums", borderStart)}
+                              >
+                                <PayrollHoursCell
+                                  info={info}
+                                  editable={config.hoursEditable && editable}
+                                  onEdit={() =>
+                                    setHoursTarget({
+                                      driverId: row.driverId,
+                                      riderName: row.name,
+                                      mgId: row.mgId,
+                                      date,
+                                      current:
+                                        typeof info?.workingHours === "number"
+                                          ? info.workingHours
+                                          : null,
+                                    })
+                                  }
+                                />
+                              </td>
+                            );
+                          })}
                         </Fragment>
                       );
                     })}
+                    {/* Row totals — the pair the project's SOP names. */}
+                    <td className="border-s border-border/60 px-2 py-1.5 text-end font-semibold tabular-nums">
+                      {rowTotals.get(row.driverId)?.workedDays ?? 0}
+                    </td>
+                    <td className="px-2 py-1.5 text-end font-semibold tabular-nums">
+                      {config.usesUploadedHours
+                        ? (rowTotals.get(row.driverId)?.totalHours ?? 0).toFixed(1)
+                        : (rowTotals.get(row.driverId)?.totalOrders ?? 0)}
+                    </td>
                   </tr>
                 ))
               )}
@@ -758,7 +920,7 @@ export function PayrollAttendanceOrdersTab({
             <span className="text-xs font-semibold text-muted-foreground">
               {t("tableFootRange", {
                 shown: visibleRows.length,
-                total: riders.length,
+                total: projectRiders.length,
                 range: month.label,
               })}
             </span>
@@ -766,21 +928,56 @@ export function PayrollAttendanceOrdersTab({
               <button
                 type="button"
                 onClick={() =>
-                  exportPayrollAttendanceOrdersCsv(month.key, month.dates, visibleRows, {
+                  exportPayrollAttendanceOrdersProjectCsv(month.dates, visibleRows, {
                     labels: exportLabelsFromConfig(headingConfig, fallbackLabel),
                     hidden: hiddenSetFor("ao", headingConfig),
                     today,
+                    project: view,
+                    visibleLeadIds: columns.map((column) => column.id),
+                    fileName: projectExportName(view, month.key),
                   })
                 }
                 className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold transition-colors hover:bg-muted/50"
               >
                 <Download className="size-3.5" />
-                {t("downloadTable")}
+                {t("exportProject", { project: t(`projects.${config.labelKey}`) })}
               </button>
             ) : null}
           </div>
         </div>
       </div>
+
+      <PayrollManualChangesPanel
+        rows={projectAuditRows}
+        title={t("manualChanges.title")}
+        hint={t("manualChanges.hintProject", { project: t(`projects.${config.labelKey}`) })}
+        prefKey="payroll.manualChanges.ao"
+        labels={{
+          when: t("manualChanges.when"),
+          who: t("manualChanges.who"),
+          rider: t("manualChanges.rider"),
+          day: t("manualChanges.day"),
+          original: t("manualChanges.original"),
+          adjusted: t("manualChanges.adjusted"),
+          reason: t("manualChanges.reason"),
+          empty: t("manualChanges.empty"),
+          entity: t("manualChanges.title"),
+        }}
+      />
+
+      <PayrollDailyUploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        view={view}
+        riders={projectRiders}
+        monthPrefix={month.key}
+        today={today}
+      />
+      <PayrollHoursDialog
+        target={hoursTarget}
+        today={today}
+        onClose={() => setHoursTarget(null)}
+      />
       <PayrollCellMenu
         state={menu}
         onClose={() => setMenu(null)}

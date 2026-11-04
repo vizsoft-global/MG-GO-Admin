@@ -9,6 +9,12 @@ import {
 import { aoShownOrders } from "./payroll-orders-display";
 import { cellParticular } from "./payroll-particulars";
 import {
+  projectConfigOf,
+  projectRowTotals,
+  type PayrollProjectView,
+  type ProjectDayColumn,
+} from "./payroll-projects";
+import {
   payrollVehicleKind,
   appAttendanceTotals,
   appHoursForDay,
@@ -316,8 +322,7 @@ export function exportPayrollAttendanceOrdersCsv(
   );
 }
 
-function aoLeadCells(row: PayrollRiderRow, today?: string): Array<string | number> {
-  return [
+function aoLeadCells(row: PayrollRiderRow, today?: string): Array<string | number> {  return [
     row.amId,
     row.mgId,
     row.name,
@@ -333,8 +338,80 @@ function aoLeadCells(row: PayrollRiderRow, today?: string): Array<string | numbe
   ];
 }
 
-export function exportPayrollApplicationAttendanceCsv(
-  fileKey: string,
+/**
+ * **Export <project> report** — the SOP's own file, for one project only.
+ *
+ * The day block is the project's day shape, not a fixed pair: Americana writes
+ * `Payroll · Orders`, Keeta `Payroll · Working hours`, Five Guys one `Hours`
+ * column. The filename comes from `projectExportName`, so a file cannot be
+ * mistaken for another project's payroll.
+ */
+export function exportPayrollAttendanceOrdersProjectCsv(
+  dates: readonly string[],
+  rows: readonly PayrollRiderRow[],
+  options: PayrollExportOptions & {
+    project: PayrollProjectView;
+    fileName: string;
+    /** The lead columns the screen is showing, in order. */
+    visibleLeadIds?: readonly string[];
+  },
+) {
+  const config = projectConfigOf(options.project);
+  const leadIds = options.visibleLeadIds
+    ? AO_LEAD_KEYS.filter((key) => options.visibleLeadIds?.includes(key))
+    : [...AO_LEAD_KEYS];
+  const identity = visibleIdentity(
+    AO_LEAD_HEADERS,
+    leadIds,
+    { ...options, hidden: options.hidden },
+    (row) => aoLeadCells(row, options.today),
+  );
+  const dayHeaders = dates.flatMap((date) =>
+    config.dayColumns.map(
+      (column) => `${isoDayLabel(date)} · ${projectDayHeader(column)}`,
+    ),
+  );
+  downloadCsv(
+    options.fileName,
+    toCsv(
+      [
+        ...identity.headers,
+        ...dayHeaders,
+        "Worked days",
+        config.usesUploadedHours ? "Total hours" : "Total orders",
+      ],
+      rows.map((row) => {
+        const totals = projectRowTotals(options.project, row);
+        return [
+          ...identity.cells(row),
+          ...dates.flatMap((_, i) =>
+            config.dayColumns.map((column) => {
+              if (column === "payroll") return cellParticular(row, i);
+              if (column === "orders") {
+                return aoShownOrders(row.dayInfo[i], row.days[i]) || "–";
+              }
+              const hours = row.dayInfo[i]?.workingHours;
+              return typeof hours === "number" && Number.isFinite(hours) ? hours : "–";
+            }),
+          ),
+          totals.workedDays,
+          config.usesUploadedHours
+            ? Number(totals.totalHours.toFixed(2))
+            : totals.totalOrders,
+        ];
+      }),
+    ),
+  );
+}
+
+function projectDayHeader(column: ProjectDayColumn): string {
+  if (column === "payroll") return "Payroll";
+  if (column === "orders") return "Orders";
+  if (column === "workingHours") return "Working hours";
+  return "Hours";
+}
+
+export function exportPayrollApplicationAttendanceCsv(  fileKey: string,
   dates: readonly string[],
   rows: readonly PayrollRiderRow[],
   options?: PayrollExportOptions,

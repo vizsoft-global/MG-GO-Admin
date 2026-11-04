@@ -311,6 +311,8 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   "./rpcs/payroll-edits": [
     "adminSavePayrollIdentity",
     "adminSavePayrollOrders",
+    "adminSavePayrollDayHours",
+    "adminImportPayrollDayHours",
     "adminListPayrollRiderStatuses",
     "adminSavePayrollRiderStatus"
   ],
