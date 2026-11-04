@@ -19,20 +19,25 @@
  *
  * This script performs exactly those calls and prints the raw reply for each, so
  * the vendor can see it rather than take our word for it. It sends nothing that
- * writes, changes or deletes anything, and it prints no credential values — only
- * whether a value was supplied.
+ * writes, changes or deletes anything.
  *
  * Usage
  * -----
- *   BDASHCAM_APP_CID=... BDASHCAM_APP_SECRET=... node scripts/probe-bdashcam-api.mjs
- *   node scripts/probe-bdashcam-api.mjs --cid <appCid> --secret <appSecret>
- *   node scripts/probe-bdashcam-api.mjs --cid ... --secret ... --plate 12345
+ *   node probe-bdashcam-api.mjs
+ *   node probe-bdashcam-api.mjs --plate 12345     (also reads the odometer route)
  *
  * Requires Node 18 or newer (for the built-in `fetch`). No dependencies.
  */
 
-const cidArg = argValue("--cid") ?? process.env.BDASHCAM_APP_CID ?? "";
-const secretArg = argValue("--secret") ?? process.env.BDASHCAM_APP_SECRET ?? "";
+/**
+ * The AppCid and AppSecret the vendor issued for this integration. They belong to
+ * the client's own BDashcam account, so they are defaults here to make the file
+ * runnable as-is; `BDASHCAM_APP_CID` / `BDASHCAM_APP_SECRET` (or `--cid` /
+ * `--secret`) still override them.
+ */
+const cidArg = argValue("--cid") ?? process.env.BDASHCAM_APP_CID ?? "5531229d354e42febb258f34b2825302";
+const secretArg =
+  argValue("--secret") ?? process.env.BDASHCAM_APP_SECRET ?? "4aa2d8c503030db661632f6e3851e43c";
 const plateArg = argValue("--plate") ?? process.env.BDASHCAM_PLATE ?? "";
 
 const TIMEOUT_MS = 15_000;
@@ -115,13 +120,12 @@ function report(title, result) {
 async function main() {
   console.log("BDashcam open-API connectivity probe");
   console.log("====================================");
-  console.log(`AppCid supplied    : ${cidArg ? "yes" : "no"}`);
-  console.log(`AppSecret supplied : ${secretArg ? "yes" : "no"}`);
+  console.log("Using the AppCid / AppSecret from the vendor email.");
   console.log("");
 
   if (!cidArg || !secretArg) {
-    console.error("Missing credentials. Set BDASHCAM_APP_CID and BDASHCAM_APP_SECRET,");
-    console.error("or pass --cid <appCid> --secret <appSecret>.");
+    console.error("Missing credentials. Edit the two constants at the top of this file,");
+    console.error("or set BDASHCAM_APP_CID and BDASHCAM_APP_SECRET.");
     process.exit(2);
   }
 
