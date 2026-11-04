@@ -25,6 +25,24 @@ export type ServiceStageEvent = {
   note: string | null;
 };
 
+/**
+ * A document filed against a service record — invoice, receipt, workshop photo.
+ *
+ * The object lives in R2 under `vehicles/{vehicleId}/service/…`, so a record that
+ * is deleted later leaves the object reachable from the vehicle folder. The key is
+ * the identity: `file_name` is what the operator recognises it by, and both are
+ * copied here so the list renders without a HEAD request per row.
+ */
+export type ServiceAttachmentMeta = {
+  key: string;
+  file_name: string | null;
+  kind: string | null;
+  content_type: string | null;
+  size: number | null;
+  uploaded_by: string | null;
+  at: string | null;
+};
+
 export type ServiceVehicleSnapshot = {
   plate: string | null;
   chassis_no: string | null;
@@ -49,6 +67,14 @@ export type ServiceRecordRow = {
   stage: ServiceStage;
   driver_id: string | null;
   driver_name: string | null;
+  /**
+   * The rider's MG ID, frozen on the record at save time.
+   *
+   * Denormalised on purpose: `driver_id` is what joins back to the profile, but a
+   * workshop invoice has to name the employee who was riding *that day*, and the
+   * profile is mutable (`employee_id` is reassigned when a record is released).
+   */
+  employee_id: string | null;
   vehicle_snapshot: ServiceVehicleSnapshot | null;
   invoice_no: string | null;
   invoice_date: string | null;
@@ -60,6 +86,8 @@ export type ServiceRecordRow = {
   notes: string | null;
   parts: ServicePart[];
   stage_history: ServiceStageEvent[];
+  /** Invoices / photos filed against this visit. */
+  attachments: ServiceAttachmentMeta[];
   done_at: string | null;
   done_odometer_km: number | null;
   created_by: string | null;
@@ -92,6 +120,10 @@ export type ServiceVehicleOption = {
   condition: string | null;
   driver_id: string | null;
   driver_name: string | null;
+  /** MG ID of the assigned rider — printed on the record, never typed. */
+  employee_id: string | null;
+  /** The rider's own company (`drivers.source_company` → `source_companies`). */
+  employee_company: string | null;
   current_odometer_km: number | null;
   /** ISO timestamp of the last reading, so a stale figure is visible. */
   odometer_updated_at: string | null;

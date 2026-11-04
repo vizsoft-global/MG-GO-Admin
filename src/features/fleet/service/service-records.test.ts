@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  canEditServiceStage,
   canTransitionStage,
   effectiveRecordCost,
   isDoneRecord,
@@ -15,6 +16,8 @@ import {
   partsTotal,
   recordDay,
   recordStage,
+  retimedDoneAt,
+  serviceEditSummary,
   stageCounts,
   transitionRequiresNote,
   validateServiceRecordInput,
@@ -43,8 +46,7 @@ function input(overrides: Partial<ServiceRecordInput> = {}): ServiceRecordInput 
 }
 
 describe("service record stage workflow", () => {
-  it("allows New → Running → Done and any open record → Cancelled", () => {
-    assert.equal(canTransitionStage("new", "running"), true);
+  it("allows New → Running → Done and any open record → Cancelled", () => {    assert.equal(canTransitionStage("new", "running"), true);
     assert.equal(canTransitionStage("new", "done"), true);
     assert.equal(canTransitionStage("new", "cancelled"), true);
     assert.equal(canTransitionStage("running", "done"), true);
@@ -213,6 +215,56 @@ describe("odometer guard", () => {
     assert.equal(
       recordDay({ done_at: null, serviced_at: "2026-02-20T00:00:00.000Z" }),
       "2026-02-20",
+    );
+  });
+});
+
+describe("editing a closed record", () => {
+  it("lets the fleet team edit every stage, Done included", () => {
+    assert.equal(canEditServiceStage("new"), true);
+    assert.equal(canEditServiceStage("running"), true);
+    assert.equal(canEditServiceStage("done"), true);
+    assert.equal(canEditServiceStage("cancelled"), true);
+  });
+
+  it("moves the completion date but keeps the time of day", () => {
+    // The maintenance baseline counts days from done_at, so a corrected service
+    // date has to move it — while the clock stays what it was.
+    assert.equal(
+      retimedDoneAt("2026-02-18", "2026-02-20T10:31:05.000Z"),
+      "2026-02-18T10:31:05.000Z",
+    );
+    assert.equal(retimedDoneAt("2026-02-18", null), "2026-02-18T00:00:00.000Z");
+    assert.equal(retimedDoneAt("2026-02-18", ""), "2026-02-18T00:00:00.000Z");
+  });
+
+  it("names which fact a correction moved", () => {
+    const before = {
+      done_at: "2026-02-20T10:00:00.000Z",
+      serviced_at: "2026-02-20T00:00:00.000Z",
+      odometer_km: 81000,
+      cost_kwd: 25,
+      parts: [{ name: "Oil", qty: 1, unit_cost_kwd: 5, total_kwd: 5 }],
+      attachments: [],
+    };
+    assert.deepEqual(
+      serviceEditSummary(before, {
+        servicedAt: "2026-02-20",
+        odometerKm: 81000,
+        costKwd: 25,
+        parts: [{ name: "Oil", qty: 1, unit_cost_kwd: 5, total_kwd: 5 }],
+      }),
+      [],
+    );
+    assert.deepEqual(
+      serviceEditSummary(before, {
+        servicedAt: "2026-02-18",
+        odometerKm: 82500,
+        costKwd: 30,
+        parts: [],
+        attachments: [{ key: "vehicles/v1/service/a.pdf" }],
+      }),
+      ["service date", "odometer", "cost", "spare parts", "attachments"],
     );
   });
 });

@@ -12127,7 +12127,8 @@
         "company": "الشركة",
         "cost": "التكلفة (د.ك)",
         "odometer": "العداد (كم)",
-        "stage": "المرحلة"
+        "stage": "المرحلة",
+        "employeeId": "الرقم الوظيفي"
       },
       "filters": {
         "from": "من",
@@ -12173,7 +12174,7 @@
         "titleNew": "سجل صيانة جديد",
         "titleEdit": "تعديل سجل الصيانة",
         "subtitleNew": "سجّل زيارة الورشة. يبدأ السجل بحالة جديد.",
-        "subtitleEdit": "يمكن تعديل السجل المفتوح فقط؛ المنتهي والملغي نهائيان.",
+        "subtitleEdit": "يمكن تصحيح أي سجل، بما في ذلك السجل المكتمل.",
         "footerHint": "تحويل السجل إلى منتهي هو ما يحدّث عداد المركبة.",
         "sectionService": "الصيانة",
         "sectionInvoice": "الفاتورة والورشة",
@@ -12199,7 +12200,14 @@
         "partUnit": "سعر الوحدة (د.ك)",
         "partTotal": "الإجمالي (د.ك)",
         "addPart": "إضافة قطعة",
-        "removePart": "حذف القطعة"
+        "removePart": "حذف القطعة",
+        "employeeId": "الرقم الوظيفي",
+        "noEmployeeId": "لا يوجد موظف مرتبط",
+        "employeeIdHint": "يُقرأ من سجل الموظف المرتبط.",
+        "sectionAttachments": "المرفقات",
+        "attachmentsHint": "فواتير وإيصالات وصور",
+        "companyAutoHint": "مأخوذة من سجل الموظف.",
+        "companyHint": "تُستخدم فقط عند عدم وجود موظف مرتبط."
       },
       "detail": {
         "summary": "السجل",
@@ -12212,7 +12220,10 @@
         "partsTotal": "إجمالي القطع: {total} د.ك",
         "noParts": "لا قطع غيار على هذا السجل.",
         "history": "مسار المراحل",
-        "noHistory": "لا مسار مراحل بعد."
+        "noHistory": "لا مسار مراحل بعد.",
+        "employeeId": "الرقم الوظيفي",
+        "attachments": "المرفقات",
+        "attachmentsHint": "فواتير أو إيصالات أو صور مرفقة بهذه الزيارة."
       },
       "reports": {
         "loading": "جار التحميل…",
@@ -12361,7 +12372,7 @@
         "odometerBelowCurrent": "القراءة الأقل من {km} كم المخزنة مرفوضة. صحّح الرقم أو سجل المركبة.",
         "invalidTransition": "تغيير المرحلة هذا غير مسموح.",
         "noteRequired": "يلزم سبب لإلغاء السجل.",
-        "recordLocked": "لا يمكن تعديل السجل المنتهي أو الملغي؛ سجّل سجلاً جديداً.",
+        "recordLocked": "لم يعد هذا السجل قابلاً للتعديل.",
         "notFound": "السجل غير موجود.",
         "saveFailed": "حدث خطأ. حاول مرة أخرى.",
         "missingMake": "اختر ماركة.",
@@ -12373,7 +12384,21 @@
         "notJson": "لم يُعِد الطرف الآخر JSON.",
         "requestFailed": "تعذّر إكمال الطلب.",
         "reasonRequired": "السبب مطلوب لخفض قراءة العدّاد.",
-        "secretMissing": "سر المورد غير مهيأ على الخادم."
+        "secretMissing": "سر المورد غير مهيأ على الخادم.",
+        "too_many_attachments": "هذا السجل يحمل الحد الأقصى من الملفات.",
+        "file_empty": "الملف فارغ.",
+        "file_too_large": "حجم الملف كبير جداً.",
+        "invalid_content_type": "يمكن إرفاق الصور وملفات PDF فقط.",
+        "upload_failed": "تعذر رفع الملف.",
+        "invalid_attachment": "هذا المرفق غير صالح.",
+        "foreign_attachment": "يجب أن يخص المرفق هذه المركبة.",
+        "tooManyAttachments": "هذا السجل يحمل الحد الأقصى من الملفات.",
+        "fileEmpty": "الملف فارغ.",
+        "fileTooLarge": "حجم الملف كبير جداً.",
+        "invalidContentType": "يمكن إرفاق الصور وملفات PDF فقط.",
+        "uploadFailed": "تعذر رفع الملف.",
+        "invalidAttachment": "هذا المرفق غير صالح.",
+        "foreignAttachment": "يجب أن يخص المرفق هذه المركبة."
       },
       "bikes": {
         "openLink": "صيانة الدراجات",
@@ -12453,7 +12478,24 @@
         "secretMissing": "السر مفقود",
         "secretHint": "SERVICE_ODOMETER_APP_SECRET في Secret Manager / بيئة Vercel — لا يُخزَّن هنا."
       },
-      "odometerSavedLowered": "تم خفض العدّاد إلى {km} كم وتسجيله"
+      "odometerSavedLowered": "تم خفض العدّاد إلى {km} كم وتسجيله",
+      "attachments": {
+        "limit": "{count} من {max} ملفات · حتى {mb} ميجابايت لكل ملف",
+        "add": "إضافة ملف",
+        "empty": "لا توجد مرفقات على هذا السجل.",
+        "open": "فتح",
+        "remove": "إزالة",
+        "openFailed": "تعذر فتح الملف.",
+        "errors": {
+          "too_many_attachments": "هذا السجل يحمل الحد الأقصى من الملفات.",
+          "file_empty": "الملف فارغ.",
+          "file_too_large": "حجم الملف أكبر من الحجم المسموح (25 ميجابايت).",
+          "invalid_content_type": "يمكن إرفاق الصور وملفات PDF فقط.",
+          "missing_fields": "اختر المركبة والملف أولاً.",
+          "upload_failed": "تعذر رفع الملف. حاول مرة أخرى.",
+          "missing_vehicle": "اختر المركبة قبل إرفاق ملف."
+        }
+      }
     },
     "fleetHandover": {
       "breadcrumb": "التسليم",

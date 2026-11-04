@@ -14,9 +14,14 @@ import { logAdminMutation } from "@/lib/audit/log-admin-activity";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { COLLECTIONS } from "@/lib/firebase/db";
+import { getPresignedGetUrl, putObject } from "@/lib/storage/r2-client";
+import { buildVehicleFileKey, extensionFromMime, isR2ObjectKey } from "@/lib/storage/r2-keys";
 import type { ServiceCategoryKey } from "./service-types";
 import {
+  canEditServiceStage,
   canTransitionStage,
+  retimedDoneAt,
+  serviceEditSummary,
   stageEvent,
   isFutureDay,
   isTerminalStage,
@@ -30,11 +35,19 @@ import {
   validateServiceRecordInput,
   type ServiceRecordInput,
 } from "./service-records-model";
+import {
+  MAX_SERVICE_ATTACHMENTS,
+  SERVICE_ATTACHMENT_FOLDER,
+  normaliseServiceAttachments,
+  serviceAttachmentKeyProblem,
+  serviceUploadBlockReason,
+} from "./service-attachments-model";
 import { exclusionId } from "./service-maintenance-model";
 import { previewBaselineImport, type BaselineFleetVehicle } from "./service-baseline-import";
 import { previewBikeImport, type BikeFleetVehicle } from "./service-bike-import";
 import {
   driverNameOf,
+  employeeIdentityOf,
   loadServiceType,
   loadVehicleRow,
   mapStageHistory,
@@ -51,6 +64,7 @@ import type {
   MaintenanceRuleScope,
   MaintenanceSettings,
   OdometerSyncConfig,
+  ServiceAttachmentMeta,
   ServicePart,
   ServiceRecordRow,
   ServiceStage,
@@ -133,6 +147,7 @@ type PreparedRecord = {
   description: string | null;
   driver_id: string | null;
   driver_name: string | null;
+  employee_id: string | null;
   vehicle_snapshot: ServiceVehicleSnapshot;
   invoice_no: string | null;
   invoice_date: string | null;
@@ -142,12 +157,19 @@ type PreparedRecord = {
   odometer_km: number | null;
   cost_kwd: number | null;
   parts: ServicePart[];
+  attachments: ServiceAttachmentMeta[];
 };
 
 /**
  * Turns the form input into the stored fields. `odometer` is written beside
  * `odometer_km` on purpose: the legacy column is what any older reader still
  * looks at, and the rider payload shape must not change.
+ *
+ * The employee block is **derived, not typed**: the MG ID and the company come
+ * from the linked driver document, and an operator's own company text only wins
+ * when no rider is linked. That is what "automatically retrieve based on the
+ * employee" means on an invoice — a company that disagrees with the roster is a
+ * data-entry mistake, not an override.
  */
 async function prepareRecord(
   input: ServiceRecordInput,
@@ -160,7 +182,21 @@ async function prepareRecord(
 
   const typeRow = await loadServiceType(input.serviceTypeKey);
   const driverId = input.driverId.trim();
-  const driverName = driverId ? await driverNameOf(driverId) : null;
+  const identity = driverId
+    ? await employeeIdentityOf(driverId)
+    : { name: null, employeeId: null, company: null };
+
+  const attachments: ServiceAttachmentMeta[] = [];
+  for (const attachment of input.attachments ?? []) {
+    const problem = serviceAttachmentKeyProblem(attachment.key, { vehicleId: input.vehicleId });
+    if (problem) return { ok: false, error: problem };
+  }
+  if ((input.attachments ?? []).length > MAX_SERVICE_ATTACHMENTS) {
+    return { ok: false, error: "too_many_attachments" };
+  }
+  for (const attachment of normaliseServiceAttachments(input.attachments ?? [])) {
+    attachments.push(attachment);
+  }
 
   return {
     ok: true,
@@ -172,16 +208,18 @@ async function prepareRecord(
       category: typeRow?.category ?? "other",
       description: input.description.trim() || null,
       driver_id: driverId || null,
-      driver_name: driverName,
+      driver_name: identity.name ?? (driverId ? await driverNameOf(driverId) : null),
+      employee_id: identity.employeeId,
       vehicle_snapshot: vehicleSnapshotOf(vehicle),
       invoice_no: input.invoiceNo.trim() || null,
       invoice_date: input.invoiceDate.trim() || null,
-      company: input.company.trim() || null,
+      company: identity.company ?? (input.company.trim() || null),
       vendor: input.vendor.trim() || null,
       notes: input.notes.trim() || null,
       odometer_km: input.odometerKm,
       cost_kwd: input.costKwd,
       parts,
+      attachments,
     },
   };
 }
@@ -255,22 +293,95 @@ export async function updateServiceRecord(
   const snap = await ref.get();
   if (!snap.exists) return { error: "not_found" };
   const before = { id: snap.id, ...(snap.data() ?? {}) } as Row;
-  // Done and Cancelled are terminal: the maintenance baseline must not be
-  // rewritten after the fact, so a correction is a new record.
-  if (isTerminalStage(recordStage(before))) return { error: "record_locked" };
+  const stage = recordStage(before);
+  // Every stage is editable, Done included — the fleet team owns the record. The
+  // correction is written, not hidden: a terminal record gets a history row and a
+  // Done record keeps `done_at` / `done_odometer_km` in step with the edit, so the
+  // maintenance baseline moves with it instead of drifting away from it.
+  if (!canEditServiceStage(stage)) return { error: "record_locked" };
 
   const vehicle = await loadVehicleRow(input.vehicleId);
   if (!vehicle) return { error: "missing_vehicle" };
   const prepared = await prepareRecord(input, vehicle, kuwaitTodayYmd());
   if (!prepared.ok) return { error: prepared.error };
 
-  try {
-    await ref.update({
-      ...prepared.prepared,
-      kind: prepared.prepared.service_type_label ?? "service",
-      odometer: prepared.prepared.odometer_km,
-      updated_at: new Date(),
+  const now = new Date();
+  const by = auth.session.id;
+  const history = mapStageHistory(before.stage_history);
+  const patch: Record<string, unknown> = {
+    ...prepared.prepared,
+    kind: prepared.prepared.service_type_label ?? "service",
+    odometer: prepared.prepared.odometer_km,
+    updated_at: now,
+  };
+
+  if (isTerminalStage(stage)) {
+    const edited = serviceEditSummary(before, {
+      servicedAt: input.servicedAt,
+      odometerKm: input.odometerKm,
+      costKwd: input.costKwd,
+      parts: prepared.prepared.parts,
+      attachments: input.attachments,
     });
+    history.push(
+      stageEvent(
+        stage,
+        now.toISOString(),
+        by,
+        sessionName(auth.session),
+        edited.length > 0
+          ? `Edited after ${stage}: ${edited.join(", ")}.`
+          : `Edited after ${stage}.`,
+      ),
+    );
+    patch.stage_history = history;
+  }
+
+  // A caller that does not speak attachments (the import paths) must not erase the
+  // files an operator already filed. Only an explicit array replaces the list.
+  if (input.attachments === undefined) {
+    patch.attachments = normaliseServiceAttachments(before.attachments);
+  }
+
+  let vehicleKm: number | null = null;
+  let readingId: string | null = null;
+  if (stage === "done") {
+    patch.done_at = retimedDoneAt(input.servicedAt, str(before.done_at) || null);
+    patch.done_odometer_km = input.odometerKm;
+    // A correction upward is a real measurement; a correction downward is the
+    // operator fixing a typo, and `recordManualOdometer` is the door for that, so
+    // the vehicle figure only ever steps forward here.
+    const decision = odometerDecision(
+      num(vehicle.current_odometer_km),
+      input.odometerKm,
+    );
+    if (decision.action === "set") {
+      vehicleKm = decision.km;
+      readingId = crypto.randomUUID();
+    }
+  }
+
+  try {
+    const batch = db.batch();
+    batch.update(ref, patch);
+    if (vehicleKm != null && readingId) {
+      batch.update(db.collection(COLLECTIONS.vehicles).doc(input.vehicleId), {
+        current_odometer_km: vehicleKm,
+        odometer_source: "service",
+        odometer_updated_at: now,
+      });
+      batch.set(db.collection(COLLECTIONS.vehicleOdometerReadings).doc(readingId), {
+        id: readingId,
+        vehicle_id: input.vehicleId,
+        km: vehicleKm,
+        source: "service",
+        at: now,
+        recorded_by: by,
+        service_id: id,
+        created_at: now,
+      });
+    }
+    await batch.commit();
   } catch {
     return { error: "save_failed" };
   }
@@ -280,14 +391,17 @@ export async function updateServiceRecord(
     entityId: id,
     routeName: "/fleet/service",
     before: {
+      stage,
       service_type_key: str(before.service_type_key) || null,
       cost_kwd: num(before.cost_kwd),
       odometer_km: odometerOf(before),
+      attachments: normaliseServiceAttachments(before.attachments).length,
     },
     after: {
       service_type_key: prepared.prepared.service_type_key,
       cost_kwd: prepared.prepared.cost_kwd,
       odometer_km: prepared.prepared.odometer_km,
+      attachments: prepared.prepared.attachments.length,
     },
   });
   revalidatePath("/fleet/service");
@@ -296,6 +410,101 @@ export async function updateServiceRecord(
   return { ok: true };
 }
 
+
+/* -------------------------------------------------------- attachments --- */
+
+const SERVICE_SIGNED_URL_TTL = 900;
+
+/**
+ * Put one file into `vehicles/{vehicleId}/service/…` and hand back the metadata the
+ * record stores.
+ *
+ * The object is written before the record references it, exactly like an accident
+ * photo, so a failed save leaves an unreferenced object rather than a record that
+ * claims a file nobody can open. `entityId` is the vehicle, not the record: the
+ * record does not exist yet on the create screen.
+ */
+export async function uploadServiceAttachment(
+  formData: FormData,
+): Promise<{ attachment: ServiceAttachmentMeta } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+  const auth = await requireService("service.manage");
+  if ("error" in auth) return { error: "not_authorized" };
+
+  const vehicleId = String(formData.get("vehicleId") ?? "").trim();
+  const file = formData.get("file");
+  if (!vehicleId || !(file instanceof File) || file.size === 0) {
+    return { error: "missing_fields" };
+  }
+  const block = serviceUploadBlockReason({
+    size: file.size,
+    contentType: file.type || "",
+    existingCount: 0,
+  });
+  if (block) return { error: block };
+
+  const key = buildVehicleFileKey(vehicleId, SERVICE_ATTACHMENT_FOLDER, extensionFromMime(file.type));
+  try {
+    await putObject(key, Buffer.from(await file.arrayBuffer()), file.type || "application/octet-stream", {
+      uploadedBy: auth.session.id,
+      entityType: "vehicle_service",
+      entityId: vehicleId,
+      uploadedVia: "admin",
+    });
+  } catch {
+    return { error: "upload_failed" };
+  }
+  return {
+    attachment: {
+      key,
+      file_name: file.name.slice(0, 180) || null,
+      kind: "admin_upload",
+      content_type: file.type || null,
+      size: file.size,
+      uploaded_by: auth.session.id,
+      at: new Date().toISOString(),
+    },
+  };
+}
+
+/**
+ * A short-lived GET for one attachment.
+ *
+ * A key is signed **only** when a service record actually references it, so a
+ * `service.view` account cannot name an arbitrary `drivers/…` object and read it.
+ */
+export async function resolveServiceAttachments(
+  keys: readonly string[],
+): Promise<{ key: string; url: string | null }[]> {
+  const auth = await requireService("service.view");
+  if ("error" in auth) return [];
+  const wanted = [...new Set(keys.map((key) => key.trim()).filter(Boolean))];
+  if (wanted.length === 0) return [];
+
+  const db = await openDb();
+  const records = await db.collection(COLLECTIONS.vehicleServices).get();
+  const claimed = new Set<string>();
+  for (const doc of records.docs) {
+    for (const attachment of normaliseServiceAttachments(doc.get("attachments"))) {
+      claimed.add(attachment.key);
+    }
+  }
+
+  const out: { key: string; url: string | null }[] = [];
+  for (const key of wanted) {
+    if (!isR2ObjectKey(key) || !claimed.has(key)) {
+      out.push({ key, url: null });
+      continue;
+    }
+    try {
+      out.push({ key, url: await getPresignedGetUrl(key, SERVICE_SIGNED_URL_TTL) });
+    } catch {
+      out.push({ key, url: null });
+    }
+  }
+  return out;
+}
 
 export type StageResult =
   | { ok: true }

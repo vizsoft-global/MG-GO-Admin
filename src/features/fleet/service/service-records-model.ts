@@ -1,4 +1,4 @@
-import type { ServicePart, ServiceRecordRow, ServiceStage } from "./types";
+import type { ServiceAttachmentMeta, ServicePart, ServiceRecordRow, ServiceStage } from "./types";
 import { SERVICE_STAGES } from "./types";
 
 export function isServiceStage(value: unknown): value is ServiceStage {
@@ -44,6 +44,72 @@ export function nextStageOptions(stage: ServiceStage): ServiceStage[] {
 /** `cancelled` needs a reason; every other move may carry an optional note. */
 export function transitionRequiresNote(to: ServiceStage): boolean {
   return to === "cancelled";
+}
+
+/**
+ * Can this record be edited in place?
+ *
+ * **Yes, at every stage — including Done.** The fleet team asked for full control
+ * over maintenance data and named Done records explicitly: a wrong invoice number
+ * or a mistyped odometer on a closed visit has to be correctable without filing a
+ * second visit that never happened, because the maintenance baseline counts days
+ * from that record.
+ *
+ * That does not make the correction invisible. `updateServiceRecord` appends a
+ * stage-history row naming the edit, and a Done record keeps `done_at` and
+ * `done_odometer_km` in step with what was edited — so the baseline moves with the
+ * correction instead of drifting away from it.
+ */
+export function canEditServiceStage(stage: ServiceStage): boolean {
+  // True for every real stage; the lookup is what makes an unknown value safe
+  // rather than editable.
+  return SERVICE_STAGES.includes(stage);
+}
+
+/**
+ * The completion instant a Done record carries after its service date is edited.
+ *
+ * The time of day is preserved (that is when the work was signed off) and only the
+ * date moves, because `recordDay()` reads `done_at` first and every maintenance
+ * due date counts from it. Writing a fresh `now()` here would silently shift a
+ * baseline to the day of the correction.
+ */
+export function retimedDoneAt(servicedAt: string, previousDoneAt: string | null): string {
+  const time = (previousDoneAt ?? "").slice(10);
+  const clock = /T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(time) ? time : "T00:00:00.000Z";
+  return `${servicedAt.slice(0, 10)}${clock}`;
+}
+
+export type ServiceEditFields = {
+  servicedAt: string;
+  odometerKm: number | null;
+  costKwd: number | null;
+  parts: readonly ServicePart[];
+  attachments?: readonly ServiceAttachmentMeta[];
+};
+
+/**
+ * What an edit actually moved, in the words the stage history records.
+ *
+ * A correction to a Done record rewrites the maintenance baseline, so the history
+ * has to say *which* fact moved — "Edited after done" alone would leave the next
+ * operator unable to tell a date correction from a typo in the invoice number.
+ */
+export function serviceEditSummary(
+  before: Record<string, unknown>,
+  next: ServiceEditFields,
+): string[] {
+  const labels: string[] = [];
+  const previousDay = recordDay(before);
+  if (previousDay && previousDay !== next.servicedAt.slice(0, 10)) labels.push("service date");
+  if (odometerOf(before) !== next.odometerKm) labels.push("odometer");
+  if (positiveNumber(before.cost_kwd) !== next.costKwd) labels.push("cost");
+  if (normaliseParts(before.parts).length !== next.parts.length) labels.push("spare parts");
+  const previousFiles = Array.isArray(before.attachments) ? before.attachments.length : 0;
+  if (next.attachments && previousFiles !== next.attachments.length) {
+    labels.push("attachments");
+  }
+  return labels;
 }
 
 export function odometerOf(row: Record<string, unknown>): number | null {
@@ -188,6 +254,12 @@ export type ServiceRecordInput = {
   odometerKm: number | null;
   costKwd: number | null;
   parts: ServicePart[];
+  /**
+   * Files to keep on the record. Optional so an older caller (a test, the import
+   * paths) can omit it; the action reads a missing value as "leave as it is" on an
+   * edit and "no files" on a create.
+   */
+  attachments?: ServiceAttachmentMeta[];
 };
 
 export const SERVICE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

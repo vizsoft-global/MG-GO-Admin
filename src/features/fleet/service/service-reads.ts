@@ -20,6 +20,7 @@ import {
   type MaintenanceVehicle,
 } from "./service-maintenance-model";
 import { DEFAULT_ODOMETER_SYNC_CONFIG } from "./types";
+import { normaliseServiceAttachments } from "./service-attachments-model";
 import type {
   MaintenanceExclusion,
   MaintenanceRuleScope,
@@ -145,6 +146,7 @@ function mapServiceRecord(id: string, row: Row): ServiceRecordRow {
     stage: recordStage(row),
     driver_id: str(row.driver_id) || null,
     driver_name: str(row.driver_name) || null,
+    employee_id: str(row.employee_id) || null,
     vehicle_snapshot: mapSnapshot(row.vehicle_snapshot),
     invoice_no: str(row.invoice_no) || null,
     invoice_date: str(row.invoice_date) || null,
@@ -156,6 +158,7 @@ function mapServiceRecord(id: string, row: Row): ServiceRecordRow {
     notes: str(row.notes) || null,
     parts: mapParts(row.parts),
     stage_history: mapStageHistory(row.stage_history),
+    attachments: normaliseServiceAttachments(row.attachments),
     done_at: str(row.done_at) || null,
     done_odometer_km: num(row.done_odometer_km),
     created_by: str(row.created_by) || null,
@@ -205,7 +208,16 @@ export async function listServiceRecordsForVehicle(
 }
 
 async function driverNamesByVehicle(): Promise<
-  Map<string, { id: string; name: string | null; zoneName: string | null }>
+  Map<
+    string,
+    {
+      id: string;
+      name: string | null;
+      employeeId: string | null;
+      companyName: string | null;
+      zoneName: string | null;
+    }
+  >
 > {
   const db = await openDb();
   const drivers = await db.collection(COLLECTIONS.drivers).get();
@@ -226,17 +238,41 @@ async function driverNamesByVehicle(): Promise<
     const snaps = await db.getAll(...refs);
     for (const snap of snaps) names.set(snap.id, str(snap.get("full_name")) || null);
   }
-  const zones = await db.collection(COLLECTIONS.zones).get();
+  const [zones, companies] = await Promise.all([
+    db.collection(COLLECTIONS.zones).get(),
+    db.collection(COLLECTIONS.sourceCompanies).get(),
+  ]);
   const zoneNames = new Map<string, string>();
   for (const doc of zones.docs) {
     zoneNames.set(doc.id, str(doc.get("name")) || str(doc.get("zone_name")) || doc.id);
   }
-  const map = new Map<string, { id: string; name: string | null; zoneName: string | null }>();
+  // `drivers.source_company` stores the catalog key (`mg`, `CL-0001`); the label is
+  // what a service record has to print.
+  const companyNames = new Map<string, string>();
+  for (const doc of companies.docs) {
+    companyNames.set(
+      str(doc.get("key")) || doc.id,
+      str(doc.get("label_en")) || str(doc.get("key")) || doc.id,
+    );
+  }
+  const map = new Map<
+    string,
+    {
+      id: string;
+      name: string | null;
+      employeeId: string | null;
+      companyName: string | null;
+      zoneName: string | null;
+    }
+  >();
   for (const row of rows) {
     const zoneId = str(row.zone_id);
+    const sourceCompany = str(row.source_company);
     map.set(str(row.vehicle_id), {
       id: row.id,
       name: names.get(row.id) ?? null,
+      employeeId: str(row.employee_id) || null,
+      companyName: sourceCompany ? companyNames.get(sourceCompany) ?? null : null,
       zoneName: zoneId ? zoneNames.get(zoneId) ?? null : null,
     });
   }
@@ -272,6 +308,8 @@ export async function listServiceVehicleOptions(): Promise<ServiceVehicleOption[
         condition: str(row.condition) || null,
         driver_id: driver?.id ?? null,
         driver_name: driver?.name ?? null,
+        employee_id: driver?.employeeId ?? null,
+        employee_company: driver?.companyName ?? null,
         current_odometer_km: num(row.current_odometer_km),
         odometer_updated_at: str(row.odometer_updated_at) || null,
         vehicle_type_key: str(row.vehicle_type_key) || null,
@@ -615,6 +653,42 @@ export async function driverNameOf(driverId: string): Promise<string | null> {
   const snap = await db.collection(COLLECTIONS.profiles).doc(driverId).get();
   if (!snap.exists) return null;
   return str(snap.get("full_name")) || null;
+}
+
+/**
+ * The three facts a service record freezes about the employee: name, MG ID and
+ * the company they belong to.
+ *
+ * Read from the driver document (not the profile alone) because `employee_id` and
+ * `source_company` live there, and a rider whose profile is missing still has a
+ * driver row. The company is resolved through `source_companies` — the field holds
+ * the catalog key, so printing it raw would put `CL-0001` on an invoice.
+ */
+export async function employeeIdentityOf(driverId: string): Promise<{
+  name: string | null;
+  employeeId: string | null;
+  company: string | null;
+}> {
+  const empty = { name: null, employeeId: null, company: null };
+  if (!driverId) return empty;
+  const db = await openDb();
+  const [driverSnap, profileSnap] = await Promise.all([
+    db.collection(COLLECTIONS.drivers).doc(driverId).get(),
+    db.collection(COLLECTIONS.profiles).doc(driverId).get(),
+  ]);
+  const driver = driverSnap.exists ? (driverSnap.data() as Record<string, unknown>) : null;
+  const employeeId = driver ? str(driver.employee_id) || null : null;
+  const sourceCompany = driver ? str(driver.source_company) : "";
+  const name = profileSnap.exists ? str(profileSnap.get("full_name")) || null : null;
+  if (!sourceCompany) return { name, employeeId, company: null };
+  const companySnap = await db.collection(COLLECTIONS.sourceCompanies).doc(sourceCompany).get();
+  return {
+    name,
+    employeeId,
+    company: companySnap.exists
+      ? str(companySnap.get("label_en")) || str(companySnap.get("key")) || sourceCompany
+      : sourceCompany,
+  };
 }
 
 /** Make/Model pairs already in the fleet, for the schedule dialog's picker. */

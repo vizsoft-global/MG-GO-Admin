@@ -125,6 +125,20 @@ export function serviceErrorKey(code: string): string {
       return "errors.invalidCost";
     case "invalid_part":
       return "errors.invalidPart";
+    case "too_many_attachments":
+      return "errors.tooManyAttachments";
+    case "file_empty":
+      return "errors.fileEmpty";
+    case "file_too_large":
+      return "errors.fileTooLarge";
+    case "invalid_content_type":
+      return "errors.invalidContentType";
+    case "upload_failed":
+      return "errors.uploadFailed";
+    case "invalid_attachment":
+      return "errors.invalidAttachment";
+    case "foreign_attachment":
+      return "errors.foreignAttachment";
     case "odometer_below_current":
       return "errors.odometerBelowCurrent";
     case "reason_required":

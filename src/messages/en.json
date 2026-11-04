@@ -12127,7 +12127,8 @@
         "company": "Company",
         "cost": "Cost (KWD)",
         "odometer": "Odometer (km)",
-        "stage": "Stage"
+        "stage": "Stage",
+        "employeeId": "Employee ID"
       },
       "filters": {
         "from": "From",
@@ -12173,7 +12174,7 @@
         "titleNew": "New service record",
         "titleEdit": "Edit service record",
         "subtitleNew": "Log a workshop visit. The record starts as New.",
-        "subtitleEdit": "Only an open record can be edited; Done and Cancelled are final.",
+        "subtitleEdit": "Correct any record, including one already marked Done.",
         "footerHint": "Marking the record Done is what advances the vehicle odometer.",
         "sectionService": "Service",
         "sectionInvoice": "Invoice & vendor",
@@ -12199,7 +12200,14 @@
         "partUnit": "Unit (KWD)",
         "partTotal": "Total (KWD)",
         "addPart": "Add part",
-        "removePart": "Remove part"
+        "removePart": "Remove part",
+        "employeeId": "Employee ID",
+        "noEmployeeId": "No employee linked",
+        "employeeIdHint": "Read from the linked employee record.",
+        "sectionAttachments": "Attachments",
+        "attachmentsHint": "Invoices, receipts and photos",
+        "companyAutoHint": "Taken from the employee record.",
+        "companyHint": "Used only when no employee is linked."
       },
       "detail": {
         "summary": "Record",
@@ -12212,7 +12220,10 @@
         "partsTotal": "Parts total: {total} KWD",
         "noParts": "No spare parts on this record.",
         "history": "Stage history",
-        "noHistory": "No stage history yet."
+        "noHistory": "No stage history yet.",
+        "employeeId": "Employee ID",
+        "attachments": "Attachments",
+        "attachmentsHint": "Invoices, receipts or photos filed with this visit."
       },
       "reports": {
         "loading": "Loading…",
@@ -12361,7 +12372,7 @@
         "odometerBelowCurrent": "A reading below the stored {km} km is refused. Correct the number or the vehicle record.",
         "invalidTransition": "That stage change is not allowed.",
         "noteRequired": "A reason is required to cancel a record.",
-        "recordLocked": "Done and Cancelled records cannot be edited; log a new record instead.",
+        "recordLocked": "This record can no longer be edited.",
         "notFound": "Record not found.",
         "saveFailed": "Something went wrong. Please try again.",
         "missingMake": "Choose a make.",
@@ -12373,7 +12384,21 @@
         "notJson": "The endpoint did not answer with JSON.",
         "requestFailed": "The request could not be completed.",
         "reasonRequired": "A reason is required to lower an odometer reading.",
-        "secretMissing": "The vendor secret is not configured on the server."
+        "secretMissing": "The vendor secret is not configured on the server.",
+        "too_many_attachments": "This record already holds the maximum number of files.",
+        "file_empty": "That file is empty.",
+        "file_too_large": "The file is too large.",
+        "invalid_content_type": "Only images and PDF files can be attached.",
+        "upload_failed": "The file could not be uploaded.",
+        "invalid_attachment": "That attachment is not valid.",
+        "foreign_attachment": "An attachment must belong to this vehicle.",
+        "tooManyAttachments": "This record already holds the maximum number of files.",
+        "fileEmpty": "That file is empty.",
+        "fileTooLarge": "The file is too large.",
+        "invalidContentType": "Only images and PDF files can be attached.",
+        "uploadFailed": "The file could not be uploaded.",
+        "invalidAttachment": "That attachment is not valid.",
+        "foreignAttachment": "An attachment must belong to this vehicle."
       },
       "bikes": {
         "openLink": "Bike maintenance",
@@ -12453,7 +12478,24 @@
         "secretMissing": "Secret missing",
         "secretHint": "SERVICE_ODOMETER_APP_SECRET in Secret Manager / Vercel env — never stored here."
       },
-      "odometerSavedLowered": "Odometer lowered to {km} km and recorded"
+      "odometerSavedLowered": "Odometer lowered to {km} km and recorded",
+      "attachments": {
+        "limit": "{count} of {max} files · up to {mb} MB each",
+        "add": "Add file",
+        "empty": "No attachments on this record.",
+        "open": "Open",
+        "remove": "Remove",
+        "openFailed": "The file could not be opened.",
+        "errors": {
+          "too_many_attachments": "This record already holds the maximum number of files.",
+          "file_empty": "That file is empty.",
+          "file_too_large": "The file is larger than the allowed size (25 MB).",
+          "invalid_content_type": "Only images and PDF files can be attached.",
+          "missing_fields": "Choose a vehicle and a file first.",
+          "upload_failed": "The file could not be uploaded. Please try again.",
+          "missing_vehicle": "Choose a vehicle before attaching a file."
+        }
+      }
     },
     "fleetHandover": {
       "breadcrumb": "Handover",

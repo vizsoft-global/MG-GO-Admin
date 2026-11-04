@@ -53,6 +53,7 @@ const COLUMNS = [
   "type",
   "vehicle",
   "driver",
+  "employee",
   "vendor",
   "company",
   "cost",
@@ -113,6 +114,7 @@ export function ServiceRecordsShell({
       { id: "type", label: t("cols.type"), categorical: true },
       { id: "vehicle", label: t("cols.vehicle"), categorical: true },
       { id: "driver", label: t("cols.driver"), categorical: true },
+      { id: "employee", label: t("cols.employeeId"), categorical: true },
       { id: "vendor", label: t("cols.vendor"), categorical: true },
       { id: "company", label: t("cols.company"), defaultHidden: true },
       { id: "cost", label: t("cols.cost") },
@@ -150,6 +152,7 @@ export function ServiceRecordsShell({
         row.vehicle_snapshot?.plate,
         vehicleLabel.get(row.vehicle_id),
         row.driver_name,
+        row.employee_id,
         row.vendor,
         row.company,
         row.invoice_no,
@@ -244,6 +247,12 @@ export function ServiceRecordsShell({
         );
       case "driver":
         return row.driver_name ? row.driver_name : <EmptyCell />;
+      case "employee":
+        return row.employee_id ? (
+          <span className="tabular-nums">{row.employee_id}</span>
+        ) : (
+          <EmptyCell />
+        );
       case "vendor":
         return row.vendor ? row.vendor : <EmptyCell />;
       case "company":

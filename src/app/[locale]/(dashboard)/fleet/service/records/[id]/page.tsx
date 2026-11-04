@@ -26,7 +26,7 @@ export default async function ServiceRecordPage({
   const record = await getServiceRecord(id);
   if (!record) notFound();
 
-  if (edit === "1" && canManage && record.stage !== "done" && record.stage !== "cancelled") {
+  if (edit === "1" && canManage) {
     return <ServiceRecordForm record={record} />;
   }
   return <ServiceRecordDetail record={record} canManage={canManage} />;
