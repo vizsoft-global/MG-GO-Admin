@@ -178,6 +178,24 @@ describe("odometer guard", () => {
       km: 78500,
       currentKm: 185000,
     });
+    // The refusal is what the dashcam sync and the baseline import rely on: those
+    // paths are unattended, so a lower machine reading is never written.
+    assert.equal(odometerDecision(185000, 78500, { allowBelow: false }).action, "refuse_below");
+  });
+
+  it("reports a downward correction for a person, who must give a reason", () => {
+    // A typo or a replaced meter does need the figure to come down. The decision
+    // only reports it; the reason gate lives in the action.
+    assert.deepEqual(odometerDecision(185000, 78500, { allowBelow: true }), {
+      action: "lower",
+      km: 78500,
+      currentKm: 185000,
+    });
+    // An upward reading under `allowBelow` is an ordinary set.
+    assert.deepEqual(odometerDecision(70000, 80000, { allowBelow: true }), {
+      action: "set",
+      km: 80000,
+    });
   });
 
   it("treats a blank stored odometer as unknown, never as zero", () => {

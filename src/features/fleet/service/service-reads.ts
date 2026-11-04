@@ -1,6 +1,7 @@
 import { logAdminRead } from "@/lib/audit/log-admin-activity";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
+import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
 import { isServiceCategoryKey, type ServiceCategoryKey } from "./service-types";
@@ -18,7 +19,10 @@ import {
   type MaintenanceDoneRecord,
   type MaintenanceVehicle,
 } from "./service-maintenance-model";
+import { DEFAULT_ODOMETER_SYNC_CONFIG } from "./types";
 import type {
+  MaintenanceExclusion,
+  MaintenanceRuleScope,
   MaintenanceScheduleRow,
   MaintenanceSettings,
   ServiceDoneRecord,
@@ -29,6 +33,8 @@ import type {
   ServiceTypeRow,
   ServiceVehicleOption,
   ServiceVehicleSnapshot,
+  VehicleDayDistance,
+  OdometerSyncConfig,
 } from "./types";
 
 export type Row = Record<string, unknown> & { id: string };
@@ -267,6 +273,7 @@ export async function listServiceVehicleOptions(): Promise<ServiceVehicleOption[
         driver_id: driver?.id ?? null,
         driver_name: driver?.name ?? null,
         current_odometer_km: num(row.current_odometer_km),
+        odometer_updated_at: str(row.odometer_updated_at) || null,
         vehicle_type_key: str(row.vehicle_type_key) || null,
         zone_name: driver?.zoneName ?? null,
       } satisfies ServiceVehicleOption;
@@ -289,6 +296,7 @@ export async function listServiceTypes(): Promise<ServiceTypeRow[]> {
         category: (isServiceCategoryKey(category) ? category : "other") as ServiceCategoryKey,
         is_active: row.is_active !== false,
         sort_order: num(row.sort_order) ?? 100,
+        tracks_maintenance: row.tracks_maintenance === true,
         created_at: str(row.created_at) || null,
         updated_at: str(row.updated_at) || null,
       } satisfies ServiceTypeRow;
@@ -323,31 +331,108 @@ export async function listMaintenanceSchedules(): Promise<MaintenanceScheduleRow
   if ("error" in auth) return [];
   const rows = await allRows(COLLECTIONS.vehicleMaintenanceSchedules);
   return rows
-    .map((row) => ({
-      id: row.id,
-      scope: str(row.scope) === "vehicle" ? ("vehicle" as const) : ("model" as const),
-      vehicle_id: str(row.vehicle_id) || null,
-      make_model_key: str(row.make_model_key) || null,
-      service_type_key: str(row.service_type_key),
-      service_type_label: str(row.service_type_label) || null,
-      km_interval: num(row.km_interval) ?? 0,
-      day_interval: num(row.day_interval) ?? 0,
-      alert_km: num(row.alert_km) ?? 0,
-      alert_days: num(row.alert_days) ?? 0,
-      is_active: row.is_active !== false,
-      created_at: str(row.created_at) || null,
-      updated_at: str(row.updated_at) || null,
-    }))
-    .sort((a, b) => a.service_type_key.localeCompare(b.service_type_key));
+    .map((row) => {
+      // `model` is the name this shipped under; a stored row keeps working.
+      const raw = str(row.scope);
+      const scope: MaintenanceRuleScope =
+        raw === "vehicle"
+          ? "vehicle"
+          : raw === "make"
+            ? "make"
+            : raw === "vehicle_type"
+              ? "vehicle_type"
+              : "make_model";
+      return {
+        id: row.id,
+        scope,
+        vehicle_id: str(row.vehicle_id) || null,
+        make_model_key: str(row.make_model_key) || null,
+        make_key: str(row.make_key) || null,
+        vehicle_type_key: str(row.vehicle_type_key) || null,
+        service_type_key: str(row.service_type_key),
+        service_type_label: str(row.service_type_label) || null,
+        km_interval: num(row.km_interval) ?? 0,
+        day_interval: num(row.day_interval) ?? 0,
+        alert_km: num(row.alert_km) ?? 0,
+        alert_days: num(row.alert_days) ?? 0,
+        is_active: row.is_active !== false,
+        created_at: str(row.created_at) || null,
+        updated_at: str(row.updated_at) || null,
+      } satisfies MaintenanceScheduleRow;
+    })
+    .sort(
+      (a, b) =>
+        a.service_type_key.localeCompare(b.service_type_key) || a.scope.localeCompare(b.scope),
+    );
+}
+
+/** `vehicle_maintenance_exclusions` — the fleet team's per-program opt-outs. */
+export async function listMaintenanceExclusions(): Promise<MaintenanceExclusion[]> {
+  const auth = await requireService("service.view");
+  if ("error" in auth) return [];
+  const rows = await allRows(COLLECTIONS.vehicleMaintenanceExclusions);
+  return rows.map((row) => ({
+    id: row.id,
+    vehicleId: str(row.vehicle_id),
+    programKey: str(row.program_key),
+    reason: str(row.reason) || null,
+    by: str(row.by) || null,
+    at: str(row.at) || null,
+  }));
+}
+
+/**
+ * `vehicle_day_distance` for one Kuwait day. The bike tab reads today's row; the
+ * sweep reads a window. Rows outside the day are dropped here so the caller does
+ * not have to carry a date filter into the model.
+ */
+export async function listVehicleDayDistances(day: string): Promise<VehicleDayDistance[]> {
+  const auth = await requireService("service.view");
+  if ("error" in auth) return [];
+  if (!day) return [];
+  const db = await openDb();
+  const snap = await db
+    .collection(COLLECTIONS.vehicleDayDistance)
+    .where("day", "==", day)
+    .get();
+  return snap.docs.map((doc) => {
+    const row = asRow(doc.id, doc.data());
+    const byDriver: Record<string, number> = {};
+    const raw = row.by_driver;
+    if (raw && typeof raw === "object") {
+      for (const [driverId, meters] of Object.entries(raw as Record<string, unknown>)) {
+        const value = num(meters);
+        if (value != null) byDriver[driverId] = value;
+      }
+    }
+    const totalMeters = num(row.total_meters) ?? 0;
+    return {
+      id: doc.id,
+      vehicleId: str(row.vehicle_id),
+      day: str(row.day) || day,
+      totalMeters,
+      byDriver,
+      odometerKm: num(row.odometer_km),
+      gpsLedgerKm: num(row.gps_ledger_km) ?? Math.round(totalMeters / 1000),
+    } satisfies VehicleDayDistance;
+  });
 }
 
 /** Everything the maintenance tab needs, shaped the way its pure model reads it. */
-export async function listServiceMaintenanceData(): Promise<{
+export async function listServiceMaintenanceData(options?: {
+  /** `["bike"]` for `/fleet/service/bikes`, `["car"]` for the main tab. */
+  vehicleTypeKeys?: readonly string[];
+  /** Kuwait today, for the day-distance rows. Defaults to the Kuwait day. */
+  today?: string;
+}): Promise<{
   vehicles: MaintenanceVehicle[];
   doneRecords: MaintenanceDoneRecord[];
   schedules: MaintenanceScheduleRow[];
   settings: MaintenanceSettings;
+  exclusions: MaintenanceExclusion[];
+  distances: VehicleDayDistance[];
 }> {
+  const today = options?.today ?? kuwaitTodayYmd();
   const auth = await requireService("service.view");
   if ("error" in auth) {
     return {
@@ -355,17 +440,31 @@ export async function listServiceMaintenanceData(): Promise<{
       doneRecords: [],
       schedules: [],
       settings: { ...DEFAULT_MAINTENANCE_SETTINGS },
+      exclusions: [],
+      distances: [],
     };
   }
-  const [options, records, schedules, settings] = await Promise.all([
+  const [allVehicles, records, schedules, settings, exclusions, distances] = await Promise.all([
     listServiceVehicleOptions(),
     listServiceRecords(),
     listMaintenanceSchedules(),
     getMaintenanceSettings(),
+    listMaintenanceExclusions(),
+    listVehicleDayDistances(today),
   ]);
-  const vehicles: MaintenanceVehicle[] = options.map((vehicle) => ({
+  const allow =
+    options?.vehicleTypeKeys && options.vehicleTypeKeys.length > 0
+      ? new Set(options.vehicleTypeKeys.map((key) => key.trim().toLowerCase()))
+      : null;
+  const chosen = allow
+    ? allVehicles.filter((vehicle) =>
+        allow.has((vehicle.vehicle_type_key ?? "").trim().toLowerCase()),
+      )
+    : allVehicles;
+  const vehicles: MaintenanceVehicle[] = chosen.map((vehicle) => ({
     id: vehicle.id,
     plate: vehicle.plate,
+    chassisNo: vehicle.chassis_no,
     make: vehicle.make,
     model: vehicle.model,
     condition: vehicle.condition,
@@ -373,9 +472,11 @@ export async function listServiceMaintenanceData(): Promise<{
     zoneName: vehicle.zone_name,
     driverName: vehicle.driver_name,
     currentKm: vehicle.current_odometer_km,
+    odometerUpdatedAt: vehicle.odometer_updated_at,
   }));
+  const visible = new Set(vehicles.map((vehicle) => vehicle.id));
   const doneRecords: MaintenanceDoneRecord[] = records
-    .filter((record) => isDoneRecord(record))
+    .filter((record) => isDoneRecord(record) && visible.has(record.vehicle_id))
     .map((record) => ({
       id: record.id,
       vehicleId: record.vehicle_id,
@@ -384,10 +485,57 @@ export async function listServiceMaintenanceData(): Promise<{
       odometerKm: odometerOf(record),
     }));
   void logAdminRead("service_maintenance", "/fleet/service");
-  return { vehicles, doneRecords, schedules, settings };
+  return {
+    vehicles,
+    doneRecords,
+    schedules,
+    settings,
+    exclusions: exclusions.filter((row) => visible.has(row.vehicleId)),
+    distances: distances.filter((row) => visible.has(row.vehicleId)),
+  };
 }
 
 /** Done records plus vehicle ownership — the cost report's two inputs. */
+
+/* --------------------------------------------------- dashcam odometer feed --- */
+
+/**
+ * The dashcam feed is configured, not compiled. The vendor's published spec
+ * answers 500 from outside their network, so the paths and field names are
+ * settings an operator fills in and proves with **Test connection** — no deploy
+ * required when they change.
+ */
+export { DEFAULT_ODOMETER_SYNC_CONFIG };
+
+export async function getOdometerSyncConfig(): Promise<OdometerSyncConfig> {
+  const auth = await requireService("service.manage");
+  if ("error" in auth) return { ...DEFAULT_ODOMETER_SYNC_CONFIG };
+  const db = await openDb();
+  const snap = await db.collection(COLLECTIONS.serviceOdometerSync).doc(SERVICE_SETTINGS_DOC).get();
+  // The secret never comes from Firestore: it lives in Secret Manager for the
+  // scheduled run and in the Vercel environment for this panel, so the only thing
+  // reported here is whether it is present at all.
+  const secretConfigured = Boolean((process.env.SERVICE_ODOMETER_APP_SECRET ?? "").trim());
+  if (!snap.exists) return { ...DEFAULT_ODOMETER_SYNC_CONFIG, secret_configured: secretConfigured };
+  const row = asRow(snap.id, snap.data());
+  const mode = str(row.auth_mode);
+  return {
+    enabled: row.enabled === true,
+    base_url: str(row.base_url),
+    auth_mode: mode === "login" ? "login" : "headers",
+    app_cid: str(row.app_cid),
+    secret_configured: secretConfigured,
+    vehicles_path: str(row.vehicles_path) || DEFAULT_ODOMETER_SYNC_CONFIG.vehicles_path,
+    vehicle_path: str(row.vehicle_path) || DEFAULT_ODOMETER_SYNC_CONFIG.vehicle_path,
+    odometer_field: str(row.odometer_field) || DEFAULT_ODOMETER_SYNC_CONFIG.odometer_field,
+    plate_field: str(row.plate_field) || DEFAULT_ODOMETER_SYNC_CONFIG.plate_field,
+    chassis_field: str(row.chassis_field) || DEFAULT_ODOMETER_SYNC_CONFIG.chassis_field,
+    last_run_at: str(row.last_run_at) || null,
+    last_run_summary: str(row.last_run_summary) || null,
+  };
+}
+
+
 export async function listServiceReportData(): Promise<{
   records: ServiceDoneRecord[];
   vehicles: { id: string; plate: string; carType: string | null }[];

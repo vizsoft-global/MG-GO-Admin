@@ -18,16 +18,21 @@ import type { ServiceCategoryKey } from "./service-types";
 import {
   canTransitionStage,
   stageEvent,
+  isFutureDay,
   isTerminalStage,
   normaliseParts,
   odometerDecision,
   odometerOf,
   positiveNumber,
   recordStage,
+  SERVICE_DATE_RE,
   transitionRequiresNote,
   validateServiceRecordInput,
   type ServiceRecordInput,
 } from "./service-records-model";
+import { exclusionId } from "./service-maintenance-model";
+import { previewBaselineImport, type BaselineFleetVehicle } from "./service-baseline-import";
+import { previewBikeImport, type BikeFleetVehicle } from "./service-bike-import";
 import {
   driverNameOf,
   loadServiceType,
@@ -43,7 +48,9 @@ import {
 } from "./service-reads";
 import * as reads from "./service-reads";
 import type {
+  MaintenanceRuleScope,
   MaintenanceSettings,
+  OdometerSyncConfig,
   ServicePart,
   ServiceRecordRow,
   ServiceStage,
@@ -84,8 +91,23 @@ export async function listMaintenanceSchedules() {
   return reads.listMaintenanceSchedules();
 }
 
-export async function listServiceMaintenanceData() {
-  return reads.listServiceMaintenanceData();
+export async function listServiceMaintenanceData(options?: {
+  vehicleTypeKeys?: readonly string[];
+  today?: string;
+}) {
+  return reads.listServiceMaintenanceData(options);
+}
+
+export async function listMaintenanceExclusions() {
+  return reads.listMaintenanceExclusions();
+}
+
+export async function listVehicleDayDistances(day: string) {
+  return reads.listVehicleDayDistances(day);
+}
+
+export async function getOdometerSyncConfig() {
+  return reads.getOdometerSyncConfig();
 }
 
 export async function listServiceReportData() {
@@ -398,10 +420,19 @@ export async function setServiceStage(input: {
 }
 
 
-/** The manual door onto the same reading table. `service.manage`, audited. */
+/**
+ * The manual door onto the same reading table.
+ *
+ * A person correcting the odometer may lower it — a typo, a replaced instrument
+ * cluster, a meter reset — but only with a **written reason**, and the change is
+ * audited with the before/after pair and the reason itself. The monotonic guard
+ * stays where nobody is watching: the dashcam sync and the baseline import.
+ */
 export async function recordManualOdometer(input: {
   vehicleId: string;
   km: number;
+  /** Required when the new reading is below the stored one. */
+  reason?: string | null;
 }): Promise<{ ok: true; km: number | null } | { error: string; currentKm?: number }> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
@@ -412,17 +443,24 @@ export async function recordManualOdometer(input: {
   if (!vehicle) return { error: "not_found" };
 
   const currentKm = num(vehicle.current_odometer_km);
-  const decision = odometerDecision(currentKm, input.km);
+  const reason = (input.reason ?? "").trim();
+  const decision = odometerDecision(currentKm, input.km, { allowBelow: true });
   if (decision.action === "invalid") return { error: "invalid_odometer" };
   if (decision.action === "skip") return { ok: true, km: currentKm };
+  if (decision.action === "same") return { ok: true, km: currentKm };
   if (decision.action === "refuse_below") {
     return { error: "odometer_below_current", currentKm: decision.currentKm };
   }
-  if (decision.action === "same") return { ok: true, km: currentKm };
+  // A correction downward is the one path the guard does not simply refuse, and
+  // it is the one path that must say why.
+  if (decision.action === "lower" && !reason) {
+    return { error: "reason_required", currentKm: decision.currentKm };
+  }
 
   const db = await openDb();
   const now = new Date();
   const id = crypto.randomUUID();
+  const lowered = decision.action === "lower";
   try {
     const batch = db.batch();
     batch.update(db.collection(COLLECTIONS.vehicles).doc(input.vehicleId), {
@@ -434,6 +472,11 @@ export async function recordManualOdometer(input: {
       id,
       vehicle_id: input.vehicleId,
       km: decision.km,
+      // The previous figure is kept on the reading itself, so the history of a
+      // lowered odometer is readable without joining the audit log.
+      previous_km: lowered ? decision.currentKm : null,
+      lowered,
+      reason: reason || null,
       source: "manual",
       at: now,
       recorded_by: auth.session.id,
@@ -450,7 +493,12 @@ export async function recordManualOdometer(input: {
     entityId: input.vehicleId,
     routeName: "/vehicles",
     before: { current_odometer_km: currentKm },
-    after: { current_odometer_km: decision.km, source: "manual" },
+    after: {
+      current_odometer_km: decision.km,
+      source: "manual",
+      lowered,
+      ...(reason ? { reason } : {}),
+    },
   });
   revalidatePath(`/vehicles/${input.vehicleId}`);
   revalidatePath("/fleet/service");
@@ -529,9 +577,11 @@ export async function saveMaintenanceSettings(input: {
 
 export async function saveMaintenanceSchedule(input: {
   id?: string | null;
-  scope: "vehicle" | "model";
+  scope: MaintenanceRuleScope;
   vehicleId?: string | null;
   makeModelKey?: string | null;
+  makeKey?: string | null;
+  vehicleTypeKey?: string | null;
   serviceTypeKey: string;
   serviceTypeLabel?: string | null;
   kmInterval: number;
@@ -547,8 +597,12 @@ export async function saveMaintenanceSchedule(input: {
 
   const vehicleId = (input.vehicleId ?? "").trim();
   const modelKey = (input.makeModelKey ?? "").trim();
+  const ownMake = (input.makeKey ?? "").trim();
+  const typeKey = (input.vehicleTypeKey ?? "").trim().toLowerCase();
   if (input.scope === "vehicle" && !vehicleId) return { error: "missing_vehicle" };
-  if (input.scope === "model" && !modelKey) return { error: "missing_model" };
+  if (input.scope === "make_model" && !modelKey) return { error: "missing_model" };
+  if (input.scope === "make" && !ownMake) return { error: "missing_make" };
+  if (input.scope === "vehicle_type" && !typeKey) return { error: "missing_vehicle_type" };
   if (!input.serviceTypeKey.trim()) return { error: "missing_service_type" };
 
   const db = await openDb();
@@ -561,9 +615,12 @@ export async function saveMaintenanceSchedule(input: {
     id,
     scope: input.scope,
     vehicle_id: input.scope === "vehicle" ? vehicleId : null,
-    make_model_key: input.scope === "model" ? modelKey : null,
+    make_model_key: input.scope === "make_model" ? modelKey : null,
+    make_key: input.scope === "make" ? ownMake : null,
+    vehicle_type_key: input.scope === "vehicle_type" ? typeKey : null,
     service_type_key: input.serviceTypeKey.trim(),
     service_type_label: (input.serviceTypeLabel ?? "").trim() || null,
+    // 0 is a real value here: it means "this dimension is not tracked".
     km_interval: intervalValue(input.kmInterval, 0),
     day_interval: intervalValue(input.dayInterval, 0),
     alert_km: intervalValue(input.alertKm, 0),
@@ -598,6 +655,8 @@ export async function saveMaintenanceSchedule(input: {
       scope: payload.scope,
       vehicle_id: payload.vehicle_id,
       make_model_key: payload.make_model_key,
+      make_key: payload.make_key,
+      vehicle_type_key: payload.vehicle_type_key,
       service_type_key: payload.service_type_key,
       km_interval: payload.km_interval,
       day_interval: payload.day_interval,
@@ -605,6 +664,780 @@ export async function saveMaintenanceSchedule(input: {
     },
   });
   revalidatePath("/fleet/service");
+  revalidatePath("/fleet/service/bikes");
   return { ok: true, id };
 }
+
+/** Remove a rule. The vehicle falls back to the next wider scope, or the defaults. */
+export async function deleteMaintenanceSchedule(input: {
+  id: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+  const auth = await requireService("service.manage");
+  if ("error" in auth) return { error: "not_authorized" };
+  if (!input.id.trim()) return { error: "not_found" };
+
+  const db = await openDb();
+  try {
+    await db.collection(COLLECTIONS.vehicleMaintenanceSchedules).doc(input.id.trim()).delete();
+  } catch {
+    return { error: "save_failed" };
+  }
+  void logAdminMutation({
+    action: "delete",
+    entityType: "vehicle_maintenance_schedule",
+    entityId: input.id.trim(),
+    routeName: "/fleet/service",
+  });
+  revalidatePath("/fleet/service");
+  revalidatePath("/fleet/service/bikes");
+  return { ok: true };
+}
+
+
+/* ------------------------------------------------ maintenance setup paths --- */
+
+/**
+ * `Not tracked` — the fleet team says this vehicle is not on this program (an
+ * electric car has no oil change; a leased bike is serviced by its owner). The
+ * opt-out is a document, so it is visible and reversible, and the row reads
+ * `not_tracked` rather than a fabricated due date.
+ */
+export async function saveMaintenanceExclusion(input: {
+  vehicleId: string;
+  programKey: string;
+  reason?: string | null;
+}): Promise<{ ok: true } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+  const auth = await requireService("service.manage");
+  if ("error" in auth) return { error: "not_authorized" };
+
+  const vehicleId = input.vehicleId.trim();
+  const programKey = input.programKey.trim();
+  if (!vehicleId) return { error: "missing_vehicle" };
+  if (!programKey) return { error: "missing_program" };
+
+  const db = await openDb();
+  const id = exclusionId(vehicleId, programKey);
+  const now = new Date();
+  try {
+    await db
+      .collection(COLLECTIONS.vehicleMaintenanceExclusions)
+      .doc(id)
+      .set(
+        {
+          id,
+          vehicle_id: vehicleId,
+          program_key: programKey,
+          reason: (input.reason ?? "").trim() || null,
+          by: auth.session.id,
+          at: now,
+          updated_at: now,
+        },
+        { merge: true },
+      );
+  } catch {
+    return { error: "save_failed" };
+  }
+
+  void logAdminMutation({
+    action: "create",
+    entityType: "vehicle_maintenance_exclusion",
+    entityId: id,
+    routeName: "/fleet/service",
+    after: { vehicle_id: vehicleId, program_key: programKey },
+  });
+  revalidatePath("/fleet/service");
+  revalidatePath("/fleet/service/bikes");
+  return { ok: true };
+}
+
+export async function clearMaintenanceExclusion(input: {
+  vehicleId: string;
+  programKey: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+  const auth = await requireService("service.manage");
+  if ("error" in auth) return { error: "not_authorized" };
+
+  const db = await openDb();
+  const id = exclusionId(input.vehicleId.trim(), input.programKey.trim());
+  try {
+    await db.collection(COLLECTIONS.vehicleMaintenanceExclusions).doc(id).delete();
+  } catch {
+    return { error: "save_failed" };
+  }
+  void logAdminMutation({
+    action: "delete",
+    entityType: "vehicle_maintenance_exclusion",
+    entityId: id,
+    routeName: "/fleet/service",
+  });
+  revalidatePath("/fleet/service");
+  revalidatePath("/fleet/service/bikes");
+  return { ok: true };
+}
+
+
+
+/**
+ * `Enter last service` — one Done record for one vehicle × program. This is the
+ * only way a `needs_baseline` row becomes countable, and it is a real service
+ * record (it can cost money and it appears on the records tab), not a hidden
+ * offset.
+ *
+ * A kilometre or a date is enough: a km-only baseline leaves the day dimension at
+ * `needs_baseline` rather than inventing a date.
+ */
+export async function saveMaintenanceBaseline(input: {
+  vehicleId: string;
+  programKey: string;
+  /** Kuwait day `YYYY-MM-DD`. */
+  serviceDay: string;
+  odometerKm?: number | null;
+  notes?: string | null;
+}): Promise<{ ok: true; id: string } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+  const auth = await requireService("service.manage");
+  if ("error" in auth) return { error: "not_authorized" };
+
+  const today = kuwaitTodayYmd();
+  const vehicleId = input.vehicleId.trim();
+  const programKey = input.programKey.trim();
+  if (!vehicleId) return { error: "missing_vehicle" };
+  if (!programKey) return { error: "missing_program" };
+  if (!SERVICE_DATE_RE.test(input.serviceDay)) return { error: "invalid_date" };
+  if (isFutureDay(input.serviceDay, today)) return { error: "future_date" };
+  const odometerKm = input.odometerKm == null ? null : Math.round(input.odometerKm);
+  if (odometerKm != null && (!Number.isFinite(odometerKm) || odometerKm < 0)) {
+    return { error: "invalid_odometer" };
+  }
+
+  const vehicle = await loadVehicleRow(vehicleId);
+  if (!vehicle) return { error: "missing_vehicle" };
+  const typeRow = await loadServiceType(programKey);
+
+  const db = await openDb();
+  const id = crypto.randomUUID();
+  const now = new Date();
+  const stamp = now.toISOString();
+  const name = sessionName(auth.session);
+  try {
+    const batch = db.batch();
+    batch.set(db.collection(COLLECTIONS.vehicleServices).doc(id), {
+      id,
+      vehicle_id: vehicleId,
+      // A baseline is a finished visit, so it carries the same shape a workshop
+      // record does — the records tab has to be able to show it.
+      serviced_at: new Date(`${input.serviceDay}T00:00:00.000Z`),
+      kind: typeRow?.label_en ?? programKey,
+      description: null,
+      service_type_key: programKey,
+      service_type_label: typeRow?.label_en ?? programKey,
+      category: typeRow?.category ?? "other",
+      stage: "done",
+      source: "baseline",
+      driver_id: null,
+      driver_name: null,
+      vehicle_snapshot: vehicleSnapshotOf(vehicle),
+      invoice_no: null,
+      invoice_date: null,
+      company: null,
+      odometer_km: odometerKm,
+      odometer: odometerKm,
+      cost_kwd: null,
+      vendor: null,
+      notes: (input.notes ?? "").trim() || "Baseline entered from the maintenance worklist.",
+      parts: [],
+      stage_history: [
+        stageEvent("done", stamp, auth.session.id, name, "Baseline entered by the fleet team."),
+      ],
+      done_at: stamp,
+      done_odometer_km: odometerKm,
+      created_by: auth.session.id,
+      created_at: now,
+      updated_at: now,
+    });
+
+    // A baseline kilometre also raises the stored odometer, under the same
+    // monotonic guard every other reading uses.
+    const currentKm = num(vehicle.current_odometer_km);
+    const decision = odometerDecision(currentKm, odometerKm);
+    if (decision.action === "set") {
+      batch.update(db.collection(COLLECTIONS.vehicles).doc(vehicleId), {
+        current_odometer_km: decision.km,
+        odometer_source: "baseline",
+        odometer_updated_at: now,
+      });
+      const readingId = crypto.randomUUID();
+      batch.set(db.collection(COLLECTIONS.vehicleOdometerReadings).doc(readingId), {
+        id: readingId,
+        vehicle_id: vehicleId,
+        km: decision.km,
+        source: "baseline",
+        at: now,
+        recorded_by: auth.session.id,
+        created_at: now,
+      });
+    }
+    await batch.commit();
+  } catch {
+    return { error: "save_failed" };
+  }
+
+  void logAdminMutation({
+    action: "create",
+    entityType: "service_baseline",
+    entityId: id,
+    routeName: "/fleet/service",
+    after: {
+      vehicle_id: vehicleId,
+      program_key: programKey,
+      day: input.serviceDay,
+      km: odometerKm,
+    },
+  });
+  revalidatePath("/fleet/service");
+  revalidatePath("/fleet/service/bikes");
+  revalidatePath(`/vehicles/${vehicleId}`);
+  return { ok: true, id };
+}
+
+
+
+/**
+ * `Start monitoring from today` — the honest alternative to inventing a history.
+ * One Done record dated today at the vehicle's stored odometer, so the program
+ * starts counting from now instead of pretending a service happened last year.
+ */
+export async function startMaintenanceMonitoring(input: {
+  vehicleId: string;
+  programKey: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const vehicle = await loadVehicleRow(input.vehicleId.trim());
+  if (!vehicle) return { error: "missing_vehicle" };
+  // A stale opt-out must not survive "start monitoring".
+  const cleared = await clearMaintenanceExclusion(input);
+  if ("error" in cleared) return cleared;
+  const saved = await saveMaintenanceBaseline({
+    vehicleId: input.vehicleId,
+    programKey: input.programKey,
+    serviceDay: kuwaitTodayYmd(),
+    odometerKm: num(vehicle.current_odometer_km),
+    notes: "Monitoring started from today by the fleet team.",
+  });
+  if ("error" in saved) return saved;
+  return { ok: true };
+}
+
+
+
+/* ------------------------------------------------------- bulk import paths --- */
+
+export type BaselineImportResult =
+  | {
+      ok: true;
+      matchedByPlate: number;
+      matchedByChassis: number;
+      created: number;
+      rejected: number;
+      /** Rows blocked because `Current KM` was below `last service`. */
+      blockedInconsistent: number;
+      records: number;
+    }
+  | { error: string };
+
+/**
+ * Apply the client's baseline sheet.
+ *
+ * The sheet is sent as **rows** and the preview is recomputed here before a
+ * single write, so the browser decided nothing and a tampered payload cannot
+ * create a vehicle the matcher would have rejected.
+ *
+ * Writes, per row: the vehicle's `current_odometer_km` under the monotonic guard
+ * (`source: "baseline"`), and one Done `vehicle_services` row filed under
+ * `oil_change`. A row that matched neither plate nor chassis creates the car
+ * first. Re-running the same sheet therefore creates nothing: every row it
+ * created is found by its own plate on the second pass.
+ */
+export async function applyServiceBaselineImport(input: {
+  rows: readonly (readonly unknown[])[];
+}): Promise<BaselineImportResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+  const auth = await requireService("service.manage");
+  if ("error" in auth) return { error: "not_authorized" };
+  if (!Array.isArray(input.rows) || input.rows.length === 0) return { error: "empty_file" };
+
+  const [options, rules] = await Promise.all([
+    reads.listServiceVehicleOptions(),
+    reads.listMaintenanceSchedules(),
+  ]);
+  const fleet: BaselineFleetVehicle[] = options.map((vehicle) => ({
+    id: vehicle.id,
+    plate: vehicle.plate,
+    chassisNo: vehicle.chassis_no,
+    make: vehicle.make,
+    model: vehicle.model,
+    vehicleTypeKey: vehicle.vehicle_type_key,
+    condition: vehicle.condition,
+    zoneName: vehicle.zone_name,
+    driverName: vehicle.driver_name,
+    currentKm: vehicle.current_odometer_km,
+  }));
+  const preview = previewBaselineImport(input.rows, fleet, rules);
+  const today = kuwaitTodayYmd();
+  const typeRow = await loadServiceType("oil_change");
+
+  const db = await openDb();
+  const now = new Date();
+  const stamp = now.toISOString();
+  const name = sessionName(auth.session);
+  let matchedByPlate = 0;
+  let matchedByChassis = 0;
+  let created = 0;
+  let records = 0;
+
+  for (const item of preview.items) {
+    if (item.group === "reject") continue;
+
+    let vehicleId = item.vehicleId;
+    const storedKm = vehicleId
+      ? fleet.find((row) => row.id === item.vehicleId)?.currentKm ?? null
+      : null;
+
+    if (!vehicleId) {
+      // Neither identity matched: a car the fleet does not hold. The sheet's own
+      // plate is stored, so a re-import finds the same car.
+      const newRef = db.collection(COLLECTIONS.vehicles).doc();
+      vehicleId = newRef.id;
+      try {
+        await newRef.set({
+          id: newRef.id,
+          bike_id: item.plate,
+          reg_number: item.plate,
+          chassis_no: item.chassisNo,
+          make: item.make,
+          model: item.model,
+          model_year: null,
+          car_type: null,
+          vehicle_type_key: "car",
+          status: "active",
+          condition: "running",
+          type_of_use: "operational",
+          current_odometer_km: item.currentKm,
+          odometer_source: item.currentKm == null ? null : "baseline",
+          odometer_updated_at: item.currentKm == null ? null : now,
+          created_at: now,
+          updated_at: now,
+          created_by: auth.session.id,
+          source: "baseline_import",
+        });
+        created += 1;
+      } catch {
+        continue;
+      }
+    } else if (item.group === "plate") {
+      matchedByPlate += 1;
+    } else {
+      matchedByChassis += 1;
+    }
+
+
+    // A row carrying no service history is a fleet addition only.
+    if (item.lastServiceKm == null && !item.lastServiceDay) continue;
+
+    const recordId = crypto.randomUUID();
+    try {
+      const batch = db.batch();
+      // A row whose `Current KM` is below its last service figure has its odometer
+      // write withheld: the service record still goes in, but nothing may rewind
+      // the meter until the sheet is confirmed.
+      const decision = item.odometerBlocked
+        ? { action: "refuse_below" as const, km: 0, currentKm: 0 }
+        : odometerDecision(storedKm, item.currentKm ?? item.lastServiceKm);
+      if (decision.action === "set") {
+        batch.update(db.collection(COLLECTIONS.vehicles).doc(vehicleId), {
+          current_odometer_km: decision.km,
+          odometer_source: "baseline",
+          odometer_updated_at: now,
+        });
+        const readingId = crypto.randomUUID();
+        batch.set(db.collection(COLLECTIONS.vehicleOdometerReadings).doc(readingId), {
+          id: readingId,
+          vehicle_id: vehicleId,
+          km: decision.km,
+          source: "baseline",
+          at: now,
+          recorded_by: auth.session.id,
+          created_at: now,
+        });
+      }
+      batch.set(db.collection(COLLECTIONS.vehicleServices).doc(recordId), {
+        id: recordId,
+        vehicle_id: vehicleId,
+        serviced_at: new Date(`${item.lastServiceDay ?? today}T00:00:00.000Z`),
+        kind: typeRow?.label_en ?? "Oil change",
+        description: null,
+        service_type_key: "oil_change",
+        service_type_label: typeRow?.label_en ?? "Oil change",
+        category: typeRow?.category ?? "engine",
+        stage: "done",
+        source: "baseline",
+        driver_id: null,
+        driver_name: null,
+        vehicle_snapshot: {
+          plate: item.matchedPlate ?? item.plate,
+          chassis_no: item.chassisNo,
+          make: item.make,
+          model: item.model,
+          model_year: null,
+          car_type: null,
+        },
+        invoice_no: null,
+        invoice_date: null,
+        company: null,
+        odometer_km: item.lastServiceKm,
+        odometer: item.lastServiceKm,
+        cost_kwd: null,
+        vendor: null,
+        notes: `Baseline from the client sheet, row ${item.sheetRow}.`,
+        parts: [],
+        stage_history: [stageEvent("done", stamp, auth.session.id, name, "Baseline imported.")],
+        done_at: stamp,
+        done_odometer_km: item.lastServiceKm,
+        created_by: auth.session.id,
+        created_at: now,
+        updated_at: now,
+      });
+      await batch.commit();
+      records += 1;
+    } catch {
+      continue;
+    }
+  }
+
+  void logAdminMutation({
+    action: "create",
+    entityType: "service_baseline_import",
+    entityId: `${preview.counts.total}-rows`,
+    routeName: "/fleet/service",
+    after: {
+      matched_by_plate: matchedByPlate,
+      matched_by_chassis: matchedByChassis,
+      created,
+      rejected: preview.counts.reject,
+      records,
+    },
+  });
+  revalidatePath("/fleet/service");
+  revalidatePath("/fleet/service/bikes");
+  revalidatePath("/vehicles");
+  return {
+    ok: true,
+    matchedByPlate,
+    matchedByChassis,
+    created,
+    rejected: preview.counts.reject,
+    blockedInconsistent: preview.kmBelowService,
+    records,
+  };
+}
+
+
+
+/* ------------------------------------------------------- bike record paths --- */
+
+export type BikeImportResult =
+  | { ok: true; created: number; rejected: number }
+  | { error: string };
+
+/**
+ * Apply a bike service sheet. Bikes only: a car plate in the sheet is rejected by
+ * the preview, never re-filed onto a bike, so a shared workbook cannot move a
+ * bike's oil date with a car's service.
+ */
+export async function applyBikeServiceImport(input: {
+  rows: readonly (readonly unknown[])[];
+}): Promise<BikeImportResult> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+  const auth = await requireService("service.manage");
+  if ("error" in auth) return { error: "not_authorized" };
+  if (!Array.isArray(input.rows) || input.rows.length === 0) return { error: "empty_file" };
+
+  const options = await reads.listServiceVehicleOptions();
+  const fleet: BikeFleetVehicle[] = options.map((vehicle) => ({
+    id: vehicle.id,
+    plate: vehicle.plate,
+    chassisNo: vehicle.chassis_no,
+    vehicleTypeKey: vehicle.vehicle_type_key,
+  }));
+  const today = kuwaitTodayYmd();
+  const preview = previewBikeImport(input.rows, fleet, today);
+
+  const typeRows = await Promise.all(
+    ["oil_change", "brake", "chain"].map((key) => loadServiceType(key)),
+  );
+  const labelByKey = new Map<string, { label: string; category: ServiceCategoryKey }>();
+  ["oil_change", "brake", "chain"].forEach((key, index) => {
+    const row = typeRows[index];
+    labelByKey.set(key, {
+      label: row?.label_en ?? key,
+      category: row?.category ?? "other",
+    });
+  });
+
+  const db = await openDb();
+  const now = new Date();
+  const stamp = now.toISOString();
+  const name = sessionName(auth.session);
+  let created = 0;
+
+  for (const item of preview.items) {
+    if (item.group !== "create" || !item.vehicleId || !item.programKey || !item.serviceDay) {
+      continue;
+    }
+    const meta = labelByKey.get(item.programKey);
+    const id = crypto.randomUUID();
+    try {
+      const batch = db.batch();
+      batch.set(db.collection(COLLECTIONS.vehicleServices).doc(id), {
+        id,
+        vehicle_id: item.vehicleId,
+        serviced_at: new Date(`${item.serviceDay}T00:00:00.000Z`),
+        kind: meta?.label ?? item.serviceTypeRaw,
+        description: item.serviceTypeRaw || null,
+        service_type_key: item.programKey,
+        service_type_label: meta?.label ?? item.serviceTypeRaw,
+        category: meta?.category ?? "other",
+        stage: "done",
+        source: "bike_import",
+        driver_id: null,
+        driver_name: null,
+        vehicle_snapshot: {
+          plate: item.matchedPlate ?? item.plate,
+          chassis_no: null,
+          make: null,
+          model: null,
+          model_year: null,
+          car_type: null,
+        },
+        invoice_no: item.invoiceNo,
+        invoice_date: null,
+        company: null,
+        odometer_km: item.odometerKm,
+        odometer: item.odometerKm,
+        cost_kwd: item.costKwd,
+        vendor: item.vendor,
+        notes: item.notes,
+        parts: [],
+        stage_history: [
+          stageEvent("done", stamp, auth.session.id, name, "Imported from the bike service sheet."),
+        ],
+        done_at: stamp,
+        done_odometer_km: item.odometerKm,
+        created_by: auth.session.id,
+        created_at: now,
+        updated_at: now,
+      });
+
+      // A bike reading only raises the stored figure, never rewinds it.
+      const stored = options.find((vehicle) => vehicle.id === item.vehicleId)?.current_odometer_km ?? null;
+      const decision = odometerDecision(stored, item.odometerKm);
+      if (decision.action === "set") {
+        batch.update(db.collection(COLLECTIONS.vehicles).doc(item.vehicleId), {
+          current_odometer_km: decision.km,
+          odometer_source: "service",
+          odometer_updated_at: now,
+        });
+        const readingId = crypto.randomUUID();
+        batch.set(db.collection(COLLECTIONS.vehicleOdometerReadings).doc(readingId), {
+          id: readingId,
+          vehicle_id: item.vehicleId,
+          km: decision.km,
+          source: "service",
+          at: now,
+          recorded_by: auth.session.id,
+          created_at: now,
+        });
+      }
+      await batch.commit();
+      created += 1;
+    } catch {
+      continue;
+    }
+  }
+
+  void logAdminMutation({
+    action: "create",
+    entityType: "service_bike_import",
+    entityId: `${preview.counts.total}-rows`,
+    routeName: "/fleet/service/bikes",
+    after: { created, rejected: preview.counts.reject },
+  });
+  revalidatePath("/fleet/service/bikes");
+  revalidatePath("/fleet/service");
+  return { ok: true, created, rejected: preview.counts.reject };
+}
+
+
+
+/* ------------------------------------------------- dashcam odometer feed --- */
+
+/**
+ * Save the dashcam feed settings. The vendor's published spec returns 500 from
+ * outside their network, so the endpoint shape is configuration: the operator
+ * fills these in and proves them with **Test connection**, and the four-times-a-
+ * day sync needs no deploy when they change.
+ */
+export async function saveOdometerSyncConfig(
+  input: Omit<OdometerSyncConfig, "last_run_at" | "last_run_summary" | "secret_configured">,
+): Promise<{ ok: true } | { error: string }> {
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+  const auth = await requireService("service.manage");
+  if ("error" in auth) return { error: "not_authorized" };
+
+  const baseUrl = (input.base_url ?? "").trim().replace(/\/+$/, "");
+  if (input.enabled && !/^https?:\/\//i.test(baseUrl)) return { error: "invalid_base_url" };
+
+  const db = await openDb();
+  const now = new Date();
+  try {
+    await db
+      .collection(COLLECTIONS.serviceOdometerSync)
+      .doc(SERVICE_SETTINGS_DOC)
+      .set(
+        {
+          enabled: input.enabled === true,
+          base_url: baseUrl,
+          auth_mode: input.auth_mode === "login" ? "login" : "headers",
+          app_cid: (input.app_cid ?? "").trim(),
+          // The secret is **not** stored here. It lives in Secret Manager for the
+          // scheduled run and in the Vercel environment for Test connection; a
+          // copy in Firestore would be readable by every staff reader and would
+          // survive a rotation.
+          app_secret: null,
+          vehicles_path: (input.vehicles_path ?? "").trim() || "/vehicle/list",
+          vehicle_path: (input.vehicle_path ?? "").trim() || "/vehicle/info?plate={plate}",
+          odometer_field: (input.odometer_field ?? "").trim() || "odometer",
+          plate_field: (input.plate_field ?? "").trim() || "plateNo",
+          chassis_field: (input.chassis_field ?? "").trim() || "vin",
+          updated_at: now,
+          updated_by: auth.session.id,
+        },
+        { merge: true },
+      );
+  } catch {
+    return { error: "save_failed" };
+  }
+
+  void logAdminMutation({
+    action: "update",
+    entityType: "service_odometer_sync",
+    entityId: SERVICE_SETTINGS_DOC,
+    routeName: "/fleet/service",
+    // Neither the secret nor a hash of it is written to the audit row.
+    after: {
+      enabled: input.enabled === true,
+      base_url: baseUrl,
+      auth_mode: input.auth_mode,
+      secret_configured: Boolean((process.env.SERVICE_ODOMETER_APP_SECRET ?? "").trim()),
+    },
+  });
+  revalidatePath("/fleet/service");
+  return { ok: true };
+}
+
+export type OdometerTestResult =
+  | {
+      ok: true;
+      status: number;
+      /** The first row the endpoint answered, so the field names are provable. */
+      sample: Record<string, unknown> | null;
+      /** How many rows came back, before any mapping. */
+      rows: number;
+    }
+  | { error: string; status?: number; message?: string };
+
+/**
+ * **Test connection** — call the configured path once and show the raw first row.
+ * That is how the real field names are settled in the panel instead of by a
+ * deploy, and it is the only way to prove the credential before the scheduled
+ * sync is switched on.
+ */
+export async function testOdometerSyncConnection(): Promise<OdometerTestResult> {
+  const auth = await requireService("service.manage");
+  if ("error" in auth) return { error: "not_authorized" };
+
+  const config = await reads.getOdometerSyncConfig();
+  if (!/^https?:\/\//i.test(config.base_url)) return { error: "invalid_base_url" };
+  // The credential comes from the server environment, never from the document.
+  const appSecret = (process.env.SERVICE_ODOMETER_APP_SECRET ?? "").trim();
+  if (!appSecret) return { error: "secret_missing" };
+
+  const url = `${config.base_url}${config.vehicles_path.startsWith("/") ? "" : "/"}${config.vehicles_path}`;
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        AppCid: config.app_cid,
+        AppSecret: appSecret,
+        "Content-Type": "application/json",
+      },
+      // The feed is a status check, not a data load: never hang a dialog on it.
+      signal: AbortSignal.timeout(15_000),
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      return { error: "http_error", status: response.status, message: text.slice(0, 400) };
+    }
+    let parsed: unknown = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return { error: "not_json", status: response.status, message: text.slice(0, 400) };
+    }
+    const rows = asRecordRows(parsed);
+    return {
+      ok: true,
+      status: response.status,
+      sample: rows[0] ?? null,
+      rows: rows.length,
+    };
+  } catch (error) {
+    return { error: "request_failed", message: String(error).slice(0, 400) };
+  }
+}
+
+/** The first array of objects anywhere in the payload — `data`, `rows`, `result`. */
+function asRecordRows(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload)) {
+    return payload.filter((row): row is Record<string, unknown> =>
+      Boolean(row) && typeof row === "object",
+    );
+  }
+  if (!payload || typeof payload !== "object") return [];
+  const record = payload as Record<string, unknown>;
+  for (const key of ["data", "rows", "result", "list", "items", "vehicles"]) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value.filter((row): row is Record<string, unknown> =>
+        Boolean(row) && typeof row === "object",
+      );
+    }
+    if (value && typeof value === "object") {
+      const nested = asRecordRows(value);
+      if (nested.length > 0) return nested;
+    }
+  }
+  return [record];
+}
+
 

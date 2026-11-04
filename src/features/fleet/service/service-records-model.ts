@@ -142,22 +142,35 @@ export type OdometerDecision =
   | { action: "same"; km: number }
   | { action: "skip" }
   | { action: "refuse_below"; km: number; currentKm: number }
+  /** Allowed only with `allowBelow` — the caller must demand a reason. */
+  | { action: "lower"; km: number; currentKm: number }
   | { action: "invalid" };
 
 /**
- * The monotonic guard. A reading can only move the stored figure up: a typo of
- * `78 500` where the vehicle is at `185 000` must not rewind maintenance and
- * hide every overdue service behind a fresh baseline.
+ * The monotonic guard.
+ *
+ * A **machine** reading can only move the stored figure up: a dashcam that
+ * reports `78 500` for a vehicle at `185 000` is wrong, and writing it would hide
+ * every overdue service behind a fresh-looking baseline. That is why the guard is
+ * applied on the dashcam sync and the baseline import, which nobody is watching.
+ *
+ * A **person** correcting the odometer is a different case — a typo, a replaced
+ * instrument cluster, a bike whose meter was reset all need the figure to come
+ * down. `allowBelow` therefore returns `{ action: "lower" }` so the caller can
+ * demand a written reason and keep an audit row; without the flag the reading is
+ * refused exactly as before.
  */
 export function odometerDecision(
   currentKm: number | null | undefined,
   reading: number | null | undefined,
+  options: { allowBelow?: boolean } = {},
 ): OdometerDecision {
   if (reading == null) return { action: "skip" };
   if (!Number.isFinite(reading) || reading < 0) return { action: "invalid" };
   if (currentKm == null || !Number.isFinite(currentKm)) return { action: "set", km: reading };
   if (reading > currentKm) return { action: "set", km: reading };
   if (reading === currentKm) return { action: "same", km: reading };
+  if (options.allowBelow) return { action: "lower", km: reading, currentKm };
   return { action: "refuse_below", km: reading, currentKm };
 }
 

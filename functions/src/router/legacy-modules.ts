@@ -81,6 +81,12 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   "./rpcs/delivery-context-sweep": [
     "deliveryProximitySweep"
   ],
+  "./rpcs/service-odometer-sync": [
+    "serviceOdometerSync"
+  ],
+  "./rpcs/service-distance-sweep": [
+    "serviceVehicleDistanceSweep"
+  ],
   "./rpcs/delivery-context-refresh": [
     "adminRefreshDeliveryContext"
   ],

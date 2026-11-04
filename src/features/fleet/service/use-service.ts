@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
+  getOdometerSyncConfig,
   listMaintenanceSchedules,
   listServiceMaintenanceData,
   listServiceRecords,
@@ -48,10 +49,20 @@ export function useServiceReports() {
   });
 }
 
-export function useServiceMaintenance() {
+export function useServiceMaintenance(scope: "all" | "car" | "bike" = "all") {
   return useQuery({
-    queryKey: queryKeys.service.maintenance(),
-    queryFn: () => listServiceMaintenanceData(),
+    queryKey: queryKeys.service.maintenance(scope),
+    queryFn: () =>
+      listServiceMaintenanceData({
+        vehicleTypeKeys: scope === "all" ? undefined : [scope],
+      }),
+  });
+}
+
+export function useOdometerSyncConfig() {
+  return useQuery({
+    queryKey: queryKeys.service.odometerSync(),
+    queryFn: () => getOdometerSyncConfig(),
   });
 }
 
@@ -88,6 +99,22 @@ export function serviceErrorKey(code: string): string {
       return "errors.missingType";
     case "missing_model":
       return "errors.missingModel";
+    case "missing_make":
+      return "errors.missingMake";
+    case "missing_vehicle_type":
+      return "errors.missingVehicleType";
+    case "missing_program":
+      return "errors.missingProgram";
+    case "empty_file":
+      return "errors.emptyFile";
+    case "invalid_base_url":
+      return "errors.invalidBaseUrl";
+    case "http_error":
+      return "errors.httpError";
+    case "not_json":
+      return "errors.notJson";
+    case "request_failed":
+      return "errors.requestFailed";
     case "missing_fields":
       return "errors.missingFields";
     case "invalid_key":
@@ -100,6 +127,10 @@ export function serviceErrorKey(code: string): string {
       return "errors.invalidPart";
     case "odometer_below_current":
       return "errors.odometerBelowCurrent";
+    case "reason_required":
+      return "errors.reasonRequired";
+    case "secret_missing":
+      return "errors.secretMissing";
     case "invalid_transition":
       return "errors.invalidTransition";
     case "note_required":

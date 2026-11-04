@@ -37,6 +37,8 @@ export const COLLECTIONS = {
   driverGroupMembers: "driver_group_members",
   sourceCompanies: "source_companies",
   vehicles: "vehicles",
+  /** One row per odometer reading, whatever wrote it (`manual`, `service`, `dashcam`, `baseline`). */
+  vehicleOdometerReadings: "vehicle_odometer_readings",
   fuelFills: "fuel_fills",
   wrongActions: "wrong_actions",
   documentTracking: "document_tracking",

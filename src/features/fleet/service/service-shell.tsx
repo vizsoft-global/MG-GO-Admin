@@ -2,8 +2,10 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { Bike } from "lucide-react";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
+import { Button } from "@/components/ui/button";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { ServiceRecordsShell } from "./service-records-shell";
 import { ServiceReportsTab } from "./service-reports-tab";
@@ -44,6 +46,19 @@ export function ServiceShell({
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={[{ label: t("breadcrumb.title") }]}
+        // The bike fleet has its own page: its programs and its odometer feed are
+        // different enough that mixing the rows would hide the difference.
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9"
+            onClick={() => router.push("/fleet/service/bikes")}
+          >
+            <Bike className="me-1 h-4 w-4" />
+            {t("bikes.openLink")}
+          </Button>
+        }
         tabs={
           <TabBar
             items={TABS.map((id) => ({ id, label: t(`tabs.${id}`) }))}

@@ -18,6 +18,7 @@ import { requireRider, riderError } from "../core/rider";
 import { riderIsNonOperational } from "../core/operational-sections";
 import { applyAttendanceRollup } from "../core/rollups";
 import { bumpRiderSignal } from "../core/rider-signals";
+import { planVehicleDayDistance, VEHICLE_DAY_DISTANCE } from "../core/vehicle-distance";
 import {
   computeIncentiveAmount,
   ruleMatchesScope,
@@ -1962,6 +1963,41 @@ export async function applyRiderCheckout(args: {
       { merge: true },
     );
   }
+
+  // The bike's daily distance ledger. Keyed by the session, so a retried
+  // checkout cannot count the same kilometres twice, and summed across every
+  // assignment of that vehicle so a bike handed over mid-shift keeps one total.
+  const checkOutVehicleId = asString((driverSnap.data() ?? {})["vehicle_id"]);
+  if (checkOutVehicleId) {
+    try {
+      const plan = await planVehicleDayDistance(db, {
+        vehicleId: checkOutVehicleId,
+        driverId: args.driverId,
+        day: today,
+        sessionId: open?.id ?? `day:${today}`,
+        distanceTodayMeters: numberOrNull(location["distance_today_meters"]) ?? 0,
+      });
+      if (!plan.noop) {
+        batch.set(
+          db.collection(VEHICLE_DAY_DISTANCE).doc(plan.id),
+          {
+            id: plan.id,
+            vehicle_id: plan.vehicleId,
+            day: plan.day,
+            total_meters: plan.totalMeters,
+            by_driver: plan.byDriver,
+            sessions: plan.sessions,
+            gps_ledger_km: Math.round(plan.totalMeters / 1000),
+            updated_at: stamp,
+          },
+          { merge: true },
+        );
+      }
+    } catch {
+      // A ledger miss must never fail a check-out.
+    }
+  }
+
   await batch.commit();
 
   // Step 1 — the phone learns about a checkout it did not perform. Data-only:

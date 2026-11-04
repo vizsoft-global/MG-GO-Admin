@@ -12152,7 +12152,8 @@
         "cancelReason": "سبب الإلغاء",
         "cancelReasonPlaceholder": "لماذا تم إلغاء هذا السجل؟",
         "confirmIntervals": "تأكيد الفترات",
-        "addSchedule": "إضافة جدول"
+        "addSchedule": "إضافة جدول",
+        "importBaseline": "استيراد بيانات الأساس"
       },
       "categories": {
         "engine": "المحرك",
@@ -12256,14 +12257,18 @@
         "scopeLabel": "ينطبق على",
         "scope": {
           "vehicle": "مركبة واحدة",
-          "model": "صنع / طراز"
+          "model": "صنع / طراز",
+          "make_model": "ماركة / موديل",
+          "make": "ماركة",
+          "vehicle_type": "نوع المركبة"
         },
         "makeModel": "الصنع / الطراز",
         "filters": {
           "zone": "المنطقة",
           "type": "نوع المركبة",
           "model": "الطراز",
-          "driver": "السائق"
+          "driver": "السائق",
+          "program": "البرنامج"
         },
         "cols": {
           "plate": "اللوحة",
@@ -12278,7 +12283,8 @@
           "daysSince": "أيام منذ",
           "nextDate": "تاريخ الصيانة القادمة",
           "remainingDays": "الأيام المتبقية",
-          "status": "الحالة"
+          "status": "الحالة",
+          "program": "البرنامج"
         },
         "emptyTitle": "لا مركبات في هذا العرض",
         "emptyHint": "أزل أحد الفلاتر لرؤية بقية الأسطول.",
@@ -12287,14 +12293,57 @@
           "due_soon": "قريب الاستحقاق",
           "due": "مستحق",
           "overdue": "متأخر",
-          "unknown": "غير معروف"
-        }
+          "unknown": "غير معروف",
+          "needs_baseline": "بحاجة إلى إعداد",
+          "not_tracked": "غير متابع",
+          "no_rule": "لا توجد قاعدة"
+        },
+        "program": "البرنامج",
+        "applyTo": "ينطبق على",
+        "rulesTitle": "قواعد الفواصل",
+        "rulesHint": "سطر لكل برنامج ونطاق. القيمة 0 في الكيلومترات أو الأيام تعني أن القاعدة لا تتابع هذا البعد، ويعرض الجدول شرطة بدلًا من تخمين.",
+        "addRuleTitle": "إضافة قاعدة",
+        "activeRule": "مفعّلة",
+        "inactiveRule": "غير مفعّلة",
+        "removeRule": "حذف القاعدة",
+        "makeModelPlaceholder": "مثال: toyota yaris",
+        "zeroMeans": "القيمة 0 في خانة الكيلومترات أو الأيام تعني أن هذا البعد غير متابع.",
+        "setupTitle": "بحاجة إلى إعداد",
+        "setupHint": "للبرنامج قاعدة لكن لا يوجد ما يُحتسب منه. أدخل آخر صيانة، أو ابدأ العد من اليوم، أو حدّد أن البرنامج لا ينطبق.",
+        "setupEnterLast": "إدخال آخر صيانة",
+        "setupStartToday": "بدء المتابعة من اليوم",
+        "setupNotTrackedAction": "غير متابع",
+        "setupNotTracked": "لم يعد {program} متابعًا على هذه المركبة",
+        "setupStarted": "{program} يُحتسب من اليوم",
+        "setupMissingBoth": "لا توجد آخر صيانة إطلاقًا",
+        "setupMissingKm": "لا توجد كيلومترات لآخر صيانة",
+        "setupMissingDate": "لا يوجد تاريخ لآخر صيانة",
+        "baselineSaved": "تم حفظ آخر صيانة لـ {program}",
+        "baselineHelp": "أدخل آخر {program} تم على {plate}. تكفي الكيلومترات أو التاريخ.",
+        "baselineDate": "تاريخ الصيانة",
+        "baselineKm": "الكيلومترات عند تلك الصيانة",
+        "baselineKmHint": "إذا تُركت فارغة يبقى بُعد الكيلومترات في انتظار قراءة.",
+        "odometerTitle": "بحاجة إلى عدّاد",
+        "odometerHint": "الكيلومترات تحدد هذه البرامج لكن المركبة بلا قراءة محفوظة. تحديث العدّاد هو التصحيح حتى يسجّل تطبيق السائق قراءة عند الخروج.",
+        "vehicleTypes": {
+          "car": "سيارة",
+          "bike": "دراجة"
+        },
+        "noRuleTitle": "لا توجد قاعدة فواصل",
+        "noRuleHint": "هذه المركبات على البرنامج لكن لا تغطيها أي قاعدة معتمدة. أضف قاعدة — لا يُخمَّن أي رقم من قيمة افتراضية.",
+        "noRuleCount": "{count} مركبة",
+        "setupAddRule": "إضافة قاعدة",
+        "setupMissingRule": "لا يوجد فاصل معتمد"
       },
       "odometer": {
         "title": "تحديث العداد",
         "placeholder": "القراءة بالكيلومتر",
         "unknown": "لا يوجد عداد مخزّن لهذه المركبة بعد.",
-        "current": "القراءة المخزنة: {km} كم"
+        "current": "القراءة المخزنة: {km} كم",
+        "loweringWarning": "هذا يخفض القراءة من {km} كم إلى {next} كم.",
+        "reason": "السبب",
+        "reasonPlaceholder": "مثال: استبدال العدّاد، أو الرقم السابق كان خطأ",
+        "reasonHint": "مطلوب. يُحفظ مع القراءة وفي سجل التدقيق."
       },
       "errors": {
         "notAuthorized": "لا تملك صلاحية لهذا الإجراء.",
@@ -12314,8 +12363,97 @@
         "noteRequired": "يلزم سبب لإلغاء السجل.",
         "recordLocked": "لا يمكن تعديل السجل المنتهي أو الملغي؛ سجّل سجلاً جديداً.",
         "notFound": "السجل غير موجود.",
-        "saveFailed": "حدث خطأ. حاول مرة أخرى."
-      }
+        "saveFailed": "حدث خطأ. حاول مرة أخرى.",
+        "missingMake": "اختر ماركة.",
+        "missingVehicleType": "اختر نوع مركبة.",
+        "missingProgram": "اختر برنامجًا.",
+        "emptyFile": "الملف لا يحتوي على سطور.",
+        "invalidBaseUrl": "أدخل رابطًا أساسيًا كاملًا يبدأ بـ http(s).",
+        "httpError": "أعاد الطرف الآخر خطأ.",
+        "notJson": "لم يُعِد الطرف الآخر JSON.",
+        "requestFailed": "تعذّر إكمال الطلب.",
+        "reasonRequired": "السبب مطلوب لخفض قراءة العدّاد.",
+        "secretMissing": "سر المورد غير مهيأ على الخادم."
+      },
+      "bikes": {
+        "openLink": "صيانة الدراجات",
+        "title": "صيانة الدراجات",
+        "subtitle": "الزيت والفرامل والسلسلة لأسطول الدراجات، مع مسافة اليوم من سجل الخروج الخاص بنا.",
+        "backToCars": "السيارات",
+        "colInterval": "الفاصل",
+        "colToday": "اليوم",
+        "noDistance": "لا مسافة اليوم",
+        "days": "يوم",
+        "phaseTwoNote": "سجلات الدراجات تُدخل عبر استيراد Excel/CSV والإدخال اليدوي. القراءة المباشرة من Bajaj Care تكامل منفصل في المرحلة الثانية.",
+        "emptyTitle": "لا دراجات في هذا العرض",
+        "emptyHint": "تظهر الدراجات هنا بعد إضافتها إلى الأسطول بنوع مركبة دراجة.",
+        "importTitle": "استيراد سجلات الدراجات",
+        "importHint": "الأعمدة: اللوحة، تاريخ الصيانة، نوع الصيانة، العدّاد، التكلفة، المورد، رقم الفاتورة، ملاحظات. لوحات السيارات تُرفض ولا تُنقل.",
+        "addRecord": "سجل دراجة جديد"
+      },
+      "import": {
+        "parseFailed": "تعذّرت قراءة هذا الملف كجدول.",
+        "downloadTemplate": "تنزيل نموذج",
+        "baselineHint": "ارفع ملف السيارات الخاص بالعميل. تتم مطابقة كل سطر على اللوحة ثم على الشاسيه قبل إنشاء أي شيء، لذا إعادة الاستيراد لا تنشئ شيئًا جديدًا.",
+        "groupPlate": "مطابقة باللوحة",
+        "groupChassis": "مطابقة بالشاسيه",
+        "groupCreate": "مركبة جديدة",
+        "groupReject": "مرفوض",
+        "colRow": "السطر",
+        "colModel": "الموديل",
+        "colGroup": "النتيجة",
+        "colNote": "ملاحظة",
+        "apply": "تطبيق",
+        "toCreate": "للإنشاء",
+        "baselineApplied": "{matched} مطابقة · {created} مركبة أُنشئت",
+        "baselineResult": "مطابقة باللوحة {plate} · بالشاسيه {chassis} · أُنشئت {created} · مرفوضة {rejected} · سجلات الصيانة {records}",
+        "nextKmMismatch": "{count} سطرًا يخالف الفاصل المعتمد. يُذكر Next Km ولا يُعتمد.",
+        "bikeApplied": "تم حفظ {created} سجل صيانة دراجة",
+        "bikeResult": "تم حفظ {created} سجلًا · رُفض {rejected} سطرًا",
+        "notes": {
+          "missing_plate": "لا توجد لوحة في السطر",
+          "plate_in_fleet": "الشاسيه مطابق تحت لوحة أخرى",
+          "next_km_expected": "Next Km يخالف الفاصل المعتمد",
+          "duplicate_plate": "لوحة مكررة في الملف",
+          "duplicate_chassis": "شاسيه مكرر في الملف",
+          "current_km_below_last_service": "القراءة الحالية أقل من رقم آخر صيانة"
+        },
+        "problems": {
+          "missing_plate": "لا توجد لوحة",
+          "not_a_bike": "هذه اللوحة لسيارة",
+          "unknown_service_type": "نوع الصيانة ليس زيتًا أو فرامل أو سلسلة",
+          "invalid_date": "تاريخ غير صالح أو مفقود",
+          "future_date": "التاريخ في المستقبل",
+          "unknown_plate": "لا توجد دراجة بهذه اللوحة"
+        },
+        "kmBelowService": "{count} سطرًا محظورًا: القراءة الحالية أقل من رقم آخر صيانة. صحّح الملف ثم أعد الاستيراد."
+      },
+      "odometerSync": {
+        "title": "عدّاد الكاميرا",
+        "hint": "يُضبط مصدر الكاميرا هنا لأن مواصفات المورد المنشورة لا يمكن قراءتها من شبكتنا. املأ المسارات واضغط اختبار الاتصال واقرأ أول سطر يعود.",
+        "enabled": "المزامنة مفعّلة",
+        "disabled": "المزامنة متوقفة",
+        "cadence": "تعمل 00:00 / 06:00 / 12:00 / 18:00 بتوقيت الكويت",
+        "lastRun": "آخر تشغيل {at}",
+        "baseUrl": "الرابط الأساسي",
+        "authMode": "المصادقة",
+        "modeHeaders": "ترويسات AppCid / AppSecret",
+        "modeLogin": "تسجيل الدخول أولًا",
+        "appCid": "AppCid",
+        "appSecret": "AppSecret",
+        "vehiclesPath": "مسار المركبات",
+        "odometerField": "حقل العدّاد",
+        "plateField": "حقل اللوحة",
+        "chassisField": "حقل الشاسيه",
+        "test": "اختبار الاتصال",
+        "testHint": "اختبار الاتصال ينادي المسار المضبوط ويعرض أول سطر خام.",
+        "testOk": "HTTP {status} · {rows} سطرًا",
+        "testFailed": "{code}: {message}",
+        "secretPresent": "السر مهيأ",
+        "secretMissing": "السر مفقود",
+        "secretHint": "SERVICE_ODOMETER_APP_SECRET في Secret Manager / بيئة Vercel — لا يُخزَّن هنا."
+      },
+      "odometerSavedLowered": "تم خفض العدّاد إلى {km} كم وتسجيله"
     },
     "fleetHandover": {
       "breadcrumb": "التسليم",
