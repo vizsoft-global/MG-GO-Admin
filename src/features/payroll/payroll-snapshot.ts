@@ -45,7 +45,8 @@ import {
   type ZoneCategory,
 } from "./payroll-rules-engine";
 import { categoryForZone } from "./payroll-zone-metrics";
-import { aoShownOrders, foldPayrollDayOrders, lookupReconOrders } from "./payroll-orders-display";
+import { foldPayrollDayOrders, lookupReconOrders } from "./payroll-orders-display";
+import { hoursForRules, viewOfProjectKey } from "./payroll-projects";
 import type {
   OffStructureSource,
   PayrollAdjustmentCell,
@@ -121,6 +122,13 @@ export type RawPayrollCover = {
   date: string;
   cover: "off" | "sick" | "accident";
   approved: boolean;
+};
+
+/** Hours Operations loaded for a Keeta / Five Guys rider-day. */
+export type RawPayrollDayHours = {
+  driverId: string;
+  date: string;
+  hours: number;
 };
 
 export type RawPayrollAdjustment = {
@@ -206,10 +214,11 @@ export function buildPayrollOptions(roster: readonly RawPayrollDriver[]): Payrol
 type RawDayRow = {
   d: string;
   h: number | string | null;
+  /** Hours Operations loaded for a Keeta / Five Guys day. `null` = not loaded. */
+  wh?: number | string | null;
   o: number | string | null;
   /** Display-only completed orders when recon is missing. */
-  do?: number | string | null;
-  /** Manual order override. Null when recon / verified still apply. `0` is a real correction. */
+  do?: number | string | null;  /** Manual order override. Null when recon / verified still apply. `0` is a real correction. */
   mo?: number | string | null;
   /** Operations cover on the date, from a request. */
   c: string | null;
@@ -377,7 +386,12 @@ export function parseAdjustmentStatus(raw: unknown): AdjustmentStatus | null {
 
 type DayFactsInput = {
   date: string;
+  /** Hours the rules are judged on: attendance for Americana, uploaded otherwise. */
   loggedHours: number;
+  /** The attendance figure, kept for the Application Attendance view. */
+  attendanceHours?: number;
+  /** Hours Operations loaded for a Keeta / Five Guys day, or null when none. */
+  workingHours?: number | null;
   /** Display-only elapsed hours for a still-open log (today). */
   elapsedHours?: number;
   orders: number;
@@ -443,7 +457,9 @@ function dayInfoFrom(
       orders: facts.orders,
       displayOrders: facts.displayOrders ?? facts.orders,
       ordersOverridden: facts.ordersOverridden,
-      loggedHours: Math.round(facts.loggedHours * 100) / 100,
+      loggedHours: Math.round((facts.attendanceHours ?? facts.loggedHours) * 100) / 100,
+      workingHours: facts.workingHours ?? null,
+      workingHoursOverridden: facts.workingHours != null,
       source: outcome.source,
       ruleLabel: outcome.ruleLabel,
       adjusted: outcome.adjusted,
@@ -482,6 +498,8 @@ export function assemblePayrollSnapshot(input: {
   orders?: RawPayrollOrders[];
   covers?: RawPayrollCover[];
   adjustments?: RawPayrollAdjustment[];
+  /** Hours Operations loaded for Keeta / Five Guys days. */
+  dayHours?: RawPayrollDayHours[];
   clients?: PayrollClientConfig[];
   rules?: PayrollRule[];
   zoneMetrics?: PayrollZoneMetricRow[];
@@ -550,6 +568,17 @@ export function assemblePayrollSnapshot(input: {
     const existing = perDate.get(row.date);
     if (!existing || adjustmentIsNewer(row, existing)) perDate.set(row.date, row);
     adjustmentByDriver.set(row.driverId, perDate);
+  }
+
+  // Loaded hours, one figure per rider-day. `0` is a value, so presence of the
+  // row decides "loaded"; a missing row is "not loaded yet", which the Keeta and
+  // Five Guys cells print as `–` rather than a zero that looks like a worked day
+  // with no length.
+  const loadedHoursByKey = new Map<string, number>();
+  for (const row of input.dayHours ?? []) {
+    if (!rosterIds.has(row.driverId)) continue;
+    if (!Number.isFinite(row.hours)) continue;
+    loadedHoursByKey.set(`${row.driverId}|${row.date}`, row.hours);
   }
 
   const offByDriver = new Map<string, RawOffStructure>();
@@ -635,6 +664,10 @@ export function assemblePayrollSnapshot(input: {
       const hoursByDate = hoursByDriver.get(r.id);
       const client = r.projectKey ? (clientByKey.get(r.projectKey) ?? null) : null;
       const rules = rulesForClient(input.rules ?? [], client?.key ?? null);
+      // Which day shape this rider is priced on. An unset project keeps the
+      // Americana behaviour it has always had here; the AO tab is the one place
+      // that refuses to guess a card for it.
+      const projectView = viewOfProjectKey(r.projectKey) ?? "americana";
       const { zoneId, zoneName } = payrollZoneFor(r, zoneNames);
       const zoneCategory = categoryForZone(zoneMetrics, zoneId);
       const metric = zoneId ? zoneMetrics.find((m) => m.zoneId === zoneId) ?? null : null;
@@ -675,9 +708,15 @@ export function assemblePayrollSnapshot(input: {
                 ? Boolean(flags?.approvedOff)
                 : false;
 
+        const uploadedHours = loadedHoursByKey.get(`${r.id}|${date}`) ?? null;
         const facts: DayFactsInput = {
           date,
-          loggedHours: logged,
+          // The rules price what the project pays for. Keeta / Five Guys pay the
+          // hours Operations loaded; Americana keeps the attendance clock, which is
+          // why that project's figures cannot move from this change.
+          loggedHours: hoursForRules(projectView, logged, uploadedHours),
+          attendanceHours: logged,
+          workingHours: uploadedHours,
           orders: reconOrders(date),
           cover,
           coverApproved,
@@ -879,6 +918,8 @@ function blankDayInfo(date: string): PayrollDayInfo {
     date,
     orders: 0,
     loggedHours: 0,
+    workingHours: null,
+    workingHoursOverridden: false,
     source: "future",
     ruleLabel: null,
     adjusted: false,
@@ -1046,13 +1087,19 @@ export function snapshotFromRpc(
 
     for (const day of row.days ?? []) {
       const logged = num(day.h);
+      const uploadedHours = day.wh == null ? null : num(day.wh);
+      const projectView = viewOfProjectKey(row.projectKey) ?? "americana";
       const cover =
         day.c === "off" || day.c === "sick" || day.c === "accident" ? day.c : null;
       const adjustmentStatus = parseAdjustmentStatus(day.x);
       const counted = foldPayrollDayOrders(day);
       const facts: DayFactsInput = {
         date: String(day.d),
-        loggedHours: logged,
+        // Same rule as the local assembly: Keeta / Five Guys are judged on the
+        // hours Operations loaded, everything else on the attendance clock.
+        loggedHours: hoursForRules(projectView, logged, uploadedHours),
+        attendanceHours: logged,
+        workingHours: uploadedHours,
         elapsedHours:
           openElapsed && String(day.d) === today
             ? openElapsed.get(row.driverId)

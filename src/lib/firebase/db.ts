@@ -67,6 +67,8 @@ export const COLLECTIONS = {
   restaurantGeofences: "restaurant_geofences",
   payrollClients: "payroll_clients",
   payrollClientRules: "payroll_client_rules",
+  /** `{driverId}_{YYYY-MM-DD}` — hours loaded for a Keeta / Five Guys day. */
+  payrollDayHours: "payroll_day_hours",
   payrollZoneMetrics: "payroll_zone_metrics",
   payrollZoneSettings: "payroll_zone_settings",
   payrollManualAdjustments: "payroll_manual_adjustments",
@@ -141,8 +143,16 @@ export const COLLECTIONS = {
    * field contract. Reads: `/fleet/accident` and the vehicle detail Accident tab.
    */
   vehicleAccidents: "vehicle_accidents",
-  /** Preventive-maintenance rules, per vehicle or per make/model. */
+  /** Preventive-maintenance rules, per vehicle / make / make-model / vehicle type. */
   vehicleMaintenanceSchedules: "vehicle_maintenance_schedules",
+  /** `{vehicleId}_{programKey}` — a program the fleet team opted this vehicle out of. */
+  vehicleMaintenanceExclusions: "vehicle_maintenance_exclusions",
+  /** `{vehicleId}_{programKey}` — a next-service point the fleet team set by hand. */
+  vehicleMaintenanceOverrides: "vehicle_maintenance_overrides",
+  /** `{vehicleId}_{day}` — the bike's daily distance ledger behind the odometer. */
+  vehicleDayDistance: "vehicle_day_distance",
+  /** The single `current` doc holding the dashcam odometer feed configuration. */
+  serviceOdometerSync: "service_odometer_sync",
   /** The single `current` doc holding the (provisional) fleet-default intervals. */
   serviceMaintenanceSettings: "service_maintenance_settings",
   menuConfigs: "menu_configs",

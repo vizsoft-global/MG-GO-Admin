@@ -38,6 +38,7 @@ import {
   type ServiceCategoryKey,
 } from "./service-types";
 import { upsertServiceType } from "./service-types-actions";
+import { isScheduledProgramKey } from "./service-programs";
 import { serviceErrorKey } from "./use-service";
 import type { ServiceTypeRow } from "./types";
 
@@ -62,8 +63,12 @@ export function ServiceTypesPanel({
   const [category, setCategory] = useState<ServiceCategoryKey>("other");
   const [sortOrder, setSortOrder] = useState("100");
   const [active, setActive] = useState(true);
+  const [tracks, setTracks] = useState(false);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
+  // The five programs the client approved cannot be un-scheduled from this page;
+  // the action pins them on as well, so this is only the UI's half of the rule.
+  const curatedKey = isScheduledProgramKey(editing?.key ?? key);
 
   const rows = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -87,13 +92,13 @@ export function ServiceTypesPanel({
     setCategory("other");
     setSortOrder("100");
     setActive(true);
+    setTracks(false);
   }
 
   function startAdd() {
     reset();
     setOpen(true);
   }
-
   function startEdit(row: ServiceTypeRow) {
     setEditing(row);
     setKey(row.key);
@@ -102,12 +107,12 @@ export function ServiceTypesPanel({
     setCategory(row.category);
     setSortOrder(String(row.sort_order || 100));
     setActive(row.is_active);
+    setTracks(row.tracks_maintenance);
     setOpen(true);
   }
 
   async function save() {
-    const resolvedKey = editing ? editing.key : serviceTypeKey(labelEn || key);
-    if (!SERVICE_TYPE_KEY_RE.test(resolvedKey)) {
+    const resolvedKey = editing ? editing.key : serviceTypeKey(labelEn || key);    if (!SERVICE_TYPE_KEY_RE.test(resolvedKey)) {
       toast.error(t("errors.invalid_key"));
       return;
     }
@@ -123,6 +128,7 @@ export function ServiceTypesPanel({
       category,
       isActive: active,
       sortOrder: Number(sortOrder || 100),
+      tracksMaintenance: tracks,
     });
     setSaving(false);
     if ("error" in result) {
@@ -182,6 +188,7 @@ export function ServiceTypesPanel({
                 <TableHead className={TABLE_HEAD_CLASS}>{t("labelAr")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("category")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("records")}</TableHead>
+                <TableHead className={TABLE_HEAD_CLASS}>{t("colScheduled")}</TableHead>
                 <TableHead className={TABLE_HEAD_CLASS}>{t("colActive")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -194,6 +201,13 @@ export function ServiceTypesPanel({
                   <TableCell className="text-xs">{tCat(row.category)}</TableCell>
                   <TableCell className="tabular-nums">{usage[row.key] ?? 0}</TableCell>
                   <TableCell>
+                    <Switch
+                      checked={row.tracks_maintenance}
+                      disabled
+                      aria-label={t("colScheduled")}
+                    />
+                  </TableCell>
+                  <TableCell>
                     <Switch checked={row.is_active} disabled aria-label={t("colActive")} />
                   </TableCell>
                 </TableRow>
@@ -201,7 +215,7 @@ export function ServiceTypesPanel({
               {rows.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
                     {query ? t("noMatches") : t("empty")}
@@ -296,6 +310,20 @@ export function ServiceTypesPanel({
                 <p className="text-xs leading-4 text-muted-foreground">{t("activeHint")}</p>
               </div>
               <Switch id="st-active" checked={active} onCheckedChange={setActive} />
+            </div>
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="st-tracks">{t("tracksMaintenance")}</Label>
+                <p className="text-xs leading-4 text-muted-foreground">
+                  {curatedKey ? t("tracksLocked") : t("tracksHint")}
+                </p>
+              </div>
+              <Switch
+                id="st-tracks"
+                checked={curatedKey ? true : tracks}
+                disabled={curatedKey}
+                onCheckedChange={setTracks}
+              />
             </div>
           </div>
           <AppModalFooter title={editing ? t("edit") : t("add")} subtitle={t("title")}>

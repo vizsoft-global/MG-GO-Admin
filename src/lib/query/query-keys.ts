@@ -185,9 +185,15 @@ export const queryKeys = {
     types: () => ["service", "types"] as const,
     typeUsage: () => ["service", "type-usage"] as const,
     reports: () => ["service", "reports"] as const,
-    maintenance: () => ["service", "maintenance"] as const,
+    /**
+     * Preventive maintenance is read per vehicle type: the cars tab and the bike
+     * page are different lists, and a bike edit must not blank the car table.
+     */
+    maintenance: (scope: "all" | "car" | "bike" = "all") =>
+      ["service", "maintenance", scope] as const,
     schedules: () => ["service", "schedules"] as const,
     models: () => ["service", "models"] as const,
+    odometerSync: () => ["service", "odometer-sync"] as const,
   },
   fuel: {
     all: () => ["fuel"] as const,

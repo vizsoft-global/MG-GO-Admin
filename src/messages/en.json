@@ -4262,7 +4262,8 @@
           "not_authorized": "You do not have permission to manage vehicles.",
           "invalid_company_key": "Use a short key of letters, numbers, or underscore.",
           "invalid_company_label": "English name is required.",
-          "save_failed": "Could not save the company."
+          "save_failed": "Could not save the company.",
+          "company_exists": "A company with this name already exists. Try a different name."
         }
       },
       "addVehicle": "Add Vehicle",
@@ -9726,7 +9727,11 @@
         "errors": {
           "invalid_key": "The key may only use lowercase letters, digits and underscores.",
           "missing_fields": "An English label is required."
-        }
+        },
+        "colScheduled": "Scheduled",
+        "tracksMaintenance": "Maintenance program",
+        "tracksHint": "On: this service gets an interval rule and a row on the maintenance tab. Off: it is a cost line only.",
+        "tracksLocked": "One of the five approved programs. It always stays scheduled; turn off its interval rule instead."
       }
     },
     "auditLogs": {
@@ -10619,7 +10624,8 @@
         "original": "Original (system)",
         "adjusted": "Adjusted",
         "reason": "Reason",
-        "empty": "No manual changes in this range."
+        "empty": "No manual changes in this range.",
+        "hintProject": "Every edit and upload for {project} is kept with user, date, time, old value, new value and reason. Read-only."
       },
       "ao": {
         "bannerTitle": "Payroll attendance and orders.",
@@ -10628,7 +10634,24 @@
         "ordersColumn": "Orders · day {day}",
         "payrollShort": "Payroll",
         "ordersShort": "Orders",
-        "footNote": "Payroll cells are editable. Orders stay read-only. A reason is required for every change."
+        "footNote": "Payroll cells are editable. Orders stay read-only. A reason is required for every change.",
+        "workingHoursShort": "Working hours",
+        "hoursShort": "Hours",
+        "workingHoursColumn": "Working hours · {day}",
+        "workedDaysShort": "Worked days",
+        "totalHoursShort": "Total hours",
+        "totalOrdersShort": "Total orders",
+        "kpiRiders": "Riders in payroll",
+        "kpiActive": "Total active riders",
+        "kpiOrders": "Total orders",
+        "kpiHours": "Total hours",
+        "kpiAvgOrders": "Avg orders per worked day",
+        "kpiAvgHours": "Avg hours per worked day",
+        "banner": {
+          "americana": "each day carries two figures: the credited Payroll day the rules produced and the reconciled Orders count behind it. Payroll cells are editable, Orders stay read-only.",
+          "keeta": "each day carries the credited Payroll day and the Working hours loaded for that day. Working hours replace Orders: they are uploaded daily and stay read-only. Payroll cells are editable, with a reason.",
+          "five_guys": "each day carries only the number of hours worked, nothing else. Hours are uploaded daily and can be edited with a reason."
+        }
       },
       "headings": {
         "columns": "Columns",
@@ -10890,7 +10913,59 @@
         "unexcused": "Unexcused Absence",
         "lessHours": "Less Hours",
         "lessOrders": "Less Orders"
-      }
+      },
+      "projects": {
+        "americana": "Americana",
+        "americanaSubtitle": "Payroll + Orders · own payroll and report",
+        "keeta": "Keeta",
+        "keetaSubtitle": "Payroll + Working hours · own payroll and report",
+        "fiveGuys": "Five Guys",
+        "fiveGuysSubtitle": "Hours only · own payroll and report",
+        "unassigned": "{count} riders have no project and are not shown on any card. Set their project on the employee record."
+      },
+      "upload": {
+        "open": "Upload daily {figure}",
+        "title": "Upload daily data · {project}",
+        "hint": "One CSV per project. Rows for riders of another project are rejected, so each project keeps its own data. Accepted rows are written to the manual changes record with the reason Daily upload.",
+        "chooseFile": "Choose CSV",
+        "downloadTemplate": "Download template",
+        "shape": "Columns: MG ID, Date, {value}. The date must be in this month and not in the future.",
+        "ordersColumn": "Orders",
+        "hoursColumn": "Hours",
+        "colLine": "Row",
+        "colId": "MG ID",
+        "colReason": "Reason",
+        "footerTitle": "Upload daily data",
+        "footerHint": "Nothing is written until you apply.",
+        "apply": "Apply {count} rows",
+        "applied": "{count} rows loaded.",
+        "partlyRejected": "{count} rows were rejected by the server.",
+        "failed": "The upload failed.",
+        "cancel": "Cancel",
+        "rejects": {
+          "row_missing_id": "No MG ID on this row.",
+          "row_unknown_id": "No rider with this MG ID.",
+          "row_other_project": "This rider belongs to another project.",
+          "row_invalid_date": "The date is not a valid day.",
+          "row_outside_month": "The date is outside the selected month.",
+          "row_future_date": "The date is in the future.",
+          "row_invalid_value": "The figure is not a number in range.",
+          "row_duplicate": "This rider and date already appear in the file."
+        }
+      },
+      "hoursEdit": {
+        "title": "Edit hours",
+        "hours": "Hours worked",
+        "placeholder": "Hours, e.g. 9.5",
+        "hint": "Zero to 24. Today is {today}; a future day is refused.",
+        "reason": "Reason (required)",
+        "reasonPlaceholder": "Why is this figure being changed?",
+        "saved": "Hours saved for {day}.",
+        "failed": "The hours could not be saved.",
+        "save": "Save",
+        "cancel": "Cancel"
+      },
+      "exportProject": "Export {project} report"
     },
     "performance": {
       "title": "Performance",
@@ -12126,7 +12201,8 @@
         "company": "Company",
         "cost": "Cost (KWD)",
         "odometer": "Odometer (km)",
-        "stage": "Stage"
+        "stage": "Stage",
+        "employeeId": "Employee ID"
       },
       "filters": {
         "from": "From",
@@ -12151,7 +12227,8 @@
         "cancelReason": "Reason for cancelling",
         "cancelReasonPlaceholder": "Why is this record cancelled?",
         "confirmIntervals": "Confirm intervals",
-        "addSchedule": "Add schedule"
+        "addSchedule": "Add schedule",
+        "importBaseline": "Import baseline"
       },
       "categories": {
         "engine": "Engine",
@@ -12171,7 +12248,7 @@
         "titleNew": "New service record",
         "titleEdit": "Edit service record",
         "subtitleNew": "Log a workshop visit. The record starts as New.",
-        "subtitleEdit": "Only an open record can be edited; Done and Cancelled are final.",
+        "subtitleEdit": "Correct any record, including one already marked Done.",
         "footerHint": "Marking the record Done is what advances the vehicle odometer.",
         "sectionService": "Service",
         "sectionInvoice": "Invoice & vendor",
@@ -12197,7 +12274,16 @@
         "partUnit": "Unit (KWD)",
         "partTotal": "Total (KWD)",
         "addPart": "Add part",
-        "removePart": "Remove part"
+        "removePart": "Remove part",
+        "employeeId": "Employee ID",
+        "noEmployeeId": "No employee linked",
+        "employeeIdHint": "Read from the linked employee record.",
+        "sectionAttachments": "Attachments",
+        "attachmentsHint": "Invoices, receipts and photos",
+        "companyAutoHint": "Taken from the employee record.",
+        "companyHint": "Used only when no employee is linked.",
+        "costFromParts": "Total cost is the sum of the spare parts above.",
+        "costNoPartsHint": "Used until a spare part is added; after that the parts decide."
       },
       "detail": {
         "summary": "Record",
@@ -12210,7 +12296,10 @@
         "partsTotal": "Parts total: {total} KWD",
         "noParts": "No spare parts on this record.",
         "history": "Stage history",
-        "noHistory": "No stage history yet."
+        "noHistory": "No stage history yet.",
+        "employeeId": "Employee ID",
+        "attachments": "Attachments",
+        "attachmentsHint": "Invoices, receipts or photos filed with this visit."
       },
       "reports": {
         "loading": "Loading…",
@@ -12255,14 +12344,18 @@
         "scopeLabel": "Applies to",
         "scope": {
           "vehicle": "One vehicle",
-          "model": "A make / model"
+          "model": "A make / model",
+          "make_model": "A make / model",
+          "make": "A make",
+          "vehicle_type": "A vehicle type"
         },
         "makeModel": "Make / model",
         "filters": {
           "zone": "Zone",
           "type": "Vehicle type",
           "model": "Model",
-          "driver": "Driver"
+          "driver": "Driver",
+          "program": "Program"
         },
         "cols": {
           "plate": "Plate",
@@ -12277,7 +12370,8 @@
           "daysSince": "Days since",
           "nextDate": "Next service date",
           "remainingDays": "Remaining days",
-          "status": "Status"
+          "status": "Status",
+          "program": "Program"
         },
         "emptyTitle": "No vehicles in this view",
         "emptyHint": "Clear a filter to see the rest of the fleet.",
@@ -12286,14 +12380,69 @@
           "due_soon": "Due soon",
           "due": "Due",
           "overdue": "Overdue",
-          "unknown": "Unknown"
-        }
+          "unknown": "Unknown",
+          "needs_baseline": "Needs setup",
+          "not_tracked": "Not tracked",
+          "no_rule": "No rule"
+        },
+        "program": "Program",
+        "applyTo": "Applies to",
+        "rulesTitle": "Interval rules",
+        "rulesHint": "One row per program and scope. Kilometres or days of 0 mean the rule does not track that dimension, and the table prints a dash instead of a guess.",
+        "addRuleTitle": "Add a rule",
+        "activeRule": "Active",
+        "inactiveRule": "Inactive",
+        "removeRule": "Remove rule",
+        "makeModelPlaceholder": "e.g. toyota yaris",
+        "zeroMeans": "0 in a kilometre or day cell means that dimension is not tracked.",
+        "setupTitle": "Needs setup",
+        "setupHint": "A program has a rule but nothing to count from. Enter the last service, start the clock today, or say it does not apply.",
+        "setupEnterLast": "Enter last service",
+        "setupStartToday": "Start monitoring from today",
+        "setupNotTrackedAction": "Not tracked",
+        "setupNotTracked": "{program} is no longer tracked on this vehicle",
+        "setupStarted": "{program} now counts from today",
+        "setupMissingBoth": "no last service at all",
+        "setupMissingKm": "no last service kilometres",
+        "setupMissingDate": "no last service date",
+        "baselineSaved": "Last service saved for {program}",
+        "baselineHelp": "Enter the last {program} performed on {plate}. A kilometre or a date is enough.",
+        "baselineDate": "Service date",
+        "baselineKm": "Kilometres at that service",
+        "baselineKmHint": "Left blank, the kilometre dimension stays waiting for a reading.",
+        "odometerTitle": "Needs odometer",
+        "odometerHint": "Kilometres decide these programs but the vehicle has no stored reading. Update odometer is the correction until the rider app captures a shift-out figure.",
+        "vehicleTypes": {
+          "car": "Car",
+          "bike": "Bike"
+        },
+        "noRuleTitle": "No interval rule",
+        "noRuleHint": "These vehicles are on the program but no approved interval covers them. Add a rule — nothing is guessed from a default.",
+        "noRuleCount": "{count} vehicles",
+        "setupAddRule": "Add rule",
+        "setupMissingRule": "no approved interval",
+        "setNextDue": "Next service",
+        "nextDueKm": "Next service KM",
+        "nextDueKmPlaceholder": "Leave blank to keep the interval",
+        "nextDueDate": "Next service date",
+        "nextDueHint": "Leave a field blank to keep that dimension on the interval rule.",
+        "derivedKm": "From the interval",
+        "derivedDate": "From the interval",
+        "overriddenTag": "set by hand",
+        "lastServiceOn": "last service {day}",
+        "nextDueSaved": "Next service for {program} saved.",
+        "nextDueCleared": "Next service for {program} is back on the interval.",
+        "clearOverride": "Back to interval"
       },
       "odometer": {
         "title": "Update odometer",
         "placeholder": "Reading in km",
         "unknown": "No odometer is stored for this vehicle yet.",
-        "current": "Stored reading: {km} km"
+        "current": "Stored reading: {km} km",
+        "loweringWarning": "This lowers the reading from {km} km to {next} km.",
+        "reason": "Reason",
+        "reasonPlaceholder": "e.g. meter replaced, previous figure was a typo",
+        "reasonHint": "Required. It is stored on the reading and in the audit log."
       },
       "errors": {
         "notAuthorized": "You do not have permission for this.",
@@ -12311,9 +12460,129 @@
         "odometerBelowCurrent": "A reading below the stored {km} km is refused. Correct the number or the vehicle record.",
         "invalidTransition": "That stage change is not allowed.",
         "noteRequired": "A reason is required to cancel a record.",
-        "recordLocked": "Done and Cancelled records cannot be edited; log a new record instead.",
+        "recordLocked": "This record can no longer be edited.",
         "notFound": "Record not found.",
-        "saveFailed": "Something went wrong. Please try again."
+        "saveFailed": "Something went wrong. Please try again.",
+        "missingMake": "Choose a make.",
+        "missingVehicleType": "Choose a vehicle type.",
+        "missingProgram": "Choose a program.",
+        "emptyFile": "The file has no rows.",
+        "invalidBaseUrl": "Enter a full http(s) base URL.",
+        "httpError": "The endpoint answered with an error.",
+        "notJson": "The endpoint did not answer with JSON.",
+        "requestFailed": "The request could not be completed.",
+        "reasonRequired": "A reason is required to lower an odometer reading.",
+        "secretMissing": "The vendor secret is not configured on the server.",
+        "too_many_attachments": "This record already holds the maximum number of files.",
+        "file_empty": "That file is empty.",
+        "file_too_large": "The file is too large.",
+        "invalid_content_type": "Only images and PDF files can be attached.",
+        "upload_failed": "The file could not be uploaded.",
+        "invalid_attachment": "That attachment is not valid.",
+        "foreign_attachment": "An attachment must belong to this vehicle.",
+        "tooManyAttachments": "This record already holds the maximum number of files.",
+        "fileEmpty": "That file is empty.",
+        "fileTooLarge": "The file is too large.",
+        "invalidContentType": "Only images and PDF files can be attached.",
+        "uploadFailed": "The file could not be uploaded.",
+        "invalidAttachment": "That attachment is not valid.",
+        "foreignAttachment": "An attachment must belong to this vehicle."
+      },
+      "bikes": {
+        "openLink": "Bike maintenance",
+        "title": "Bike maintenance",
+        "subtitle": "Oil, brakes and chain on the bike fleet, with today's distance from our own shift-out ledger.",
+        "backToCars": "Cars",
+        "colInterval": "Interval",
+        "colToday": "Today",
+        "noDistance": "No distance today",
+        "days": "days",
+        "phaseTwoNote": "Bike records arrive through Excel/CSV import and manual entry. Reading them directly from Bajaj Care is a separate Phase 2 integration.",
+        "emptyTitle": "No bikes in this view",
+        "emptyHint": "Bikes appear here once they are in the fleet with a vehicle type of bike.",
+        "importTitle": "Import bike records",
+        "importHint": "Columns: plate, service date, service type, odometer, cost, vendor, invoice no, notes. Car plates in the sheet are rejected, not re-filed.",
+        "addRecord": "New bike record"
+      },
+      "import": {
+        "parseFailed": "That file could not be read as a sheet.",
+        "downloadTemplate": "Download sample",
+        "baselineHint": "Upload the client's car sheet. Every row is matched on plate and then on chassis before anything is created, so re-importing the same sheet creates nothing new.",
+        "groupPlate": "Match by plate",
+        "groupChassis": "Match by chassis",
+        "groupCreate": "New vehicle",
+        "groupReject": "Rejected",
+        "colRow": "Row",
+        "colModel": "Model",
+        "colGroup": "Result",
+        "colNote": "Note",
+        "apply": "Apply",
+        "toCreate": "To create",
+        "baselineApplied": "{matched} matched Â· {created} vehicles created",
+        "baselineResult": "Matched by plate {plate} Â· by chassis {chassis} Â· created {created} Â· rejected {rejected} Â· service records {records}",
+        "nextKmMismatch": "{count} rows disagree with the approved interval. Their Next Km is reported, not trusted.",
+        "bikeApplied": "{created} bike service records saved",
+        "bikeResult": "{created} records saved Â· {rejected} rows rejected",
+        "notes": {
+          "missing_plate": "No plate on the row",
+          "plate_in_fleet": "chassis matched under another plate",
+          "next_km_expected": "Next Km disagrees with the approved interval",
+          "duplicate_plate": "duplicate plate in the file",
+          "duplicate_chassis": "duplicate chassis in the file",
+          "current_km_below_last_service": "Current KM is below the last service figure"
+        },
+        "problems": {
+          "missing_plate": "No plate",
+          "not_a_bike": "That plate belongs to a car",
+          "unknown_service_type": "Service type is not oil, brake or chain",
+          "invalid_date": "Invalid or missing date",
+          "future_date": "Date is in the future",
+          "unknown_plate": "No bike with that plate"
+        },
+        "kmBelowService": "{count} rows are blocked: Current KM is below the last service figure. Correct the sheet, then re-import."
+      },
+      "odometerSync": {
+        "title": "Dashcam odometer",
+        "hint": "The dashcam feed is configured here because the vendor's published specification cannot be read from our network. Fill the paths, press Test connection and read the first row it returns.",
+        "enabled": "Sync on",
+        "disabled": "Sync off",
+        "cadence": "Runs 00:00 / 06:00 / 12:00 / 18:00 Kuwait",
+        "lastRun": "Last run {at}",
+        "baseUrl": "Base URL",
+        "authMode": "Authentication",
+        "modeHeaders": "AppCid / AppSecret headers",
+        "modeLogin": "Login first",
+        "appCid": "AppCid",
+        "appSecret": "AppSecret",
+        "vehiclesPath": "Vehicles path",
+        "odometerField": "Odometer field",
+        "plateField": "Plate field",
+        "chassisField": "Chassis field",
+        "test": "Test connection",
+        "testHint": "Test connection calls the configured path and shows the raw first row.",
+        "testOk": "HTTP {status} Â· {rows} rows returned",
+        "testFailed": "{code}: {message}",
+        "secretPresent": "Secret configured",
+        "secretMissing": "Secret missing",
+        "secretHint": "SERVICE_ODOMETER_APP_SECRET in Secret Manager / Vercel env — never stored here."
+      },
+      "odometerSavedLowered": "Odometer lowered to {km} km and recorded",
+      "attachments": {
+        "limit": "{count} of {max} files · up to {mb} MB each",
+        "add": "Add file",
+        "empty": "No attachments on this record.",
+        "open": "Open",
+        "remove": "Remove",
+        "openFailed": "The file could not be opened.",
+        "errors": {
+          "too_many_attachments": "This record already holds the maximum number of files.",
+          "file_empty": "That file is empty.",
+          "file_too_large": "The file is larger than the allowed size (25 MB).",
+          "invalid_content_type": "Only images and PDF files can be attached.",
+          "missing_fields": "Choose a vehicle and a file first.",
+          "upload_failed": "The file could not be uploaded. Please try again.",
+          "missing_vehicle": "Choose a vehicle before attaching a file."
+        }
       }
     },
     "fleetHandover": {
@@ -13511,7 +13780,20 @@
       "userExists": "That email is already invited.",
       "noPortals": "No client portal is configured yet.",
       "attentionNoUsers": "{project} has no client users yet.",
-      "attentionNoHeadcount": "{project} has no contracted headcount, so contract fill cannot be shown."
+      "attentionNoHeadcount": "{project} has no contracted headcount, so contract fill cannot be shown.",
+      "bucketWorking": "Working today",
+      "bucketOnLeave": "On leave",
+      "bucketSick": "Sick",
+      "bucketAbsent": "Absent",
+      "bucketNotMarked": "Not marked yet",
+      "colEmployee": "Employee ID",
+      "colBucket": "Today",
+      "clearWidget": "Clear",
+      "widgetEmpty": "No riders in this group.",
+      "ridersUnavailable": "This table needs the latest server build; reload after the next deploy.",
+      "pagerRange": "{from}–{to} of {total}",
+      "pagerPrev": "Previous",
+      "pagerNext": "Next"
     },
     "clientPortal": {
       "title": "Your Riders Today",

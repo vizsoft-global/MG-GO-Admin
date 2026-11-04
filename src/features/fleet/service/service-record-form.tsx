@@ -19,9 +19,10 @@ import { formatKwd } from "@/lib/format/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import { partTotal, recordDay } from "./service-records-model";
 import { serviceTypeSearchText } from "./service-types";
+import { ServiceAttachments } from "./service-attachments";
 import { createServiceRecord, updateServiceRecord } from "./service-actions";
 import { serviceErrorKey, useServiceTypeCatalog, useServiceVehicles } from "./use-service";
-import type { ServiceRecordRow } from "./types";
+import type { ServiceAttachmentMeta, ServiceRecordRow } from "./types";
 
 type PartDraft = { name: string; qty: string; unit: string };
 
@@ -65,7 +66,20 @@ export function ServiceRecordForm({
   const [notes, setNotes] = useState(record?.notes ?? "");
   const [driverId, setDriverId] = useState(record?.driver_id ?? "");
   const [parts, setParts] = useState<PartDraft[]>(draftFrom(record ?? null));
+  const [attachments, setAttachments] = useState<ServiceAttachmentMeta[]>(
+    record?.attachments ?? [],
+  );
   const [saving, setSaving] = useState(false);
+
+  const selectedVehicle = useMemo(
+    () => (vehicles.data ?? []).find((row) => row.id === vehicleId) ?? null,
+    [vehicles.data, vehicleId],
+  );
+  // The employee block is derived from the roster: the MG ID and the company are
+  // read from the linked driver, so an operator cannot type a company that
+  // disagrees with the employee record.
+  const employeeId = selectedVehicle?.employee_id ?? record?.employee_id ?? null;
+  const employeeCompany = selectedVehicle?.employee_company ?? null;
 
   const vehicleItems = useMemo(
     () =>
@@ -100,7 +114,9 @@ export function ServiceRecordForm({
     const row = (vehicles.data ?? []).find((item) => item.id === next);
     if (!row) return;
     setDriverId(row.driver_id ?? "");
-    if (!company.trim() && row.company_name) setCompany(row.company_name);
+    // The employee's own company wins; the vehicle's registered company is only a
+    // fallback for a plate with no rider assigned.
+    setCompany(row.employee_company ?? row.company_name ?? "");
     if (!odometer.trim() && row.current_odometer_km != null) {
       setOdometer(String(row.current_odometer_km));
     }
@@ -113,6 +129,10 @@ export function ServiceRecordForm({
   }
 
   const partsTotalValue = parts.reduce((sum, part) => sum + partTotal(part.qty, part.unit), 0);
+  // Total Cost is the spare-parts breakdown — the client's rule. While the
+  // breakdown is empty the invoice figure is still what gets stored, because a
+  // silent zero would be worse than an unexplained total.
+  const hasParts = parts.some((part) => part.name.trim().length > 0);
 
   async function submit() {
     setSaving(true);
@@ -124,11 +144,16 @@ export function ServiceRecordForm({
       driverId,
       invoiceNo,
       invoiceDate,
-      company,
+      company: employeeCompany ?? company,
       vendor,
       notes,
       odometerKm: odometer.trim() === "" ? null : Number(odometer),
-      costKwd: cost.trim() === "" ? null : Number(cost),
+      costKwd: hasParts
+        ? partsTotalValue
+        : cost.trim() === ""
+          ? null
+          : Number(cost),
+      attachments,
       parts: parts
         .filter((part) => part.name.trim())
         .map((part) => ({
@@ -235,12 +260,22 @@ export function ServiceRecordForm({
             <span className="block font-medium">{t("form.driver")}</span>
             <Input
               className="h-9"
-              value={
-                (vehicles.data ?? []).find((row) => row.driver_id === driverId)?.driver_name ?? ""
-              }
+              value={selectedVehicle?.driver_name ?? record?.driver_name ?? ""}
               readOnly
               placeholder={t("form.noDriver")}
             />
+          </label>
+          <label className="space-y-1 text-xs">
+            <span className="block font-medium">{t("form.employeeId")}</span>
+            <Input
+              className="h-9 tabular-nums"
+              value={employeeId ?? ""}
+              readOnly
+              placeholder={t("form.noEmployeeId")}
+            />
+            <span className="block text-[10px] text-muted-foreground">
+              {t("form.employeeIdHint")}
+            </span>
           </label>
         </div>
       </AppFormSection>
@@ -258,14 +293,32 @@ export function ServiceRecordForm({
           </label>
           <label className="space-y-1 text-xs">
             <span className="block font-medium">{t("cols.cost")}</span>
-            <Input
-              type="number"
-              min={0}
-              step="0.001"
-              className="h-9 tabular-nums"
-              value={cost}
-              onChange={(event) => setCost(event.target.value)}
-            />
+            {hasParts ? (
+              <>
+                <Input
+                  className="h-9 cursor-default bg-muted/40 tabular-nums"
+                  value={formatKwd(partsTotalValue)}
+                  readOnly
+                />
+                <span className="block text-[10px] text-muted-foreground">
+                  {t("form.costFromParts")}
+                </span>
+              </>
+            ) : (
+              <>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.001"
+                  className="h-9 tabular-nums"
+                  value={cost}
+                  onChange={(event) => setCost(event.target.value)}
+                />
+                <span className="block text-[10px] text-muted-foreground">
+                  {t("form.costNoPartsHint")}
+                </span>
+              </>
+            )}
           </label>
           <label className="space-y-1 text-xs">
             <span className="block font-medium">{t("detail.invoiceNo")}</span>
@@ -290,10 +343,14 @@ export function ServiceRecordForm({
             <span className="block font-medium">{t("cols.company")}</span>
             <Input
               className="h-9"
-              value={company}
+              value={employeeCompany ?? company}
+              readOnly={employeeCompany != null}
               maxLength={120}
               onChange={(event) => setCompany(event.target.value)}
             />
+            <span className="block text-[10px] text-muted-foreground">
+              {employeeCompany != null ? t("form.companyAutoHint") : t("form.companyHint")}
+            </span>
           </label>
           <label className="space-y-1 text-xs sm:col-span-2">
             <span className="block font-medium">{t("form.notes")}</span>
@@ -378,6 +435,15 @@ export function ServiceRecordForm({
             </div>
           ))}
         </div>
+      </AppFormSection>
+
+      <AppFormSection title={t("form.sectionAttachments")} description={t("form.attachmentsHint")}>
+        <ServiceAttachments
+          vehicleId={vehicleId}
+          attachments={attachments}
+          canManage
+          onChange={setAttachments}
+        />
       </AppFormSection>
 
       <AppModalFooter

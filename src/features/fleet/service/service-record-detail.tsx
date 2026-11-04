@@ -25,6 +25,7 @@ import {
   recordStage,
 } from "./service-records-model";
 import { categoryTone } from "./service-types";
+import { ServiceAttachments } from "./service-attachments";
 import { setServiceStage } from "./service-actions";
 import { serviceErrorKey } from "./use-service";
 import type { ServiceRecordRow, ServiceStage } from "./types";
@@ -79,11 +80,12 @@ export function ServiceRecordDetail({
     { label: t("detail.description"), value: record.description ?? "—" },
     { label: t("cols.date"), value: recordDay(record) || "—" },
     { label: t("detail.driver"), value: record.driver_name ?? "—" },
+    { label: t("detail.employeeId"), value: record.employee_id ?? "—" },
     { label: t("detail.invoiceNo"), value: record.invoice_no ?? "—" },
     { label: t("detail.invoiceDate"), value: record.invoice_date ?? "—" },
     { label: t("cols.company"), value: record.company ?? "—" },
     { label: t("cols.vendor"), value: record.vendor ?? "—" },
-    { label: t("cols.cost"), value: kwd(record.cost_kwd ?? effectiveRecordCost(record)) },
+    { label: t("cols.cost"), value: kwd(effectiveRecordCost(record)) },
     { label: t("cols.odometer"), value: String(record.odometer_km ?? record.odometer ?? "—") },
   ];
 
@@ -123,7 +125,7 @@ export function ServiceRecordDetail({
                   </Button>
                 ))
               : null}
-            {canManage && !isTerminalStage(stage) ? (
+            {canManage ? (
               <Button
                 type="button"
                 variant="outline"
@@ -189,6 +191,15 @@ export function ServiceRecordDetail({
           )}
         </AppFormSection>
       </div>
+
+      <AppFormSection title={t("detail.attachments")} description={t("detail.attachmentsHint")}>
+        <ServiceAttachments
+          vehicleId={record.vehicle_id}
+          attachments={record.attachments}
+          canManage={false}
+          onChange={() => undefined}
+        />
+      </AppFormSection>
 
       <AppFormSection title={t("detail.history")}>
         {record.stage_history.length === 0 ? (

@@ -69,6 +69,17 @@ function argsOf(data: unknown): Dict {
   return data as Dict;
 }
 
+/** A trimmed string, or `""`. Keeps the callables readable where null is noise. */
+function asString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(String(value).trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function parseIdentityField(value: unknown): PayrollIdentityField {
   switch (value) {
     case "employeeId":
@@ -431,6 +442,216 @@ function parseOrders(value: unknown): number | null {
   return parsed;
 }
 
+/** Hours one rider-day may carry. `0` is a real value: the rider did not work. */
+export function parseDayHours(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(String(value).trim());
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 24) {
+    throw new HttpsError("invalid-argument", "invalid_hours");
+  }
+  // Half-hour precision is what the sheet carries; keep the value exact.
+  return Math.round(parsed * 100) / 100;
+}
+
+/** Which projects load hours instead of orders. Americana keeps orders. */
+export const UPLOAD_HOURS_PROJECTS = ["keeta", "five_guys"] as const;
+
+export function projectLoadsHours(projectKey: string | null | undefined): boolean {
+  return (UPLOAD_HOURS_PROJECTS as readonly string[]).includes((projectKey ?? "").trim().toLowerCase());
+}
+
+/**
+ * One rider-day of hours for a project that loads hours instead of orders.
+ *
+ * Written to its own collection rather than folded into the order overrides:
+ * `payroll_order_overrides` is read by the rule engine as `orders`, and writing
+ * hours there would price a Keeta day against an order count that does not
+ * exist. Absent + `0` is stored as a real document so "loaded and zero" is
+ * distinguishable from "never loaded".
+ */
+export const adminSavePayrollDayHours = onCall(async (request) => {
+  const staff = await requireStaffFresh(request, "payroll.manage");
+  const data = argsOf(request.data);
+  const driverId = pickText(data, "p_driver_id", "driver_id", "driverId") ?? "";
+  const date = pickText(data, "p_date", "date", "work_date", "workDate") ?? "";
+  if (!driverId) throw new HttpsError("invalid-argument", "invalid_driver");
+  if (!date || !payrollOrderDateAllowed(date, kuwaitToday())) {
+    throw new HttpsError("failed-precondition", "date_out_of_range");
+  }
+  const rawHours = pick(data, "p_hours", "hours");
+  const hours = parseDayHours(rawHours);
+  const reason = (pickText(data, "p_reason", "reason") ?? "").slice(0, 200);
+
+  const db = getFirestore();
+  const driver = await db.collection(COLLECTIONS.drivers).doc(driverId).get();
+  if (!driver.exists) throw new HttpsError("not-found", "driver_not_found");
+  const projectKey = asString(driver.get("project_key"));
+  if (!projectLoadsHours(projectKey)) {
+    // An Americana day is priced on orders. Accepting hours here would create a
+    // figure no screen could show.
+    throw new HttpsError("failed-precondition", "project_uses_orders");
+  }
+
+  const ref = db.collection(COLLECTIONS.payrollDayHours).doc(`${driverId}_${date}`);
+  const before = await ref.get();
+  const previous = nullableNumber(before.get("hours"));
+  if (hours == null) {
+    await ref.delete();
+  } else {
+    await ref.set(
+      {
+        driver_id: driverId,
+        work_date: date,
+        project_key: projectKey,
+        hours,
+        reason: reason || null,
+        updated_by: staff.uid,
+        updated_at: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }
+  await logAdminActivity({
+    actorId: staff.uid,
+    action: hours == null ? "delete" : "update",
+    entity: "payroll_day_hours",
+    entityId: `${driverId}_${date}`,
+    detail: { hours, before: previous, reason: reason || null },
+  });
+  await bumpScanSnapshots(PAYROLL_SNAPSHOTS);
+  return { ok: true };
+});
+
+export type DayHoursImportRow = {
+  driverId: string;
+  mgId: string | null;
+  date: string;
+  hours: number;
+};
+
+export type DayHoursImportResult = {
+  ok: true;
+  applied: number;
+  rejected: Array<{ row: number; code: string; mgId: string | null; date: string | null }>;
+};
+
+/**
+ * Operations' daily sheet: many rider-days in one write.
+ *
+ * The client sends already-parsed rows; **every rule is checked again here**, so
+ * a tampered payload cannot load another project's rider or a future day. A
+ * rejected row never blocks the rest — one bad MG ID must not cost the operator
+ * the whole file — and each accepted row is audited with the reason
+ * "Daily upload", which is what the manual-changes record prints.
+ */
+export const adminImportPayrollDayHours = onCall(async (request) => {
+  const staff = await requireStaffFresh(request, "payroll.manage");
+  const data = argsOf(request.data);
+  const projectKey = (pickText(data, "p_project_key", "project_key", "projectKey") ?? "")
+    .trim()
+    .toLowerCase();
+  if (!projectLoadsHours(projectKey)) {
+    throw new HttpsError("invalid-argument", "project_uses_orders");
+  }
+  const rawRows = pick(data, "p_rows", "rows");
+  if (!Array.isArray(rawRows) || rawRows.length === 0) {
+    throw new HttpsError("invalid-argument", "empty_file");
+  }
+  if (rawRows.length > 2000) throw new HttpsError("invalid-argument", "row_cap_exceeded");
+
+  const today = kuwaitToday();
+  const monthPrefix = `${today.slice(0, 7)}-`;
+  const db = getFirestore();
+
+  // One roster read, not one per row: the same 900-driver scan per row is what
+  // turned a 200-row file into 200 full-collection reads.
+  const roster = await db
+    .collection(COLLECTIONS.drivers)
+    .where("archived_at", "==", null)
+    .get();
+  const byMgId = new Map<string, { id: string; projectKey: string }>();
+  for (const doc of roster.docs) {
+    const raw = doc.data();
+    const keys = [asString(raw["driver_code"]), asString(raw["employee_id"]), asString(raw["client_id"])];
+    const entry = { id: doc.id, projectKey: (asString(raw["project_key"]) ?? "").toLowerCase() };
+    for (const key of keys) {
+      if (key) byMgId.set(key.trim().toLowerCase(), entry);
+    }
+  }
+
+  const rejected: DayHoursImportResult["rejected"] = [];
+  const accepted: DayHoursImportRow[] = [];
+  rawRows.forEach((raw, index) => {
+    const row = (raw ?? {}) as Dict;
+    const rowNumber = nullableNumber(pick(row, "row")) ?? index + 2;
+    const mgId = (pickText(row, "mgId", "mg_id", "driver_key") ?? "").trim();
+    const date = (pickText(row, "date", "work_date") ?? "").trim();
+    const hoursValue = pick(row, "hours", "value");
+    if (!mgId) {
+      rejected.push({ row: rowNumber, code: "row_missing_id", mgId: null, date: date || null });
+      return;
+    }
+    const hit = byMgId.get(mgId.toLowerCase());
+    if (!hit) {
+      rejected.push({ row: rowNumber, code: "row_unknown_id", mgId, date: date || null });
+      return;
+    }
+    if (hit.projectKey !== projectKey) {
+      rejected.push({ row: rowNumber, code: "row_other_project", mgId, date: date || null });
+      return;
+    }
+    if (!DAY.test(date)) {
+      rejected.push({ row: rowNumber, code: "row_invalid_date", mgId, date: date || null });
+      return;
+    }
+    if (!date.startsWith(monthPrefix)) {
+      rejected.push({ row: rowNumber, code: "row_outside_month", mgId, date });
+      return;
+    }
+    if (date > today) {
+      rejected.push({ row: rowNumber, code: "row_future_date", mgId, date });
+      return;
+    }
+    const hours = typeof hoursValue === "number" ? hoursValue : Number(String(hoursValue ?? "").trim());
+    if (!Number.isFinite(hours) || hours < 0 || hours > 24) {
+      rejected.push({ row: rowNumber, code: "row_invalid_value", mgId, date });
+      return;
+    }
+    accepted.push({ driverId: hit.id, mgId, date, hours: Math.round(hours * 100) / 100 });
+  });
+
+  const now = new Date();
+  for (let index = 0; index < accepted.length; index += 400) {
+    const batch = db.batch();
+    for (const row of accepted.slice(index, index + 400)) {
+      batch.set(
+        db.collection(COLLECTIONS.payrollDayHours).doc(`${row.driverId}_${row.date}`),
+        {
+          driver_id: row.driverId,
+          work_date: row.date,
+          project_key: projectKey,
+          hours: row.hours,
+          source: "daily_upload",
+          updated_by: staff.uid,
+          updated_at: now,
+        },
+        { merge: true },
+      );
+    }
+    await batch.commit();
+  }
+
+  await logAdminActivity({
+    actorId: staff.uid,
+    action: "update",
+    entity: "payroll_day_hours",
+    entityId: `import_${now.toISOString()}`,
+    detail: { project_key: projectKey, applied: accepted.length, rejected: rejected.length },
+  });
+  if (accepted.length > 0) await bumpScanSnapshots(PAYROLL_SNAPSHOTS);
+  return { ok: true, applied: accepted.length, rejected } satisfies DayHoursImportResult;
+});
+
 /** Status-column choices. Worked days stay Active; Active Payroll is set by hand. */
 export const CORE_STATUS_KEYS = [
   "active",
@@ -481,7 +702,6 @@ export const CATALOG_STATUS_LABEL: Record<CatalogStatusKey, string> = {
 };
 
 export type PayrollStatusEntry = { key: CoreStatusKey | CatalogStatusKey | "custom"; label: string };
-
 export type PayrollStatusRoster = {
   byDriver: Record<string, PayrollStatusEntry>;
   customs: string[];

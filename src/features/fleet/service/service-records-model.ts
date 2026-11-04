@@ -1,4 +1,4 @@
-import type { ServicePart, ServiceRecordRow, ServiceStage } from "./types";
+import type { ServiceAttachmentMeta, ServicePart, ServiceRecordRow, ServiceStage } from "./types";
 import { SERVICE_STAGES } from "./types";
 
 export function isServiceStage(value: unknown): value is ServiceStage {
@@ -44,6 +44,72 @@ export function nextStageOptions(stage: ServiceStage): ServiceStage[] {
 /** `cancelled` needs a reason; every other move may carry an optional note. */
 export function transitionRequiresNote(to: ServiceStage): boolean {
   return to === "cancelled";
+}
+
+/**
+ * Can this record be edited in place?
+ *
+ * **Yes, at every stage — including Done.** The fleet team asked for full control
+ * over maintenance data and named Done records explicitly: a wrong invoice number
+ * or a mistyped odometer on a closed visit has to be correctable without filing a
+ * second visit that never happened, because the maintenance baseline counts days
+ * from that record.
+ *
+ * That does not make the correction invisible. `updateServiceRecord` appends a
+ * stage-history row naming the edit, and a Done record keeps `done_at` and
+ * `done_odometer_km` in step with what was edited — so the baseline moves with the
+ * correction instead of drifting away from it.
+ */
+export function canEditServiceStage(stage: ServiceStage): boolean {
+  // True for every real stage; the lookup is what makes an unknown value safe
+  // rather than editable.
+  return SERVICE_STAGES.includes(stage);
+}
+
+/**
+ * The completion instant a Done record carries after its service date is edited.
+ *
+ * The time of day is preserved (that is when the work was signed off) and only the
+ * date moves, because `recordDay()` reads `done_at` first and every maintenance
+ * due date counts from it. Writing a fresh `now()` here would silently shift a
+ * baseline to the day of the correction.
+ */
+export function retimedDoneAt(servicedAt: string, previousDoneAt: string | null): string {
+  const time = (previousDoneAt ?? "").slice(10);
+  const clock = /T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(time) ? time : "T00:00:00.000Z";
+  return `${servicedAt.slice(0, 10)}${clock}`;
+}
+
+export type ServiceEditFields = {
+  servicedAt: string;
+  odometerKm: number | null;
+  costKwd: number | null;
+  parts: readonly ServicePart[];
+  attachments?: readonly ServiceAttachmentMeta[];
+};
+
+/**
+ * What an edit actually moved, in the words the stage history records.
+ *
+ * A correction to a Done record rewrites the maintenance baseline, so the history
+ * has to say *which* fact moved — "Edited after done" alone would leave the next
+ * operator unable to tell a date correction from a typo in the invoice number.
+ */
+export function serviceEditSummary(
+  before: Record<string, unknown>,
+  next: ServiceEditFields,
+): string[] {
+  const labels: string[] = [];
+  const previousDay = recordDay(before);
+  if (previousDay && previousDay !== next.servicedAt.slice(0, 10)) labels.push("service date");
+  if (odometerOf(before) !== next.odometerKm) labels.push("odometer");
+  if (positiveNumber(before.cost_kwd) !== next.costKwd) labels.push("cost");
+  if (normaliseParts(before.parts).length !== next.parts.length) labels.push("spare parts");
+  const previousFiles = Array.isArray(before.attachments) ? before.attachments.length : 0;
+  if (next.attachments && previousFiles !== next.attachments.length) {
+    labels.push("attachments");
+  }
+  return labels;
 }
 
 export function odometerOf(row: Record<string, unknown>): number | null {
@@ -105,18 +171,21 @@ export function partsTotal(parts: readonly ServicePart[] | null | undefined): nu
 }
 
 /**
- * What the record cost. `cost_kwd` is the invoice figure the client types; the
- * parts grid is the same money broken down, so a record with an invoice value
- * must not be added to its own parts. A record that carries only priced parts
- * still contributes their total.
+ * What the record cost.
+ *
+ * **Total Cost = the sum of the spare parts**, which is the client's rule: a
+ * workshop invoice is the parts breakdown, so the two cannot be added and must not
+ * be able to disagree. A record with no parts yet keeps the invoice figure the
+ * operator typed, because an unexplained total is better than a silent zero while
+ * the breakdown is still being entered.
  */
 export function effectiveRecordCost(row: {
   cost_kwd?: number | null;
   parts?: readonly ServicePart[] | null;
 }): number {
-  const invoice = positiveNumber(row.cost_kwd);
-  if (invoice != null && invoice > 0) return invoice;
-  return partsTotal(row.parts);
+  const parts = row.parts ?? [];
+  if (parts.length > 0) return partsTotal(parts);
+  return positiveNumber(row.cost_kwd) ?? 0;
 }
 
 export type StageCounts = Record<ServiceStage | "all", number>;
@@ -142,22 +211,35 @@ export type OdometerDecision =
   | { action: "same"; km: number }
   | { action: "skip" }
   | { action: "refuse_below"; km: number; currentKm: number }
+  /** Allowed only with `allowBelow` — the caller must demand a reason. */
+  | { action: "lower"; km: number; currentKm: number }
   | { action: "invalid" };
 
 /**
- * The monotonic guard. A reading can only move the stored figure up: a typo of
- * `78 500` where the vehicle is at `185 000` must not rewind maintenance and
- * hide every overdue service behind a fresh baseline.
+ * The monotonic guard.
+ *
+ * A **machine** reading can only move the stored figure up: a dashcam that
+ * reports `78 500` for a vehicle at `185 000` is wrong, and writing it would hide
+ * every overdue service behind a fresh-looking baseline. That is why the guard is
+ * applied on the dashcam sync and the baseline import, which nobody is watching.
+ *
+ * A **person** correcting the odometer is a different case — a typo, a replaced
+ * instrument cluster, a bike whose meter was reset all need the figure to come
+ * down. `allowBelow` therefore returns `{ action: "lower" }` so the caller can
+ * demand a written reason and keep an audit row; without the flag the reading is
+ * refused exactly as before.
  */
 export function odometerDecision(
   currentKm: number | null | undefined,
   reading: number | null | undefined,
+  options: { allowBelow?: boolean } = {},
 ): OdometerDecision {
   if (reading == null) return { action: "skip" };
   if (!Number.isFinite(reading) || reading < 0) return { action: "invalid" };
   if (currentKm == null || !Number.isFinite(currentKm)) return { action: "set", km: reading };
   if (reading > currentKm) return { action: "set", km: reading };
   if (reading === currentKm) return { action: "same", km: reading };
+  if (options.allowBelow) return { action: "lower", km: reading, currentKm };
   return { action: "refuse_below", km: reading, currentKm };
 }
 
@@ -175,6 +257,12 @@ export type ServiceRecordInput = {
   odometerKm: number | null;
   costKwd: number | null;
   parts: ServicePart[];
+  /**
+   * Files to keep on the record. Optional so an older caller (a test, the import
+   * paths) can omit it; the action reads a missing value as "leave as it is" on an
+   * edit and "no files" on a create.
+   */
+  attachments?: ServiceAttachmentMeta[];
 };
 
 export const SERVICE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
