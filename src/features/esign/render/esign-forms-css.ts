@@ -128,6 +128,19 @@ th .ar { text-transform: none; letter-spacing: 0; font-size: 7.6pt; display: blo
 .sigs { display: grid; gap: 3mm; margin-top: 4.2mm; }
 .sigs--2 { grid-template-columns: 1fr 1fr; }
 .sigs--3 { grid-template-columns: 1fr 1fr 1fr; gap: 2.4mm; padding: 2.4mm; margin-top: 0; }
+/* Leave Request: five signed columns on one row (Employee + four managers). */
+.sigs--5 { grid-template-columns: repeat(5, 1fr); gap: 0; margin-top: 4.2mm; }
+.sigs--5 .sig .h { font-size: 6.9pt; padding: 1.1mm 1.6mm; gap: .6mm; flex-wrap: wrap; }
+.sigs--5 .sig .b { padding: 1.4mm 1.6mm; }
+.sigs--5 .sig .lines { gap: 1mm; }
+.sigs--5 .sig .ln { font-size: 6.4pt; }
+.sigs--5 .sig .ln.name-box i { font-size: 7pt; }
+.sigs--5 .sig + .sig { border-left: .5pt solid var(--line); }
+.sigs--5 .sig { border: .9pt solid var(--navy); border-left: 0; }
+.sigs--5 .sig:first-child { border-left: .9pt solid var(--navy); }
+.decide { display: flex; align-items: center; gap: 1.2mm; font-size: 6pt; color: var(--muted); margin-top: .8mm; }
+.decide .cb { width: 2.4mm; height: 2.4mm; }
+.decide .ar { font-size: 5.6pt; }
 .sigs--joined { margin-top: 0; gap: 0; }
 .sigs--joined .sig { border-top: 0; }
 .sigs--joined .sig + .sig { border-left: 0; }

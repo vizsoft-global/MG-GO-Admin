@@ -4,6 +4,7 @@ import {
   ESIGN_EMPLOYEE_CORE_ROWS,
   ESIGN_EMPLOYEE_ROWS,
   accidentEmployeeRows,
+  sortEmployeeRows,
 } from "../employee-block";
 import {
   ACCIDENT_CONSUMED_KEYS,
@@ -49,7 +50,18 @@ export type SignSlotRole =
   | "gm"
   | "ceo"
   | "ack_received"
-  | "ack_not_received";
+  | "ack_not_received"
+  /**
+   * The four line managers a Leave Request is signed by, in the client's own
+   * order: the direct manager, the person given responsibility during the
+   * absence, the HR officer and the HR manager. Each is a real signature box,
+   * not a typed name — the client's sheet prints five columns and every one of
+   * them carries ink.
+   */
+  | "direct_manager"
+  | "hr_responsibility"
+  | "hr_manager"
+  | "general_manager";
 
 export type SignSlot = {
   id: string;
@@ -271,8 +283,7 @@ export const LOAN_GEOM: FigmaGeom[] = [
   { h: 64, ack: "ack_not_received", boxW: 130, boxH: 30, dy: 16 },
 ];
 
-export function slotsFromGeom(steps: FigmaGeom[]): SignSlot[] {
-  let y = FIGMA_PAD_TOP;
+export function slotsFromGeom(steps: FigmaGeom[]): SignSlot[] {  let y = FIGMA_PAD_TOP;
   const out: SignSlot[] = [];
   for (const step of steps) {
     if ("line" in step) {
@@ -331,6 +342,38 @@ export const GENERAL_SLOTS: SignSlot[] = [
   { id: "employee", role: "employee", page: 1, xPt: 446, yPt: 191, wPt: 119, hPt: 23 },
   { id: "hr", role: "hr", page: 1, xPt: 172, yPt: 69, wPt: 119, hPt: 23 },
 ];
+
+/**
+ * Leave Request — **five** signature boxes on one row, matching the client's
+ * sheet: Employee, Direct Manager, HR Responsibility, HR Manager, General
+ * Manager. Every one takes ink, so every one is a slot the compose step stamps.
+ *
+ * The row is 547pt wide (the content column) and five boxes of 101pt with a
+ * 10pt gutter land exactly inside it. Heights match the other docks so a
+ * signature image fits without being scaled below legibility.
+ */
+export const LEAVE_SLOTS: SignSlot[] = (() => {
+  const width = 101;
+  const gutter = 10;
+  const height = 26;
+  const top = 24;
+  const roles: SignSlotRole[] = [
+    "employee",
+    "direct_manager",
+    "hr_responsibility",
+    "hr_manager",
+    "general_manager",
+  ];
+  return roles.map((role, index) => ({
+    id: role,
+    role,
+    page: 1,
+    xPt: FIGMA_PAD_X + index * (width + gutter),
+    yPt: fromTop(top, height),
+    wPt: width,
+    hPt: height,
+  }));
+})();
 
 const PAYSLIP_EM = "—";
 
@@ -546,6 +589,8 @@ export function slotsForKind(kind: EsignDocumentKind): SignSlot[] {
       return LOAN_SLOTS;
     case "payslip":
       return PAYSLIP_SLOTS;
+    case "leave":
+      return LEAVE_SLOTS;
     case "general":
       return GENERAL_SLOTS;
     default: {
@@ -697,15 +742,78 @@ function checksFromFields(fields: LayoutFieldInput[]): LayoutCheckbox[] {
   return checksFromPenaltyFields(fields);
 }
 
-function catalogueEmployeeRows(values: Record<string, string>): LayoutFieldRow[] {
-  return [
+/**
+ * The six leave types the client's Leave Request prints, in their order. The
+ * one picked is the one checked; a value that matches no type leaves all six
+ * unticked rather than guessing an annual leave.
+ */
+export const LEAVE_TYPES: readonly { key: string; label: BilingualText }[] = [
+  { key: "annual", label: { en: "Annual Leave", ar: "إجازة سنوية" } },
+  { key: "emergency", label: { en: "Emergency Leave", ar: "إجازة طارئة" } },
+  { key: "unpaid", label: { en: "Unpaid Leave", ar: "إجازة بدون مرتب" } },
+  { key: "sick", label: { en: "Sick Leave", ar: "إجازة مرضية" } },
+  { key: "maternity", label: { en: "Maternity Leave", ar: "إجازة أمومة" } },
+  { key: "accident", label: { en: "Accident Leave", ar: "إجازة إصابة" } },
+];
+
+/** The client's seven leave policies, bilingual, printed as the sheet's tail. */
+export const LEAVE_POLICY: BilingualText = {
+  en: [
+    "1. Annual leave should be approved 60 days before the start date.",
+    "2. The duration of annual leave shall not exceed the approved days.",
+    "3. Employees are allowed to go on leave only after they receive an official confirmation from HR stating that their leave has been approved.",
+    "4. Emergency leave will be deducted from the leave balance.",
+    "5. Unpaid leave is not allowed in case of annual balance is available.",
+    "6. It is not allowed to delay the date of returning from the leave from the date specified for that. In case of delaying for an unacceptable excuse, the penalty set by the management will be applied to the regulations and laws.",
+    "7. In case of absence for a period of seven consecutive days without an excuse after the end of the leave period, the employer has the right to consider the employee resigned pursuant to Article (42) of the Labor Law in the Private Sector No. 6 of 2010.",
+  ].join("\n"),
+  ar: [
+    "١. يجب الإبلاغ بالإجازة السنوية قبل موعد بدء الإجازة بـ 60 يوماً.",
+    "٢. مدة الإجازة السنوية يجب ألا تزيد عن الإجازة المعتمدة فقط.",
+    "٣. يسمح للموظفين للذهاب في إجازة بعد الحصول على تأكيد من الموارد البشرية مشيرا إلى أن إجازتهم تمت الموافقة عليها.",
+    "٤. الإجازة الطارئة يتم احتسابها من رصيد الإجازة السنوية.",
+    "٥. لا يجوز التقدم بطلب إجازة بدون راتب في حال وجود رصيد للإجازات السنوية.",
+    "٦. لا يجوز التأخير في موعد العودة من الإجازة عن الموعد المحدد لذلك وفي حالة التأخر لعذر غير مقبول سوف يتم تطبيق الجزاء المحدد من قبل الإدارة طبقاً إلى اللوائح والقوانين.",
+    "٧. في حالة الغياب لمدة سبعة أيام متصلة بدون عذر بعد نهاية مدة الإجازة يحق لصاحب العمل اعتبار الموظف مستقيلاً عملاً بالمادة (42) من قانون العمل في القطاع الأهلي رقم 6 لسنة 2010.",
+  ].join("\n"),
+};
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Days between two `YYYY-MM-DD` labels, inclusive, as a string.
+ *
+ * Empty when either end is missing or unparseable — a sheet that does not know
+ * its dates must not print a confident `0`, which is why the client's own
+ * template shows a literal zero only because nothing was filled in.
+ */
+export function leaveDaysBetween(from: string, to: string): string {
+  const a = from.trim().slice(0, 10);
+  const b = to.trim().slice(0, 10);
+  if (!ISO_DAY.test(a) || !ISO_DAY.test(b)) return "";
+  const start = Date.parse(`${a}T00:00:00.000Z`);
+  const end = Date.parse(`${b}T00:00:00.000Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "";
+  return String(Math.round((end - start) / 86_400_000) + 1);
+}
+
+/** The day after an ISO day, or `""` when the input is not a day. */
+export function addDayLabel(day: string, delta: number): string {
+  const value = day.trim().slice(0, 10);
+  if (!ISO_DAY.test(value)) return "";
+  const base = Date.parse(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(base)) return "";
+  return new Date(base + delta * 86_400_000).toISOString().slice(0, 10);
+}
+
+function catalogueEmployeeRows(values: Record<string, string>): LayoutFieldRow[] {  return sortEmployeeRows([
     ...ESIGN_EMPLOYEE_CORE_ROWS.map((entry) =>
       row(entry.key, entry.label_en, entry.label_ar, values[entry.key] ?? ""),
     ),
     ...ESIGN_EMPLOYEE_ROWS.slice(ESIGN_EMPLOYEE_CORE_ROWS.length)
       .filter((entry) => (values[entry.key] ?? "").trim().length > 0)
       .map((entry) => row(entry.key, entry.label_en, entry.label_ar, values[entry.key] ?? "")),
-  ];
+  ]);
 }
 
 function fillBoth(en: string, ar: string, merged: Record<string, string>): BilingualText {
@@ -825,7 +933,9 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
           ? { en: "Penalty Notice", ar: "إشعار جزاء" }
           : kind === "loan"
             ? { en: "Loan Request", ar: "طلب سلفة" }
-            : kind === "payslip"
+            : kind === "leave"
+              ? { en: "Leave Request", ar: "طلب إجازة" }
+              : kind === "payslip"
               ? { en: "Payslip", ar: "قسيمة الراتب" }
               : { en: "Document", ar: "مستند" };
 
@@ -871,13 +981,13 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
             token.toLowerCase() === check.label.en.toLowerCase(),
         ),
       );
-    employeeRows = [
+    employeeRows = sortEmployeeRows([
       row("employee_name", "Employee Name", "اسم الموظف", values.employee_name ?? "", "system"),
       row("employee_number", "Employee Number", "رقم الموظف", values.employee_id ?? "", "system"),
       row("position", "Position", "الوظيفة", position, "system"),
       row("company", "Company", "الشركة", values.company_name ?? "", "system"),
       row("accommodation", "Accommodation", "السكن", values.accommodation ?? "", "system"),
-    ];
+    ]);
     const consumed = new Set([
       "penalty",
       "penalty_text",
@@ -1006,7 +1116,7 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
     const verifiedBy = firstField(allFields, ["verified_by", "hr_manager_name"]) || "";
     const verifiedDate = firstField(allFields, ["verified_date"]);
     const verifiedLine = verifiedDate || verifiedBy;
-    employeeRows = [
+    employeeRows = sortEmployeeRows([
       row("employee_name", "Employee name", "اسم الموظف", values.employee_name ?? "", "system"),
       row("employee_id", "Employee number", "رقم الموظف", values.employee_id ?? "", "system"),
       row("civil_id", "Civil ID number", "الرقم المدني", values.civil_id ?? "", "system"),
@@ -1015,7 +1125,7 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
       row("position", "Position", "المهنة", position, "system"),
       row("joined_at", "Date of employment", "تاريخ التعيين", values.joined_at ?? "", "system"),
       row("request_date", "Application date", "تاريخ الطلب", requestDate, "fixed"),
-    ];
+    ]);
     const loanRows: LayoutFieldRow[] = [
       row("monthly_salary_kwd", "Monthly salary (KWD)", "الراتب الشهري (د.ك)", monthlySalary, "system"),
       row("amount", "Amount requested (KWD)", "المبلغ المطلوب (د.ك)", firstField(allFields, ["amount", "requested_amount", "loan_amount"]), "entry"),
@@ -1140,10 +1250,166 @@ export function buildEsignDocumentLayout(input: BuildLayoutInput): EsignDocument
       },
     );
     appendDocumentTail(sections, [...employeeFields, ...documentFields], consumed, body, title);
+  } else if (kind === "leave") {
+    employeeRows = sortEmployeeRows([
+      row("employee_id", "Employee Code", "رقم الموظف", values.employee_id ?? "", "system"),
+      row("employee_name", "Employee Name", "اسم الموظف", values.employee_name ?? "", "system"),
+      row("sponsor", "Sponsor", "الكفيل", firstField(allFields, ["sponsor"]) || values.sponsor || "", "system"),
+      row("civil_id", "Civil ID Number", "الرقم المدني", values.civil_id ?? "", "system"),
+      row("position", "Position", "المهنة", firstField(allFields, ["position"]) || values.position || "", "system"),
+    ]);
+
+    const leaveType = (
+      firstField(allFields, ["leave_type", "leave_kind", "type_of_leave"]) ||
+      (merged.leave_type ?? "")
+    )
+      .trim()
+      .toLowerCase();
+    const leaveFrom =
+      firstField(allFields, ["leave_from", "starting_date", "start_date", "absence_from"]) ||
+      (merged.absence_from ?? merged.leave_from ?? "").trim();
+    const leaveTo =
+      firstField(allFields, ["leave_to", "ending_date", "end_date", "absence_to"]) ||
+      (merged.absence_to ?? merged.leave_to ?? "").trim();
+    const leaveDays =
+      firstField(allFields, ["leave_days", "number_of_days", "days"]) ||
+      leaveDaysBetween(leaveFrom, leaveTo);
+    const directManager =
+      firstField(allFields, ["direct_manager", "manager"]) || (merged.direct_manager ?? "");
+    const responsibility =
+      firstField(allFields, ["responsibility_assigned", "responsibility"]) ||
+      (merged.responsibility_assigned ?? "");
+    const managerNotes =
+      firstField(allFields, ["manager_notes", "direct_manager_notes"]) ||
+      (merged.manager_notes ?? "");
+    const employmentDate =
+      firstField(allFields, ["date_of_employment", "joining_date"]) || values.joined_at || "";
+    const balanceBefore =
+      firstField(allFields, ["leave_balance", "balance_until_start", "balance"]) ||
+      (merged.leave_balance ?? "");
+    const actualDays =
+      firstField(allFields, ["actual_leave_days", "actual_days"]) || leaveDays;
+    const resumeDate =
+      firstField(allFields, ["resume_date", "return_date"]) || addDayLabel(leaveTo, 1);
+    const hrComments =
+      firstField(allFields, ["hr_comments", "hr_notes"]) || (merged.hr_comments ?? "");
+
+    sections.push(
+      {
+        key: "type_of_leave",
+        title: { en: "Type of Leave", ar: "نوع الإجازة" },
+        alwaysPrint: true,
+        rows: [],
+        checkboxes: LEAVE_TYPES.map((type) => ({
+          key: type.key,
+          label: type.label,
+          checked: leaveType === type.key || leaveType === type.label.en.toLowerCase(),
+        })),
+      },
+      {
+        key: "leave_period",
+        title: { en: "Leave Period", ar: "مدة الإجازة" },
+        alwaysPrint: true,
+        rows: [
+          row("leave_from", "Starting Date", "تاريخ بداية الإجازة", leaveFrom, "entry"),
+          row("leave_to", "Ending Date", "تاريخ الانتهاء", leaveTo, "entry"),
+          row("leave_days", "Number of Days", "عدد الأيام", leaveDays, "entry"),
+        ],
+      },
+      {
+        key: "direct_manager",
+        title: { en: "Direct Manager", ar: "المدير المباشر" },
+        alwaysPrint: true,
+        rows: [
+          row("direct_manager", "Direct Manager", "المدير المباشر", directManager, "entry"),
+          row(
+            "responsibility_assigned",
+            "Responsibility assigned to",
+            "المسؤول أثناء الغياب",
+            responsibility,
+            "entry",
+          ),
+          row("manager_notes", "Direct Manager Notes", "ملاحظات المدير المباشر", managerNotes, "entry"),
+        ],
+      },
+      {
+        key: "hr_use",
+        title: { en: "HR Use Only", ar: "لاستعمال شؤون الموظفين فقط" },
+        alwaysPrint: true,
+        rows: [
+          row("date_of_employment", "Date of Employment", "تاريخ التعيين", employmentDate, "system"),
+          row(
+            "leave_balance",
+            "Balance until the start of the leave",
+            "الرصيد حتى بداية الإجازة",
+            balanceBefore,
+            "entry",
+          ),
+          row(
+            "actual_leave_days",
+            "Actual number of leave days",
+            "عدد أيام الإجازة الفعلي",
+            actualDays,
+            "entry",
+          ),
+          row("resume_date", "Resume date", "تاريخ المباشرة", resumeDate, "entry"),
+          row("hr_comments", "HR Comments", "ملاحظات شؤون الموظفين", hrComments, "entry"),
+        ],
+      },
+      {
+        key: "leave_policy",
+        title: { en: "Leave Policy", ar: "سياسة الإجازات" },
+        alwaysPrint: true,
+        rows: [],
+        body: LEAVE_POLICY,
+      },
+    );
+
+    const consumed = new Set<string>([
+      "employee_id",
+      "employee_name",
+      "sponsor",
+      "civil_id",
+      "position",
+      "leave_type",
+      "leave_kind",
+      "type_of_leave",
+      "leave_from",
+      "starting_date",
+      "start_date",
+      "absence_from",
+      "leave_to",
+      "ending_date",
+      "end_date",
+      "absence_to",
+      "leave_days",
+      "number_of_days",
+      "days",
+      "direct_manager",
+      "manager",
+      "responsibility_assigned",
+      "responsibility",
+      "manager_notes",
+      "direct_manager_notes",
+      "date_of_employment",
+      "joining_date",
+      "joined_at",
+      "leave_balance",
+      "balance_until_start",
+      "balance",
+      "actual_leave_days",
+      "actual_days",
+      "resume_date",
+      "return_date",
+      "hr_comments",
+      "hr_notes",
+      ...LEAVE_TYPES.map((type) => type.key),
+    ]);
+    appendDocumentTail(sections, [...employeeFields, ...documentFields], consumed, body, title);
   } else if (kind === "payslip") {
     payslip = buildPayslipSheet(values, documentFields);
-    employeeRows = payslip.identity.map((item) =>
-      row(item.key, item.label.en, item.label.ar, item.value, "system"),
+    employeeRows = sortEmployeeRows(
+      payslip.identity.map((item) => row(item.key, item.label.en, item.label.ar, item.value, "system")),
     );
     sections.push({
       key: "payslip",

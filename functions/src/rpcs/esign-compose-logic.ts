@@ -234,6 +234,13 @@ export const STAFF_STAMP_SLOT_ROLES: Record<
   loan: ["hr"],
   payslip: ["hr"],
   general: ["hr"],
+  /**
+   * A Leave Request is signed by five people, and every one of them has a box:
+   * the rider, the direct manager, the person given responsibility during the
+   * absence, the HR officer and the HR manager. The order is the client's own,
+   * which is also the order their signatures are applied in.
+   */
+  leave: ["direct_manager", "hr_responsibility", "hr_manager", "general_manager"],
 };
 
 export type StaffStampSigner = { id: string; sortOrder: number };
