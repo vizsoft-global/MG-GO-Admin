@@ -124,6 +124,46 @@ export const ESIGN_EMPLOYEE_ROWS: readonly EsignEmployeeRow[] =
   EMPLOYEE_PLACEHOLDER_KEYS.map((key) => ({ key, ...META[key] }));
 
 /**
+ * The order the client asked for, from their Leave Request sheet:
+ * **Employee Code → Employee Name → Sponsor → Civil ID → Position**.
+ *
+ * It is one list rather than five per-document orders, because "the employee
+ * information section must sort the same way on every template" is a single
+ * requirement — and five hand-kept orders is exactly how one document ends up
+ * printing Sponsor above Civil ID while its neighbour does the opposite.
+ * Anything not named here keeps its catalogue position after these five.
+ */
+export const ESIGN_EMPLOYEE_PRINT_ORDER = [
+  "employee_id",
+  "employee_name",
+  "sponsor",
+  "civil_id",
+  "position",
+] as const satisfies readonly EsignEmployeeRowKey[];
+
+const PRINT_RANK = new Map<string, number>(
+  ESIGN_EMPLOYEE_PRINT_ORDER.map((key, index) => [key, index]),
+);
+
+/** Rank of one employee row: the five named fields first, in that order. */
+export function employeeRowRank(key: string): number {
+  return PRINT_RANK.get(key) ?? ESIGN_EMPLOYEE_PRINT_ORDER.length;
+}
+
+/**
+ * Sort an employee block into the client's order. Stable, so two rows that are
+ * not in the named five keep whatever order the caller built them in.
+ */
+export function sortEmployeeRows<T extends { key: string }>(rows: readonly T[]): T[] {
+  return [...rows].sort((a, b) => employeeRowRank(a.key) - employeeRowRank(b.key));
+}
+
+/** Sort a `Record<key, value>`-derived label/value pair list the same way. */
+export function sortEmployeeFieldRows<T extends { key: string }>(rows: readonly T[]): T[] {
+  return sortEmployeeRows(rows);
+}
+
+/**
  * The rows a document always opens with, whatever the rider has on file: the
  * company, the rider and their identifying code. Everything after these is
  * printed only when it carries a value.
@@ -172,10 +212,12 @@ export type AccidentEmployeeValueRow = {
 export function accidentEmployeeRows(
   values: Record<string, string>,
 ): AccidentEmployeeValueRow[] {
-  return ACCIDENT_EMPLOYEE_ROW_KEYS.map((key) => ({
-    key,
-    label_en: META[key].label_en,
-    label_ar: META[key].label_ar,
-    value: (values[key] ?? "").trim(),
-  }));
+  return sortEmployeeRows(
+    ACCIDENT_EMPLOYEE_ROW_KEYS.map((key) => ({
+      key,
+      label_en: META[key].label_en,
+      label_ar: META[key].label_ar,
+      value: (values[key] ?? "").trim(),
+    })),
+  );
 }

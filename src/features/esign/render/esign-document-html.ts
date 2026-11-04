@@ -21,9 +21,10 @@ export const SIGNATURE_BAND_PT = 140;
  * 8 — new sheets stamp this version. Persisted employee and staff slots stay
  * trusted from `ESIGN_SLOT_MEASURE_SINCE` (7); a version-7 measurement is not
  * stale when this number moves.
+ * 9 — Leave Request (five signed boxes) and the client's employee-block order.
  * `functions/src/rpcs/esign-signature-slots.ts` must mirror this number.
  */
-export const ESIGN_SHEET_RENDER_VERSION = 8;
+export const ESIGN_SHEET_RENDER_VERSION = 9;
 
 /** Inline MG mark when Settings has no logo, or `/logo.png` is missing from public/. */
 export const ESIGN_DEFAULT_LOGO_SRC =
@@ -32,7 +33,19 @@ export const ESIGN_DEFAULT_LOGO_SRC =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 24"><rect width="24" height="24" rx="4" fill="#18181b"/><path fill="#fff" d="M5 17.5V6.5h3.2l3.8 8 3.8-8H19v11h-2.4V9.6l-3.5 7.9h-2.2L7.4 9.6v7.9H5z"/></svg>`,
   );
 
+/**
+ * **Every sheet prints without a logo**, on the client's instruction: the brand
+ * is carried by the palette, the type and the rules, not by a mark in the
+ * corner. That has to hold even when Settings *does* hold a logo, so this is a
+ * hard switch rather than "pass nothing and hope" — the send path resolves a URL
+ * from branding and the source company, and either would otherwise reappear.
+ *
+ * Flip to `false` to bring the logo back on all templates.
+ */
+export const ESIGN_SHEETS_WITHOUT_LOGO = true;
+
 export function resolveEsignLogoSrc(url?: string | null): string {
+  if (ESIGN_SHEETS_WITHOUT_LOGO) return "";
   const trimmed = url?.trim() ?? "";
   if (!trimmed || trimmed === "/logo.png") return ESIGN_DEFAULT_LOGO_SRC;
   return trimmed;

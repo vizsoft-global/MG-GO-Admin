@@ -442,9 +442,10 @@ describe("esign accident and template geometry", () => {
     });
 
     assert.equal(layout.title.en, "Accident");
+    // The client's order, on every template: code, name, sponsor, civil ID, position.
     assert.deepEqual(
       layout.employeeRows.map((row) => row.key),
-      ["employee_id", "employee_name", "civil_id", "position", "sponsor"],
+      ["employee_id", "employee_name", "sponsor", "civil_id", "position"],
     );
     const details = layout.sections.find((section) => section.key === "request_details");
     assert.equal(details?.title.en, "Accident");

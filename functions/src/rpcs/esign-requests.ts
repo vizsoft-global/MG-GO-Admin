@@ -63,7 +63,7 @@ const EXPIRE_SCAN_CAP = 20_000;
 export const SIGN_DEEP_LINK_PREFIX = "musallam:///profile/support/sign/";
 export const SIGN_ROUTE_PREFIX = "/profile/support/sign/";
 
-const TEMPLATE_DOCUMENT_KINDS = ["penalty", "loan", "payslip", "general"] as const;
+const TEMPLATE_DOCUMENT_KINDS = ["penalty", "loan", "payslip", "general", "leave"] as const;
 const FIELD_SOURCE_KINDS = ["system", "entry", "fixed", "signature"] as const;
 const FIELD_SECTION_KEYS = ["employee", "document"] as const;
 

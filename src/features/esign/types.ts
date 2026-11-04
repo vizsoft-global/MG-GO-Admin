@@ -39,7 +39,7 @@ export type EsignFieldSection = (typeof ESIGN_FIELD_SECTIONS)[number];
  * prints whatever field values the request stored), so this changes the
  * builder's preview and any future kind-aware renderer — never a sent document.
  */
-export const ESIGN_DOCUMENT_KINDS = ["penalty", "loan", "payslip", "general"] as const;
+export const ESIGN_DOCUMENT_KINDS = ["penalty", "loan", "payslip", "general", "leave"] as const;
 export type EsignDocumentKind = (typeof ESIGN_DOCUMENT_KINDS)[number];
 
 export type EsignStatusCounts = {
@@ -134,6 +134,15 @@ export const ESIGN_STAFF_SIGNER_ROLES = [
   "countersigner",
   "manager",
   "witness",
+  /**
+   * The four line managers on a Leave Request, in the order the client's sheet
+   * prints them. Each one has its own printed box, so each one is a real
+   * signature rather than a name typed onto the page.
+   */
+  "direct_manager",
+  "hr_responsibility",
+  "hr_manager",
+  "general_manager",
 ] as const;
 export type EsignStaffSignerRole = (typeof ESIGN_STAFF_SIGNER_ROLES)[number];
 

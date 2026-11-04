@@ -191,6 +191,14 @@ function defaultCaption(role: SignSlotRole, kind: EsignDocumentKind): BilingualT
       return { en: "Amount received", ar: "تم الاستلام" };
     case "ack_not_received":
       return { en: "Amount not received", ar: "لم يُستلم" };
+    case "direct_manager":
+      return { en: "Direct Manager", ar: "المدير المباشر" };
+    case "hr_responsibility":
+      return { en: "HR Responsibility", ar: "مسؤول الموارد البشرية" };
+    case "hr_manager":
+      return { en: "HR Manager", ar: "مدير الموارد البشرية" };
+    case "general_manager":
+      return { en: "General Manager", ar: "المدير العام" };
     default: {
       const exhaustive: never = role;
       return exhaustive;
@@ -229,8 +237,39 @@ function sigCard(title: BilingualText, role: SignSlotRole, name: string, stamp: 
   return `<div class="sig sig--bare"><div class="h"><span>${escapeHtml(title.en)}</span>${ar(title.ar)}</div><div class="b"><div class="lines">${nameLine(name)}${signLine(role, { en: "Signature", ar: "التوقيع" })}${dateLine()}</div>${seal}</div></div>`;
 }
 
-function pairSig(title: BilingualText, role: SignSlotRole, name: string): string {
-  return `<div class="sig"><div class="h"><span>${escapeHtml(title.en)}</span>${ar(title.ar)}</div><div class="b"><div class="lines">${nameLine(name)}${signLine(role, title)}${dateLine()}</div></div></div>`;
+/** The five leave signers, in the order the client's sheet prints them. */
+const LEAVE_SIGN_ROLES: readonly SignSlotRole[] = [
+  "employee",
+  "direct_manager",
+  "hr_responsibility",
+  "hr_manager",
+  "general_manager",
+];
+
+/**
+ * Leave Request dock: **five columns, every one signed.**
+ *
+ * The client's sheet pairs each of the four staff columns with Approved / Not
+ * approved boxes and a Name / Signature / Date line. Only the employee column
+ * carries the rider's name from the record — the four managers are whoever the
+ * operator assigned as signers, so their names arrive with their signatures
+ * rather than being typed onto the page.
+ */
+function leaveSignatures(layout: EsignDocumentLayout, staffLabel?: string): string {
+  const employeeName = findRow(layout, ["employee_name"]);
+  const cards = LEAVE_SIGN_ROLES.map((role) => {
+    const caption = captionFor(layout, role);
+    const name = role === "employee" ? employeeName : role === "hr_manager" ? (staffLabel?.trim() ?? "") : "";
+    const decide =
+      role === "employee"
+        ? ""
+        : `<div class="decide"><span class="cb" data-decision="approved"></span><span>Approved</span><span class="ar" dir="rtl">معتمد</span></div><div class="decide"><span class="cb" data-decision="not_approved"></span><span>Not approved</span><span class="ar" dir="rtl">غير معتمد</span></div>`;
+    return `<div class="sig sig--bare"><div class="h"><span>${escapeHtml(caption.en)}</span>${ar(caption.ar)}</div><div class="b"><div class="lines">${nameLine(name)}${signLine(role, { en: "Signature", ar: "التوقيع" })}${dateLine()}</div>${decide}</div></div>`;
+  });
+  return `<div class="sigs sigs--5 sigs--joined leave-signs" data-signature-band="1">${cards.join("")}</div>`;
+}
+
+function pairSig(title: BilingualText, role: SignSlotRole, name: string): string {  return `<div class="sig"><div class="h"><span>${escapeHtml(title.en)}</span>${ar(title.ar)}</div><div class="b"><div class="lines">${nameLine(name)}${signLine(role, title)}${dateLine()}</div></div></div>`;
 }
 
 function signatures(layout: EsignDocumentLayout, staffLabel?: string): string {
@@ -238,6 +277,7 @@ function signatures(layout: EsignDocumentLayout, staffLabel?: string): string {
   const staff = staffLabel?.trim() ?? "";
   const employeeCaption = captionFor(layout, "employee");
   const hrCaption = captionFor(layout, "hr");
+  if (layout.kind === "leave") return leaveSignatures(layout, staffLabel);
   if (layout.kind === "payslip") {
     const employee = roles.has("employee") ? pairSig(employeeCaption, "employee", findRow(layout, ["employee_name"])) : "";
     const hr = roles.has("hr") ? pairSig(hrCaption, "hr", staff) : "";
@@ -301,14 +341,36 @@ function metaStrip(layout: EsignDocumentLayout): string {
   return `<div class="box box--flush meta"><table><tr>${metaCell(no.en, no.ar, ref)}${metaCell("Issue Date", "تاريخ الإصدار", date)}${metaCell("Department", "القسم", department)}${metaCell("Status", "الحالة", status)}</tr></table></div>`;
 }
 
+/** A body with real line breaks — a policy list must not collapse onto one line. */
+function multilineBody(text: string, className = ""): string {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return "";
+  return lines
+    .map((line) => `<div${className ? ` class="${className}"` : ""}>${escapeHtml(line)}</div>`)
+    .join("");
+}
+
+/** One flat checkbox grid, for a group whose keys carry no penalty semantics. */
+function simpleChecks(checks: LayoutCheckbox[]): string {
+  const cells = checks.map((check) => checkCell(check)).join("");
+  return `<table class="opts" data-check-group="plain"><tbody><tr>${cells}</tr></tbody></table>`;
+}
+
 function sectionBox(section: LayoutSection, index: number): string {
   const rows = gridTable(section.rows, section.alwaysPrint === true);
-  const checks = section.checkboxes?.length ? penaltyChecks(section.checkboxes) : "";
+  const checks = section.checkboxes?.length
+    ? section.key === "penalty"
+      ? penaltyChecks(section.checkboxes)
+      : simpleChecks(section.checkboxes)
+    : "";
   const bodyEn = section.body?.en.trim() ?? "";
   const bodyAr = section.body?.ar.trim() ?? "";
   const body =
     bodyEn || bodyAr
-      ? `<div class="note" data-section="${escapeHtml(section.key)}">${bodyEn ? `<div>${escapeHtml(bodyEn)}</div>` : ""}${bodyAr && bodyAr !== bodyEn ? `<div class="ar ar-start">${escapeHtml(bodyAr)}</div>` : ""}</div>`
+      ? `<div class="note" data-section="${escapeHtml(section.key)}">${multilineBody(bodyEn)}${bodyAr && bodyAr !== bodyEn ? multilineBody(bodyAr, "ar ar-start") : ""}</div>`
       : "";
   if (!rows && !checks && !body) return "";
   const employee = section.key === "employee" ? ` class="employee-block" data-employee-block="1"` : ` class="box"`;
