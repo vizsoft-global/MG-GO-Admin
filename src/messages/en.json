@@ -4262,7 +4262,8 @@
           "not_authorized": "You do not have permission to manage vehicles.",
           "invalid_company_key": "Use a short key of letters, numbers, or underscore.",
           "invalid_company_label": "English name is required.",
-          "save_failed": "Could not save the company."
+          "save_failed": "Could not save the company.",
+          "company_exists": "A company with this name already exists. Try a different name."
         }
       },
       "addVehicle": "Add Vehicle",

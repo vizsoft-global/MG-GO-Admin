@@ -18,6 +18,8 @@ export type VehicleCompanyError =
   | "not_authorized"
   | "invalid_company_key"
   | "invalid_company_label"
+  /** The key already belongs to a company — not the same as a malformed key. */
+  | "company_exists"
   | "save_failed";
 
 const KNOWN = new Set<string>([
@@ -129,13 +131,20 @@ export async function upsertVehicleCompany(input: {
 
   const db = await openDb();
   const beforeSnap = await db.collection(COLLECTIONS.vehicleCompanies).doc(key).get();
-  if (input.isNew && beforeSnap.exists) return { error: "invalid_company_key" };
+  // A key that already belongs to a company is a different answer from a
+  // malformed one, and the operator can act on it: pick another name.
+  if (input.isNew && beforeSnap.exists) return { error: "company_exists" };
 
   const { error } = await callAdminFunction("admin_upsert_vehicle_company", {
-    p_key: key,
-    p_label_en: labelEn,
-    p_label_ar: labelAr,
-    p_is_active: input.isActive,
+    // camelCase, like every other callable in `catalogs.ts`: its readers pull
+    // `key` / `labelEn` / `labelIsActive` by name and have no `p_snake_case`
+    // fallback, so sending `p_key` arrived as an empty key and the function
+    // refused with `invalid_key` — which the caller then reported as "use a
+    // short key", for a key that was perfectly valid.
+    key,
+    labelEn,
+    labelAr,
+    isActive: input.isActive,
   });
   if (error) {
     const code = KNOWN.has(error.message) ? error.message : "save_failed";
