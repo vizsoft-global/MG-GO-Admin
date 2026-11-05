@@ -1118,6 +1118,24 @@ export async function fetchHrPayrollBundle(monthKey: string, locale: string): Pr
   return data;
 }
 
+/**
+ * App-open hours per rider for the month (Shift in → Shift out, unioned).
+ *
+ * Display only: it fills the "Worked hours (app)" column beside the attendance
+ * clock and never enters a pay formula.
+ */
+export async function fetchHrAppHours(
+  monthKey: string,
+): Promise<{ hours: Record<string, number>; truncated: boolean }> {
+  await requireHrPayrollRead();
+  const { data, error } = await callRpc<{ hours?: Record<string, number>; truncated?: boolean }>(
+    "admin_hr_app_hours",
+    { p_month: monthKey },
+  );
+  if (error || !data) throw new Error(error?.message || "load_failed");
+  return { hours: data.hours ?? {}, truncated: data.truncated === true };
+}
+
 export async function saveHrPayrollCells(
   monthKey: string,
   cells: readonly { driverId: string; patch: HrCellPatch }[],
@@ -1136,6 +1154,107 @@ export async function saveHrPayrollCells(
     skipped += Number(data.skipped ?? 0);
   }
   return { saved, skipped };
+}
+
+/**
+ * Set a rider's vehicle type from the HR sheet.
+ *
+ * The type lives on the assigned vehicle (`vehicles.vehicle_type_key`), because
+ * that is what the Fleet and Employees screens read; a rider with no vehicle is
+ * skipped and reported by the callable rather than silently ignored.
+ */
+export async function saveHrVehicleType(
+  monthKey: string,
+  driverId: string,
+  vehicleTypeKey: string,
+): Promise<{ saved: number; skipped: number }> {
+  await requirePayrollPermission("payroll.manage");
+  const { data, error } = await callRpc<{ saved?: number; skipped?: number }>("admin_save_hr_payroll_cells", {
+    p_month: monthKey,
+    p_cells: [{ driverId, vehicleTypeKey }],
+  });
+  if (error || !data) throw new Error(error?.message || "save_failed");
+  // `skipped` means the rider has no assigned vehicle, so nothing was typed. That
+  // is a refusal the operator must see, not a silent success.
+  if (!Number(data.saved ?? 0) && Number(data.skipped ?? 0) > 0) {
+    throw new Error("invalid_cell:vehicle_type");
+  }
+  return { saved: Number(data.saved ?? 0), skipped: Number(data.skipped ?? 0) };
+}
+
+/** The identity cells the HR sheet can correct, in one write. */
+export type HrIdentityPatch = {
+  bankNumber?: string;
+  bankCode?: string;
+  currency?: string;
+  zoneId?: string;
+  projectKey?: string;
+};
+
+/**
+ * Correct a rider's bank, zone or client from the HR sheet.
+ *
+ * Every key is validated by the callable against its catalog (`bank_codes`,
+ * `zones`, `payroll_clients`) and the write is audited with the payroll month, so
+ * a typo cannot become a bank account.
+ */
+export async function saveHrIdentityCells(
+  monthKey: string,
+  driverId: string,
+  identity: HrIdentityPatch,
+): Promise<{ saved: number; skipped: number }> {
+  await requirePayrollPermission("payroll.manage");
+  const { data, error } = await callRpc<{ saved?: number; skipped?: number }>("admin_save_hr_payroll_cells", {
+    p_month: monthKey,
+    p_cells: [{ driverId, identity }],
+  });
+  if (error || !data) throw new Error(error?.message || "save_failed");
+  if (!Number(data.saved ?? 0) && Number(data.skipped ?? 0) > 0) {
+    throw new Error("invalid_cell:driver_not_found");
+  }
+  return { saved: Number(data.saved ?? 0), skipped: Number(data.skipped ?? 0) };
+}
+
+/** The catalogs the HR identity cells pick from. */
+export async function listHrIdentityOptions(): Promise<{
+  banks: { key: string; label: string }[];
+  zones: { id: string; name: string }[];
+  clients: { key: string; label: string }[];
+}> {
+  await requireHrPayrollRead();
+  const db = await staffDb();
+  if (!db) return { banks: [], zones: [], clients: [] };
+  const [banks, zones, clients] = await Promise.all([
+    db.collection(COLLECTIONS.bankCodes).get(),
+    db.collection(COLLECTIONS.zones).get(),
+    db.collection(COLLECTIONS.payrollClients).get(),
+  ]);
+  const label = (data: Record<string, unknown>, fallback: string): string => {
+    const en = typeof data.label_en === "string" ? data.label_en : "";
+    const ar = typeof data.label_ar === "string" ? data.label_ar : "";
+    const name = typeof data.name === "string" ? data.name : "";
+    return name || en || ar || fallback;
+  };
+  return {
+    banks: banks.docs
+      .map((doc) => ({
+        key: typeof doc.get("key") === "string" ? (doc.get("key") as string) : doc.id,
+        label: label(doc.data() ?? {}, doc.id),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    zones: zones.docs
+      .map((doc) => ({
+        id: doc.id,
+        name: typeof doc.get("name") === "string" ? (doc.get("name") as string) : doc.id,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    clients: clients.docs
+      .map((doc) => ({
+        key: typeof doc.get("key") === "string" ? (doc.get("key") as string) : doc.id,
+        label: label(doc.data() ?? {}, doc.id),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  };
 }
 
 export type PayrollIdentityField =

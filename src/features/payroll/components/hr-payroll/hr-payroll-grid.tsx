@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, type JSX } from "react";
-import { INLINE_EDIT_CELL_CLASS } from "@/components/app/constants";
+import { memo, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { HR_FOOTER_KEYS, HR_GROUP_FILL, hrColumnIsNumeric, hrGroupSpans, stickyOffsets } from "../../hr-payroll-columns";
 import type { HrColumn } from "../../hr-payroll-columns";
-import { HR_AWAITING, hrFooterTotals } from "../../hr-payroll-formulas";
+import { HR_AWAITING, hrFooterTotals, hrSalaryShortfall } from "../../hr-payroll-formulas";
 import { HR_STATUS_ORDER, hrStatusPaint, hrStatusStyle } from "../../hr-payroll-status";
 import type { HrEditState, HrGroupBy, HrPayrollGroup, HrPayrollRow } from "../../hr-payroll-types";
 import {
@@ -12,9 +12,105 @@ import {
   type ColumnFilterValue,
   type ColumnSort,
 } from "../../payroll-column-filter";
-import { COLUMN_EDIT, money3, optionLabel } from "./hr-payroll-ui";
+import type { PayrollCellStatus } from "../../use-payroll-cell-mutation";
+import type { HrNumericCell } from "../../hr-cell-validation";
+import { COLUMN_EDIT, money3 } from "./hr-payroll-ui";
+import { HrAmountCell, HrOptionCell, HrSelectCell, HrTextCell } from "./editable-cell";
+import type { HrIdentityPatch } from "../../payroll-actions";
 import { PayrollIdentityCell, hrIdentityField } from "../../payroll-identity-cell";
+import { PayrollRowLink } from "../../payroll-row-link";
 import "./hr-payroll.css";
+
+function HrDataRow({
+  row,
+  index,
+  columns,
+  offsets,
+  flash,
+  canManage,
+  awaiting,
+  noRate,
+  shortfallTitle,
+  cellStates,
+  cellError,
+  vehicleOptions,
+  noVehicle,
+  noIdentity,
+  onVehicleType,
+  identityOptions,
+  onIdentity,
+  onSelect,
+  onAmount,
+}: {
+  row: HrPayrollRow;
+  index: number;
+  columns: readonly HrColumn[];
+  offsets: readonly number[];
+  flash: boolean;
+  canManage: boolean;
+  awaiting: string;
+  noRate: string;
+  shortfallTitle: (gap: number) => string;
+  cellStates: Readonly<Record<string, PayrollCellStatus>>;
+  cellError: (reason: string | undefined) => string;
+  vehicleOptions: readonly { key: string; label: string }[];
+  identityOptions: { banks: { value: string; label: string }[]; zones: { value: string; label: string }[]; clients: { value: string; label: string }[] };
+  noVehicle: string;
+  noIdentity: string;
+  onVehicleType: (driverId: string, vehicleKey: string) => void;
+  onIdentity: (driverId: string, patch: HrIdentityPatch) => void;
+  onSelect: (driverId: string, key: keyof HrEditState, value: number) => void;
+  onAmount: (driverId: string, key: keyof HrEditState, value: number) => void;
+}) {
+  return (
+    <tr className={flash ? "hrpay-flash" : undefined}>
+      {columns.map((column, columnIndex) => {
+        const paint = column.key === "name" ? hrStatusPaint(row.statusKey, row.jobEndDescription) : null;
+        const sticky = stickyBox(columnIndex, offsets, column.width);
+        const tone =
+          paint && paint.fill !== "transparent" ? { background: paint.fill, color: paint.text } : undefined;
+        return (
+          <td
+            key={column.key}
+            className={withSticky("hrpay-cell", columnIndex)}
+            style={tone ? { ...sticky, ...tone } : sticky}
+          >
+            {renderHrCell(
+              column,
+              row,
+              index,
+              canManage,
+              awaiting,
+              noRate,
+              onSelect,
+              onAmount,
+              shortfallTitle,
+              cellStates,
+              cellError,
+              vehicleOptions,
+              noVehicle,
+              noIdentity,
+              onVehicleType,
+              identityOptions,
+              onIdentity,
+            )}
+          </td>
+        );
+      })}
+      <td key="row-action" className="hrpay-cell w-9 text-center">
+        <PayrollRowLink driverId={row.driverId} />
+      </td>
+    </tr>
+  );
+}
+
+/**
+ * One row of the HR sheet.
+ *
+ * Memoised on the row identity plus primitives, so a sort or a filter that only
+ * re-orders rows does not rebuild every cell's className and sticky box.
+ */
+const HrRow = memo(HrDataRow);
 
 function stickyOnly(index: number): string | undefined {
   if (index === 3) return "hrpay-sticky hrpay-edge";
@@ -241,31 +337,6 @@ function footerMoney(
   return null;
 }
 
-function HrAmountEditor(props: { display: string; current: number; onCommit: (value: number) => void }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  return (
-    <input
-      className={INLINE_EDIT_CELL_CLASS}
-      value={draft ?? props.display}
-      onFocus={(event) => {
-        const next = String(props.current);
-        setDraft(next);
-        event.currentTarget.value = next;
-        event.currentTarget.select();
-      }}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={(event) => {
-        const trimmed = event.currentTarget.value.trim();
-        const parsed = Number(trimmed);
-        if (trimmed !== "" && Number.isFinite(parsed) && parsed >= 0 && parsed !== props.current) {
-          props.onCommit(parsed);
-        }
-        setDraft(null);
-      }}
-    />
-  );
-}
-
 function renderHrCell(
   column: HrColumn,
   row: HrPayrollRow,
@@ -275,6 +346,15 @@ function renderHrCell(
   noRate: string,
   onSelect: (driverId: string, key: keyof HrEditState, value: number) => void,
   onAmount: (driverId: string, key: keyof HrEditState, value: number) => void,
+  shortfallTitle: (gap: number) => string,
+  cellStates: Readonly<Record<string, PayrollCellStatus>>,
+  cellError: (reason: string | undefined) => string,
+  vehicleOptions: readonly { key: string; label: string }[],
+  noVehicle: string,
+  noIdentity: string,
+  onVehicleType: (driverId: string, vehicleKey: string) => void,
+  identityOptions: { banks: { value: string; label: string }[]; zones: { value: string; label: string }[]; clients: { value: string; label: string }[] },
+  onIdentity: (driverId: string, patch: HrIdentityPatch) => void,
 ): JSX.Element | string | number {
   if (column.key === "i") return dataIndex;
   if (column.key === "status") {
@@ -285,30 +365,94 @@ function renderHrCell(
       </span>
     );
   }
-  const editKey = COLUMN_EDIT[column.key];
-  if (column.editable === "select" && canManage && editKey && column.select) {
-    const selected = editKey;
+  if (column.key === "vtype" && canManage) {
+    // A rider on a type the catalog no longer lists keeps that string in the
+    // cell: deleting a type must never blank somebody's vehicle.
+    const known = vehicleOptions.some((option) => option.key === row.vehicleKey);
     return (
       <select
-        className={INLINE_EDIT_CELL_CLASS}
-        value={String(row.edit[selected])}
-        onChange={(event) => onSelect(row.driverId, selected, Number(event.target.value))}
+        className="w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-input focus-visible:border-input"
+        value={row.vehicleKey}
+        aria-label={column.header}
+        onChange={(event) => onVehicleType(row.driverId, event.target.value)}
       >
-        {column.select.map((value) => (
-          <option key={value} value={String(value)}>
-            {optionLabel(value, column)}
+        {!known ? <option value={row.vehicleKey}>{row.vehicleKey || noVehicle}</option> : null}
+        {vehicleOptions.map((option) => (
+          <option key={option.key} value={option.key}>
+            {option.label}
           </option>
         ))}
       </select>
     );
   }
-  if (column.editable === "amount" && canManage && editKey) {
-    const amountKey = editKey;
+  /**
+   * The identity cells the client asked to correct from the sheet: bank number,
+   * bank, currency, zone and client. Each one writes through the audited callable
+   * and keeps the row's dependent figures in step.
+   */
+  if (canManage && (column.key === "bankNo" || column.key === "cur")) {
+    const field = column.key === "bankNo" ? "bankNumber" : "currency";
+    const raw = row.cells[column.key] ?? "";
     return (
-      <HrAmountEditor
+      <HrTextCell
+        driverId={row.driverId}
+        field={field}
+        columnKey={column.key}
+        value={raw === "—" ? "" : raw}
+        status={cellStates[`${row.driverId}:${field}`] ?? { state: "idle" }}
+        errorText={cellError}
+        canEdit={canManage}
+        onCommit={(driverId, changed, value) => onIdentity(driverId, { [changed]: value })}
+      />
+    );
+  }
+  if (canManage && (column.key === "bank" || column.key === "zone" || column.key === "clientName")) {
+    const spec =
+      column.key === "bank"
+        ? { field: "bankCode" as const, value: row.bankCode, options: identityOptions.banks }
+        : column.key === "zone"
+          ? { field: "zoneId" as const, value: row.zoneId, options: identityOptions.zones }
+          : { field: "projectKey" as const, value: row.projectKey, options: identityOptions.clients };
+    return (
+      <HrOptionCell
+        value={spec.value}
+        options={spec.options}
+        emptyLabel={noIdentity}
+        ariaLabel={column.header}
+        status={cellStates[`${row.driverId}:${spec.field}`] ?? { state: "idle" }}
+        errorText={cellError}
+        canEdit={canManage}
+        onCommit={(value) => onIdentity(row.driverId, { [spec.field]: value })}
+      />
+    );
+  }
+  const editKey = COLUMN_EDIT[column.key];
+  if (column.editable === "select" && canManage && editKey && column.select) {
+    return (
+      <HrSelectCell
+        driverId={row.driverId}
+        field={editKey as HrNumericCell}
+        value={row.edit[editKey]}
+        column={column}
+        status={cellStates[`${row.driverId}:${editKey}`] ?? { state: "idle" }}
+        errorText={cellError}
+        canEdit={canManage}
+        onCommit={onSelect}
+      />
+    );
+  }
+  if (column.editable === "amount" && canManage && editKey) {
+    return (
+      <HrAmountCell
+        driverId={row.driverId}
+        field={editKey as HrNumericCell}
+        columnKey={column.key}
         display={row.cells[column.key] ?? ""}
-        current={row.edit[amountKey]}
-        onCommit={(value) => onAmount(row.driverId, amountKey, value)}
+        current={row.edit[editKey]}
+        status={cellStates[`${row.driverId}:${editKey}`] ?? { state: "idle" }}
+        errorText={cellError}
+        canEdit={canManage}
+        onCommit={onAmount}
       />
     );
   }
@@ -337,6 +481,22 @@ function renderHrCell(
   const text = row.cells[column.key] ?? "";
   if (text === HR_AWAITING) return <span className="hrpay-await">{awaiting}</span>;
   if (column.key === "rate" && text === noRate) return <span className="hrpay-warn">{text}</span>;
+  if (column.key === "total") {
+    // Req: a month that pays less than the work permit salary is flagged, not
+    // silently printed. A permit figure of 0 is "not recorded", never "below".
+    const gap = hrSalaryShortfall(row.numbers.totalSalary, row.permitSalary);
+    if (gap !== null) {
+      return (
+        <span
+          className="inline-flex rounded-sm bg-destructive/15 px-1 font-semibold text-destructive"
+          title={shortfallTitle(gap)}
+          aria-label={shortfallTitle(gap)}
+        >
+          {text}
+        </span>
+      );
+    }
+  }
   return text;
 }
 
@@ -359,9 +519,29 @@ export function HrPayrollGrid(props: {
   statusList: readonly string[];
   onSelect: (driverId: string, key: keyof HrEditState, value: number) => void;
   onAmount: (driverId: string, key: keyof HrEditState, value: number) => void;
+  /** Sentence naming the shortfall against the work permit salary, in KWD. */
+  shortfallTitle: (gap: number) => string;
+  /** Per-cell save state, keyed `${driverId}:${editKey}`. */
+  cellStates: Readonly<Record<string, PayrollCellStatus>>;
+  /** A refused value's reason as a sentence. */
+  cellError: (reason: string | undefined) => string;
+  /** The live `vehicle_types` catalog, for the inline Vehicle Type cell. */
+  vehicleOptions: readonly { key: string; label: string }[];
+  /** Bank / Zone / Client catalogs for the identity cells. */
+  identityOptions: { banks: { value: string; label: string }[]; zones: { value: string; label: string }[]; clients: { value: string; label: string }[] };
+  /** Printed when a rider has no assignment. */
+  noVehicle: string;
+  noIdentity: string;
+  onVehicleType: (driverId: string, vehicleKey: string) => void;
+  onIdentity: (driverId: string, patch: HrIdentityPatch) => void;
+  /** Pinned bar under the scroller (count + Download this table). */
+  footer?: ReactNode;
+  /** The rows exactly as painted, so the export can be the screen. */
+  onOrderedRows?: (rows: readonly HrPayrollRow[]) => void;
 }): JSX.Element {
   const [sort, setSort] = useState<HrSort | null>(null);
-  const offsets = stickyOffsets(props.columns);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const offsets = useMemo(() => stickyOffsets(props.columns), [props.columns]);
   const ordered = [...props.rows].sort((a, b) => {
     if (props.groupBy !== "none") {
       const group = groupRank(a, props.groupBy).localeCompare(groupRank(b, props.groupBy));
@@ -370,14 +550,79 @@ export function HrPayrollGrid(props: {
     if (!sort) return 0;
     return compareSorted(a, b, sort.key, sort.mode);
   });
+  // The workbook must be the screen: same rows, same order (filters, grouping and
+  // the header sort all live in this component).
+  const reportOrdered = props.onOrderedRows;
+  useEffect(() => {
+    reportOrdered?.(ordered);
+  }, [ordered, reportOrdered]);
+  /**
+   * Req 1.9: 962 riders x 51 columns is 49,062 `<td>` elements in one paint. The
+   * ungrouped sheet virtualises its body — about 25 rows stay in the DOM — while
+   * a grouped sheet keeps the plain body, because its banner rows have to sit
+   * between data rows and a window would cut them.
+   */
+  const virtualise = props.groupBy === "none" && ordered.length > 40;
+  const virtualizer = useVirtualizer({
+    count: virtualise ? ordered.length : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 26,
+    overscan: 14,
+  });
   const totals = hrFooterTotals(props.rows);
   const nameIndex = props.columns.findIndex((column) => column.key === "name");
   const riderLabelAt = nameIndex >= 0 ? nameIndex : 0;
   const body: JSX.Element[] = [];
+  const renderRow = (row: HrPayrollRow, index: number) => (
+    <HrRow
+      key={row.driverId}
+      row={row}
+      index={index}
+      columns={props.columns}
+      offsets={offsets}
+      flash={props.flash.has(row.driverId)}
+      canManage={props.canManage}
+      awaiting={props.awaiting}
+      noRate={props.noRate}
+      shortfallTitle={props.shortfallTitle}
+      cellStates={props.cellStates}
+      cellError={props.cellError}
+      vehicleOptions={props.vehicleOptions}
+      noVehicle={props.noVehicle}
+      noIdentity={props.noIdentity}
+      onVehicleType={props.onVehicleType}
+      identityOptions={props.identityOptions}
+      onIdentity={props.onIdentity}
+      onSelect={props.onSelect}
+      onAmount={props.onAmount}
+    />
+  );
   if (ordered.length === 0) {
     body.push(
       <tr key="empty">
-        <td colSpan={props.columns.length}>{props.empty}</td>
+        <td colSpan={props.columns.length + 1}>{props.empty}</td>
+      </tr>,
+    );
+  } else if (virtualise) {
+    const items = virtualizer.getVirtualItems();
+    body.push(
+      <tr key="pad-top" aria-hidden>
+        <td colSpan={props.columns.length + 1} style={{ height: items[0]?.start ?? 0, padding: 0 }} />
+      </tr>,
+    );
+    for (const item of items) {
+      const row = ordered[item.index];
+      if (row) body.push(renderRow(row, item.index + 1));
+    }
+    body.push(
+      <tr key="pad-bottom" aria-hidden>
+        <td
+          colSpan={props.columns.length + 1}
+          style={{
+            height: Math.max(0, virtualizer.getTotalSize() - (items.at(-1)?.end ?? 0)),
+            padding: 0,
+          }}
+        />
       </tr>,
     );
   } else {
@@ -390,50 +635,24 @@ export function HrPayrollGrid(props: {
           const shown = value && value !== "—" ? value : props.blank;
           body.push(
             <tr key={`group-${body.length}-${value}`} className="hrpay-group">
-              <td colSpan={props.columns.length}>{shown}</td>
+              <td colSpan={props.columns.length + 1}>{shown}</td>
             </tr>,
           );
           previous = value;
         }
       }
       dataIndex += 1;
-      const index = dataIndex;
-      body.push(
-        <tr key={row.driverId} className={props.flash.has(row.driverId) ? "hrpay-flash" : undefined}>
-          {props.columns.map((column, columnIndex) => {
-            const paint = column.key === "name" ? hrStatusPaint(row.statusKey, row.jobEndDescription) : null;
-            const sticky = stickyBox(columnIndex, offsets, column.width);
-            const tone =
-              paint && paint.fill !== "transparent" ? { background: paint.fill, color: paint.text } : undefined;
-            return (
-            <td
-              key={column.key}
-              className={withSticky("hrpay-cell", columnIndex)}
-              style={tone ? { ...sticky, ...tone } : sticky}
-            >
-              {renderHrCell(
-                column,
-                row,
-                index,
-                props.canManage,
-                props.awaiting,
-                props.noRate,
-                props.onSelect,
-                props.onAmount,
-              )}
-            </td>
-            );
-          })}
-        </tr>,
-      );
+      body.push(renderRow(row, dataIndex));
     }
   }
   let bandStart = 0;
   const bands = hrGroupSpans(props.columns).map((span) => {
     const start = bandStart;
     bandStart += span.count;
-    const sticky = start < 4;
-    const edge = sticky && start + span.count >= 4;
+    // A band that spans past the frozen columns must scroll with the table: a
+    // 19-column-wide sticky band would sit on top of the columns sliding under it.
+    const sticky = start < 4 && start + span.count <= 4;
+    const edge = sticky && start + span.count === 4;
     const bandClass = edge ? "hrpay-band hrpay-sticky hrpay-edge" : sticky ? "hrpay-band hrpay-sticky" : "hrpay-band";
     return (
       <th
@@ -451,50 +670,58 @@ export function HrPayrollGrid(props: {
     );
   });
   return (
-    <div className="hrpay-scroll">
-      <table className="hrpay-table">
-        <thead>
-          <tr>{bands}</tr>
-          <tr>
-            {props.columns.map((column, index) => (
-              <PayrollColumnHeader
-                key={column.key}
-                label={props.headers[column.key] ?? column.header}
-                heading={
-                  <button type="button" className="hrpay-sort" onClick={() => setSort((current) => nextSort(column, current))}>
-                    {props.headers[column.key] ?? column.header}
-                    {sort?.key === column.key ? sortMark(sort.mode) : ""}
-                  </button>
-                }
-                columnId={column.key}
-                values={columnFilterValues(column, props.sourceRows, props.awaiting)}
-                fixedList={column.key === "status" ? props.statusList : undefined}
-                filter={props.filters[column.key]}
-                onChange={(next) => props.onFilter(column.key, next)}
-                sort={funnelSortOf(sort)}
-                onSort={(next) => setSort(applyFunnelSort(column, next))}
-                numeric={hrColumnIsNumeric(column)}
-                className={withSticky("hrpay-colhead", index)}
-                style={stickyBox(index, offsets, column.width)}
-              />
-            ))}
-          </tr>
-        </thead>
-        <tbody>{body}</tbody>
-        <tfoot>
-          <tr className="hrpay-foot">
-            {props.columns.map((column, index) => {
-              const summed = footerMoney(column.key, totals);
-              const text = index === riderLabelAt ? props.totalRiders : summed ?? "";
-              return (
-                <td key={column.key} className={stickyOnly(index)} style={stickyBox(index, offsets, column.width)}>
-                  {text}
-                </td>
-              );
-            })}
-          </tr>
-        </tfoot>
-      </table>
-    </div>
+    <>
+      <div className="hrpay-scroll" ref={scrollRef}>
+        <table className="hrpay-table">
+          <thead>
+            <tr>
+              {bands}
+              <th key="row-action-band" className="hrpay-band w-9" scope="col" aria-hidden />
+            </tr>
+            <tr>
+              {props.columns.map((column, index) => (
+                <PayrollColumnHeader
+                  key={column.key}
+                  label={props.headers[column.key] ?? column.header}
+                  heading={
+                    <button type="button" className="hrpay-sort" onClick={() => setSort((current) => nextSort(column, current))}>
+                      {props.headers[column.key] ?? column.header}
+                      {sort?.key === column.key ? sortMark(sort.mode) : ""}
+                    </button>
+                  }
+                  columnId={column.key}
+                  values={columnFilterValues(column, props.sourceRows, props.awaiting)}
+                  fixedList={column.key === "status" ? props.statusList : undefined}
+                  filter={props.filters[column.key]}
+                  onChange={(next) => props.onFilter(column.key, next)}
+                  sort={funnelSortOf(sort)}
+                  onSort={(next) => setSort(applyFunnelSort(column, next))}
+                  numeric={hrColumnIsNumeric(column)}
+                  className={withSticky("hrpay-colhead", index)}
+                  style={stickyBox(index, offsets, column.width)}
+                />
+              ))}
+              <th key="row-action" className="hrpay-colhead w-9 text-center" scope="col" />
+            </tr>
+          </thead>
+          <tbody>{body}</tbody>
+          <tfoot>
+            <tr className="hrpay-foot">
+              {props.columns.map((column, index) => {
+                const summed = footerMoney(column.key, totals);
+                const text = index === riderLabelAt ? props.totalRiders : summed ?? "";
+                return (
+                  <td key={column.key} className={stickyOnly(index)} style={stickyBox(index, offsets, column.width)}>
+                    {text}
+                  </td>
+                );
+              })}
+              <td key="row-action" className="w-9" />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {props.footer}
+    </>
   );
 }

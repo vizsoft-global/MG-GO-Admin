@@ -4930,6 +4930,9 @@
       "weekPresent": "حاضر (7 أيام)",
       "timelineTitle": "الجدول الزمني للنشاط",
       "emptyTimeline": "لا توجد أحداث مسجّلة لهذا اليوم",
+      "shiftIn": "بداية الوردية",
+      "shiftOut": "نهاية الوردية",
+      "workedAppHours": "ساعات العمل (التطبيق)",
       "resolveTitle": "حل المشكلة",
       "resolveNotePlaceholder": "ملاحظة اختيارية للمشرفين",
       "saveResolution": "حفظ",
@@ -8469,6 +8472,8 @@
         "nationalitySubtitle": "قيم فئة الجنسية على الموظفين ولوحة العد — الجنسيات إضافة إلى مجموعات عربي / أفريقي / آسيوي.",
         "banksTitle": "رموز البنوك",
         "banksSubtitle": "بنوك الكويت لتفاصيل دفع الموظف.",
+        "jobPositionsTitle": "المسميات الوظيفية",
+        "jobPositionsSubtitle": "المسميات المستخدمة على الموظفين وكبُعد للسعر في رواتب الموارد البشرية.",
         "errors": {
           "not_authorized": "ليس لديك صلاحية.",
           "not_configured": "حفظ الكتالوج غير متاح في هذه البيئة.",
@@ -9968,6 +9973,26 @@
         "importFile": "CSV أو Excel",
         "importHint": "عمودان: MG ID والمبلغ. حقل واحد لكل عملية استيراد.",
         "importProblems": "تم التخطي: {ids}",
+        "importPreview": "معاينة",
+        "importReady": "#count# صف جاهز",
+        "importProblemsCount": "#count# صف فيه مشكلة",
+        "importPreviewEmpty": "لم يتم لصق أي شيء بعد.",
+        "importIdColumn": "MG ID",
+        "importAmountColumn": "المبلغ",
+        "importClearFile": "إزالة الملف",
+        "cellErrors": {
+          "amount": "هذا المبلغ غير مسموح. أدخل رقماً صفراً أو أكبر.",
+          "food": "بدل الطعام إما 0 أو 15 دينار.",
+          "sick": "أيام الإجازة المرضية عدد صحيح من 0 إلى 30.",
+          "bank": "هذا البنك غير موجود في كتالوج رموز البنوك.",
+          "zone": "هذه المنطقة غير موجودة.",
+          "client": "هذا العميل غير موجود في قائمة عملاء الرواتب."
+        },
+        "emptyIdentity": "—",
+        "footerSummary": "عرض {shown} من {total} سائق · {month}",
+        "footerExport": "تنزيل هذا الجدول",
+        "noVehicle": "بدون مركبة",
+        "vehicleTypeFailed": "تعذّر حفظ نوع المركبة. ربما لا توجد مركبة مسندة للسائق.",
         "cancel": "إلغاء",
         "done": "تم",
         "columnsTitle": "مجموعات الأعمدة",
@@ -10032,6 +10057,7 @@
           "orders": "عدد الطلبات",
           "wd": "عدد أيام العمل",
           "ah": "ساعات العمل الفعلية",
+          "ahApp": "ساعات العمل (التطبيق)",
           "restDpd": "DPD المطعم",
           "riderDpd": "DPD السائق",
           "eff": "الكفاءة",
@@ -10128,10 +10154,13 @@
           "vehicle": "المركبة",
           "project": "المشروع",
           "zone": "المنطقة",
+          "position": "المسمى الوظيفي",
+          "anyPosition": "كل المسميات",
           "rate": "السعر",
           "rateKwd": "السعر (KWD)",
           "save": "حفظ",
           "saved": "حُفظت الأسعار",
+          "savedAndPriced": "حُفظ السعر وحُدّث جدول الموارد البشرية",
           "saveFailed": "تعذّر حفظ الأسعار",
           "saveOne": "حفظ",
           "saveMany": "حفظ #count# أسعار",
@@ -10188,7 +10217,8 @@
           "revenueFormula": "الطلبات المعتمدة × كل سعر مطابق للمركبة والمشروع والمنطقة",
           "contribution": "المساهمة",
           "contributionFormula": "الإيراد − إجمالي الدفع"
-        }
+        },
+        "salaryBelowPermit": "إجمالي الراتب أقل من راتب تصريح العمل بمقدار {amount}"
       },
       "range": {
         "thisMonth": "هذا الشهر",
@@ -10203,6 +10233,7 @@
         "to": "إلى",
         "daysCount": "{count} أيام",
         "windowHint": "داخل {from} – {to}.",
+        "monthNote": "رواتب الموارد البشرية شهرية؛ يتم عرض {month}.",
         "clearCustom": "مسح النطاق"
       },
       "clearFilters": "مسح الفلاتر",
@@ -10326,7 +10357,10 @@
         "atOrAbove100": "سائقون عند / فوق 100%",
         "unjustified": "سائقون بأيام غير مبررة",
         "reduced3Days": "أيام 3 ساعات",
-        "manualAdjustments": "تعديلات يدوية"
+        "manualAdjustments": "تعديلات يدوية",
+        "avgEffHint": "المتوسط لا يقابل قائمة سائقين محددة",
+        "emptyHint": "لا يوجد سائقون في هذا العرض",
+        "ridersCaption": "سائق"
       },
       "reqKpi": {
         "total": "إجمالي الطلبات",
@@ -10401,7 +10435,8 @@
         "vehicleKind": "المركبة",
         "appTotalHours": "ساعات التطبيق",
         "appActiveDays": "أيام نشاط التطبيق",
-        "appAvgHours": "متوسط الساعات / يوم نشط"
+        "appAvgHours": "متوسط الساعات / يوم نشط",
+        "serial": "#"
       },
       "appAttendance": {
         "bannerTitle": "حضور التطبيق",
@@ -10449,7 +10484,7 @@
         "terminated": "منتهي",
         "phone_issue": "مشكلة هاتف",
         "id_suspended": "هوية موقوفة",
-        "new_hire": "موظف جديد",
+        "new_hire": "جديد",
         "training": "تدريب"
       },
       "tileDept": {
@@ -10546,7 +10581,8 @@
         "sortSmallest": "الأصغر أولاً",
         "sortLargest": "الأكبر أولاً",
         "searchPlaceholder": "بحث القيم",
-        "sortPair": "ترتيب {column}"
+        "sortPair": "ترتيب {column}",
+        "activeRange": "يُعرض {bounds}"
       },
       "adjust": {
         "title": "تعديل أيام الرواتب",
@@ -10965,7 +11001,10 @@
         "save": "حفظ",
         "cancel": "إلغاء"
       },
-      "exportProject": "تصدير تقرير {project}"
+      "exportProject": "تصدير تقرير {project}",
+      "common": {
+        "openEmployee": "فتح ملف الموظف"
+      }
     },
     "performance": {
       "title": "إدارة الأداء",
@@ -12735,6 +12774,10 @@
           "bankCodes": {
             "title": "رموز البنوك",
             "body": "بنوك الكويت لتفاصيل دفع الموظف."
+          },
+          "jobPositions": {
+            "title": "المسميات الوظيفية",
+            "body": "المسميات المستخدمة على الموظفين وكبُعد للسعر في رواتب الموارد البشرية."
           },
           "serviceTypes": {
             "title": "أنواع الصيانة",

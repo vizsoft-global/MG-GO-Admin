@@ -198,9 +198,21 @@ function defaultFilterMode(
 ): ColumnFilterValue["kind"] {
   if (fixedList && fixedList.length > 0) return "list";
   if (filter?.kind) return filter.kind;
-  if (values && values.length > 0) return "list";
+  // A numeric column opens on Range, not List: money, counts, hours, days and
+  // percentages are answered with "between two figures" far more often than with
+  // ticking a hundred distinct values.
   if (numeric) return "range";
+  if (values && values.length > 0) return "list";
   return "text";
+}
+
+/** The bounds a Range filter is actually applying, for the header hint. */
+export function rangeBoundsLabel(filter: ColumnFilterValue | undefined): string | null {
+  if (!filter || filter.kind !== "range") return null;
+  if (filter.min === null && filter.max === null) return null;
+  const min = filter.min === null ? "" : String(filter.min);
+  const max = filter.max === null ? "" : String(filter.max);
+  return `${min || "…"} – ${max || "…"}`;
 }
 
 export function PayrollColumnHeader({
@@ -263,7 +275,9 @@ export function PayrollColumnHeader({
   );
   const modeIds = fixedList
     ? (["list"] as const)
-    : (["text", "list", ...(numeric ? (["range"] as const) : [])] as const);
+    : numeric
+      ? (["range", "text", "list"] as const)
+      : (["text", "list"] as const);
   const visibleValues = useMemo(() => {
     const needle = search.trim().toLowerCase();
     if (!needle) return uniqueValues;
@@ -272,6 +286,7 @@ export function PayrollColumnHeader({
 
   const active = columnFilterActive(filter);
   const sorted = sort?.columnId === columnId ? sort.dir : null;
+  const bounds = rangeBoundsLabel(filter);
 
   function openChanged(next: boolean) {
     setOpen(next);
@@ -519,6 +534,14 @@ export function PayrollColumnHeader({
             </div>
           </PopoverContent>
         </Popover>
+        {bounds ? (
+          <span
+            className="rounded-sm bg-primary/10 px-1 text-[10px] font-semibold tabular-nums text-primary"
+            title={t("activeRange", { bounds })}
+          >
+            {bounds}
+          </span>
+        ) : null}
       </span>
     </th>
   );

@@ -22,6 +22,7 @@ import { ListToolbar, rowMatches } from "@/features/roster/table-kit";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/auth-context";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -116,7 +117,7 @@ function rulesSignature(rules: readonly RuleDraft[]): string {
 export function PayrollSettingsTab({
   month,
   zoneMetrics,
-  canManage,
+  canManage: canManageProp,
   riders = [],
 }: {
   month: PayrollMonthMeta;
@@ -125,6 +126,12 @@ export function PayrollSettingsTab({
   riders?: readonly PayrollRiderRow[];
 }) {
   const t = useTranslations("pages.payroll.settings");
+  const { can } = useAuth();
+  // The tab strip asks for the same slug the server writes with
+  // (`payroll.manage`), so a direct `?tab=settings` cannot render controls whose
+  // save would be refused. The server action keeps its own check; this is the UI
+  // half of one rule, not a second rule.
+  const canManage = canManageProp && can("payroll.manage");
   const auditColumns = useMemo<TableToolbarColumn[]>(
     () => [
       { id: "when", label: t("audit.when") },

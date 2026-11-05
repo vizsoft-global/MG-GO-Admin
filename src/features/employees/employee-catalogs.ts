@@ -5,6 +5,7 @@ export type EmployeeCatalogKind =
   | "employee_sections"
   | "nationality_categories"
   | "bank_codes"
+  | "job_positions"
   | "sponsorships";
 
 export type EmployeeCatalogRow = {
@@ -228,6 +229,20 @@ export const DEFAULT_BANK_CODES: readonly EmployeeCatalogRow[] = [
 export const DEFAULT_EMPLOYEE_STATUS_KEY = "new";
 export const RUNNING_EMPLOYEE_STATUS_KEY = "running";
 
+/**
+ * The job positions the client's own HR sheet uses. `drivers.job_position` was
+ * free text before this catalog existed; the seed names the six values already in
+ * use, and a stored free-text value keeps rendering on its rider unchanged.
+ */
+export const DEFAULT_JOB_POSITIONS: readonly EmployeeCatalogRow[] = [
+  { key: "rider", label_en: "Rider", label_ar: "سائق", is_active: true, is_system: true, sort_order: 10 },
+  { key: "light_driver", label_en: "Light driver", label_ar: "سائق خفيف", is_active: true, is_system: true, sort_order: 20 },
+  { key: "heavy_driver", label_en: "Heavy driver", label_ar: "سائق ثقيل", is_active: true, is_system: true, sort_order: 30 },
+  { key: "maintenance", label_en: "Maintenance", label_ar: "صيانة", is_active: true, is_system: true, sort_order: 40 },
+  { key: "workshop", label_en: "Workshop", label_ar: "ورشة", is_active: true, is_system: true, sort_order: 50 },
+  { key: "head_office", label_en: "Head office", label_ar: "المكتب الرئيسي", is_active: true, is_system: true, sort_order: 60 },
+];
+
 export function catalogKeyFromLabel(name: string): string {
   return name
     .trim()
@@ -277,6 +292,8 @@ export function seedsForKind(kind: EmployeeCatalogKind): readonly EmployeeCatalo
       return DEFAULT_NATIONALITY_CATEGORIES;
     case "bank_codes":
       return DEFAULT_BANK_CODES;
+    case "job_positions":
+      return DEFAULT_JOB_POSITIONS;
     case "sponsorships":
       return DEFAULT_SPONSORSHIPS;
     default: {

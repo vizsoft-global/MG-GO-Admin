@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { payrollStatusChoiceFromLabel } from "./payroll-status-options";
+import { payrollStatusDisplayLabel } from "./payroll-column-labels";
 import { usePayrollStatusEditor } from "./payroll-status-context";
 import { RiderStatusPill } from "./rider-status-pill";
 import { resolveRiderStatus } from "./payroll-rider-columns";
@@ -77,7 +78,9 @@ export function PayrollStatusCell({
         <p className="mb-2 text-xs font-semibold">{t("statusEdit.title")}</p>
         <div className="max-h-52 space-y-1 overflow-auto">
           {editor.labels.map((label) => {
-            const selected = label.toLowerCase() === status.label.toLowerCase();
+            const selected =
+              payrollStatusDisplayLabel(label).toLowerCase() ===
+              payrollStatusDisplayLabel(status.label).toLowerCase();
             return (
               <button
                 key={label}

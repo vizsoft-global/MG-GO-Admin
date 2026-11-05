@@ -1,14 +1,14 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calculator, CalendarOff, Download, FilterX, Loader2, ScrollText } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
 import { TabBar } from "@/components/dashboard/tab-bar";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
+import { PayrollPageActions } from "./payroll-page-actions";
 import { kuwaitToday } from "@/features/performance/performance-formulas";
 import { EMPTY_OPS_SLICERS } from "@/features/performance/performance-ops-types";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -72,24 +72,43 @@ const TAB_PERMISSION: Record<PayrollHubTab, Permission> = {
   "attendance-orders": "payroll.attendance_orders",
   "app-attendance": "payroll.app_attendance",
   requests: "payroll.requests",
-  settings: "payroll.settings",
+  /**
+   * The server writes payroll rules behind `payroll.manage`, so the UI asks for
+   * the same slug. A narrower UI permission (`payroll.settings`) would hide the
+   * tab from people the server would happily save for, and a broader one would
+   * open a panel whose every write is refused.
+   */
+  settings: "payroll.manage",
 };
 
 export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: PayrollHubTab }) {
   const t = useTranslations("pages.payroll");
   const locale = useLocale();
   const router = useRouter();
-  const { can } = useAuth();
+  const { can, isSuperAdmin } = useAuth();
   const canExport = can("payroll.export");
   const canManage = can("payroll.manage");
   const queryClient = useQueryClient();
   const today = kuwaitToday();
   const [requestedTab, setTab] = useState<PayrollHubTab>(initialTab);
   const allowedTabs = useMemo<PayrollHubTab[]>(() => {
-    const permitted = TABS.filter((id) => canManage || can(TAB_PERMISSION[id]));
+    // Settings is its own permission: a role that may read the payroll tables but
+    // not change the rules must not open the panel behind `?tab=settings`.
+    const permitted = TABS.filter((id) =>
+      id === "settings" ? can(TAB_PERMISSION.settings) : canManage || can(TAB_PERMISSION[id]),
+    );
     return permitted.length ? permitted : [TABS[0]];
   }, [can, canManage]);
   const tab = allowedTabs.includes(requestedTab) ? requestedTab : allowedTabs[0];
+
+  // A direct `?tab=settings` (or any tab this role cannot open) is rewritten to
+  // the first permitted tab instead of rendering a shell the role may not use.
+  useEffect(() => {
+    if (requestedTab === tab) return;
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", tab);
+    router.replace(`/payroll?${params.toString()}`);
+  }, [requestedTab, tab, router]);
   const [preset, setPreset] = useState<PayrollRangePreset>("thisMonth");
   const [customRange, setCustomRange] = useState<PayrollRange | null>(null);
   const [slicers, setSlicers] = useState<PayrollSlicers>(EMPTY_OPS_SLICERS);
@@ -285,44 +304,16 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
         title={t("title")}
         description={t("subtitle")}
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9"
-              onClick={() => router.push("/payroll/pay-plan")}
-            >
-              <Calculator className="size-3.5" />
-              {t("payPlan.title")}
-            </Button>
-            {canManage || can("drivers.manage") ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9"
-                onClick={() => router.push("/settings/sponsorships")}
-              >
-                <ScrollText className="size-3.5" />
-                {t("sponsorship.title")}
-              </Button>
-            ) : null}
-            {canManage ? (
-              <Button type="button" variant="outline" className="h-9" onClick={() => setOffOpen(true)}>
-                <CalendarOff className="size-3.5" />
-                {t("offStructure.open")}
-              </Button>
-            ) : null}
-            <Button type="button" variant="outline" className="h-9" onClick={clearFilters}>
-              <FilterX className="size-3.5" />
-              {t("clearFilters")}
-            </Button>
-            {canExport && tab !== "settings" ? (
-              <Button type="button" className="h-9" onClick={exportHeader}>
-                <Download className="size-3.5" />
-                {t("export")}
-              </Button>
-            ) : null}
-          </div>
+          <PayrollPageActions
+            onPayPlan={() => router.push("/payroll/pay-plan")}
+            onSponsorships={() => router.push("/settings/sponsorships")}
+            canUseSettings={isSuperAdmin}
+            onOffStructure={() => setOffOpen(true)}
+            canManage={canManage}
+            onClearFilters={clearFilters}
+            onExport={exportHeader}
+            canExport={canExport && tab !== "settings"}
+          />
         }
       />
       <TabBar

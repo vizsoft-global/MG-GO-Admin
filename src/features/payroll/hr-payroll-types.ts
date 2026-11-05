@@ -53,6 +53,8 @@ export type HrBundleRow = {
   sponsor: string;
   company: string;
   position: string;
+  /** The raw catalog key on the driver; rates match on this, not the label. */
+  positionKey: string;
   hiringType: string;
   workStart: string;
   jobEnd: string;
@@ -61,7 +63,13 @@ export type HrBundleRow = {
   workPermitSalary: number;
   bankNumber: string;
   bankName: string;
+  /** The raw `bank_codes` key and `zones` id, so the sheet can edit them. */
+  bankCode: string;
+  zoneId: string;
   currency: string;
+  /** The rider's assigned vehicle, and its catalog type. Empty when unassigned. */
+  vehicleId: string;
+  vehicleTypeKey: string;
   twoYear: number;
   fourYear: number;
   food: number;
@@ -99,6 +107,8 @@ export type HrPayrollNumbers = {
   orders: number;
   revenue: number;
   contribution: number;
+  /** App-open hours (sessions, unioned). Display only — never in a pay formula. */
+  appHours: number;
 };
 
 export type HrPayrollRow = {
@@ -107,12 +117,20 @@ export type HrPayrollRow = {
   active: boolean;
   statusKey: string;
   jobEndDescription: string;
+  /** Work Permit Salary from the HR sheet; drives the Total Salary shortfall flag. */
+  permitSalary: number;
   searchBlob: string;
   company: string;
   project: string;
   section: string;
   sponsor: string;
   zone: string;
+  /** The rider's vehicle-type catalog key; drives the inline Vehicle Type cell. */
+  vehicleKey: string;
+  /** The raw bank/zone/client keys the identity cells pick from. */
+  bankCode: string;
+  zoneId: string;
+  projectKey: string;
   cells: Record<string, string>;
   numbers: HrPayrollNumbers;
   edit: HrEditState;

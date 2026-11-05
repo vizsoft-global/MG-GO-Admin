@@ -121,9 +121,18 @@ export function AppListControls({
             </SelectContent>
           </Select>
         ) : null}
-
         {onViewModeChange ? (
-          <div className="inline-flex h-9 items-center gap-1" role="group" aria-label={tableViewLabel}>
+          /*
+           * SegmentOption renders role="radio", so the wrapper must be a
+           * radiogroup: a radio outside a radiogroup is an ARIA violation and
+           * the pair is announced as two unrelated controls, which is part of
+           * why the List/Grid pair read as dead next to the Group-by select.
+           */
+          <div
+            className="inline-flex h-9 items-center gap-1"
+            role="radiogroup"
+            aria-label={tableViewLabel}
+          >
             <SegmentOption
               selected={(viewMode ?? "table") === "table"}
               onClick={() => onViewModeChange("table")}

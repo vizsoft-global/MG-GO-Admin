@@ -58,26 +58,30 @@ function resolveMenuTree(
   cfg: MenuNode[],
   can: (p: Permission) => boolean,
   isSuperAdmin: boolean,
+  canOpenSettings: boolean,
 ) {
   const { tree: merged } = mergeMenu(cfg);
-  const resolved = resolveForSidebar(merged, can, isSuperAdmin);
+  const resolved = resolveForSidebar(merged, can, isSuperAdmin, canOpenSettings);
   if (resolved.length === 0) {
-    return buildInitialTree(can, isSuperAdmin);
+    return buildInitialTree(can, isSuperAdmin, canOpenSettings);
   }
   return resolved;
 }
 
 export function useSidebarMenu(epochs: SidebarMenuEpochs = {}) {
-  const { adminRoleSlug, can, isSuperAdmin, permissions } = useAuth();
+  const { adminRoleSlug, can, isSuperAdmin, permissions, accessKind } = useAuth();
   const provided = useSidebarEpochs();
   const initialConfig = useInitialMenuConfig();
   const queryClient = useQueryClient();
   const accessEpoch = epochs.accessEpoch ?? provided.access ?? 0;
   const menuEpoch = epochs.menuEpoch ?? provided.menu ?? 0;
+  // Same rule as `requireSettingsAccess`: a plain `user` and a partner have no
+  // Settings area, so the sidebar must not paint a door to /unauthorized.
+  const canOpenSettings = isSuperAdmin || accessKind === "manager";
 
   const serverTree = useMemo(
-    () => resolveMenuTree(initialConfig, can, isSuperAdmin),
-    [initialConfig, isSuperAdmin, permissions],
+    () => resolveMenuTree(initialConfig, can, isSuperAdmin, canOpenSettings),
+    [initialConfig, isSuperAdmin, canOpenSettings, permissions],
   );
 
   const { data: tree = serverTree, isLoading: loading } = useQuery({
@@ -88,11 +92,11 @@ export function useSidebarMenu(epochs: SidebarMenuEpochs = {}) {
     queryFn: async () => {
       try {
         const cfg = await getMenuConfig(adminRoleSlug);
-        const resolved = resolveMenuTree(cfg, can, isSuperAdmin);
+        const resolved = resolveMenuTree(cfg, can, isSuperAdmin, canOpenSettings);
         saveCachedMenu(adminRoleSlug, resolved);
         return resolved;
       } catch {
-        const fallback = buildInitialTree(can, isSuperAdmin);
+        const fallback = buildInitialTree(can, isSuperAdmin, canOpenSettings);
         saveCachedMenu(adminRoleSlug, fallback);
         return fallback;
       }

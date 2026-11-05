@@ -7,8 +7,20 @@
  * label — no second column.
  */
 
-export const JOB_POSITIONS = ["rider", "light_driver"] as const;
-export type DriverJobPosition = (typeof JOB_POSITIONS)[number];
+/**
+ * The six positions the client's HR sheet uses. The Profile picker reads the
+ * `job_positions` catalog (an operator can add a seventh); this list is the
+ * offline/seed fallback and the value order of the stored keys.
+ */
+export const JOB_POSITIONS: readonly string[] = [
+  "rider",
+  "light_driver",
+  "heavy_driver",
+  "maintenance",
+  "workshop",
+  "head_office",
+];
+export type DriverJobPosition = string;
 
 export const HIRING_TYPES = ["overseas", "old_local", "new_local", "outsourcing_partner"] as const;
 export type DriverHiringType = (typeof HIRING_TYPES)[number];
@@ -94,8 +106,13 @@ export function parseOptionalMoney(value: unknown): { ok: boolean; value: number
   return { ok: amount !== null, value: amount };
 }
 
+/**
+ * The compiled six. A catalog can add a seventh, so the **form** validates against
+ * `job_positions` (see `saveDriverPrivateInformation`); this guard is the offline
+ * fallback for a value that must be one of the shipped keys.
+ */
 export function isJobPosition(value: string): value is DriverJobPosition {
-  return (JOB_POSITIONS as readonly string[]).includes(value);
+  return JOB_POSITIONS.includes(value);
 }
 
 export function isHiringType(value: string): value is DriverHiringType {

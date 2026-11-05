@@ -1,6 +1,7 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import {
   Bike,
+  BriefcaseBusiness,
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
@@ -152,6 +153,13 @@ const CONFIGURE_TILES: OpsTile[] = [
     href: "/settings/bank-codes",
     icon: Landmark,
     tint: HUB_GLYPH_TINTS.rose,
+    permission: "drivers.manage",
+  },
+  {
+    key: "jobPositions",
+    href: "/settings/job-positions",
+    icon: BriefcaseBusiness,
+    tint: HUB_GLYPH_TINTS.teal,
     permission: "drivers.manage",
   },
 ];

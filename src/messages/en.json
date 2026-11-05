@@ -4872,6 +4872,9 @@
       "complianceBreakdownHint": "Each day's compliance is the weighted average of the components below. A dash means that component had no data that day, so it was left out rather than counted as zero.",
       "timelineTitle": "Activity timeline",
       "emptyTimeline": "No events recorded for this day",
+      "shiftIn": "Shift in",
+      "shiftOut": "Shift out",
+      "workedAppHours": "Worked (app)",
       "correctionTitle": "Correct attendance",
       "correctionCreateTitle": "Mark attendance",
       "correctionNote": "Admin note",
@@ -8469,6 +8472,8 @@
         "nationalitySubtitle": "Nationality Category values used on Employees and the dashboard — the nationalities plus the Arab / African / Asian groups.",
         "banksTitle": "Bank codes",
         "banksSubtitle": "Kuwait banks used for employee payment details.",
+        "jobPositionsTitle": "Job positions",
+        "jobPositionsSubtitle": "Positions used on Employees and as a rate dimension in HR Payroll.",
         "errors": {
           "not_authorized": "You do not have permission.",
           "not_configured": "Catalog save is not available on this environment.",
@@ -9968,6 +9973,26 @@
         "importFile": "CSV or Excel",
         "importHint": "Two columns: MG ID, amount. One field per import.",
         "importProblems": "Skipped: {ids}",
+        "importPreview": "Preview",
+        "importReady": "#count# rows ready",
+        "importProblemsCount": "#count# problem rows",
+        "importPreviewEmpty": "Nothing pasted yet.",
+        "importIdColumn": "MG ID",
+        "importAmountColumn": "Amount",
+        "importClearFile": "Remove file",
+        "cellErrors": {
+          "amount": "That amount is not allowed. Type a number of 0 or more.",
+          "food": "Food allowance is either 0 or 15 KWD.",
+          "sick": "Sick leave must be a whole number of days from 0 to 30.",
+          "bank": "That bank is not in the bank-codes catalog.",
+          "zone": "That zone does not exist.",
+          "client": "That client is not in the payroll clients list."
+        },
+        "emptyIdentity": "—",
+        "footerSummary": "Showing {shown} of {total} riders · {month}",
+        "footerExport": "Download this table",
+        "noVehicle": "No vehicle",
+        "vehicleTypeFailed": "The vehicle type could not be saved. The rider may have no assigned vehicle.",
         "cancel": "Cancel",
         "done": "Done",
         "columnsTitle": "Column groups",
@@ -10032,6 +10057,7 @@
           "orders": "Count of Orders",
           "wd": "Count of Working Days",
           "ah": "Actual Working Hours",
+          "ahApp": "Worked hours (app)",
           "restDpd": "Restaurant DPD",
           "riderDpd": "Rider DPD",
           "eff": "Efficiency",
@@ -10128,10 +10154,13 @@
           "vehicle": "Vehicle",
           "project": "Project",
           "zone": "Zone",
+          "position": "Job Position",
+          "anyPosition": "All positions",
           "rate": "Rate",
           "rateKwd": "Rate (KWD)",
           "save": "Save",
           "saved": "Rates saved",
+          "savedAndPriced": "Rate saved and the HR table updated",
           "saveFailed": "Could not save rates",
           "saveOne": "Save",
           "saveMany": "Save #count# rates",
@@ -10188,7 +10217,8 @@
           "revenueFormula": "Approved orders × each matching vehicle, project and zone rate",
           "contribution": "Contribution",
           "contributionFormula": "Revenue − total payment"
-        }
+        },
+        "salaryBelowPermit": "Total salary is {amount} below the work permit salary"
       },
       "range": {
         "thisMonth": "This month",
@@ -10203,6 +10233,7 @@
         "to": "To",
         "daysCount": "{count} days",
         "windowHint": "Inside {from} – {to}.",
+        "monthNote": "HR Payroll is monthly; showing {month}.",
         "clearCustom": "Clear range"
       },
       "clearFilters": "Clear filters",
@@ -10326,7 +10357,10 @@
         "atOrAbove100": "Riders at / above 100%",
         "unjustified": "Riders with unjustified days",
         "reduced3Days": "3 h Days",
-        "manualAdjustments": "Manual Adjustments"
+        "manualAdjustments": "Manual Adjustments",
+        "avgEffHint": "An average has no single rider list to open",
+        "emptyHint": "No riders in this view",
+        "ridersCaption": "riders"
       },
       "reqKpi": {
         "total": "Total requests",
@@ -10401,7 +10435,8 @@
         "vehicleKind": "Vehicle",
         "appTotalHours": "App hours",
         "appActiveDays": "Active app days",
-        "appAvgHours": "Avg hours / active day"
+        "appAvgHours": "Avg hours / active day",
+        "serial": "#"
       },
       "appAttendance": {
         "bannerTitle": "Application attendance",
@@ -10449,7 +10484,7 @@
         "terminated": "Terminated",
         "phone_issue": "Phone issue",
         "id_suspended": "ID suspended",
-        "new_hire": "New hire",
+        "new_hire": "New",
         "training": "Training"
       },
       "tileDept": {
@@ -10546,7 +10581,8 @@
         "sortSmallest": "Smallest first",
         "sortLargest": "Largest first",
         "searchPlaceholder": "Search values",
-        "sortPair": "Sort {column}"
+        "sortPair": "Sort {column}",
+        "activeRange": "Showing {bounds}"
       },
       "adjust": {
         "title": "Adjust payroll days",
@@ -10965,7 +11001,10 @@
         "save": "Save",
         "cancel": "Cancel"
       },
-      "exportProject": "Export {project} report"
+      "exportProject": "Export {project} report",
+      "common": {
+        "openEmployee": "Open employee"
+      }
     },
     "performance": {
       "title": "Performance",
@@ -12735,6 +12774,10 @@
           "bankCodes": {
             "title": "Bank codes",
             "body": "Kuwait banks used for employee payment details."
+          },
+          "jobPositions": {
+            "title": "Job positions",
+            "body": "Positions used on Employees and as a rate dimension in HR Payroll."
           },
           "serviceTypes": {
             "title": "Service types",

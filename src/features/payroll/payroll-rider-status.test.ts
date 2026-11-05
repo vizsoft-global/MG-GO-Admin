@@ -73,8 +73,9 @@ describe("rider status", () => {
 
   it("lists the seven cores and a custom, and hides the retired day words", () => {
     const labels = statusFilterLabels(["Night desk"], ["Night desk"]);
+    // Client wording: a working rider reads **Running**, not Active.
     assert.deepEqual(labels.slice(0, 7), [
-      "Active",
+      "Running",
       "Absent",
       "Leave",
       "Active Payroll",

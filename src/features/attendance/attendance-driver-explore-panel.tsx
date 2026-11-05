@@ -288,22 +288,44 @@ export function AttendanceDriverExplorePanel({
         <h3 className="mb-2 text-sm font-semibold">{t("timelineTitle")}</h3>
         {timelineLoading ? (
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        ) : !timeline?.length ? (
+        ) : !timeline?.events.length ? (
           <p className="text-sm text-muted-foreground">{t("emptyTimeline")}</p>
         ) : (
-          <ul className="max-h-48 space-y-2 overflow-y-auto">
-            {timeline.map((ev) => (
-              <li
-                key={`${ev.at}-${ev.kind}`}
-                className="flex items-center justify-between gap-4 text-sm"
-              >
-                <span>{ev.label}</span>
-                <span className="text-muted-foreground tabular-nums">
-                  {formatDateTimeKuwait(ev.at)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <>
+            <dl className="mb-3 grid grid-cols-3 gap-2 text-xs">
+              <div>
+                <dt className="text-muted-foreground">{t("shiftIn")}</dt>
+                <dd className="tabular-nums">
+                  {timeline.summary.shiftInAt ? formatDateTimeKuwait(timeline.summary.shiftInAt) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{t("shiftOut")}</dt>
+                <dd className="tabular-nums">
+                  {timeline.summary.shiftOutAt ? formatDateTimeKuwait(timeline.summary.shiftOutAt) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{t("workedAppHours")}</dt>
+                <dd className="tabular-nums">
+                  {(timeline.summary.workedSeconds / 3600).toFixed(1)} h
+                </dd>
+              </div>
+            </dl>
+            <ul className="max-h-48 space-y-2 overflow-y-auto">
+              {timeline.events.map((ev) => (
+                <li
+                  key={`${ev.at}-${ev.kind}`}
+                  className="flex items-center justify-between gap-4 text-sm"
+                >
+                  <span>{ev.label}</span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {formatDateTimeKuwait(ev.at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
     </div>

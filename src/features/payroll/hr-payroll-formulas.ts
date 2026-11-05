@@ -102,6 +102,20 @@ export function formatHrEfficiency(ratio: number): string {
   return formatUnitPct(ratio);
 }
 
+/**
+ * The gap when a month's Total Salary is below the Work Permit Salary, or `null`
+ * when there is nothing to flag.
+ *
+ * A missing or zero permit figure is *not* "below" — an unrecorded permit salary
+ * would otherwise paint every rider in the sheet red.
+ */
+export function hrSalaryShortfall(totalSalary: number, workPermitSalary: number): number | null {
+  if (!Number.isFinite(totalSalary) || !Number.isFinite(workPermitSalary)) return null;
+  if (workPermitSalary <= 0) return null;
+  const gap = workPermitSalary - totalSalary;
+  return gap > 0 ? gap : null;
+}
+
 function money(n: number): string {
   return Number.isFinite(n) ? n.toFixed(3) : DASH;
 }
@@ -204,10 +218,33 @@ export function buildHrPayrollRows(args: {
   statusLabels?: Readonly<Record<string, string>>;
   rates?: readonly HrRateLine[];
   noRateLabel?: string;
+  /** The `vehicle_types` catalog, so the Vehicle Type cell prints the real label. */
+  vehicleTypes?: readonly { key: string; label: string }[];
+  /** App-open hours per driver for the month (display only). */
+  appHours?: Readonly<Record<string, number>>;
+  /** Optimistic identity edits (bank, zone, client) layered over the bundle. */
+  identityOverrides?: Readonly<
+    Record<
+      string,
+      {
+        bankNo?: string;
+        bank?: string;
+        cur?: string;
+        zone?: string;
+        clientName?: string;
+        /** Raw keys, so the pickers stay on the optimistic value. */
+        bankCode?: string;
+        zoneId?: string;
+        projectKey?: string;
+      }
+    >
+  >;
 }): HrPayrollRow[] {
   const byId = new Map((args.bundle?.rows ?? []).map((row) => [row.driverId, row]));
   const approved = args.bundle?.opsApproved ?? false;
   const dpds = restaurantDpds(args.riders);
+  const vehicleTypes = new Map((args.vehicleTypes ?? []).map((row) => [row.key, row.label]));
+  const vehicleLabelOf = (key: string): string => (key ? vehicleTypes.get(key) ?? key : "");
   return args.riders.map((rider) => {
     const identity = byId.get(rider.driverId);
     const edit = editFromBundle(identity, args.edits?.[rider.driverId]);
@@ -246,6 +283,7 @@ export function buildHrPayrollRows(args: {
     );
     const rateHits = matchHrRates({
       vehicleKey: rider.vehicleKey,
+      positionKey: identity?.positionKey ?? "",
       projects: rateProjects,
       zone: rider.zone.trim(),
       lines: args.rates ?? [],
@@ -282,7 +320,7 @@ export function buildHrPayrollRows(args: {
       fixed: money(identity?.fixedSalary ?? 0),
       wps: money(identity?.workPermitSalary ?? 0),
       rate: hrRateLabel(rateHits, args.noRateLabel),
-      vtype: hrVehicleLabel(rateHits),
+      vtype: vehicleLabelOf(rider.vehicleKey ?? "") || hrVehicleLabel(rateHits),
       inc2: selectText(edit.twoYear, " KWD", false),
       inc4: selectText(edit.fourYear, " KWD", false),
       offs: opsText(approved, "offs", plain(rider.offStructureDays)),
@@ -292,6 +330,7 @@ export function buildHrPayrollRows(args: {
       orders: opsText(approved, "orders", plain(rider.finalOrders)),
       wd: opsText(approved, "wd", plain(rider.workDays)),
       ah: opsText(approved, "ah", dec2(rider.actualHours)),
+      ahApp: opsText(approved, "ahApp", dec2(args.appHours?.[rider.driverId] ?? 0)),
       restDpd: opsText(approved, "restDpd", dec2(dpds.get(restaurant) ?? 0)),
       riderDpd: opsText(approved, "riderDpd", dec2(computed.riderDpd)),
       eff: opsText(approved, "eff", formatHrEfficiency(computed.efficiency)),
@@ -309,6 +348,17 @@ export function buildHrPayrollRows(args: {
       ded: money(edit.deductions),
       total: money(computed.totalSalary),
     };
+    // An optimistic identity edit shows before the callable answers; the refetch
+    // then replaces it with what was stored.
+    const identityEdit = args.identityOverrides?.[rider.driverId];
+    if (identityEdit) {
+      if (identityEdit.bankNo !== undefined) cells.bankNo = dash(identityEdit.bankNo);
+      if (identityEdit.bank !== undefined) cells.bank = dash(identityEdit.bank);
+      if (identityEdit.cur !== undefined) cells.cur = dash(identityEdit.cur);
+      if (identityEdit.zone !== undefined) cells.zone = dash(identityEdit.zone);
+      if (identityEdit.clientName !== undefined) cells.clientName = dash(identityEdit.clientName);
+    }
+    const zoneShown = identityEdit?.zone !== undefined ? dash(identityEdit.zone) : zone;
     const searchBlob = [name, mgId, identity?.civilId ?? "", zone, restaurant, clientId]
       .join(" ")
       .toLowerCase();
@@ -329,6 +379,7 @@ export function buildHrPayrollRows(args: {
       orders: orderCount,
       revenue,
       contribution: revenue - computed.payment,
+      appHours: args.appHours?.[rider.driverId] ?? 0,
     };
     return {
       driverId: rider.driverId,
@@ -336,12 +387,17 @@ export function buildHrPayrollRows(args: {
       active: isHrActive(statusKey),
       statusKey,
       jobEndDescription: identity?.jobEndDescription ?? "",
+      permitSalary: identity?.workPermitSalary ?? 0,
       searchBlob,
       company: cells.company,
       project: cells.clientName,
       section: cells.section,
       sponsor: cells.sponsor,
-      zone,
+      zone: zoneShown,
+      vehicleKey: rider.vehicleKey ?? "",
+      bankCode: identityEdit?.bankCode ?? byId.get(rider.driverId)?.bankCode ?? "",
+      zoneId: identityEdit?.zoneId ?? byId.get(rider.driverId)?.zoneId ?? "",
+      projectKey: identityEdit?.projectKey ?? byId.get(rider.driverId)?.projectKey ?? "",
       cells,
       numbers,
       edit,

@@ -21,6 +21,7 @@ import {
   DEFAULT_BANK_CODES,
   DEFAULT_EMPLOYEE_SECTIONS,
   DEFAULT_EMPLOYEE_STATUSES,
+  DEFAULT_JOB_POSITIONS,
   DEFAULT_NATIONALITY_CATEGORIES,
   DEFAULT_SPONSORSHIPS,
   isNbkBank,
@@ -32,6 +33,7 @@ import {
   useBankCodes,
   useEmployeeSections,
   useEmployeeStatuses,
+  useJobPositions,
   useNationalityCategories,
   useSponsorships,
 } from "@/features/employees/use-employee-catalogs";
@@ -39,7 +41,6 @@ import { setDriverOffStructure } from "@/features/payroll/payroll-actions";
 import {
   HIRING_TYPES,
   JOB_END_DESCRIPTIONS,
-  JOB_POSITIONS,
   OFFS_STRUCTURE_DAYS,
 } from "../driver-private-fields";
 import { saveDriverPrivateInformation } from "../drivers-actions";
@@ -198,11 +199,31 @@ export function PrivateInformationTab({
   const banks = useBankCodes();
   const sponsorships = useSponsorships();
   const companies = useSourceCompanies();
+  const jobPositions = useJobPositions();
 
   const readonly = !canManage || !driver.intake_id;
   const bank = driver.bank_details;
 
   const [form, setForm] = useState(() => buildForm(driver));
+  /**
+   * The Position picker reads the catalog, so a position added in Operations Hub
+   * appears here without a rebuild. The compiled six are the fallback while the
+   * catalog read is in flight.
+   */
+  const jobPositionOptions = (() => {
+    const rows = catalogRows(jobPositions.data, DEFAULT_JOB_POSITIONS);
+    const options = rows
+      .filter((row) => row.is_active)
+      .map((row) => ({
+        value: row.key,
+        label: locale.startsWith("ar") ? row.label_ar || row.label_en : row.label_en || row.key,
+      }));
+    // A rider stored on a position the catalog no longer lists keeps that value.
+    if (form.jobPosition && !options.some((option) => option.value === form.jobPosition)) {
+      options.push({ value: form.jobPosition, label: form.jobPosition });
+    }
+    return options;
+  })();
   const dirty = JSON.stringify(form) !== JSON.stringify(buildForm(driver));
   const [offsDays, setOffsDays] = useState<string>(
     driver.offs_structure_days != null ? String(driver.offs_structure_days) : "none",
@@ -515,7 +536,7 @@ export function PrivateInformationTab({
           <FieldBlock>
             <FieldLabel className={LABEL}>{t("fields.jobPosition")}</FieldLabel>
             <Select
-              items={[{ value: "none", label: t("fields.selectJob") }, ...JOB_POSITIONS.map((value) => ({ value, label: t(`options.jobPosition.${value}`) }))]}
+              items={[{ value: "none", label: t("fields.selectJob") }, ...jobPositionOptions]}
               value={form.jobPosition || "none"}
               onValueChange={(value) => set("jobPosition", !value || value === "none" ? "" : value)}
             >
@@ -524,8 +545,8 @@ export function PrivateInformationTab({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">{t("fields.selectJob")}</SelectItem>
-                {JOB_POSITIONS.map((value) => (
-                  <SelectItem key={value} value={value}>{t(`options.jobPosition.${value}`)}</SelectItem>
+                {jobPositionOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

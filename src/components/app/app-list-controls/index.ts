@@ -5,6 +5,6 @@ export { groupCounts, groupRows } from "./group-rows";
 export { scopeSelectionState, toggleScopeSelection } from "./list-page";
 export { useGroupedListView } from "./use-grouped-list-view";
 export { fieldSearchMatch } from "./search-match";
-export { useListViewPrefs } from "./use-list-view-prefs";
+export { useListViewPrefs, type ListViewPrefs } from "./use-list-view-prefs";
 export { useListControlLabels } from "./use-list-control-labels";
 export type { GroupedRows, ListGroupByOption, ListSearchFieldOption, ListViewMode } from "./types";

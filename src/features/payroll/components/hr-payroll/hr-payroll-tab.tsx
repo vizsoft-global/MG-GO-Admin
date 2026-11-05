@@ -4,14 +4,17 @@ import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { AppTableColumnPicker } from "@/components/app/app-table-column-picker";
+import { TableFooterExport } from "@/components/app/table-footer-export";
+import { formatKwd } from "@/lib/format/money";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
-  HR_COLUMNS,
   HR_GROUP_ORDER,
   visibleHrColumns,
   type HrColumn,
 } from "../../hr-payroll-columns";
 import { downloadHrWorkbook, hrExportCell } from "../../hr-payroll-export";
+import { useRegisterPayrollActions } from "../../payroll-actions-bridge";
 import {
   HR_AWAITING,
   buildHrPayrollRows,
@@ -19,6 +22,7 @@ import {
   filterHrRowsByColumns,
   filterHrSheet,
   hrKpis,
+  hrSalaryShortfall,
   summarizeHr,
 } from "../../hr-payroll-formulas";
 import { parseHrImport } from "../../hr-payroll-import";
@@ -26,6 +30,7 @@ import { HR_STATUS_LEGEND_ORDER, HR_STATUS_ORDER, hrStatusPaint, type HrStatusKe
 import { columnFilterActive, type ColumnFilters } from "../../payroll-column-filter";
 import type { HrRateEvent, HrRateLine } from "../../hr-rate";
 import { listHrRateCatalog, saveHrRateLines } from "../../hr-rate-actions";
+import { listEmployeeCatalog } from "@/features/employees/employee-catalogs-actions";
 import type {
   HrBundle,
   HrCellPatch,
@@ -33,14 +38,18 @@ import type {
   HrGroupBy,
   HrImportField,
   HrPayrollGroup,
+  HrPayrollRow,
   HrSheetFilters,
   HrSummaryBy,
   HrSummaryLine,
 } from "../../hr-payroll-types";
 import { EMPTY_HR_SHEET_FILTERS } from "../../hr-payroll-types";
-import { fetchHrPayrollBundle, saveHrPayrollCells } from "../../payroll-actions";
+import { usePayrollCellMutation } from "../../use-payroll-cell-mutation";
+import { subscribePayrollWrites, notifyPayrollWrite } from "../../payroll-sync";
+import { fetchHrPayrollBundle, fetchHrAppHours, listHrIdentityOptions, saveHrIdentityCells, saveHrPayrollCells, saveHrVehicleType, type HrIdentityPatch } from "../../payroll-actions";
+import { listVehicleTypes } from "@/features/vehicles/vehicles-actions";
 import type { PayrollRiderRow } from "../../payroll-types";
-import { HrColumnsDialog, HrImportDialog } from "./hr-payroll-dialogs";
+import { HrImportDialog } from "./hr-payroll-dialogs";
 import { HrPayrollConfig } from "./hr-payroll-config";
 import { HrPayrollGrid } from "./hr-payroll-grid";
 import { HrPayrollSummary } from "./hr-payroll-summary";
@@ -138,11 +147,77 @@ export function HrPayrollTab(props: {
   const bundleQuery = useQuery({
     queryKey: queryKeys.payroll.hrPayroll(monthKey, locale),
     queryFn: () => fetchHrPayrollBundle(monthKey, locale),
+    /**
+     * This sheet is money. An order or rate edited on another tab (or in another
+     * window) must be visible here without a manual refresh, so the HR bundle
+     * never trusts a cached read; the server's read-through snapshot keeps the
+     * cost of an aggressive client policy honest.
+     */
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
   const ratesQuery = useQuery({
     queryKey: queryKeys.payroll.hrRates(),
     queryFn: () => listHrRateCatalog(),
   });
+  /**
+   * Job positions come from the Operations Hub catalog, so a position added there
+   * is selectable here without a redeploy.
+   */
+  const positionsQuery = useQuery({
+    queryKey: ["hr-job-positions"],
+    queryFn: () => listEmployeeCatalog("job_positions"),
+    staleTime: 60_000,
+  });
+  /** The live vehicle-type catalog. A deleted type still shows on its riders. */
+  const vehicleTypesQuery = useQuery({
+    queryKey: queryKeys.vehicles.useTypes(),
+    queryFn: () => listVehicleTypes(),
+    staleTime: 60_000,
+  });
+  const identityOptionsQuery = useQuery({
+    queryKey: ["hr-identity-options"],
+    queryFn: () => listHrIdentityOptions(),
+    staleTime: 300_000,
+  });
+  const identityOptions = useMemo(
+    () => ({
+      banks: (identityOptionsQuery.data?.banks ?? []).map((bank) => ({ value: bank.key, label: bank.label })),
+      zones: (identityOptionsQuery.data?.zones ?? []).map((zone) => ({ value: zone.id, label: zone.name })),
+      clients: (identityOptionsQuery.data?.clients ?? []).map((client) => ({ value: client.key, label: client.label })),
+    }),
+    [identityOptionsQuery.data],
+  );
+  /**
+   * App-open hours (Shift in → Shift out) for every rider in the month. Display
+   * only — it fills one column and enters no pay formula.
+   */
+  const appHoursQuery = useQuery({
+    queryKey: [...queryKeys.payroll.hrPayroll(monthKey, locale), "app-hours"],
+    queryFn: () => fetchHrAppHours(monthKey),
+    staleTime: 60_000,
+  });
+  const vehicleOptions = useMemo(
+    () =>
+      (vehicleTypesQuery.data ?? [])
+        .filter((row) => row.is_active)
+        .map((row) => ({
+          key: row.key,
+          label: locale === "ar" ? row.label_ar || row.label_en : row.label_en || row.key,
+        })),
+    [vehicleTypesQuery.data, locale],
+  );
+  const positionOptions = useMemo(
+    () =>
+      (positionsQuery.data ?? [])
+        .filter((row) => row.is_active)
+        .map((row) => ({
+          key: row.key,
+          label: locale === "ar" ? row.label_ar || row.label_en : row.label_en || row.key,
+        })),
+    [positionsQuery.data, locale],
+  );
   const saveRates = useMutation({
     mutationFn: (lines: readonly HrRateLine[]) => saveHrRateLines([...lines]),
     onSuccess: (result) => {
@@ -150,8 +225,12 @@ export function HrPayrollTab(props: {
         toast.error(t("config.saveFailed"));
         return;
       }
-      toast.success(t("config.saved"));
+      toast.success(t("config.savedAndPriced"));
       void queryClient.invalidateQueries({ queryKey: queryKeys.payroll.hrRates() });
+      // The formula runs on this screen, so "recalculate" means "refetch the
+      // bundle": Rate, Revenue, Salary as per Hours, Total Salary, Payment, the
+      // summary and the cards all re-derive from the new lines.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.payroll.all() });
     },
   });
   const bundle: HrBundle | null = bundleQuery.data ?? null;
@@ -160,6 +239,8 @@ export function HrPayrollTab(props: {
   const [sheetFilters, setSheetFilters] = useState<HrSheetFilters>(EMPTY_HR_SHEET_FILTERS);
   const [search, setSearch] = useState("");
   const [statusKey, setStatusKey] = useState("");
+  /** `Total active riders` card pressed: the sheet shows only active riders. */
+  const [activeOnly, setActiveOnly] = useState(false);
   const [sheetView, setSheetView] = useState<"table" | "cards">("table");
   const [groupBy, setGroupBy] = useState<HrGroupBy>("none");
   const [shown, setShown] = useState<Set<HrPayrollGroup>>(() => new Set(HR_GROUP_ORDER));
@@ -168,14 +249,177 @@ export function HrPayrollTab(props: {
   const [flash, setFlash] = useState<Set<string>>(() => new Set());
   const [summaryBy, setSummaryBy] = useState<HrSummaryBy>("company");
   const [importOpen, setImportOpen] = useState(false);
-  const [columnsOpen, setColumnsOpen] = useState(false);
   const flashTimer = useRef<number | null>(null);
+  /** Rows as the grid paints them (filtered, grouped, sorted) — the export source. */
+  const orderedRef = useRef<readonly HrPayrollRow[]>([]);
+  /** Latest edits, readable from the optimistic patch without a stale closure. */
+  const editsRef = useRef<Record<string, Partial<HrEditState>>>({});
+  editsRef.current = edits;
+
+  /**
+   * The one cell-write path: optimistic patch → callable → invalidate + notify
+   * the other tab, with the patch rolled back and the reason kept on the cell
+   * when the server refuses it.
+   */
+  const cellWrite = usePayrollCellMutation<
+    { driverId: string; key: keyof HrEditState; value: number },
+    { saved: number; skipped: number }
+  >({
+    mutationFn: ({ driverId, key, value }) =>
+      saveHrPayrollCells(monthKey, [{ driverId, patch: editPatch(key, value) }]),
+    cellOf: ({ driverId, key }) => `${driverId}:${key}`,
+    patch: ({ driverId, key, value }) => {
+      const had = Object.prototype.hasOwnProperty.call(editsRef.current, driverId);
+      const before = editsRef.current[driverId];
+      setEdits((current) => ({ ...current, [driverId]: { ...current[driverId], ...editPatch(key, value) } }));
+      return () => {
+        setEdits((current) => {
+          const next = { ...current };
+          if (had) next[driverId] = before ?? {};
+          else delete next[driverId];
+          return next;
+        });
+      };
+    },
+    failedMessage: (code) => cellErrorText(code),
+  });
+
+  /** A server refusal, in words. `invalid_cell:food_allowance` names the field. */
+  function cellErrorText(code: string | undefined): string {
+    const field = code?.startsWith("invalid_cell:")
+      ? code.slice("invalid_cell:".length)
+      : undefined;
+    switch (field) {
+      case "two_year_applicable":
+      case "four_year_applicable":
+      case "pending_salary":
+      case "traffic_violation":
+      case "loan_deduction":
+      case "total_allowances":
+      case "total_deductions":
+        return t("cellErrors.amount");
+      case "food_allowance":
+        return t("cellErrors.food");
+      case "sick_leave_days":
+        return t("cellErrors.sick");
+      case "vehicle_type":
+        return t("vehicleTypeFailed");
+      case "bank_code":
+        return t("cellErrors.bank");
+      case "zone":
+        return t("cellErrors.zone");
+      case "project":
+        return t("cellErrors.client");
+      default:
+        return t("saveFailed");
+    }
+  }
+
+  /**
+   * A vehicle type picked on the sheet. The optimistic draft is what the row
+   * prices from; a refused save removes it and puts the stored key back.
+   */
+  const [vehicleDraft, setVehicleDraft] = useState<Record<string, string>>({});
+  /**
+   * Bank / zone / client edits, optimistic. The draft holds both the raw keys the
+   * pickers bind to and the labels the cells print.
+   */
+  const [identityDraft, setIdentityDraft] = useState<
+    Record<
+      string,
+      {
+        bankNo?: string;
+        bank?: string;
+        cur?: string;
+        zone?: string;
+        clientName?: string;
+        bankCode?: string;
+        zoneId?: string;
+        projectKey?: string;
+      }
+    >
+  >({});
+  const identityWrite = usePayrollCellMutation<
+    {
+      driverId: string;
+      patch: HrIdentityPatch;
+      display: {
+        bankNo?: string;
+        bank?: string;
+        cur?: string;
+        zone?: string;
+        clientName?: string;
+      };
+    },
+    { saved: number; skipped: number }
+  >({
+    mutationFn: ({ driverId, patch }) => saveHrIdentityCells(monthKey, driverId, patch),
+    cellOf: ({ driverId, patch }) => `${driverId}:${Object.keys(patch)[0] ?? "identity"}`,
+    patch: ({ driverId, patch, display }) => {
+      const before = identityDraft[driverId];
+      setIdentityDraft((current) => ({
+        ...current,
+        [driverId]: { ...current[driverId], ...patch, ...display },
+      }));
+      return () => {
+        setIdentityDraft((current) => {
+          const next = { ...current };
+          if (before === undefined) delete next[driverId];
+          else next[driverId] = before;
+          return next;
+        });
+      };
+    },
+    failedMessage: (code) => cellErrorText(code),
+  });
+  const vehicleWrite = usePayrollCellMutation<
+    { driverId: string; vehicleKey: string },
+    { saved: number; skipped: number }
+  >({
+    mutationFn: ({ driverId, vehicleKey }) => saveHrVehicleType(monthKey, driverId, vehicleKey),
+    cellOf: ({ driverId }) => `${driverId}:vehicleType`,
+    patch: ({ driverId, vehicleKey }) => {
+      const before = vehicleDraft[driverId];
+      setVehicleDraft((current) => ({ ...current, [driverId]: vehicleKey }));
+      return () => {
+        setVehicleDraft((current) => {
+          const next = { ...current };
+          if (before === undefined) delete next[driverId];
+          else next[driverId] = before;
+          return next;
+        });
+      };
+    },
+    failedMessage: () => t("vehicleTypeFailed"),
+  });
+
+  // Another tab saved a payroll or HR cell: this sheet must not keep showing the
+  // number the write has already replaced.
+  useEffect(() => {
+    return subscribePayrollWrites(() => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.payroll.all() });
+    });
+  }, [queryClient]);
+
+  /**
+   * The shell owns the top action bar; this sheet owns the work. `pageActions` is
+   * refreshed after every render and handed to the bridge as one stable ref, so
+   * "Export to Excel" and "Clear filters" in the header reach the current view
+   * (Payroll / Summary / Config) instead of a stale closure.
+   */
+  const pageActions = useRef<{ exportNow?: () => void; clearNow?: () => void }>({});
+  useRegisterPayrollActions(pageActions);
 
   useEffect(() => {
     return () => {
       if (flashTimer.current != null) window.clearTimeout(flashTimer.current);
     };
   }, []);
+
+  // Refresh the handlers the header's action bar calls (declared below; hoisted).
+  useEffect(() => {
+    pageActions.current = { exportNow: exportCurrentView, clearNow: clearHrFilters };
+  });
 
   const statusLabels = useMemo<Record<HrStatusKey, string>>(
     () => ({
@@ -232,6 +476,7 @@ export function HrPayrollTab(props: {
       orders: t("cols.orders"),
       wd: t("cols.wd"),
       ah: t("cols.ah"),
+      ahApp: t("cols.ahApp"),
       restDpd: t("cols.restDpd"),
       riderDpd: t("cols.riderDpd"),
       eff: t("cols.eff"),
@@ -265,8 +510,41 @@ export function HrPayrollTab(props: {
   );
 
   const rows = useMemo(
-    () => buildHrPayrollRows({ riders, bundle, monthDays, edits, statusLabels, rates: rateLines, noRateLabel: t("noRate") }),
-    [riders, bundle, monthDays, edits, statusLabels, rateLines, t],
+    () =>
+      buildHrPayrollRows({
+        // An optimistic type change reprices the row before the callable answers;
+        // the refetch then replaces the draft with what was stored.
+        riders:
+          Object.keys(vehicleDraft).length === 0
+            ? riders
+            : riders.map((rider) =>
+                vehicleDraft[rider.driverId] !== undefined
+                  ? { ...rider, vehicleKey: vehicleDraft[rider.driverId] }
+                  : rider,
+              ),
+        bundle,
+        monthDays,
+        edits,
+        statusLabels,
+        rates: rateLines,
+        noRateLabel: t("noRate"),
+        vehicleTypes: vehicleOptions,
+        appHours: appHoursQuery.data?.hours,
+        identityOverrides: identityDraft,
+      }),
+    [
+      riders,
+      bundle,
+      monthDays,
+      edits,
+      statusLabels,
+      rateLines,
+      t,
+      vehicleDraft,
+      vehicleOptions,
+      appHoursQuery.data,
+      identityDraft,
+    ],
   );
   const missingRates = useMemo(() => {
     if (rows.length === 0) return null;
@@ -280,8 +558,13 @@ export function HrPayrollTab(props: {
     return [...counts.entries()].map(([label, count]) => ({ label, count }));
   }, [rows, t]);
   const searched = useMemo(
-    () => filterHrRows(rows, { search, statusKey, filters: [] }),
-    [rows, search, statusKey],
+    () =>
+      filterHrRows(rows, { search, statusKey, filters: [] }).filter(
+        // The "Total active riders" card is a filter, not decoration: pressing it
+        // narrows the sheet to the same rows it counts.
+        (row) => !activeOnly || row.active,
+      ),
+    [rows, search, statusKey, activeOnly],
   );
   const sheeted = useMemo(() => filterHrSheet(searched, sheetFilters), [searched, sheetFilters]);
   const visible: readonly HrColumn[] = useMemo(() => visibleHrColumns(shown), [shown]);
@@ -316,22 +599,36 @@ export function HrPayrollTab(props: {
     });
   }
 
-  async function saveCell(driverId: string, key: keyof HrEditState, value: number) {
+  function saveCell(driverId: string, key: keyof HrEditState, value: number) {
     if (!EDIT_KEYS.has(key)) return;
-    const had = Object.prototype.hasOwnProperty.call(edits, driverId);
-    const previous = edits[driverId];
-    setEdits((current) => ({ ...current, [driverId]: { ...current[driverId], ...editPatch(key, value) } }));
-    try {
-      await saveHrPayrollCells(monthKey, [{ driverId, patch: editPatch(key, value) }]);
-    } catch {
-      setEdits((current) => {
-        const next = { ...current };
-        if (had) next[driverId] = previous ?? {};
-        else delete next[driverId];
-        return next;
-      });
-      toast.error(t("saveFailed"));
+    cellWrite.mutation.mutate({ driverId, key, value });
+  }
+
+  /**
+   * Bank / zone / client from the sheet. The display strings are resolved here so
+   * the optimistic row prints the label the picker just showed, not the raw key.
+   */
+  function saveIdentity(driverId: string, patch: HrIdentityPatch) {
+    const display: {
+      bankNo?: string;
+      bank?: string;
+      cur?: string;
+      zone?: string;
+      clientName?: string;
+    } = {};
+    if (patch.bankNumber !== undefined) display.bankNo = patch.bankNumber;
+    if (patch.currency !== undefined) display.cur = patch.currency;
+    if (patch.bankCode !== undefined) {
+      display.bank = identityOptions.banks.find((bank) => bank.value === patch.bankCode)?.label ?? patch.bankCode;
     }
+    if (patch.zoneId !== undefined) {
+      display.zone = identityOptions.zones.find((zone) => zone.value === patch.zoneId)?.label ?? patch.zoneId;
+    }
+    if (patch.projectKey !== undefined) {
+      display.clientName =
+        identityOptions.clients.find((client) => client.value === patch.projectKey)?.label ?? patch.projectKey;
+    }
+    identityWrite.mutation.mutate({ driverId, patch, display });
   }
 
   async function applyImport(field: HrImportField, text: string) {
@@ -365,6 +662,8 @@ export function HrPayrollTab(props: {
             patch: editPatch(editKey, match.amount),
           })),
         );
+        notifyPayrollWrite();
+        void queryClient.invalidateQueries({ queryKey: queryKeys.payroll.all() });
       } catch {
         setEdits(snapshot);
         toast.error(t("saveFailed"));
@@ -377,9 +676,12 @@ export function HrPayrollTab(props: {
   }
 
   function payrollSheetRows(): string[][] {
-    return filtered.map((row, offset) => {
+    // The file is the screen: the visible column set, in the visible order, over
+    // the rows and sort the grid is actually painting.
+    const sheet = orderedRef.current.length > 0 ? orderedRef.current : filtered;
+    return sheet.map((row, offset) => {
       const index = offset + 1;
-      return HR_COLUMNS.map((column) => {
+      return visible.map((column) => {
         const raw = column.key === "i" ? String(index) : (row.cells[column.key] ?? "");
         if (raw === HR_AWAITING) return hrExportCell(HR_AWAITING, t("awaiting"));
         return hrExportCell(raw, t("awaiting"));
@@ -388,10 +690,21 @@ export function HrPayrollTab(props: {
   }
 
   async function exportPayroll() {
+    const totalColumn = visible.findIndex((column) => column.key === "total");
+    const sheet = orderedRef.current.length > 0 ? orderedRef.current : filtered;
     await downloadHrWorkbook({
       filename: `hr-payroll-${monthKey}.xlsx`,
-      headers: HR_COLUMNS.map((column) => headers[column.key] ?? column.key),
+      headers: visible.map((column) => headers[column.key] ?? column.header),
       rows: payrollSheetRows(),
+      shortfall:
+        totalColumn < 0
+          ? undefined
+          : {
+              column: totalColumn,
+              gaps: sheet.map((row) =>
+                hrSalaryShortfall(row.numbers.totalSalary, row.permitSalary),
+              ),
+            },
     });
   }
 
@@ -449,6 +762,17 @@ export function HrPayrollTab(props: {
     });
   }
 
+  /**
+   * Clear every filter the sheet holds, from the header's shared "Clear filters".
+   * The same reset the sheet's own button performs.
+   */
+  function clearHrFilters() {
+    setColFilters({});
+    setSearch("");
+    setStatusKey("");
+    setSheetFilters(EMPTY_HR_SHEET_FILTERS);
+  }
+
   function exportCurrentView() {
     switch (view) {
       case "payroll":
@@ -491,7 +815,7 @@ export function HrPayrollTab(props: {
     switch (view) {
       case "payroll":
         return (
-          <>
+          <div className="hrpay-sheet">
             <HrPayrollGrid
               columns={visible}
               rows={filtered}
@@ -516,14 +840,45 @@ export function HrPayrollTab(props: {
               totalRiders={t("totalRiders", { count: filtered.length })}
               empty={t("empty")}
               statusList={HR_STATUS_LEGEND_ORDER.map((key) => statusLabels[key])}
+              shortfallTitle={(gap) => t("salaryBelowPermit", { amount: formatKwd(gap) })}
+              cellStates={cellWrite.cells}
+              cellError={cellErrorText}
+              vehicleOptions={vehicleOptions}
+              noVehicle={t("noVehicle")}
+              identityOptions={identityOptions}
+              noIdentity={t("emptyIdentity")}
+              onIdentity={(driverId, patch) => {
+                saveIdentity(driverId, patch);
+              }}
+              onOrderedRows={(next) => {
+                orderedRef.current = next;
+              }}
+              onVehicleType={(driverId, vehicleKey) => {
+                if (!vehicleKey || vehicleKey === rows.find((row) => row.driverId === driverId)?.vehicleKey) return;
+                vehicleWrite.mutation.mutate({ driverId, vehicleKey });
+              }}
               onSelect={(driverId, key, value) => {
-                void saveCell(driverId, key, value);
+                saveCell(driverId, key, value);
               }}
               onAmount={(driverId, key, value) => {
-                void saveCell(driverId, key, value);
+                saveCell(driverId, key, value);
               }}
+              footer={
+                <TableFooterExport
+                  summary={t("footerSummary", {
+                    shown: filtered.length,
+                    total: rows.length,
+                    month: monthLabel,
+                  })}
+                  exportLabel={t("footerExport")}
+                  onExport={() => {
+                    void exportPayroll();
+                  }}
+                  canExport={filtered.length > 0}
+                />
+              }
             />
-          </>
+          </div>
         );
       case "summary":
         return (
@@ -573,6 +928,7 @@ export function HrPayrollTab(props: {
             key={JSON.stringify(rateLines)}
             projects={uniqueValues(rows, "project", new Set(["—", t("noRate")]))}
             zones={uniqueValues(rows, "zone", new Set(["—", t("noRate")]))}
+            positions={positionOptions}
             lines={rateLines}
             history={ratesQuery.data?.history ?? []}
             missing={missingRates}
@@ -584,6 +940,8 @@ export function HrPayrollTab(props: {
               vehicle: t("config.vehicle"),
               project: t("config.project"),
               zone: t("config.zone"),
+              position: t("config.position"),
+              anyPosition: t("config.anyPosition"),
               rate: t("config.rate"),
               save: t("config.save"),
               invalid: t("config.invalid"),
@@ -630,29 +988,6 @@ export function HrPayrollTab(props: {
 
   return (
     <div className="hrpay">
-      <div className="hrpay-head">
-        <div>
-          <h1 className="hrpay-title">{t("title")}</h1>
-          <p className="hrpay-sub">{t("subtitle")}</p>
-        </div>
-        <div className="hrpay-actions">
-          <button
-            type="button"
-            className="hrpay-btn"
-            onClick={() => {
-              setSearch("");
-              setStatusKey("");
-              setColFilters({});
-              setSheetFilters(EMPTY_HR_SHEET_FILTERS);
-            }}
-          >
-            {t("clear")}
-          </button>
-          <button type="button" className="hrpay-btn hrpay-btn-primary" onClick={exportCurrentView}>
-            {t("exportExcel")}
-          </button>
-        </div>
-      </div>
       <div className="hrpay-tabs">
         <button
           type="button"
@@ -789,15 +1124,30 @@ export function HrPayrollTab(props: {
             })}
           </div>
           <div className="hrpay-kpis">
-            <div className="hrpay-kpi hrpay-kpi-lead">
+            <button
+              type="button"
+              className="hrpay-kpi hrpay-kpi-lead"
+              aria-pressed={!statusKey && !activeOnly}
+              title={t("kpiRiders")}
+              onClick={() => {
+                setStatusKey("");
+                setActiveOnly(false);
+              }}
+            >
               <div className="hrpay-kpi-label">{t("kpiRiders")}</div>
               <div className="hrpay-kpi-value">{monthKpis.riders}</div>
-            </div>
-            <div className="hrpay-kpi hrpay-kpi-lead">
+            </button>
+            <button
+              type="button"
+              className="hrpay-kpi hrpay-kpi-lead"
+              aria-pressed={activeOnly}
+              title={t("kpiActive")}
+              onClick={() => setActiveOnly((current) => !current)}
+            >
               <div className="hrpay-kpi-label">{t("kpiActive")}</div>
               <div className="hrpay-kpi-value">{monthKpis.active}</div>
-            </div>
-            <div className="hrpay-kpi">
+            </button>
+            <div className="hrpay-kpi" title={t("kpiPayment")}>
               <div className="hrpay-kpi-label">{t("kpiPayment")}</div>
               <div className="hrpay-kpi-value">{moneyGrouped(monthKpis.payment)}</div>
             </div>
@@ -860,10 +1210,19 @@ export function HrPayrollTab(props: {
               >
                 {t("import")}
               </button>
-              <button type="button" className="hrpay-btn" onClick={() => setColumnsOpen(true)}>
-                {t("columns")}
-                <span className="hrpay-chip">{t("columnsCount", { count: shown.size })}</span>
-              </button>
+              <AppTableColumnPicker
+                options={HR_GROUP_ORDER.map((group) => ({
+                  id: group,
+                  label: groupLabels[group],
+                  defaultVisible: true,
+                }))}
+                isVisible={(id) => shown.has(id as HrPayrollGroup)}
+                onToggle={(id) => toggleGroup(id as HrPayrollGroup)}
+                onReset={() => setShown(new Set(HR_GROUP_ORDER))}
+                sourceLabel={t("title")}
+                hiddenCount={HR_GROUP_ORDER.length - shown.size}
+                iconOnly
+              />
             </div>
             <div className="hrpay-source">
               <span><i style={{ background: "#EDEEF6" }} />{t("sourceEmp")}</span>
@@ -941,20 +1300,16 @@ export function HrPayrollTab(props: {
           cancel: t("cancel"),
           done: t("done"),
           hint: t("importHint"),
+          preview: t("importPreview"),
+          previewReady: t("importReady"),
+          previewProblems: t("importProblemsCount"),
+          previewEmpty: t("importPreviewEmpty"),
+          idColumn: t("importIdColumn"),
+          amountColumn: t("importAmountColumn"),
+          clearFile: t("importClearFile"),
         }}
         onApply={(field, text) => {
           void applyImport(field, text);
-        }}
-      />
-      <HrColumnsDialog
-        open={columnsOpen}
-        onOpenChange={setColumnsOpen}
-        shown={shown}
-        onToggle={toggleGroup}
-        labels={{
-          title: t("columnsTitle"),
-          done: t("done"),
-          ...groupLabels,
         }}
       />
     </div>

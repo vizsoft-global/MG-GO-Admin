@@ -108,6 +108,8 @@ export const SCAN_FUNCTIONS = [
   "adminPayrollRuleSnapshot",
   "adminPayrollMonthSnapshot",
   "adminHrPayrollSnapshot",
+  /** A month of `driver_sessions`, unioned per rider per day. Display only. */
+  "adminHrAppHours",
   "adminListAttendanceDaily",
   "adminAttendanceKpis",
   "adminIncentiveDailyReport",

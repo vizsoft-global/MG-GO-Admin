@@ -5,7 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { EmptyCell, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
 import { groupBanner, groupRows, ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
 import { SearchSelect } from "@/components/ui/search-select";
-import { HR_VEHICLES, type HrRateEvent, type HrRateLine, type HrVehicleType } from "@/features/payroll/hr-rate";
+import { duplicateRateLine, HR_VEHICLES, type HrRateEvent, type HrRateLine, type HrVehicleType } from "@/features/payroll/hr-rate";
 
 export type HrPayrollConfigLabels = {
   title: string;
@@ -13,6 +13,8 @@ export type HrPayrollConfigLabels = {
   vehicle: string;
   project: string;
   zone: string;
+  position: string;
+  anyPosition: string;
   rate: string;
   save: string;
   invalid: string;
@@ -87,6 +89,8 @@ function vehicleName(vehicle: HrVehicleType, labels: HrPayrollConfigLabels): str
 export function HrPayrollConfig(props: {
   projects: readonly string[];
   zones: readonly string[];
+  /** The job-positions catalog; a rate line may name one or price every position. */
+  positions: readonly { key: string; label: string }[];
   lines: readonly HrRateLine[];
   history: readonly HrRateEvent[];
   missing: readonly { label: string; count: number }[] | null;
@@ -114,6 +118,15 @@ export function HrPayrollConfig(props: {
     () => props.projects.map((project) => ({ value: project, label: project, keywords: [project] })),
     [props.projects],
   );
+  const positionItems = useMemo(
+    () =>
+      props.positions.map((position) => ({
+        value: position.key,
+        label: position.label,
+        keywords: [position.key, position.label],
+      })),
+    [props.positions],
+  );
   const history = useMemo(
     () =>
       props.history.filter((event) =>
@@ -136,7 +149,14 @@ export function HrPayrollConfig(props: {
         setInvalid(true);
         return;
       }
-      kept.push({ ...line, project, rate: line.rate });
+      const clean = { ...line, project, rate: line.rate };
+      // Two lines that price the same order: refuse here as well as on the server,
+      // so the operator sees it before the round-trip.
+      if (duplicateRateLine(kept, clean)) {
+        setInvalid(true);
+        return;
+      }
+      kept.push(clean);
     }
     setInvalid(false);
     props.onSave(kept);
@@ -149,6 +169,8 @@ export function HrPayrollConfig(props: {
         const saved = props.lines.find(
           (item) =>
             item.vehicle === line.vehicle &&
+            (item.vehicleKey ?? "") === (line.vehicleKey ?? "") &&
+            (item.position ?? "") === (line.position ?? "") &&
             item.project.trim() === line.project.trim() &&
             item.zones.some((value) => value.trim() === zone.trim()),
         );
@@ -201,6 +223,19 @@ export function HrPayrollConfig(props: {
                 searchPlaceholder={labels.pickProject}
                 emptyText={labels.pickProject}
                 recentsKey="hr-rate-project"
+                disabled={!props.canManage}
+              />
+            </label>
+            <label>
+              {labels.position}
+              <SearchSelect
+                items={positionItems}
+                value={line.position || null}
+                onChange={(next) => patch(line.id, { position: next ?? "" })}
+                placeholder={labels.anyPosition}
+                searchPlaceholder={labels.anyPosition}
+                emptyText={labels.anyPosition}
+                recentsKey="hr-rate-position"
                 disabled={!props.canManage}
               />
             </label>

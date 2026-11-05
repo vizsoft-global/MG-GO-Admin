@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { staffDb } from "@/lib/firebase/staff-db";
 import {
+  duplicateRateLine,
   expandHrRateLines,
   isHrVehicle,
   type HrRateEvent,
@@ -26,12 +27,14 @@ function parseLine(value: unknown): HrRateLine | null {
   const vehicle = typeof row.vehicle === "string" ? row.vehicle : "";
   const project = typeof row.project === "string" ? row.project.trim() : "";
   const rate = typeof row.rate === "number" ? row.rate : Number(row.rate);
+  const position = typeof row.position === "string" ? row.position.trim() : "";
+  const vehicleKey = typeof row.vehicleKey === "string" ? row.vehicleKey.trim() : "";
   const zones = Array.isArray(row.zones)
     ? row.zones.filter((zone): zone is string => typeof zone === "string" && zone.trim() !== "").map((zone) => zone.trim())
     : [];
   if (!isHrVehicle(vehicle) || !project || !Number.isFinite(rate) || rate < 0 || zones.length === 0) return null;
   const id = typeof row.id === "string" && row.id ? row.id : `${vehicle}-${project}`;
-  return { id, vehicle, project, zones, rate };
+  return { id, vehicle, project, zones, rate, ...(position ? { position } : {}), ...(vehicleKey ? { vehicleKey } : {}) };
 }
 
 function parseEvent(id: string, value: DocumentData): HrRateEvent | null {
@@ -82,6 +85,11 @@ export async function saveHrRateLines(lines: readonly HrRateLine[]): Promise<{ e
   const db = await staffDb();
   if (!db) return { error: "not_configured" };
   const clean = lines.map(parseLine).filter((line): line is HrRateLine => line !== null);
+  // Two lines that would price the same order are refused rather than resolved by
+  // row order: the operator either names a different position or edits the line.
+  for (const line of clean) {
+    if (duplicateRateLine(clean, line)) return { error: "duplicate_rate" };
+  }
   const session = gated.session;
   const actor = session.profile.full_name?.trim() || session.email || session.id;
   const previousSnap = await db.collection(CATALOG).doc("catalog").get();

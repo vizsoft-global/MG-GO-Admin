@@ -18,6 +18,7 @@ import type {
   ExceptionResolutionStatus,
 } from "./attendance-reporting-types";
 import { attendanceWindowTooLarge } from "./attendance-query-error";
+import { sessionDaySummary } from "./working-hours";
 import { resolveOrderProofUrl } from "@/lib/storage/order-proof-resolve";
 
 const KUWAIT_TZ = "Asia/Kuwait";
@@ -483,13 +484,19 @@ export async function fetchDriverAttendanceRange(
 export async function fetchDriverAttendanceTimeline(
   driverId: string,
   date: string,
-): Promise<
-  {
+): Promise<{
+  events: {
     at: string;
     kind: string;
     label: string;
-  }[]
-> {
+  }[];
+  /**
+   * App-open hours for the day: the union of the duty sessions, clipped to the
+   * Kuwait day. This sits **beside** the attendance-clock hours, never instead of
+   * them, until the client confirms which figure prices a salary.
+   */
+  summary: { shiftInAt: string | null; shiftOutAt: string | null; workedSeconds: number };
+}> {
   await requireAttendanceView();
   const db = await reportingDb();
   const events: { at: string; kind: string; label: string }[] = [];
@@ -520,8 +527,15 @@ export async function fetchDriverAttendanceTimeline(
     .filter((row) => {
       const at = isoOf(row.went_online_at);
       if (!at) return false;
-      const ms = Date.parse(at);
-      return Number.isFinite(ms) && ms >= dayStart && ms <= dayEnd;
+      const start = Date.parse(at);
+      const end = Date.parse(isoOf(row.went_offline_at) ?? "") || start;
+      // A session that started yesterday and is still open tonight belongs to both
+      // days, so the filter asks whether the span touches this day.
+      return (
+        (Number.isFinite(start) && start >= dayStart && start <= dayEnd) ||
+        (Number.isFinite(end) && end >= dayStart && end <= dayEnd) ||
+        (Number.isFinite(start) && Number.isFinite(end) && start < dayStart && end > dayEnd)
+      );
     })
     .sort((a, b) => (isoOf(a.went_online_at) ?? "").localeCompare(isoOf(b.went_online_at) ?? ""));
 
@@ -532,17 +546,29 @@ export async function fetchDriverAttendanceTimeline(
       events.push({
         at: onlineAt,
         kind: "online",
-        label: "Went online",
+        // "App open" is a shift the rider starts by clocking in, so the timeline
+        // names it the same way the attendance sheet does.
+        label: "Shift in",
       });
     }
     if (offlineAt) {
       events.push({
         at: offlineAt,
         kind: "offline",
-        label: "Went offline",
+        label: "Shift out",
       });
     }
   }
 
-  return events.sort((a, b) => a.at.localeCompare(b.at));
+  const summary = sessionDaySummary(
+    sessions.map((s) => ({
+      start: isoOf(s.went_online_at) ?? "",
+      end: isoOf(s.went_offline_at),
+    })),
+    dayStart,
+    dayEnd,
+    Date.now(),
+  );
+
+  return { events: events.sort((a, b) => a.at.localeCompare(b.at)), summary };
 }

@@ -32,6 +32,7 @@ const KIND_COLLECTION: Record<EmployeeCatalogKind, string> = {
   employee_sections: COLLECTIONS.employeeSections,
   nationality_categories: COLLECTIONS.nationalityCategories,
   bank_codes: COLLECTIONS.bankCodes,
+  job_positions: COLLECTIONS.jobPositions,
   sponsorships: COLLECTIONS.sponsorships,
 };
 
