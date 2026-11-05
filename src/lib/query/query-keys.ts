@@ -413,6 +413,7 @@ export const queryKeys = {
     analyticsDaily: (filters: Record<string, unknown> = {}) =>
       ["notifications", "analytics-daily", filters] as const,
     targetingOptions: () => ["notifications", "targeting-options"] as const,
+    creators: () => ["notifications", "creators"] as const,
     driverSearch: (query: string) => ["notifications", "driver-search", query] as const,
   },
   driverGroups: {
