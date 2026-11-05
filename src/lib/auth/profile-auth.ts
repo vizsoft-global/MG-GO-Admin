@@ -5,10 +5,10 @@ import {
   type EpochReader,
 } from "@/lib/auth/epoch-cache";
 import {
-  PERMISSIONS,
   type AuthProfile,
   canAccessAdminPanel,
 } from "@/lib/auth/permissions";
+import { CATALOG_SLUGS } from "@/lib/auth/permission-catalog";
 import {
   parseStaffAccessKind,
   resolveSessionPermissionSlugs,
@@ -63,6 +63,31 @@ function slugsFrom(data: Record<string, unknown> | undefined): string[] | null {
   return stored.filter((slug): slug is string => typeof slug === "string");
 }
 
+/**
+ * A Manager's permission set **is** the catalog, so it must never be narrower
+ * than the slugs this build ships.
+ *
+ * The stored `admin_permissions/catalog` document lags the code. On 2026-11-02
+ * it carried 161 slugs and was missing every one added since it was last
+ * seeded: `service.view` / `service.manage` / `service.export`, the seven
+ * `payroll.*` tab slugs, `compliance.view` / `compliance.manage` and
+ * `drivers.bank_view`. A Full access (`access_kind: "manager"`) session resolves
+ * from that document alone, so those people were redirected to `/unauthorized`
+ * on `/fleet/service` and lost every Payroll tab — while a User holding an
+ * explicit tick still opened them, and a super admin bypassed the check
+ * entirely. That inversion is what gets reported as "this account has full
+ * access but the page is missing".
+ *
+ * Unioning the code catalog in fixes the thirteen and every slug added later,
+ * without waiting for a seeding pass. The stored document is still honoured, so
+ * a doc that carries extra matrix slugs keeps them.
+ */
+export function catalogWithCodeSlugs(stored: readonly string[]): string[] {
+  const merged = new Set<string>(stored);
+  for (const slug of CATALOG_SLUGS) merged.add(slug);
+  return [...merged];
+}
+
 async function loadCatalogSlugs(db: EpochReader, now = Date.now()): Promise<string[]> {
   if (cachedCatalogSlugs && cachedCatalogSlugs.expiresAt > now) {
     return cachedCatalogSlugs.value;
@@ -73,7 +98,7 @@ async function loadCatalogSlugs(db: EpochReader, now = Date.now()): Promise<stri
     .doc(PERMISSION_CATALOG_DOC_ID)
     .get();
   const stored = (snap.data() as PermissionCatalogDoc | undefined)?.slugs;
-  const value = stored?.length ? stored : [...Object.values(PERMISSIONS)];
+  const value = catalogWithCodeSlugs(stored?.length ? stored : []);
 
   cachedCatalogSlugs = { value, expiresAt: now + CATALOG_TTL_MS };
   return value;
@@ -102,7 +127,7 @@ async function readCatalogNow(db: EpochReader): Promise<string[]> {
     .collection(COLLECTIONS.adminPermissions)
     .doc(PERMISSION_CATALOG_DOC_ID)
     .get();
-  return slugsFrom(snap.data()) ?? [...Object.values(PERMISSIONS)];
+  return catalogWithCodeSlugs(slugsFrom(snap.data()) ?? []);
 }
 
 async function catalogFromEpoch(
@@ -114,8 +139,7 @@ async function catalogFromEpoch(
   const catalogRef = db.collection(COLLECTIONS.adminPermissions).doc(PERMISSION_CATALOG_DOC_ID);
   const docs = [{ id: "catalog", ref: catalogRef }, ...extra];
   const filled = await readEpochAndDocs(db, cache, "access", seenEpoch, docs);
-  const catalogSlugs =
-    slugsFrom(filled.values[0]?.data) ?? [...Object.values(PERMISSIONS)];
+  const catalogSlugs = catalogWithCodeSlugs(slugsFrom(filled.values[0]?.data) ?? []);
   return { catalogSlugs, extra: filled.values.slice(1) };
 }
 

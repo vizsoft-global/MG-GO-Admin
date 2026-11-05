@@ -56,15 +56,9 @@ import {
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
 import { AppFormSection } from "@/components/app";
+import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -563,6 +557,17 @@ export function RolesPermissionsPanel({
     () => clonePermissionsByRole(savedByRole),
   );
 
+  /**
+   * The server hands a new `roles` array after every save/refresh, so the local
+   * editor is re-seeded during render instead of from an effect — an effect here
+   * cascaded a second render on every mount.
+   */
+  const [seededFrom, setSeededFrom] = useState(savedByRole);
+  if (seededFrom !== savedByRole) {
+    setSeededFrom(savedByRole);
+    setPermissionsByRole(clonePermissionsByRole(savedByRole));
+  }
+
   const [selectedColumnId, setSelectedColumnId] = useState(
     () => editableRoles[0]?.id ?? "",
   );
@@ -586,10 +591,6 @@ export function RolesPermissionsPanel({
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(
     () => loadCollapsedCategories(sortedCategories),
   );
-
-  useEffect(() => {
-    setPermissionsByRole(clonePermissionsByRole(savedByRole));
-  }, [savedByRole]);
 
   const persistCollapsed = useCallback((next: Set<string>) => {
     setCollapsedCategories(next);
@@ -699,28 +700,39 @@ export function RolesPermissionsPanel({
   const selectedColumn =
     editableRoles.find((r) => r.id === selectedColumnId) ?? editableRoles[0];
 
-  useEffect(() => {
-    if (dirtyRoleIds.size === 0) return;
-    setCollapsedCategories((prev) => {
-      let changed = false;
-      const next = new Set(prev);
-      for (const roleId of dirtyRoleIds) {
-        const current = permissionsByRole[roleId];
-        const saved = savedByRole[roleId];
-        if (!current || !saved) continue;
-        for (const perm of matrixPermissions) {
-          const was = saved.has(perm.slug);
-          const now = current.has(perm.slug);
-          if (was !== now && next.has(perm.category)) {
-            next.delete(perm.category);
-            changed = true;
+  /**
+   * A collapsed category opens itself as soon as one of its permissions is
+   * toggled. This runs during render — the effect it replaced cascaded a second
+   * render on every toggle — and the write-back to localStorage follows below.
+   */
+  const [dirtySeen, setDirtySeen] = useState(dirtyRoleIds);
+  if (dirtySeen !== dirtyRoleIds) {
+    setDirtySeen(dirtyRoleIds);
+    if (dirtyRoleIds.size > 0) {
+      setCollapsedCategories((prev) => {
+        let changed = false;
+        const next = new Set(prev);
+        for (const roleId of dirtyRoleIds) {
+          const current = permissionsByRole[roleId];
+          const saved = savedByRole[roleId];
+          if (!current || !saved) continue;
+          for (const perm of matrixPermissions) {
+            const was = saved.has(perm.slug);
+            const now = current.has(perm.slug);
+            if (was !== now && next.has(perm.category)) {
+              next.delete(perm.category);
+              changed = true;
+            }
           }
         }
-      }
-      if (changed) saveCollapsedCategories(next);
-      return changed ? next : prev;
-    });
-  }, [dirtyRoleIds, matrixPermissions, permissionsByRole, savedByRole]);
+        return changed ? next : prev;
+      });
+    }
+  }
+
+  useEffect(() => {
+    saveCollapsedCategories(collapsedCategories);
+  }, [collapsedCategories]);
 
   const [newOpen, setNewOpen] = useState(false);
   const [dupOpen, setDupOpen] = useState(false);
@@ -918,19 +930,19 @@ export function RolesPermissionsPanel({
       </div>
 
       <Dialog open={newOpen} onOpenChange={setNewOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("dialogs.newTitle")}</DialogTitle>
-            <DialogDescription>{t("dialogs.newDescription")}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
+        <DialogContent
+          className="flex max-h-[92vh] w-[min(520px,96vw)] flex-col gap-0 overflow-visible rounded-xl p-0"
+          showCloseButton
+          closeOutside
+        >
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pt-4 pb-3">
             <div className="space-y-1.5">
               <Label htmlFor="new-role-name">{t("roleName")}</Label>
               <Input
                 id="new-role-name"
                 value={formName}
                 onChange={(e) => handleNameChangeForSlug(e.target.value)}
-                className="rounded-lg"
+                className="h-9"
               />
             </div>
             <div className="space-y-1.5">
@@ -939,7 +951,7 @@ export function RolesPermissionsPanel({
                 id="role-slug"
                 value={formSlug}
                 onChange={(e) => setFormSlug(e.target.value)}
-                className="rounded-lg font-mono text-sm"
+                className="h-9 font-mono text-sm"
               />
             </div>
             <div className="space-y-1.5">
@@ -949,7 +961,7 @@ export function RolesPermissionsPanel({
                 value={formTemplateId}
                 onValueChange={(v) => setFormTemplateId(v ?? "")}
               >
-                <SelectTrigger className="w-full cursor-pointer rounded-lg">
+                <SelectTrigger className="h-9 w-full cursor-pointer">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -961,64 +973,67 @@ export function RolesPermissionsPanel({
                 </SelectContent>
               </Select>
             </div>
+            <AppModalFooter
+              title={t("dialogs.newTitle")}
+              subtitle={t("dialogs.newDescription")}
+            >
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 cursor-pointer"
+                onClick={() => setNewOpen(false)}
+              >
+                {t("discard")}
+              </Button>
+              <Button
+                type="button"
+                className="h-9 cursor-pointer"
+                disabled={
+                  isPending || !formName.trim() || !isValidRoleSlug(formSlug)
+                }
+                onClick={() => {
+                  const template = editableRoles.find((r) => r.id === formTemplateId);
+                  const templatePerms = template
+                    ? Array.from(permissionsByRole[template.id] ?? [])
+                    : [];
+                  startTransition(async () => {
+                    const result = await createCustomRole(
+                      formName,
+                      formSlug,
+                      templatePerms,
+                    );
+                    if (result.error) {
+                      toast.error(mapCreateError(result.error));
+                      return;
+                    }
+                    toast.success(t("saved"));
+                    setNewOpen(false);
+                    if (result.roleId) setSelectedColumnId(result.roleId);
+                    router.refresh();
+                  });
+                }}
+              >
+                {isPending ? t("creating") : t("createRole")}
+              </Button>
+            </AppModalFooter>
           </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => setNewOpen(false)}
-            >
-              {t("discard")}
-            </Button>
-            <Button
-              type="button"
-              className="cursor-pointer"
-              disabled={
-                isPending || !formName.trim() || !isValidRoleSlug(formSlug)
-              }
-              onClick={() => {
-                const template = editableRoles.find((r) => r.id === formTemplateId);
-                const templatePerms = template
-                  ? Array.from(permissionsByRole[template.id] ?? [])
-                  : [];
-                startTransition(async () => {
-                  const result = await createCustomRole(
-                    formName,
-                    formSlug,
-                    templatePerms,
-                  );
-                  if (result.error) {
-                    toast.error(mapCreateError(result.error));
-                    return;
-                  }
-                  toast.success(t("saved"));
-                  setNewOpen(false);
-                  if (result.roleId) setSelectedColumnId(result.roleId);
-                  router.refresh();
-                });
-              }}
-            >
-              {isPending ? t("creating") : t("createRole")}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={dupOpen} onOpenChange={setDupOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("dialogs.duplicateTitle")}</DialogTitle>
-            <DialogDescription>{t("dialogs.duplicateDescription")}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
+        <DialogContent
+          className="flex max-h-[92vh] w-[min(520px,96vw)] flex-col gap-0 overflow-visible rounded-xl p-0"
+          showCloseButton
+          closeOutside
+        >
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pt-4 pb-3">
             <div className="space-y-1.5">
               <Label htmlFor="dup-role-name">{t("roleName")}</Label>
               <Input
                 id="dup-role-name"
                 value={formName}
                 onChange={(e) => handleNameChangeForSlug(e.target.value)}
-                className="rounded-lg"
+                className="h-9"
               />
             </div>
             <div className="space-y-1.5">
@@ -1027,103 +1042,111 @@ export function RolesPermissionsPanel({
                 id="dup-role-slug"
                 value={formSlug}
                 onChange={(e) => setFormSlug(e.target.value)}
-                className="rounded-lg font-mono text-sm"
+                className="h-9 font-mono text-sm"
               />
             </div>
+            <AppModalFooter
+              title={t("dialogs.duplicateTitle")}
+              subtitle={t("dialogs.duplicateDescription")}
+            >
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 cursor-pointer"
+                onClick={() => setDupOpen(false)}
+              >
+                {t("discard")}
+              </Button>
+              <Button
+                type="button"
+                className="h-9 cursor-pointer"
+                disabled={
+                  isPending ||
+                  !selectedColumn ||
+                  !formName.trim() ||
+                  !isValidRoleSlug(formSlug)
+                }
+                onClick={() => {
+                  if (!selectedColumn) return;
+                  startTransition(async () => {
+                    const result = await duplicateRole(
+                      selectedColumn.id,
+                      formName,
+                      formSlug,
+                    );
+                    if (result.error) {
+                      toast.error(mapCreateError(result.error));
+                      return;
+                    }
+                    toast.success(t("saved"));
+                    setDupOpen(false);
+                    if (result.roleId) setSelectedColumnId(result.roleId);
+                    router.refresh();
+                  });
+                }}
+              >
+                {isPending ? t("duplicating") : t("duplicate")}
+              </Button>
+            </AppModalFooter>
           </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => setDupOpen(false)}
-            >
-              {t("discard")}
-            </Button>
-            <Button
-              type="button"
-              className="cursor-pointer"
-              disabled={
-                isPending ||
-                !selectedColumn ||
-                !formName.trim() ||
-                !isValidRoleSlug(formSlug)
-              }
-              onClick={() => {
-                if (!selectedColumn) return;
-                startTransition(async () => {
-                  const result = await duplicateRole(
-                    selectedColumn.id,
-                    formName,
-                    formSlug,
-                  );
-                  if (result.error) {
-                    toast.error(mapCreateError(result.error));
-                    return;
-                  }
-                  toast.success(t("saved"));
-                  setDupOpen(false);
-                  if (result.roleId) setSelectedColumnId(result.roleId);
-                  router.refresh();
-                });
-              }}
-            >
-              {isPending ? t("duplicating") : t("duplicate")}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t("dialogs.renameTitle")}</DialogTitle>
-            <DialogDescription>{t("dialogs.renameDescription")}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5 py-2">
-            <Label htmlFor="rename-role">{t("roleName")}</Label>
-            <Input
-              id="rename-role"
-              value={formName}
-              onChange={(e) => setFormName(e.target.value)}
-              className="rounded-lg"
-            />
+        <DialogContent
+          className="flex max-h-[92vh] w-[min(520px,96vw)] flex-col gap-0 overflow-visible rounded-xl p-0"
+          showCloseButton
+          closeOutside
+        >
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pt-4 pb-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="rename-role">{t("roleName")}</Label>
+              <Input
+                id="rename-role"
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <AppModalFooter
+              title={t("dialogs.renameTitle")}
+              subtitle={t("dialogs.renameDescription")}
+            >
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 cursor-pointer"
+                onClick={() => setRenameOpen(false)}
+              >
+                {t("discard")}
+              </Button>
+              <Button
+                type="button"
+                className="h-9 cursor-pointer"
+                disabled={
+                  isPending ||
+                  !selectedColumn ||
+                  selectedColumn.isSystem ||
+                  !formName.trim()
+                }
+                onClick={() => {
+                  if (!selectedColumn || selectedColumn.isSystem) return;
+                  startTransition(async () => {
+                    const result = await updateRoleMeta(selectedColumn.id, formName);
+                    if (result.error) {
+                      toast.error(t("errors.renameFailed"));
+                      return;
+                    }
+                    toast.success(t("saved"));
+                    setRenameOpen(false);
+                    router.refresh();
+                  });
+                }}
+              >
+                {isPending ? t("renaming") : t("rename")}
+              </Button>
+            </AppModalFooter>
           </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => setRenameOpen(false)}
-            >
-              {t("discard")}
-            </Button>
-            <Button
-              type="button"
-              className="cursor-pointer"
-              disabled={
-                isPending ||
-                !selectedColumn ||
-                selectedColumn.isSystem ||
-                !formName.trim()
-              }
-              onClick={() => {
-                if (!selectedColumn || selectedColumn.isSystem) return;
-                startTransition(async () => {
-                  const result = await updateRoleMeta(selectedColumn.id, formName);
-                  if (result.error) {
-                    toast.error(t("errors.renameFailed"));
-                    return;
-                  }
-                  toast.success(t("saved"));
-                  setRenameOpen(false);
-                  router.refresh();
-                });
-              }}
-            >
-              {isPending ? t("renaming") : t("rename")}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

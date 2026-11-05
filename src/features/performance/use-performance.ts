@@ -15,6 +15,7 @@ import {
   fetchPerformanceComponents,
   fetchPerformanceOpsBounds,
   fetchPerformanceOpsSnapshot,
+  fetchPerformanceOpsTail,
   fetchPerformanceTargetDpd,
   fetchPerformanceTrend,
   savePerformanceTargetDpd,
@@ -34,7 +35,7 @@ import type {
   PerformanceScoreWeights,
   PerformanceTrendBucket,
 } from "./performance-types";
-import type { OpsQueryInput } from "./performance-ops-types";
+import type { OpsQueryInput, OpsSlicers } from "./performance-ops-types";
 
 export function useDriverPerformanceList(
   filters: PerformanceListFilters,
@@ -307,6 +308,31 @@ export function usePerformanceOpsSnapshot(
     queryFn: () => fetchPerformanceOpsSnapshot(input),
     enabled,
     refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * The Refresh button's read: the last `minutes` of counted orders.
+ *
+ * `enabled: false` always — it is fired by the click, not by a timer, and a
+ * refetch of the whole window is what Refresh used to do.
+ */
+export function usePerformanceOpsTail(
+  minutes: number,
+  slicers: OpsSlicers,
+  orderStatus: string,
+  outsourceOnly: boolean,
+) {
+  return useQuery({
+    queryKey: queryKeys.performance.opsRecentTail(minutes, {
+      slicers,
+      orderStatus,
+      outsourceOnly,
+    }),
+    queryFn: () => fetchPerformanceOpsTail(minutes, slicers, orderStatus, outsourceOnly),
+    enabled: false,
+    staleTime: 0,
     refetchOnWindowFocus: false,
   });
 }

@@ -67,7 +67,17 @@ import {
   type FleetTrackingStatus,
 } from "../../../../src/features/live-tracking-v2/fleet-status";
 
-const ROSTER_TTL_MS = 120_000;
+/**
+ * How long the room's roster is treated as current.
+ *
+ * It used to be two minutes, and every reload is a whole-fleet snapshot read
+ * (~6,000-8,000 documents). A rider who starts reporting after the last reload
+ * does not wait for the next one: `loadSingleDriver` reads that rider directly
+ * (twelve reads) on their first batch, so a long TTL costs nothing but a
+ * slightly older catalogue. `EVICT_AFTER_MS` still retires riders whose pins
+ * have gone quiet, so a stale roster cannot keep a departed driver on the map.
+ */
+const ROSTER_TTL_MS = 10 * 60_000;
 /** `/refresh` is operator-driven; a burst of clicks must not herd the door. */
 const FORCED_ROSTER_MIN_MS = 60_000;
 const TOKEN_CACHE_TTL_MS = 10 * 60_000;
@@ -81,6 +91,12 @@ export const TOKEN_NEGATIVE_CACHE_TTL_MS = 5 * 60_000;
 const MAX_PENDING_POINTS = 16;
 /** Entities with no report for this long leave the room entirely. */
 const EVICT_AFTER_MS = 30 * 60_000;
+/**
+ * How long a driver the single-driver read could not resolve stays unresolved
+ * before the room asks again. Loads are cheap now (twelve reads), but a phone
+ * left reporting after its session ended must not trigger one per batch.
+ */
+const DRIVER_MISSING_TTL_MS = 5 * 60_000;
 const OPS_POLL_LIMIT = 200;
 const STATS_SYNC_MS = 60 * 60_000;
 const STATS_SYNC_PAGE = 400;
@@ -242,6 +258,8 @@ export class FleetRoom implements DurableObject {
   private readonly entities = new Map<string, Entity>();
   /** Coalesces the targeted reads for a rider whose first fix arrives after the roster. */
   private readonly driverLoads = new Map<string, Promise<Entity | null>>();
+  /** `driverId -> epoch ms` before which a failed lookup is not retried. */
+  private readonly driverMissingUntil = new Map<string, number>();
   private readonly idIndex = new Map<number, string>();
   private nextIdIdx = 1;
 
@@ -1022,6 +1040,12 @@ export class FleetRoom implements DurableObject {
   private loadSingleDriver(driverId: string): Promise<Entity | null> {
     const existing = this.driverLoads.get(driverId);
     if (existing) return existing;
+    // A rider the snapshot cannot resolve (archived, never linked, or reporting
+    // from a phone whose session ended long ago) stays unresolved. Without this
+    // the next batch asked again, and an old install left running overnight
+    // turned into one read burst per batch for hours.
+    const missingUntil = this.driverMissingUntil.get(driverId);
+    if (missingUntil != null && missingUntil > Date.now()) return Promise.resolve(null);
     const pending = this.fetchSingleDriver(driverId);
     this.driverLoads.set(driverId, pending);
     const clear = () => {
@@ -1029,19 +1053,48 @@ export class FleetRoom implements DurableObject {
         this.driverLoads.delete(driverId);
       }
     };
-    pending.then(clear, clear);
+    pending
+      .then((entity) => {
+        if (entity) this.driverMissingUntil.delete(driverId);
+        else this.driverMissingUntil.set(driverId, Date.now() + DRIVER_MISSING_TTL_MS);
+        clear();
+      })
+      .catch(() => {
+        // A failed read is not evidence the driver is gone; retry next batch.
+        clear();
+      });
     return pending;
   }
 
+  /**
+   * One rider, read on its own.
+   *
+   * `op: "snapshot"` used to answer this, and it is a whole-fleet read — every
+   * driver, their profile, location, today's shift and attendance, plus every
+   * delivery of the Kuwait day, roughly 6,000-8,000 document reads. It ran on
+   * **every** ingest batch from a rider the room was not holding, which is the
+   * normal state for a shift that starts after the last roster read: the roster
+   * only holds riders the snapshot found eligible, so one batch, one full scan,
+   * a `null` row, and the next batch scans again. That loop is what put the
+   * project at 2.6 billion reads a day.
+   *
+   * `driver_snapshot` reads exactly this rider — twelve reads — and builds the
+   * row with the same `fleetDriverRow` the fleet snapshot uses, so the room
+   * cannot hold two descriptions of one driver.
+   */
   private async fetchSingleDriver(driverId: string): Promise<Entity | null> {
     // A rider who clocked in after the roster is recent, not a 24-hour ghost.
     // The old 1440-minute window kept every departed rider in the snapshot read.
     const snapshot = await callWorkerFunction<{
-      drivers: SnapshotDriver[];
+      driver: SnapshotDriver | null;
       settings: Record<string, number> | null;
-    }>(this.env, "workerFleetRead", { op: "snapshot", seen_within_minutes: 60 });
+    }>(this.env, "workerFleetRead", {
+      op: "driver_snapshot",
+      driver_id: driverId,
+      seen_within_minutes: 60,
+    });
 
-    const row = (snapshot.drivers ?? []).find((d) => d.driver_id === driverId);
+    const row = snapshot.driver;
     if (!row) return null;
     return this.upsertFromSnapshot(row);
   }

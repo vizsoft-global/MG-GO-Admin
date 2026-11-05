@@ -1174,6 +1174,55 @@ export async function savePayrollOrders(
   if (error) throw new Error(error.message || "save_failed");
 }
 
+/**
+ * One rider-day of hours for a project that pays hours instead of orders.
+ * `null` clears the figure (the cell goes back to `–`).
+ */
+export async function savePayrollDayHours(
+  driverId: string,
+  date: string,
+  hours: number | null,
+  reason?: string | null,
+): Promise<void> {
+  await requirePayrollPermission("payroll.manage");
+  const { error } = await callRpc("admin_save_payroll_day_hours", {
+    p_driver_id: driverId,
+    p_date: date,
+    p_hours: hours,
+    p_reason: reason ?? null,
+  });
+  if (error) throw new Error(error.message || "save_failed");
+}
+
+export type PayrollDayHoursImportRow = {
+  row: number;
+  mgId: string;
+  date: string;
+  hours: number;
+};
+
+export type PayrollDayHoursImportResult = {
+  applied: number;
+  rejected: Array<{ row: number; code: string; mgId: string | null; date: string | null }>;
+};
+
+/**
+ * Operations' daily sheet in one write. The server re-checks every rule, so this
+ * only forwards the rows the preview already accepted.
+ */
+export async function importPayrollDayHours(
+  projectKey: string,
+  rows: readonly PayrollDayHoursImportRow[],
+): Promise<PayrollDayHoursImportResult> {
+  await requirePayrollPermission("payroll.manage");
+  const { data, error } = await callRpc<PayrollDayHoursImportResult>(
+    "admin_import_payroll_day_hours",
+    { p_project_key: projectKey, p_rows: rows },
+  );
+  if (error || !data) throw new Error(error?.message || "save_failed");
+  return { applied: data.applied ?? 0, rejected: Array.isArray(data.rejected) ? data.rejected : [] };
+}
+
 export type PayrollStatusRoster = {
   byDriver: Record<string, { key: string; label: string }>;
   customs: string[];

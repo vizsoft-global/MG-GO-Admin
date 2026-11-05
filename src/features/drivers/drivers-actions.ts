@@ -73,6 +73,16 @@ import { pickDriverAvatarKey } from "@/lib/storage/driver-avatar-key";
 import { syncDriverAvatarKey } from "@/lib/storage/sync-driver-avatar";
 import { isR2Configured } from "@/lib/storage/r2-config";
 import { deleteObjects, putObject } from "@/lib/storage/r2-client";
+import { getFirebaseAuth } from "@/lib/firebase/admin";
+import { callAdminFunction } from "@/lib/firebase/callable";
+import { UNIQ_COLLECTIONS } from "@/lib/firebase/db";
+import { staffDb } from "@/lib/firebase/staff-db";
+import { revalidatePath } from "next/cache";
+import {
+  deleteConfirmationMatches,
+  type IdentityConflict,
+  type IdentityConflictField,
+} from "./driver-delete";
 import { listExistingDriverDocuments, listExtraDriverDocuments } from "@/lib/storage/driver-documents";
 import {
   parseExpiryConfigFromForm,
@@ -421,7 +431,36 @@ async function phoneExists(phone: string, excludeIntakeId?: string): Promise<boo
       .maybeSingle();
     if (linkedIntake?.id === excludeIntakeId) return false;
   }
+  // An archived rider cannot sign in, so the number goes back into circulation — the
+  // archive callable clears `profiles.phone` for the same reason. A profile with no
+  // driver row at all is left alone: that is a staff account, not a rider.
+  const { data: driver } = await db
+    .from("drivers")
+    .select("id, archived_at")
+    .eq("id", profile.id)
+    .maybeSingle();
+  if (driver && driver.archived_at != null) return false;
   return true;
+}
+
+/**
+ * Unwind an intake a failed create left behind.
+ *
+ * `StaffQuery.delete()` releases the `uniq_*` locks the insert claimed, which is
+ * the point: the row plus its locks are exactly what makes the next attempt say
+ * "employee ID already assigned" while no employee is visible in the list.
+ */
+async function discardFailedIntake(db: StaffClient, intakeId: string): Promise<void> {
+  try {
+    await db.from("driver_intakes").delete().eq("id", intakeId);
+  } catch {
+    /* the caller already has an error to show */
+  }
+  try {
+    await deleteObjects([...allIntakeDocumentKeys(intakeId), ...allIntakeAvatarKeys(intakeId)]);
+  } catch {
+    /* best-effort */
+  }
 }
 
 async function uploadIntakeDocument(
@@ -640,6 +679,9 @@ export async function createDriverIntake(
     null,
   );
   if (assetSync.error) {
+    // Roll the intake back: a half-made profile would hold this MG ID and phone
+    // against the next attempt while staying invisible in the Employees list.
+    await discardFailedIntake(db, data.id);
     return { error: assetSync.error };
   }
 
@@ -652,6 +694,7 @@ export async function createDriverIntake(
       expiry,
     });
     if (trackingResult.error) {
+      await discardFailedIntake(db, data.id);
       return { error: trackingResult.error };
     }
   }
@@ -3063,5 +3106,289 @@ export async function listAvailableVehicles(): Promise<VehicleOption[]> {
     reg_number: v.reg_number,
     vehicle_type_key: v.vehicle_type_key ?? "bike",
   }));
+}
+
+/**
+ * Who already holds this MG ID / mobile number?
+ *
+ * The create path refuses a duplicate before writing anything, and the lists it
+ * checks are not the list the Employees page shows: an unfinished profile
+ * (`driver_intakes` with no driver row) blocks the MG ID and the phone while
+ * being invisible in the list, which is why the panel answered "already
+ * assigned" to an operator who could find nothing. This returns the holder.
+ */
+export async function findDriverIdentityConflict(input: {
+  employeeId?: string | null;
+  phone?: string | null;
+}): Promise<IdentityConflict | null> {
+  const auth = await requireDriversManager();
+  if (auth.error) throw new Error("not_authorized");
+
+  const employeeId = normalizeEmployeeId(input.employeeId ?? "");
+  const phone = input.phone ? normalizeKuwaitPhone(input.phone) : null;
+  if (!employeeId && !phone) return null;
+
+  const db = await staffClient();
+  const columns =
+    "id, full_name, employee_id, phone, account_status, status, workflow_status, archived_at, linked_profile_id";
+
+  if (employeeId) {
+    const { data } = await db
+      .from("driver_intakes")
+      .select(columns)
+      .ilike("employee_id", employeeId)
+      .is("archived_at", null)
+      .limit(1);
+    if (data?.[0]) return intakeConflict(data[0], "employee_id");
+
+    const { data: drivers } = await db
+      .from("drivers")
+      .select(columns)
+      .ilike("employee_id", employeeId)
+      .is("archived_at", null)
+      .limit(1);
+    if (drivers?.[0]) return await driverConflict(db, drivers[0], "employee_id");
+  }
+
+  if (phone) {
+    const { data } = await db
+      .from("driver_intakes")
+      .select(columns)
+      .eq("phone", phone)
+      .is("archived_at", null)
+      .limit(1);
+    if (data?.[0]) return intakeConflict(data[0], "phone");
+
+    const { data: drivers } = await db
+      .from("drivers")
+      .select(columns)
+      .eq("phone", phone)
+      .is("archived_at", null)
+      .limit(1);
+    if (drivers?.[0]) return await driverConflict(db, drivers[0], "phone");
+
+    // `phoneExists` also refuses a number only a login profile still holds.
+    const { data: profiles } = await db
+      .from("profiles")
+      .select("id, full_name, phone")
+      .eq("phone", phone)
+      .limit(1);
+    if (profiles?.[0]) {
+      return {
+        field: "phone",
+        kind: "profile",
+        id: String(profiles[0].id),
+        intakeId: null,
+        driverId: null,
+        name: profiles[0].full_name ?? null,
+        employeeId: null,
+        phone: profiles[0].phone ?? null,
+        state: "not_approved",
+      };
+    }
+  }
+
+  return null;
+}
+
+function intakeConflict(row: Record<string, any>, field: IdentityConflictField): IdentityConflict {
+  return {
+    field,
+    kind: "intake",
+    id: String(row.id),
+    intakeId: String(row.id),
+    driverId: row.linked_profile_id ?? null,
+    name: row.full_name ?? null,
+    employeeId: row.employee_id ?? null,
+    phone: row.phone ?? null,
+    state: row.archived_at ? "archived" : "not_approved",
+  };
+}
+
+async function driverConflict(
+  db: StaffClient,
+  row: Record<string, any>,
+  field: IdentityConflictField,
+): Promise<IdentityConflict> {
+  const { data: linked } = await db
+    .from("driver_intakes")
+    .select("id")
+    .eq("linked_profile_id", row.id)
+    .limit(1);
+  return {
+    field,
+    kind: "driver",
+    id: String(row.id),
+    intakeId: linked?.[0]?.id ?? null,
+    driverId: String(row.id),
+    name: row.full_name ?? null,
+    employeeId: row.employee_id ?? null,
+    phone: row.phone ?? null,
+    state: row.account_status ?? "active",
+  };
+}
+
+/**
+ * Delete one employee for good — the record, its intakes, its login, its files,
+ * its edges and the `uniq_*` locks it holds. Archive keeps a rider and frees the
+ * MG ID; this is the option for a profile created by mistake or for someone who
+ * has left. It rides `drivers.bulk_delete` (the slug the purge callables check)
+ * and refuses until the operator types the MG ID back.
+ */
+export async function deleteDriverPermanently(input: {
+  intakeId?: string | null;
+  driverId?: string | null;
+  confirm: string;
+}): Promise<{ ok: true } | { error: string }> {
+  const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(session.permissions, "drivers.bulk_delete", session.isSuperAdmin)
+  ) {
+    return { error: "not_authorized" };
+  }
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+
+  const db = await staffClient();
+  const intakeId = input.intakeId?.trim() || null;
+  const driverId = input.driverId?.trim() || null;
+  if (!intakeId && !driverId) return { error: "missing_fields" };
+
+  const intake = intakeId
+    ? (
+        await db
+          .from("driver_intakes")
+          .select("id, full_name, employee_id, linked_profile_id, archived_at")
+          .eq("id", intakeId)
+          .limit(1)
+      ).data?.[0] ?? null
+    : null;
+  const resolvedDriverId = driverId ?? intake?.linked_profile_id ?? null;
+  const driver = resolvedDriverId
+    ? (
+        await db
+          .from("drivers")
+          .select("id, full_name, employee_id")
+          .eq("id", resolvedDriverId)
+          .limit(1)
+      ).data?.[0] ?? null
+    : null;
+
+  if (!intake && !driver) return { error: "driver_not_found" };
+
+  const employeeId = driver?.employee_id ?? intake?.employee_id ?? null;
+  if (!deleteConfirmationMatches(input.confirm, employeeId)) {
+    return { error: "confirm_mismatch" };
+  }
+
+  // Every intake that belongs to this person, not only the one we were handed:
+  // an intake id is its own uuid, so purging "the driver" never finds it.
+  const intakeIds = new Set<string>();
+  if (intakeId) intakeIds.add(intakeId);
+  if (intake?.linked_profile_id) intakeIds.add(String(intake.id));
+  if (resolvedDriverId) {
+    const { data: linked } = await db
+      .from("driver_intakes")
+      .select("id")
+      .eq("linked_profile_id", resolvedDriverId);
+    for (const row of linked ?? []) intakeIds.add(String(row.id));
+  }
+
+  if (intakeIds.size) {
+    const purge = await callAdminFunction("admin_purge_intakes", { p_ids: [...intakeIds] });
+    if (purge.error) return { error: purge.error.message };
+  }
+
+  const payload = resolvedDriverId
+    ? await callAdminFunction<Record<string, unknown>>("admin_purge_drivers", {
+        p_ids: [resolvedDriverId],
+      })
+    : null;
+  if (payload?.error) return { error: payload.error.message };
+  const result = (payload?.data ?? {}) as Record<string, unknown>;
+  const storageKeys = Array.isArray(result.storage_keys)
+    ? (result.storage_keys as unknown[]).filter((key): key is string => typeof key === "string")
+    : [];
+  const manifest = Array.isArray(result.manifest)
+    ? (result.manifest as Array<{ auth_user_id?: string }>)
+    : [];
+
+  // Files: the intake sweep is exact (its keys derive from the id), the driver
+  // keys come back from the purge.
+  const objectKeys = new Set<string>(storageKeys);
+  for (const id of intakeIds) {
+    for (const key of allIntakeDocumentKeys(id)) objectKeys.add(key);
+    for (const key of allIntakeAvatarKeys(id)) objectKeys.add(key);
+  }
+  if (resolvedDriverId) for (const key of allDriverAvatarKeys(resolvedDriverId)) objectKeys.add(key);
+  if (objectKeys.size) {
+    try {
+      await deleteObjects([...objectKeys]);
+    } catch {
+      /* a missing object must not keep the record alive */
+    }
+  }
+
+  const auth = await getFirebaseAuth();
+  if (auth) {
+    const uids = new Set<string>(manifest.map((entry) => entry.auth_user_id ?? "").filter(Boolean));
+    if (resolvedDriverId) uids.add(resolvedDriverId);
+    for (const uid of uids) {
+      try {
+        await auth.deleteUser(uid);
+      } catch {
+        /* the login may never have existed */
+      }
+    }
+  }
+
+  await releaseIdentityLocks(
+    [resolvedDriverId, ...intakeIds].filter((id): id is string => typeof id === "string" && !!id),
+  );
+
+  void logAdminMutation({
+    action: "delete",
+    entityType: "driver",
+    entityId: resolvedDriverId ?? intakeId ?? "",
+    routeName: "deleteDriverPermanently",
+    before: {
+      intake_id: intakeId,
+      driver_id: resolvedDriverId,
+      employee_id: employeeId,
+      full_name: driver?.full_name ?? intake?.full_name ?? null,
+      intakes: [...intakeIds],
+    },
+  });
+
+  revalidatePath("/drivers");
+  if (resolvedDriverId) revalidatePath(`/drivers/${resolvedDriverId}`);
+  return { ok: true };
+}
+
+/** Drop the `uniq_*` locks a deleted person still owns, so the values free up. */
+async function releaseIdentityLocks(ownerIds: readonly string[]): Promise<void> {
+  if (ownerIds.length === 0) return;
+  const raw = await staffDb();
+  if (!raw) return;
+  const collections = [
+    UNIQ_COLLECTIONS.employeeId,
+    UNIQ_COLLECTIONS.phone,
+    UNIQ_COLLECTIONS.civilId,
+  ];
+  for (const collection of collections) {
+    for (let index = 0; index < ownerIds.length; index += 30) {
+      const slice = ownerIds.slice(index, index + 30);
+      try {
+        const snap = await raw.collection(collection).where("owner_id", "in", slice).get();
+        if (snap.empty) continue;
+        const batch = raw.batch();
+        for (const doc of snap.docs) batch.delete(doc.ref);
+        await batch.commit();
+      } catch {
+        /* best-effort: a lock left behind is reported by the probe script */
+      }
+    }
+  }
 }
 

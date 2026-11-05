@@ -68,25 +68,30 @@ export const WORKER_HTTP_FUNCTIONS = [
 /**
  * Exports that are neither callables nor HTTP handlers.
  *
- * `bitesMirrorSweep` and `deliveryProximitySweep` are `onSchedule` functions:
- * Cloud Scheduler invokes them, so they must not be reachable through a lane and
- * must not carry callable options. They are listed in `LEGACY_MODULES` only so
- * `index.ts` publishes them — every other module there is a callable the light
- * lane serves.
+ * `bitesMirrorSweep`, `deliveryProximitySweep`, `serviceOdometerSync` and
+ * `serviceVehicleDistanceSweep` are `onSchedule` functions: Cloud Scheduler
+ * invokes them, so they must not be reachable through a lane and must not carry
+ * callable options. They are listed in `LEGACY_MODULES` only so `index.ts`
+ * publishes them — every other module there is a callable the light lane serves.
  */
 export const SCHEDULED_FUNCTIONS = [
   "bitesMirrorSweep",
   "homeSnapshotRepair",
   "deliveryProximitySweep",
+  "serviceOdometerSync",
+  "serviceVehicleDistanceSweep",
 ] as const;
 
 export const SCAN_FUNCTIONS = [
   "adminPerformanceOpsSnapshot",
   /**
    * Order Comparison joins `order_recon_rows` with `deliveries`, `drivers`,
-   * `profiles` and `restaurants` for a month window. On the light lane that
-   * scan blew past the 60s client abort and the compare page reported "RPC not
-   * live"; the scan lane's 120s budget is what the read actually needs.
+   * `profiles` and `restaurants` for a month window.
+   *
+   * Measured on production 2026-11-02: October 2026 is **85,878** AM rows (31s)
+   * plus **175,584** deliveries read as day slices (110s), and they run
+   * together. The scan lane's 180s is what this read needs; its five-minute
+   * read-through snapshot means only the first open of a window pays it.
    */
   "adminOrderComparisonSnapshot",
   /**
@@ -168,7 +173,7 @@ export const LANE_FUNCTION_NAME: Record<LaneId, LaneExportName> = {
 /** Client abort must be at least the lane's server timeout. Light uses the 60s platform default. */
 export const LANE_CLIENT_TIMEOUT_MS: Record<LaneId, number> = {
   light: 60_000,
-  scan: 120_000,
+  scan: 180_000,
   heavy: 300_000,
 };
 
@@ -218,7 +223,17 @@ export function callableOptionsForLane(lane: LaneId): LaneRuntimeOptions {
         concurrency: 2,
         minInstances: SCAN_MIN_INSTANCES,
         maxInstances: 6,
-        timeoutSeconds: 120,
+        /**
+         * 180s, not 120s.
+         *
+         * Order Comparison is the widest reader on this lane: October 2026 is
+         * 85,878 AM rows (31s) plus 175,584 deliveries read as day slices
+         * (110s), and they run together. At 120s the pair landed within a
+         * second of the ceiling, so one more month of growth would turn a legal
+         * "Last month" into a timeout. The five-minute read-through snapshot
+         * keeps only the first open of a window paying this.
+         */
+        timeoutSeconds: 180,
       };
     case "heavy":
       return {

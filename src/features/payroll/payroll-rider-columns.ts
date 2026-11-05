@@ -485,12 +485,25 @@ export function riderColumnValue(
         const info = row.dayInfo[index];
         return info ? aoShownOrders(info, row.days[index]) : null;
       }
+      // Hours Operations loaded for the day (Keeta / Five Guys). `null` means
+      // nothing has been loaded yet, which the filter treats as "no value".
+      if (/^w\d+$/.test(columnId)) {
+        const index = Number(columnId.slice(1)) - 1;
+        const info = row.dayInfo[index];
+        const hours = info?.workingHours;
+        return typeof hours === "number" && Number.isFinite(hours) ? hours : null;
+      }
       return null;
   }
 }
 
 export function dayOrdersColumnId(dayIndex: number): string {
   return `o${dayIndex + 1}`;
+}
+
+/** Column id for one day's loaded hours (Keeta / Five Guys). */
+export function workingHoursColumnId(dayIndex: number): string {
+  return `w${dayIndex + 1}`;
 }
 
 export function dayColumnValue(status: DayStatus): string {

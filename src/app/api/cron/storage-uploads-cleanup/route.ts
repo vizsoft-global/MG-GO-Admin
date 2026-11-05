@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { markExpiredPendingUploads } from "@/lib/storage/storage-upload-audit";
+import {
+  markExpiredPendingUploads,
+  sweepOrphanAccidentUploads,
+} from "@/lib/storage/storage-upload-audit";
 
 export async function GET(request: Request): Promise<Response> {
   const secret = process.env.CRON_SECRET?.trim();
@@ -18,7 +21,10 @@ export async function GET(request: Request): Promise<Response> {
     async () => {
       try {
         const result = await markExpiredPendingUploads();
-        return NextResponse.json({ ok: true, ...result });
+        // Second pass on the same schedule: an accident upload that was confirmed
+        // but never attached to a case. It sends nothing.
+        const accidentOrphans = await sweepOrphanAccidentUploads();
+        return NextResponse.json({ ok: true, ...result, accidentOrphans });
       } catch (e) {
         Sentry.captureException(e);
         const message = e instanceof Error ? e.message : "cleanup_failed";

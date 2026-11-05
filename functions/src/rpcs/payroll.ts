@@ -240,7 +240,7 @@ async function loadPayrollContext(input: {
   const phases = input.phases ?? {};
   const firstDay = kuwaitDayString(start);
 
-  const [driverSnap, attendanceSnap, clientsSnap, zonesSnap, restaurantsSnap, adjustmentsSnap, offSnap, orderSnap] =
+  const [driverSnap, attendanceSnap, clientsSnap, zonesSnap, restaurantsSnap, adjustmentsSnap, offSnap, orderSnap, hoursSnap] =
     await timedPhase(phases, "fanoutMs", () => Promise.all([
       db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get(),
       db
@@ -261,6 +261,11 @@ async function loadPayrollContext(input: {
       db.collection(COLLECTIONS.driverOffStructure).where("period_month", "==", `${month}-01`).get(),
       db
         .collection(COLLECTIONS.payrollOrderOverrides)
+        .where("work_date", ">=", firstDay)
+        .where("work_date", "<=", lastDay)
+        .get(),
+      db
+        .collection(COLLECTIONS.payrollDayHours)
         .where("work_date", ">=", firstDay)
         .where("work_date", "<=", lastDay)
         .get(),
@@ -406,6 +411,20 @@ async function loadPayrollContext(input: {
     manualOrders.set(`${driverId}|${workDate}`, orders);
   }
 
+  /**
+   * Hours Operations loaded for a Keeta / Five Guys day. `0` is a real value —
+   * a rider who did not work that day — so presence of the document decides
+   * "loaded", never the number.
+   */
+  const loadedHours = new Map<string, number>();
+  for (const doc of hoursSnap.docs) {
+    const driverId = asString(doc.get("driver_id"));
+    const workDate = asString(doc.get("work_date"));
+    const hours = nullableNumber(doc.get("hours"));
+    if (!driverId || !workDate || hours == null) continue;
+    loadedHours.set(`${driverId}|${workDate}`, hours);
+  }
+
   return {
     month,
     zoneMonth,
@@ -428,6 +447,7 @@ async function loadPayrollContext(input: {
     workedByDriverDay,
     adjustmentByDriverDay,
     manualOrders,
+    loadedHours,
     profileNames,
   };
 }
@@ -834,6 +854,9 @@ async function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: Staff
         return {
           d: day,
           h: Math.round(hours * 100) / 100,
+          wh: ctx.loadedHours.has(key)
+            ? Math.round((ctx.loadedHours.get(key) ?? 0) * 100) / 100
+            : null,
           o: counted.orders,
           do: counted.displayOrders,
           mo: counted.overridden ? counted.orders : null,

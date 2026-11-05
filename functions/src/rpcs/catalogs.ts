@@ -40,6 +40,37 @@ function readString(data: Record<string, unknown>, key: string): string {
   return typeof raw === "string" ? raw.trim() : "";
 }
 
+/**
+ * `readString` that also accepts the `p_snake_case` spelling.
+ *
+ * `callAdminFunction` documents that every callable takes both, but these
+ * readers match one name exactly — so a caller that sends `p_key` arrives as an
+ * empty key and the function refuses with `invalid_key`. That is what made
+ * "Add company" fail on a perfectly valid key: the panel sent `p_key`, this
+ * read `key`, and the save was told to "use a short key".
+ */
+function readStringEither(data: Record<string, unknown>, ...names: string[]): string {
+  for (const name of names) {
+    const value = readString(data, name);
+    if (value) return value;
+  }
+  return "";
+}
+
+function readBoolEither(
+  data: Record<string, unknown>,
+  fallback: boolean,
+  ...names: string[]
+): boolean {
+  for (const name of names) {
+    const raw = data[name];
+    if (typeof raw === "boolean") return raw;
+    if (raw === "true") return true;
+    if (raw === "false") return false;
+  }
+  return fallback;
+}
+
 function readNumber(data: Record<string, unknown>, key: string): number | null {
   const raw = data[key];
   if (typeof raw === "number" && Number.isFinite(raw)) return raw;
@@ -58,8 +89,7 @@ function readBool(data: Record<string, unknown>, key: string, fallback: boolean)
   return fallback;
 }
 
-function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
+function readStringArray(value: unknown): string[] {  if (!Array.isArray(value)) return [];
   return [
     ...new Set(
       value
@@ -399,9 +429,9 @@ export const adminUpsertVehicleCompany = onCall(async (request) => {
   await requireStaff(request, "vehicles.manage");
 
   const data = asRecord(request.data);
-  const key = readString(data, "key").toLowerCase();
+  const key = readStringEither(data, "key", "p_key").toLowerCase();
   if (!key || !SLUG_KEY_RE.test(key)) throw new HttpsError("invalid-argument", "invalid_key");
-  const labelEn = readString(data, "labelEn") || readString(data, "label");
+  const labelEn = readStringEither(data, "labelEn", "p_label_en", "label");
   if (!labelEn) throw new HttpsError("invalid-argument", "missing_fields");
 
   const sortOrder = readNumber(data, "sortOrder") ?? 100;
@@ -410,8 +440,8 @@ export const adminUpsertVehicleCompany = onCall(async (request) => {
     {
       key,
       label_en: labelEn,
-      label_ar: optionalString(data, "labelAr"),
-      is_active: readBool(data, "isActive", true),
+      label_ar: readStringEither(data, "labelAr", "p_label_ar") || null,
+      is_active: readBoolEither(data, true, "isActive", "p_is_active"),
       sort_order: sortOrder,
       updated_at: FieldValue.serverTimestamp(),
     },

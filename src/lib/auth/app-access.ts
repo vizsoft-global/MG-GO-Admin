@@ -84,8 +84,8 @@ export const APP_ACCESS_CATALOG: readonly AppAccessEntry[] = [
       { id: "devices", labelKey: "subViews.devices", slugs: ["driver_devices.view"] },
     ],
   },
-  { appId: "operations-dashboard", extraViewer: ["operations_dashboard.view"], subViews: [] },
-  { appId: "client-portal", extraViewer: ["client_portal.view"], subViews: [] },
+  { appId: "operations-dashboard-v2", extraViewer: ["operations_dashboard.view"], subViews: [] },
+  { appId: "client-portal-v2", extraViewer: ["client_portal.view"], subViews: [] },
   {
     appId: "deliveries",
     crudModule: "deliveries",
@@ -171,6 +171,23 @@ export const APP_ACCESS_CATALOG: readonly AppAccessEntry[] = [
       { id: "fuel", labelKey: "subViews.fuel", slugs: ["fuel.view"] },
       { id: "fuelRequests", labelKey: "subViews.fuelRequests", slugs: ["fuel_requests.view"] },
       { id: "fuelRefunds", labelKey: "subViews.fuelRefunds", slugs: ["fuel_refunds.view"] },
+      // Fleet Service. Read-only ticks; `service.manage` / `service.export` are
+      // granted from Roles & Permissions, never by ticking a tab.
+      {
+        id: "serviceRecords",
+        labelKey: "subViews.serviceRecords",
+        slugs: ["service.view"],
+      },
+      {
+        id: "serviceReports",
+        labelKey: "subViews.serviceReports",
+        slugs: ["service.view"],
+      },
+      {
+        id: "serviceMaintenance",
+        labelKey: "subViews.serviceMaintenance",
+        slugs: ["service.view"],
+      },
     ],
   },
   {

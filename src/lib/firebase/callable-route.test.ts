@@ -54,7 +54,7 @@ describe("admin callable route", () => {
 
   it("raises the client timeout to the lane timeout", () => {
     assert.equal(route(undefined, "admin_performance_ops_snapshot").url.endsWith("/adminApiScan"), true);
-    assert.equal(route(undefined, "admin_performance_ops_snapshot").timeoutMs, 120_000);
+    assert.equal(route(undefined, "admin_performance_ops_snapshot").timeoutMs, 180_000);
     assert.equal(route(undefined, "recalculate_earnings_for_range").url.endsWith("/adminApiHeavy"), true);
     assert.equal(route(undefined, "recalculate_earnings_for_range", 5_000).timeoutMs, 300_000);
     assert.equal(route(undefined, "admin_perf_ping", 400_000).timeoutMs, 400_000);
@@ -74,7 +74,8 @@ describe("admin callable route", () => {
       resolved.url,
       "https://me-central1-musallam-delivery-prod.cloudfunctions.net/adminApiScan",
     );
-    assert.equal(resolved.timeoutMs, 120_000);
+    // A month is 85,878 AM rows plus 175,584 deliveries: ~110s measured.
+    assert.equal(resolved.timeoutMs, 180_000);
   });
 
   it("routes the order recon compare to the scan lane", () => {
@@ -85,7 +86,7 @@ describe("admin callable route", () => {
       resolved.url,
       "https://me-central1-musallam-delivery-prod.cloudfunctions.net/adminApiScan",
     );
-    assert.equal(resolved.timeoutMs, 120_000);
+    assert.equal(resolved.timeoutMs, 180_000);
   });
 
   it("leaves a name without underscores unchanged", () => {

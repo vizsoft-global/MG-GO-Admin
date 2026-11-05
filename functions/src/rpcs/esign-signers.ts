@@ -45,7 +45,16 @@ import {
   type Dict,
 } from "./_shared";
 
-const SIGNER_ROLES = new Set(["countersigner", "manager", "witness"]);
+const SIGNER_ROLES = new Set([
+  "countersigner",
+  "manager",
+  "witness",
+  // Leave Request's four line-manager boxes, in the client's own order.
+  "direct_manager",
+  "hr_responsibility",
+  "hr_manager",
+  "general_manager",
+]);
 const FIRST_STAFF_SLOT = 10;
 const LAST_STAFF_SLOT = 200;
 const REORDER_SHIFT = 1000;

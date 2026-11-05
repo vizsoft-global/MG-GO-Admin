@@ -16,7 +16,10 @@ export function companyKeyFromLabel(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
-    .slice(0, 32);
+    // Truncate **before** the trailing trim, or a name whose 32nd character is
+    // the separator leaves a dangling `_` and fails `COMPANY_KEY_RE`.
+    .slice(0, 32)
+    .replace(/_+$/g, "");
 }
 
 export function companyLabel(

@@ -1,129 +1,157 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import {
   Bike,
-  Building2,
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
   FormInput,
   Globe,
   Handshake,
-  ScrollText,
   Landmark,
   Layers,
-  LayoutGrid,
+  ListChecks,
   ListTree,
   MapPin,
   UsersRound,
   UtensilsCrossed,
   Wallet,
 } from "lucide-react";
-import { AppPage } from "@/components/app/app-page";
-import { AppPageHeader } from "@/components/app/app-page-header";
-import { Card, CardContent } from "@/components/ui/card";
-import { Link } from "@/i18n/navigation";
+import { AppHubShell, HUB_GLYPH_TINTS, type HubGroup } from "@/components/app/app-hub-shell";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import { requireAnyPermission } from "@/lib/auth/require-permission";
 import { OPERATIONS_HUB_PERMISSIONS } from "@/lib/menu/menu-registry";
-import { launcherTileVisual } from "@/lib/menu/tile-visual";
 
 /**
- * OperationsHub — the home of the operational rule tables.
+ * OperationsHub — the home of the operational rule tables, on the same Figma
+ * shell as Visit bookings (`AppHubShell`).
  *
  * This is a **settings section, not a guard of its own**: it opens for anyone
  * holding any one of `OPERATIONS_HUB_PERMISSIONS`, which is also what the
- * sidebar group is gated on, so the card list and the menu cannot disagree about
- * who may see it.
+ * sidebar group is gated on, so the tile list and the menu cannot disagree about
+ * who may see it. Each tile is filtered by **its own** permission and the target
+ * page is gated on the same slug, so a tile can never be an advertisement for a
+ * page that answers /unauthorized.
  *
- * Each card is filtered by **its own** permission and the target page is gated on
- * the same slug, so a card can never be an advertisement for a page that answers
- * /unauthorized. Nothing here is a promise of a route that does not exist —
- * every href below is a page that ships today.
+ * The two panels are the design's own split: the ledgers and their rules on the
+ * start panel, the catalogs that feed them on the end panel.
  */
-const CARDS: ReadonlyArray<{
+type OpsTile = {
   key: string;
   href: string;
-  /** Registry id when the card mirrors a sidebar module — icon + tint come from it. */
-  itemId?: string;
-  icon?: typeof Handshake;
+  icon: typeof Handshake;
+  tint: (typeof HUB_GLYPH_TINTS)[keyof typeof HUB_GLYPH_TINTS];
   permission: Permission;
-}> = [
-  { key: "partners", href: "/partners", icon: Handshake, permission: "partners.view" },
-  { key: "restaurants", href: "/restaurants", icon: UtensilsCrossed, permission: "restaurants.view" },
-  { key: "zones", href: "/zones", icon: MapPin, permission: "zones.view" },
+};
+
+const MANAGE_TILES: OpsTile[] = [
+  { key: "partners", href: "/partners", icon: Handshake, tint: HUB_GLYPH_TINTS.teal, permission: "partners.view" },
+  {
+    key: "restaurants",
+    href: "/restaurants",
+    icon: UtensilsCrossed,
+    tint: HUB_GLYPH_TINTS.rust,
+    permission: "restaurants.view",
+  },
+  { key: "zones", href: "/zones", icon: MapPin, tint: HUB_GLYPH_TINTS.navy, permission: "zones.view" },
   {
     key: "driverGroups",
     href: "/drivers/groups",
     icon: UsersRound,
+    tint: HUB_GLYPH_TINTS.rose,
     permission: "driver_groups.view",
   },
   {
     key: "attendance",
     href: "/attendance",
-    itemId: "attendance",
+    icon: ClipboardCheck,
+    tint: HUB_GLYPH_TINTS.olive,
     permission: "attendance.view",
   },
   {
     key: "roster",
     href: "/operations/roster",
     icon: CalendarClock,
+    tint: HUB_GLYPH_TINTS.gold,
     permission: "attendance.view",
   },
   {
     key: "orderExceptions",
     href: "/order-exceptions",
-    itemId: "order-exceptions",
+    icon: ClipboardList,
+    tint: HUB_GLYPH_TINTS.brown,
     permission: "deliveries.view",
   },
-  { key: "deliveryRules", href: "/delivery-rules", icon: ListTree, permission: "earnings.view" },
-  { key: "incentiveRules", href: "/incentive-rules", icon: Wallet, permission: "earnings.view" },
-  { key: "driverFields", href: "/settings/driver-fields", icon: FormInput, permission: "drivers.manage" },
+  {
+    key: "deliveryRules",
+    href: "/delivery-rules",
+    icon: ListTree,
+    tint: HUB_GLYPH_TINTS.teal,
+    permission: "earnings.view",
+  },
+  {
+    key: "incentiveRules",
+    href: "/incentive-rules",
+    icon: Wallet,
+    tint: HUB_GLYPH_TINTS.gold,
+    permission: "earnings.view",
+  },
+];
+
+const CONFIGURE_TILES: OpsTile[] = [
+  {
+    key: "driverFields",
+    href: "/settings/driver-fields",
+    icon: FormInput,
+    tint: HUB_GLYPH_TINTS.navy,
+    permission: "drivers.manage",
+  },
+  {
+    key: "serviceTypes",
+    href: "/settings/service-types",
+    icon: ListChecks,
+    tint: HUB_GLYPH_TINTS.rose,
+    permission: "service.manage",
+  },
   {
     key: "attendanceSettings",
     href: "/settings/attendance",
     icon: ClipboardCheck,
+    tint: HUB_GLYPH_TINTS.olive,
     permission: "attendance.manage",
   },
   {
     key: "vehicleTypes",
     href: "/settings/vehicle-types",
     icon: Bike,
+    tint: HUB_GLYPH_TINTS.teal,
     permission: "vehicles.manage",
-  },
-  {
-    key: "sourceCompanies",
-    href: "/settings/source-companies",
-    icon: Building2,
-    permission: "companies.view",
   },
   {
     key: "employeeStatuses",
     href: "/settings/employee-statuses",
     icon: ClipboardList,
+    tint: HUB_GLYPH_TINTS.brown,
     permission: "drivers.manage",
   },
   {
     key: "employeeSections",
     href: "/settings/employee-sections",
     icon: Layers,
+    tint: HUB_GLYPH_TINTS.navy,
     permission: "drivers.manage",
   },
   {
     key: "nationalityCategories",
     href: "/settings/nationality-categories",
     icon: Globe,
-    permission: "drivers.manage",
-  },
-  {
-    key: "sponsorships",
-    href: "/settings/sponsorships",
-    icon: ScrollText,
+    tint: HUB_GLYPH_TINTS.rust,
     permission: "drivers.manage",
   },
   {
     key: "bankCodes",
     href: "/settings/bank-codes",
     icon: Landmark,
+    tint: HUB_GLYPH_TINTS.rose,
     permission: "drivers.manage",
   },
 ];
@@ -138,48 +166,38 @@ export default async function OperationsHubPage({
   const session = await requireAnyPermission(locale, OPERATIONS_HUB_PERMISSIONS);
   const t = await getTranslations("pages.operationsHub.hub");
 
-  const cards = CARDS.filter((card) =>
-    hasPermissionInSet(session.permissions, card.permission, session.isSuperAdmin),
-  );
+  const visible = (tile: OpsTile): boolean =>
+    hasPermissionInSet(session.permissions, tile.permission, session.isSuperAdmin);
+
+  const toTile = (tile: OpsTile) => ({
+    href: tile.href,
+    label: t(`cards.${tile.key}.title`),
+    icon: tile.icon,
+    tint: tile.tint,
+  });
+
+  const groups: HubGroup[] = [
+    {
+      id: "manage",
+      heading: t("manageHeading"),
+      hint: t("manageHint"),
+      tiles: MANAGE_TILES.filter(visible).map(toTile),
+    },
+    {
+      id: "configure",
+      heading: t("configureHeading"),
+      hint: t("configureHint"),
+      tiles: CONFIGURE_TILES.filter(visible).map(toTile),
+    },
+  ].filter((group) => group.tiles.length > 0);
 
   return (
-    <AppPage className="space-y-4">
-      <AppPageHeader
-        breadcrumbs={[{ label: t("breadcrumb") }]}
-        title={t("title")}
-        description={t("subtitle")}
-      />
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {cards.map((card) => {
-          const visual = card.itemId ? launcherTileVisual(card.itemId) : null;
-          const Icon = visual?.icon ?? card.icon ?? LayoutGrid;
-          return (
-            <Link key={card.key} href={card.href} className="group">
-              <Card className="h-full rounded-xl border-border bg-card shadow-sm transition-colors group-hover:border-primary/40">
-                <CardContent className="flex items-start gap-3 p-4">
-                  <span
-                    className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"
-                    style={
-                      visual ? { backgroundColor: `${visual.tint}1a`, color: visual.tint } : undefined
-                    }
-                  >
-                    <Icon className="size-4" aria-hidden />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground">
-                      {t(`cards.${card.key}.title`)}
-                    </p>
-                    <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
-                      {t(`cards.${card.key}.body`)}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
-    </AppPage>
+    <AppHubShell
+      title={t("title")}
+      subtitle={t("subtitle")}
+      breadcrumbHome={t("breadcrumbHome")}
+      titleTile={{ icon: Layers, tint: HUB_GLYPH_TINTS.navy }}
+      groups={groups}
+    />
   );
 }

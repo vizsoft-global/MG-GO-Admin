@@ -20,12 +20,12 @@ export function DashboardFrame({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (accessKind !== "partner") return;
     const allowed =
-      pathname === "/client-portal" ||
-      pathname === "/client-portal/employees" ||
-      pathname.startsWith("/client-portal/employees/") ||
-      pathname === "/operations-dashboard" ||
-      pathname.startsWith("/operations-dashboard/");
-    if (!allowed) router.replace("/client-portal");
+      pathname === "/client-portal-v2" ||
+      pathname === "/client-portal-v2/employees" ||
+      pathname.startsWith("/client-portal-v2/employees/") ||
+      pathname === "/operations-dashboard-v2" ||
+      pathname.startsWith("/operations-dashboard-v2/");
+    if (!allowed) router.replace("/client-portal-v2");
   }, [accessKind, pathname, router]);
 
   if (isLauncher) {

@@ -5,7 +5,6 @@ import type {
 } from "./esign-document-layout";
 import { escapeHtml } from "./esign-placeholders";
 import { logoImageHtml } from "./esign-logo";
-import { MUSALLAM_GROUP_LOGO } from "./esign-reference-logo";
 
 /**
  * Reference sheets for the three forms the client signed off on
@@ -317,11 +316,13 @@ ${logoImageHtml(logoUrl, "ref-logo")}
   return pageShell("loan", "loan-page", body, fontCss, LOAN_CSS);
 }
 
+/**
+ * The accident sheet's mark. **Off by default** — every template prints without
+ * a logo, so this returns nothing when no logo URL was resolved rather than
+ * falling back to the embedded Musallam Group mark.
+ */
 function accidentLogoHtml(logoUrl?: string | null): string {
-  return (
-    logoImageHtml(logoUrl, "acc-logo", "Musallam Group") ||
-    `<img class="acc-logo" src="${MUSALLAM_GROUP_LOGO}" alt="Musallam Group"/>`
-  );
+  return logoImageHtml(logoUrl, "acc-logo", "Musallam Group");
 }
 
 function accidentSignatureTail(rider: string): string {

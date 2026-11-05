@@ -13,7 +13,7 @@ export default async function DashboardPage({
   setRequestLocale(locale);
   const session = await getSessionUser();
   if (session?.accessKind === "partner") {
-    redirect({ href: "/client-portal", locale });
+    redirect({ href: "/client-portal-v2", locale });
   }
   await requirePermission(locale, "dashboard.view");
   return <AppLauncherShell />;

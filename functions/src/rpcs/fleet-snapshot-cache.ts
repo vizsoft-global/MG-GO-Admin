@@ -1,9 +1,14 @@
 /**
+ * How long one built snapshot serves every caller.
+ *
  * The raw fleet roster changes at GPS cadence, not at dashboard cadence. Five
  * seconds meant every open tracking tab rebuilt the whole snapshot; a minute is
- * still well inside the roster's own freshness window.
+ * still well inside the roster's own freshness window. Two minutes now: the
+ * build is a whole-fleet read (~6,000-8,000 documents), positions are already
+ * carried by the edge socket and interpolated on the client, and a snapshot
+ * older than this is still far fresher than the poll cadence it backs.
  */
-export const FLEET_BASE_CACHE_MS = 60_000;
+export const FLEET_BASE_CACHE_MS = 120_000;
 
 /** Fields a caller without contact permission must not receive. */
 export const FLEET_CONTACT_FIELDS = ["phone", "contact", "email", "driver_phone"] as const;

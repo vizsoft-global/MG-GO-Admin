@@ -16,3 +16,4 @@ export { AppEmptyState } from "./app-empty-state";
 export { SearchField } from "./search-field";
 export { AppFormSection } from "./app-form-section";
 export { ModuleIndexPage } from "./module-index-page";
+export { AppHubShell, HUB_GLYPH_TINTS, type HubGroup, type HubTile, type HubStat, type HubPills } from "./app-hub-shell";

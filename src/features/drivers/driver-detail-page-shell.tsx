@@ -13,6 +13,7 @@ import {
   EyeOff,
   Loader2,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { TabBar, type TabItem } from "@/components/dashboard/tab-bar";
@@ -40,6 +41,7 @@ import { DriverActivityTab } from "./driver-activity-tab";
 import { DriverHistoryTab } from "./driver-history-tab";
 import { DriverPerformanceTab } from "./driver-performance-tab";
 import { DriverArchiveDialog } from "./driver-archive-dialog";
+import { DriverDeleteDialog } from "./driver-delete-dialog";
 import { DriverLevelOverrideDialog } from "./driver-level-badge";
 import { DriverEditSheet } from "./driver-edit-sheet";
 import { useDriverLevelOverride } from "./use-driver-levels";
@@ -53,6 +55,7 @@ import type { DriverAccountStatus, DriverWorkflowStatus } from "./types";
 import {
   useApproveDriverIntake,
   useArchiveDriverIntake,
+  useDeleteDriverPermanently,
   useRestoreDriverIntake,
   useDriverDetail,
   useRegenerateDriverPasscode,
@@ -307,6 +310,9 @@ function DriverDetailContent({ id }: { id: string }) {
   const { can, accessKind } = useAuth();
   const isPartner = accessKind === "partner";
   const canManage = can("drivers.manage");
+  // A hard delete is a bulk-delete-class action: it removes the login, the files
+  // and the uniq locks, not just the row.
+  const canDelete = can("drivers.bulk_delete");
   const { sweep, pending: levelSweepPending } = useDriverLevelOverride();
   const [levelOverrideOpen, setLevelOverrideOpen] = useState(false);
   const canViewOps = can("driver_ops.view");
@@ -316,6 +322,7 @@ function DriverDetailContent({ id }: { id: string }) {
   const sectionsQuery = useEmployeeSections();
   const searchParams = useSearchParams();
   const archiveDriver = useArchiveDriverIntake();
+  const deleteDriverPermanently = useDeleteDriverPermanently();
   const restoreDriver = useRestoreDriverIntake();
   const approveDriver = useApproveDriverIntake();
   const [activeTab, setActiveTab] = useState<DetailTabId>(
@@ -323,6 +330,7 @@ function DriverDetailContent({ id }: { id: string }) {
   );
   const [editOpen, setEditOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [holdApproveSlot, setHoldApproveSlot] = useState(false);
   const editRouteConsumedRef = useRef(false);
   const suppressEditOpenUntilRef = useRef(0);
@@ -998,6 +1006,54 @@ function DriverDetailContent({ id }: { id: string }) {
                   ) : null}
                   {t("archiveDriver")}
                 </Button>
+                {canDelete ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    aria-label={t("deleteCta")}
+                    title={t("deleteCta")}
+                    className={cn(
+                      HEADER_BUTTON,
+                      "w-10 justify-center px-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
+                    )}
+                    disabled={deleteDriverPermanently.isPending}
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    {deleteDriverPermanently.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                ) : null}
+                <DriverDeleteDialog
+                  open={deleteOpen}
+                  onOpenChange={setDeleteOpen}
+                  pending={deleteDriverPermanently.isPending}
+                  employeeId={driver.employee_id ?? null}
+                  employeeName={driver.full_name ?? null}
+                  onConfirm={async (typed) => {
+                    try {
+                      await deleteDriverPermanently.mutateAsync({
+                        intakeId: driver.intake_id,
+                        driverId: driver.linked_profile_id ?? null,
+                        confirm: typed,
+                      });
+                      setDeleteOpen(false);
+                      toast.success(t("deleted"));
+                      router.push("/drivers");
+                    } catch (err) {
+                      const key = err instanceof Error ? err.message : "save_failed";
+                      toast.error(
+                        key === "confirm_mismatch"
+                          ? t("deleteMismatch")
+                          : key === "not_authorized"
+                            ? t("deleteNeedsPermission")
+                            : t("deleteFailed"),
+                      );
+                    }
+                  }}
+                />
                 <DriverArchiveDialog
                   open={archiveOpen}
                   onOpenChange={setArchiveOpen}

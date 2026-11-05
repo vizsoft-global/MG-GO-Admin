@@ -15,8 +15,10 @@ export const INVALID_SIGNATURE_SLOT = "invalid_signature_slot";
  * Mirrors `src/features/esign/render/esign-document-html.ts`. Slot trust is
  * gated on `ESIGN_SLOT_MEASURE_SINCE`, not this number: bumping the render
  * version must not discard slots measured at 7.
+ *
+ * 9 — Leave Request (five signed boxes) and the client's employee-block order.
  */
-export const ESIGN_SHEET_RENDER_VERSION = 8;
+export const ESIGN_SHEET_RENDER_VERSION = 9;
 
 /** Persisted `signature_slots` at this sheet version or later stay usable. */
 export const ESIGN_SLOT_MEASURE_SINCE = 7;
@@ -30,7 +32,11 @@ export type SignSlotRole =
   | "gm"
   | "ceo"
   | "ack_received"
-  | "ack_not_received";
+  | "ack_not_received"
+  | "direct_manager"
+  | "hr_responsibility"
+  | "hr_manager"
+  | "general_manager";
 
 export type SignSlot = {
   id: string;
@@ -42,9 +48,9 @@ export type SignSlot = {
   hPt: number;
 };
 
-export type EsignDocumentKind = "penalty" | "loan" | "payslip" | "general";
+export type EsignDocumentKind = "penalty" | "loan" | "payslip" | "general" | "leave";
 
-const KINDS: readonly EsignDocumentKind[] = ["penalty", "loan", "payslip", "general"];
+const KINDS: readonly EsignDocumentKind[] = ["penalty", "loan", "payslip", "general", "leave"];
 
 /** Ruled lines on the client sheet dock. Keep identical to esign-document-layout.ts. */
 export const PENALTY_SLOTS: SignSlot[] = [
@@ -68,6 +74,30 @@ export const GENERAL_SLOTS: SignSlot[] = [
   { id: "hr", role: "hr", page: 1, xPt: 172, yPt: 69, wPt: 119, hPt: 23 },
 ];
 
+/** Five signed boxes on one row. Keep identical to esign-document-layout.ts. */
+export const LEAVE_SLOTS: SignSlot[] = (() => {
+  const width = 101;
+  const gutter = 10;
+  const height = 26;
+  const top = 24;
+  const roles: SignSlotRole[] = [
+    "employee",
+    "direct_manager",
+    "hr_responsibility",
+    "hr_manager",
+    "general_manager",
+  ];
+  return roles.map((role, index) => ({
+    id: role,
+    role,
+    page: 1,
+    xPt: 24 + index * (width + gutter),
+    yPt: A4_HEIGHT_PT - top - height,
+    wPt: width,
+    hPt: height,
+  }));
+})();
+
 export function normalizeDocumentKind(value: unknown): EsignDocumentKind {
   const kind = String(value ?? "");
   return KINDS.includes(kind as EsignDocumentKind) ? (kind as EsignDocumentKind) : "general";
@@ -81,6 +111,8 @@ export function slotsForKind(kind: EsignDocumentKind): SignSlot[] {
       return LOAN_SLOTS;
     case "payslip":
       return PAYSLIP_SLOTS;
+    case "leave":
+      return LEAVE_SLOTS;
     case "general":
       return GENERAL_SLOTS;
     default: {
@@ -112,6 +144,10 @@ export function parseSignatureSlots(raw: unknown): SignSlot[] | null {
       "ceo",
       "ack_received",
       "ack_not_received",
+      "direct_manager",
+      "hr_responsibility",
+      "hr_manager",
+      "general_manager",
     ];
     if (!roles.includes(role as SignSlotRole)) return null;
     const slotRow: SignSlot = {

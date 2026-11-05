@@ -35,11 +35,16 @@ export const FIGMA_HUB_CATEGORY: Record<string, OutgoingHubCategoryKey> = {
   general_document: "general_doc",
 };
 
-export const FIGMA_HUB_DOCUMENT_KIND: Record<string, "loan" | "payslip" | "penalty" | "general"> = {
+export const FIGMA_HUB_DOCUMENT_KIND: Record<string, "loan" | "payslip" | "penalty" | "general" | "leave"> = {
   loan_request: "loan",
   payslip: "payslip",
   asset: "general",
-  leave: "general",
+  /**
+   * Leave prints the client's own Leave Request sheet — five signed boxes, the
+   * leave-type checklist and the HR block — so it is its own document kind
+   * rather than the plain `general` body it used to fall back to.
+   */
+  leave: "leave",
   penalty_notice: "penalty",
   investigation: "general",
   accident: "general",

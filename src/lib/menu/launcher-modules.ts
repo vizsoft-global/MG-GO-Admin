@@ -27,8 +27,6 @@ export const LAUNCHER_TILE_IDS = [
   "driver-app",
   "app-releases",
   "assets",
-  "operations-dashboard",
-  "client-portal",
   "vehicles",
   "operations-hub",
   "payroll",
@@ -82,7 +80,11 @@ export const LAUNCHER_HIDDEN_TILE_IDS: ReadonlySet<string> = new Set(
  * given for them; they must never be added to `LAUNCHER_TILE_IDS` or they
  * would reappear as launcher tiles.
  */
-export const APP_ACCESS_EXTRA_MODULE_IDS = ["performance"] as const;
+export const APP_ACCESS_EXTRA_MODULE_IDS = [
+  "performance",
+  "operations-dashboard-v2",
+  "client-portal-v2",
+] as const;
 
 export type AppAccessModuleId =
   | LauncherTileId

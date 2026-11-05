@@ -17,7 +17,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
-import { buildLiveFleetSnapshot, num, type Dict } from "./fleet";
+import { buildDriverSnapshot, buildLiveFleetSnapshot, num, type Dict } from "./fleet";
 import { runIngestDriverPositions, runRecordFleetEvents, runRecordRiderDayStats } from "./fleet-ingest";
 import { WORKER_HTTP_CAPACITY } from "./worker-http-capacity";
 
@@ -40,7 +40,7 @@ type OpsEvent = {
   occurred_at: string;
 };
 
-type WorkerOp = "snapshot" | "ops";
+type WorkerOp = "snapshot" | "driver_snapshot" | "ops";
 
 function readBody(body: unknown): Dict {
   if (typeof body === "string") {
@@ -89,7 +89,7 @@ function asDict(value: unknown): Dict {
 }
 
 function parseOp(value: unknown): WorkerOp | null {
-  if (value === "snapshot" || value === "ops") return value;
+  if (value === "snapshot" || value === "driver_snapshot" || value === "ops") return value;
   return null;
 }
 
@@ -188,6 +188,26 @@ export const workerFleetRead = guarded(async (body, res) => {
       const minutes =
         num(body.seen_within_minutes ?? body.seenWithinMinutes ?? body.p_seen_within_minutes) ?? 30;
       res.status(200).json(await buildLiveFleetSnapshot(minutes));
+      return;
+    }
+    /**
+     * One rider, read directly.
+     *
+     * The room calls this when an ingest arrives for a driver it is not holding —
+     * a shift that started after the last roster read, or a rider who came back
+     * after an eviction. It used to call `snapshot`, which is a whole-fleet answer:
+     * every driver plus every delivery of the day, ~6,000-8,000 reads per batch.
+     */
+    case "driver_snapshot": {
+      const driverId = text(body.driver_id ?? body.driverId ?? body.p_driver_id);
+      if (!driverId) {
+        res.status(400).json({ ok: false, error: "driver_id_required" });
+        return;
+      }
+      const minutes =
+        num(body.seen_within_minutes ?? body.seenWithinMinutes ?? body.p_seen_within_minutes) ?? 60;
+      const result = await buildDriverSnapshot(driverId, minutes);
+      res.status(200).json(result);
       return;
     }
     case "ops": {
