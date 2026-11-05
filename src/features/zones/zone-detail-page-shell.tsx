@@ -66,8 +66,8 @@ export function ZoneDetailPageShell({ id }: { id: string }) {
   const zone = useMemo(() => zones.find((item) => item.id === id) ?? null, [id, zones]);
   const { data: drivers = [], isLoading: driversLoading } = useZoneDrivers(id, Boolean(zone));
   const driverColumns = useMemo((): TableToolbarColumn[] => [
+    { id: "code", label: t("detailDriverCode"), locked: true },
     { id: "name", label: t("detailDriverName"), locked: true },
-    { id: "code", label: t("detailDriverCode") },
   ], [t]);
   const driverPrefs = useTablePrefs("zone-drivers", driverColumns);
   const driverQuery = driverPrefs.appliedQuery.trim().toLowerCase();

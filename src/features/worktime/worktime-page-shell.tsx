@@ -24,7 +24,12 @@ import { useAuth } from "@/contexts/auth-context";
 import { useDriverFormOptions } from "@/features/drivers/use-driver-form-options";
 import { partnerSearchOptions, zoneSearchOptions } from "@/lib/search-options";
 import { SearchSelect } from "@/components/ui/search-select";
-import { Input } from "@/components/ui/input";
+import {
+  PeriodActionButtons,
+  detectPeriodPreset,
+  periodRangeFor,
+  usePeriodActionLabels,
+} from "@/components/app/period-action-buttons";
 import {
   Select,
   SelectContent,
@@ -79,6 +84,7 @@ function scheduledShiftLabel(row: WorktimeListRow): string {
 
 export function WorktimePageShell() {
   const t = useTranslations("pages.worktime");
+  const periodLabels = usePeriodActionLabels();
   const { can } = useAuth();
   const canManage = can("attendance.manage");
   const today = kuwaitToday();
@@ -143,24 +149,21 @@ export function WorktimePageShell() {
           }
           exportDisabled={filtered.length === 0}
           dateSlot={
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="w-[140px]"
-              />
-              <span className="text-muted-foreground text-sm">{t("to")}</span>
-              <Input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="w-[140px]"
-              />
-              <Button type="button" variant="ghost" size="sm" onClick={() => setToDate(today)}>
-                {t("today")}
-              </Button>
-            </div>
+            <PeriodActionButtons
+              preset={detectPeriodPreset(fromDate, toDate, today)}
+              from={fromDate}
+              to={toDate}
+              labels={periodLabels}
+              onPreset={(next) => {
+                const range = periodRangeFor(next, today);
+                setFromDate(range.from);
+                setToDate(range.to);
+              }}
+              onApplyCustom={({ from, to: toYmd }) => {
+                setFromDate(from);
+                setToDate(toYmd);
+              }}
+            />
           }
           filterSlot={
             <>

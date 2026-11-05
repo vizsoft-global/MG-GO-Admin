@@ -44,7 +44,14 @@ import type {
 import {
   defaultEndDate,
   defaultStartDate,
+  kuwaitTodayYmd,
 } from "@/lib/date/kuwait-dates";
+import {
+  PeriodActionButtons,
+  detectPeriodPreset,
+  periodRangeFor,
+  usePeriodActionLabels,
+} from "@/components/app/period-action-buttons";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   runPreviewEarnings,
@@ -97,6 +104,8 @@ export function EarningsPageShell() {
 
   const [startDate, setStartDate] = useState(defaultStartDate);
   const [endDate, setEndDate] = useState(defaultEndDate);
+  const today = kuwaitTodayYmd();
+  const periodLabels = usePeriodActionLabels();
   const [groupBy, setGroupBy] = useState<"day" | "driver" | "zone" | "partner" | "restaurant">(
     "driver",
   );
@@ -318,30 +327,21 @@ export function EarningsPageShell() {
               totalCount={totalCount}
             />
             <div className="flex flex-wrap items-center gap-2 px-4 pb-4">
-              <div className="space-y-1">
-                <Label htmlFor="earn-start" className="sr-only">
-                  {t("startDate")}
-                </Label>
-                <Input
-                  id="earn-start"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="h-9 w-40 rounded-lg"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="earn-end" className="sr-only">
-                  {t("endDate")}
-                </Label>
-                <Input
-                  id="earn-end"
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="h-9 w-40 rounded-lg"
-                />
-              </div>
+              <PeriodActionButtons
+                preset={detectPeriodPreset(startDate, endDate, today)}
+                from={startDate}
+                to={endDate}
+                labels={periodLabels}
+                onPreset={(next) => {
+                  const range = periodRangeFor(next, today);
+                  setStartDate(range.from);
+                  setEndDate(range.to);
+                }}
+                onApplyCustom={({ from, to }) => {
+                  setStartDate(from);
+                  setEndDate(to);
+                }}
+              />
               <Select
                 value={selectedDriverId || "__all"}
                 onValueChange={(v) => setSelectedDriverId(!v || v === "__all" ? "" : v)}

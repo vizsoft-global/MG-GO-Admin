@@ -178,9 +178,9 @@ export function VerificationsPageShell() {
   const t = useTranslations("pages.verifications");
   const columns = useMemo<TableToolbarColumn[]>(
     () => [
-      { id: "date", label: t("colDate"), categorical: true },
-      { id: "driver", label: t("colDriver"), locked: true },
       { id: "employee", label: t("colEmployeeId") },
+      { id: "driver", label: t("colDriver"), locked: true },
+      { id: "date", label: t("colDate"), categorical: true },
       { id: "restaurant", label: t("colRestaurant") },
       { id: "partner", label: t("colPartner"), categorical: true },
       { id: "counts", label: t("colCounts") },
@@ -393,9 +393,9 @@ export function VerificationsPageShell() {
 
   const tableColumns = useMemo(
     () => [
-      { id: "date", label: t("colDate"), className: "w-[7.5rem]" },
-      { id: "driver", label: t("colDriver") },
       { id: "employee", label: t("colEmployeeId"), className: "hidden lg:table-cell w-[6.5rem]" },
+      { id: "driver", label: t("colDriver") },
+      { id: "date", label: t("colDate"), className: "w-[7.5rem]" },
       { id: "restaurant", label: t("colRestaurant"), className: "hidden md:table-cell" },
       { id: "partner", label: t("colPartner"), className: "hidden xl:table-cell" },
       { id: "counts", label: t("colCounts"), className: "w-[7rem] text-end" },
@@ -819,8 +819,8 @@ export function VerificationsPageShell() {
                   className="cursor-pointer"
                   onClick={() => openDetail(row)}
                 >
-                  <TableCell className="whitespace-nowrap text-sm tabular-nums">
-                    {formatDate(row.service_date)}
+                  <TableCell className="hidden font-mono text-xs tabular-nums lg:table-cell">
+                    {row.employee_id ?? "—"}
                   </TableCell>
                   <TableCell>
                     <div className="min-w-0">
@@ -828,8 +828,8 @@ export function VerificationsPageShell() {
                       <p className="text-xs text-muted-foreground">#{row.driver_code}</p>
                     </div>
                   </TableCell>
-                  <TableCell className="hidden font-mono text-xs tabular-nums lg:table-cell">
-                    {row.employee_id ?? "—"}
+                  <TableCell className="whitespace-nowrap text-sm tabular-nums">
+                    {formatDate(row.service_date)}
                   </TableCell>
                   <TableCell className="hidden max-w-[12rem] truncate text-sm md:table-cell">
                     {row.restaurant_name}

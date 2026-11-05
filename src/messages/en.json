@@ -96,6 +96,16 @@
       "select": "Select …",
       "export": "Export",
       "add": "Add"
+    },
+    "period": {
+      "thisMonth": "This month",
+      "lastMonth": "Last month",
+      "custom": "Custom",
+      "title": "Custom range",
+      "from": "From",
+      "to": "To",
+      "cancel": "Cancel",
+      "apply": "Apply"
     }
   },
   "nav": {
@@ -3639,7 +3649,12 @@
       "reportMonthHint": "Always the whole month {month} — filters are ignored.",
       "downloadUnused": "Download this list (Excel)",
       "periodThisMonth": "This month",
+      "periodLastMonth": "Last month",
       "periodCustom": "Custom",
+      "periodCustomTitle": "Custom range",
+      "periodFrom": "From",
+      "periodTo": "To",
+      "periodCancel": "Cancel",
       "applyRange": "Apply",
       "kpiRiders": "Riders compared",
       "kpiAm": "AM orders",

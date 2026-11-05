@@ -34,8 +34,8 @@ export function IncentiveDailyPanel() {
   const [restaurantId, setRestaurantId] = useState("");
   const [exporting, setExporting] = useState(false);
   const columns = useMemo((): TableToolbarColumn[] => [
-    { id: "driver", label: t("colDriver"), locked: true },
     { id: "employee", label: t("colEmployeeId") },
+    { id: "driver", label: t("colDriver"), locked: true },
     { id: "date", label: t("colDate") },
     { id: "restaurant", label: t("colRestaurant") },
     { id: "zone", label: t("colZone") },

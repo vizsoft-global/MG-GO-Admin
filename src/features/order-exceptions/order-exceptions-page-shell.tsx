@@ -22,7 +22,12 @@ import { VisibleTableCell } from "@/components/app/visible-table-cell";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  PeriodActionButtons,
+  detectPeriodPreset,
+  periodRangeFor,
+  usePeriodActionLabels,
+} from "@/components/app/period-action-buttons";
 import {
   Select,
   SelectContent,
@@ -132,6 +137,8 @@ export function OrderExceptionsPageShell() {
   const [source, setSource] = useState<OrderExceptionSourceFilter>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const today = kuwaitTodayYmd();
+  const periodLabels = usePeriodActionLabels();
   const [page, setPage] = useState(0);
   const [cursors, setCursors] = useState<Array<string | null>>([null]);
   const [selected, setSelected] = useState<OrderExceptionRow | null>(null);
@@ -446,25 +453,22 @@ export function OrderExceptionsPageShell() {
                 ))}
               </SelectContent>
             </Select>
-            <Input
-              type="date"
-              value={from}
-              aria-label={t("filterFrom")}
-              onChange={(event) => {
-                setFrom(event.target.value);
+            <PeriodActionButtons
+              preset={from && to ? detectPeriodPreset(from, to, today) : "custom"}
+              from={from}
+              to={to}
+              labels={periodLabels}
+              onPreset={(next) => {
+                const range = periodRangeFor(next, today);
+                setFrom(range.from);
+                setTo(range.to);
                 resetPage();
               }}
-              className="h-9 w-[140px]"
-            />
-            <Input
-              type="date"
-              value={to}
-              aria-label={t("filterTo")}
-              onChange={(event) => {
-                setTo(event.target.value);
+              onApplyCustom={({ from: nextFrom, to: nextTo }) => {
+                setFrom(nextFrom);
+                setTo(nextTo);
                 resetPage();
               }}
-              className="h-9 w-[140px]"
             />
           </div>
         }

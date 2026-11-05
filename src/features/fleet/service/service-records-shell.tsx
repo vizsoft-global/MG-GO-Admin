@@ -109,12 +109,12 @@ export function ServiceRecordsShell({
 
   const columns = useMemo<TableToolbarColumn[]>(
     () => [
+      { id: "employee", label: t("cols.employeeId"), categorical: true },
+      { id: "driver", label: t("cols.driver"), categorical: true },
       { id: "date", label: t("cols.date") },
       { id: "description", label: t("cols.description") },
       { id: "type", label: t("cols.type"), categorical: true },
       { id: "vehicle", label: t("cols.vehicle"), categorical: true },
-      { id: "driver", label: t("cols.driver"), categorical: true },
-      { id: "employee", label: t("cols.employeeId"), categorical: true },
       { id: "vendor", label: t("cols.vendor"), categorical: true },
       { id: "company", label: t("cols.company"), defaultHidden: true },
       { id: "cost", label: t("cols.cost") },

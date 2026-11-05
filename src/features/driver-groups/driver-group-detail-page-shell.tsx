@@ -45,9 +45,9 @@ export function DriverGroupDetailPageShell({ groupId }: { groupId: string }) {
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
   const memberColumns = useMemo((): TableToolbarColumn[] => [
-    { id: "driver", label: t("colDriver"), locked: true },
     { id: "employee", label: t("colEmployeeId") },
     { id: "code", label: t("colDriverCode") },
+    { id: "driver", label: t("colDriver"), locked: true },
   ], [t]);
   const memberPrefs = useTablePrefs(`driver-group-members-${groupId}`, memberColumns);
 

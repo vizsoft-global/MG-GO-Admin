@@ -19,8 +19,12 @@ import {
 } from "@/components/app/table-toolbar";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  PeriodActionButtons,
+  detectPeriodPreset,
+  periodRangeFor,
+  usePeriodActionLabels,
+} from "@/components/app/period-action-buttons";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import {
   Table,
@@ -34,6 +38,7 @@ import { useAuth } from "@/contexts/auth-context";
 import {
   defaultEndDate,
   defaultStartDateMonthsAgo,
+  kuwaitTodayYmd,
 } from "@/lib/date/kuwait-dates";
 import { NewPayoutRunDialog } from "./new-payout-run-dialog";
 import { usePayoutRuns } from "./use-payouts";
@@ -58,6 +63,8 @@ export function PayoutsPageShell() {
   const [startDate, setStartDate] = useState(defaultStartDateMonthsAgo);
   const [endDate, setEndDate] = useState(defaultEndDate);
   const [newRunOpen, setNewRunOpen] = useState(false);
+  const today = kuwaitTodayYmd();
+  const periodLabels = usePeriodActionLabels();
   const runsQuery = usePayoutRuns(startDate, endDate);
   const runs = runsQuery.data ?? [];
 
@@ -139,31 +146,22 @@ export function PayoutsPageShell() {
               onAdd={canManage ? () => setNewRunOpen(true) : undefined}
               addLabel={t("newRunTitle")}
             />
-            <div className="flex flex-wrap gap-2 px-4 pb-3">
-              <div className="space-y-1">
-                <Label htmlFor="payout-start-filter" className="sr-only">
-                  {t("periodStart")}
-                </Label>
-                <Input
-                  id="payout-start-filter"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="h-9 w-40 rounded-lg"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="payout-end-filter" className="sr-only">
-                  {t("periodEnd")}
-                </Label>
-                <Input
-                  id="payout-end-filter"
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="h-9 w-40 rounded-lg"
-                />
-              </div>
+            <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+              <PeriodActionButtons
+                preset={detectPeriodPreset(startDate, endDate, today)}
+                from={startDate}
+                to={endDate}
+                labels={periodLabels}
+                onPreset={(next) => {
+                  const range = periodRangeFor(next, today);
+                  setStartDate(range.from);
+                  setEndDate(range.to);
+                }}
+                onApplyCustom={({ from, to: toYmd }) => {
+                  setStartDate(from);
+                  setEndDate(toYmd);
+                }}
+              />
             </div>
           </>
         }

@@ -822,11 +822,11 @@ export function DriverBulkImportDialog({
                             }}
                           />
                         </th>
-                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colStatus")}</th>
-                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colName")}</th>
-                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colPhone")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colEmployeeId")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colPlatformId")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colName")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colStatus")}</th>
+                        <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colPhone")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colPlatform")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colZone")}</th>
                         <th className={`${TABLE_HEAD_CLASS} px-2 py-1.5`}>{t("colRestaurants")}</th>
@@ -857,6 +857,11 @@ export function DriverBulkImportDialog({
                               />
                             ) : null}
                           </td>
+                          <td className="px-2 py-1 tabular-nums">
+                            {row.employee_id ?? row.resolved_employee_id ?? "—"}
+                          </td>
+                          <td className="px-2 py-1">{row.client_id ?? "—"}</td>
+                          <td className="px-2 py-1">{row.full_name ?? "—"}</td>
                           <td className="px-2 py-1">
                             <StatusPill variant={previewVariant(row, duplicateStrategy)} dot={false}>
                               {isImportRowReady(row, duplicateStrategy) &&
@@ -865,12 +870,7 @@ export function DriverBulkImportDialog({
                                 : t(`status.${row.status}`)}
                             </StatusPill>
                           </td>
-                          <td className="px-2 py-1">{row.full_name ?? "—"}</td>
                           <td className="px-2 py-1">{row.phone ?? "—"}</td>
-                          <td className="px-2 py-1 tabular-nums">
-                            {row.employee_id ?? row.resolved_employee_id ?? "—"}
-                          </td>
-                          <td className="px-2 py-1">{row.client_id ?? "—"}</td>
                           <td className="px-2 py-1">{row.client_name ?? "—"}</td>
                           <td className="px-2 py-1">{row.zone_name ?? "—"}</td>
                           <td className="px-2 py-1">

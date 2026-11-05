@@ -269,7 +269,7 @@ describe("buildHrPayrollRows", () => {
     assert.deepEqual(
       HR_COLUMNS.map((column) => column.key),
       [
-        "i", "client", "mg", "name", "civil", "bankNo", "bank", "cur", "payment",
+        "i", "mg", "client", "name", "civil", "bankNo", "bank", "cur", "payment",
         "clientName", "zone", "rest", "nationality", "natCat", "status", "start",
         "endDate", "endDesc", "company", "sponsor", "position", "hiring", "section",
         "fixed", "wps", "rate", "vtype", "inc2", "inc4", "offs", "fwd", "fwh", "hourly", "orders",

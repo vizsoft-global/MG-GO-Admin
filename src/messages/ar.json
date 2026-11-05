@@ -96,6 +96,16 @@
       "select": "اختر …",
       "export": "تصدير",
       "add": "إضافة"
+    },
+    "period": {
+      "thisMonth": "هذا الشهر",
+      "lastMonth": "الشهر الماضي",
+      "custom": "مخصص",
+      "title": "نطاق مخصص",
+      "from": "من",
+      "to": "إلى",
+      "cancel": "إلغاء",
+      "apply": "تطبيق"
     }
   },
   "nav": {
@@ -3639,7 +3649,12 @@
       "reportMonthHint": "دائماً الشهر كامل {month} — الفلاتر لا تؤثر.",
       "downloadUnused": "تنزيل هذه القائمة (Excel)",
       "periodThisMonth": "هذا الشهر",
+      "periodLastMonth": "الشهر الماضي",
       "periodCustom": "مخصص",
+      "periodCustomTitle": "نطاق مخصص",
+      "periodFrom": "من",
+      "periodTo": "إلى",
+      "periodCancel": "إلغاء",
       "applyRange": "تطبيق",
       "kpiRiders": "الفرسان المقارنون",
       "kpiAm": "طلبات AM",

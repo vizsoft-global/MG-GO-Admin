@@ -59,8 +59,8 @@ const SICK = Array.from({ length: 31 }, (_, n) => n);
 
 export const HR_COLUMNS: readonly HrColumn[] = [
   { key: "i", header: "#", group: "emp", kind: "index", width: 56, filter: "contains" },
-  { key: "client", header: "Client ID", group: "emp", kind: "text", width: 86, filter: "contains" },
   { key: "mg", header: "MG ID", group: "emp", kind: "text", width: 96, filter: "contains", mono: true },
+  { key: "client", header: "Client ID", group: "emp", kind: "text", width: 86, filter: "contains" },
   { key: "name", header: "Employee Name", group: "emp", kind: "text", width: 230, filter: "contains" },
   { key: "civil", header: "Civil ID", group: "emp", kind: "text", width: 140, filter: "contains", mono: true },
   { key: "bankNo", header: "Bank Number", group: "emp", kind: "text", width: 150, filter: "contains", mono: true },

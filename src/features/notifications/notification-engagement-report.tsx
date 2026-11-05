@@ -114,8 +114,8 @@ export function NotificationEngagementReport({
   }, [items, tab, trackEngagement]);
 
   const columns = useMemo((): TableToolbarColumn[] => [
-    { id: "driver", label: t("colDriver"), locked: true },
     { id: "employee", label: t("colEmployeeId") },
+    { id: "driver", label: t("colDriver"), locked: true },
     { id: "title", label: t("colSentTitle") },
     { id: "body", label: t("colSentBody") },
     { id: "seen", label: t("engagementColSeen") },

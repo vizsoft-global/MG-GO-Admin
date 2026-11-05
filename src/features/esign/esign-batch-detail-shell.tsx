@@ -135,8 +135,8 @@ export function EsignBatchDetailShell({ batchId }: { batchId: string }) {
   const [tab, setTab] = useState<EsignRecipientTab>("all");
   const columns = useMemo<TableToolbarColumn[]>(
     () => [
-      { id: "name", label: t("colName"), locked: true },
       { id: "emp", label: t("colEmployee"), locked: true },
+      { id: "name", label: t("colName"), locked: true },
       { id: "sent", label: tTracker("colSent") },
       { id: "status", label: t("colStage"), categorical: true },
       { id: "signedOn", label: t("colSignedOn") },

@@ -44,7 +44,6 @@ import { downloadCsv } from "@/features/driver-tracking/csv-export";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Tooltip,
   TooltipContent,
@@ -60,6 +59,12 @@ import {
   type TableToolbarColumn,
 } from "@/components/app/table-toolbar";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
+import {
+  PeriodActionButtons,
+  detectPeriodPreset,
+  periodRangeFor,
+  usePeriodActionLabels,
+} from "@/components/app/period-action-buttons";
 import { AttendanceAnalyticsPanel } from "./attendance-analytics-panel";
 import { AttendanceCheckInCell } from "./attendance-check-in-cell";
 import { AttendanceCorrectionSheet } from "./attendance-correction-sheet";
@@ -121,6 +126,7 @@ function countActiveFilters(filters: AttendanceFiltersState): number {
 
 function AttendancePageContent() {
   const t = useTranslations("pages.attendance");
+  const periodLabels = usePeriodActionLabels();
   const labels = useListControlLabels();
   const auth = useAuth();
   const canManage = auth.can("attendance.manage");
@@ -647,23 +653,21 @@ function AttendancePageContent() {
       <AppListCard>
         {tab === "analytics" ? (
           <div className="space-y-4 p-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="w-[140px]"
-                aria-label={t("fromDate")}
-              />
-              <span className="text-sm text-muted-foreground">{t("to")}</span>
-              <Input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="w-[140px]"
-                aria-label={t("toDate")}
-              />
-            </div>
+            <PeriodActionButtons
+              preset={detectPeriodPreset(fromDate, toDate, today)}
+              from={fromDate}
+              to={toDate}
+              labels={periodLabels}
+              onPreset={(next) => {
+                const range = periodRangeFor(next, today);
+                setFromDate(range.from);
+                setToDate(range.to);
+              }}
+              onApplyCustom={({ from, to: toYmd }) => {
+                setFromDate(from);
+                setToDate(toYmd);
+              }}
+            />
             <AttendanceAnalyticsPanel fromDate={fromDate} toDate={toDate} />
           </div>
         ) : (
@@ -749,20 +753,20 @@ function AttendancePageContent() {
                   dateSlot={
                     tab === "history" ? (
                       <div className="flex flex-wrap items-center gap-2">
-                        <Input
-                          type="date"
-                          value={fromDate}
-                          onChange={(e) => setFromDate(e.target.value)}
-                          className="w-[140px]"
-                          aria-label={t("fromDate")}
-                        />
-                        <span className="text-sm text-muted-foreground">{t("to")}</span>
-                        <Input
-                          type="date"
-                          value={toDate}
-                          onChange={(e) => setToDate(e.target.value)}
-                          className="w-[140px]"
-                          aria-label={t("toDate")}
+                        <PeriodActionButtons
+                          preset={detectPeriodPreset(fromDate, toDate, today)}
+                          from={fromDate}
+                          to={toDate}
+                          labels={periodLabels}
+                          onPreset={(next) => {
+                            const range = periodRangeFor(next, today);
+                            setFromDate(range.from);
+                            setToDate(range.to);
+                          }}
+                          onApplyCustom={({ from, to: toYmd }) => {
+                            setFromDate(from);
+                            setToDate(toYmd);
+                          }}
                         />
                         <Button
                           type="button"

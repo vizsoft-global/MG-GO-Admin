@@ -21,10 +21,10 @@ import { TableToolbar, useTablePrefs, type TableToolbarColumn } from "@/componen
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { ToggleChip } from "@/components/app/toggle-chip";
+import { PeriodActionButtons, usePeriodActionLabels } from "@/components/app/period-action-buttons";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useAuth } from "@/contexts/auth-context";
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
@@ -96,8 +96,8 @@ export function OrderReconPageShell() {
   const t = useTranslations("pages.orderRecon");
   const columns = useMemo<TableToolbarColumn[]>(
     () => [
+      { id: "mgId", label: t("colMgId"), locked: true },
       { id: "name", label: t("colRiderName"), locked: true },
-      { id: "mgId", label: t("colMgId") },
       { id: "restaurant", label: t("colRestaurant"), categorical: true },
       { id: "result", label: t("colStatus"), categorical: true },
     ],
@@ -105,14 +105,12 @@ export function OrderReconPageShell() {
   );
   const prefs = useTablePrefs("order-recon", columns);
   const locale = useLocale();
+  const periodLabels = usePeriodActionLabels();
   const { can } = useAuth();
   const canManage = can("order_recon.manage");
   const today = kuwaitTodayYmd();
-  const lastMonth = comparisonPeriod("lastMonth", today);
 
   const [preset, setPreset] = useState<ComparisonPeriodPreset>("thisMonth");
-  const [customFrom, setCustomFrom] = useState(today);
-  const [customTo, setCustomTo] = useState(today);
   const [appliedCustom, setAppliedCustom] = useState({ from: today, to: today });
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("both");
@@ -123,6 +121,14 @@ export function OrderReconPageShell() {
 
   const range = comparisonPeriod(preset, today, appliedCustom);
   const overSpan = spanDays(range.from, range.to) > 93;
+  const customDay = (ymd: string) =>
+    new Intl.DateTimeFormat(locale === "ar" ? "ar" : "en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+      numberingSystem: "latn",
+    }).format(new Date(`${ymd}T00:00:00Z`));
 
   /**
    * A day cell and a column filter belong to the range they were picked in.
@@ -253,13 +259,6 @@ export function OrderReconPageShell() {
     });
   };
 
-  const lastMonthLabel =
-    locale === "ar"
-      ? new Intl.DateTimeFormat("ar", { month: "long", year: "numeric", timeZone: "UTC" }).format(
-          new Date(`${lastMonth.from}T00:00:00Z`),
-        )
-      : monthLabelEn(monthContaining(lastMonth.from).year, monthContaining(lastMonth.from).month);
-
   return (
     <AppPage>
       <AppPageHeader
@@ -299,29 +298,18 @@ export function OrderReconPageShell() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <ToggleChip selected={preset === "thisMonth"} className="h-9" onClick={() => setPreset("thisMonth")}>
-          {t("periodThisMonth")}
-        </ToggleChip>
-        <ToggleChip selected={preset === "lastMonth"} className="h-9" onClick={() => setPreset("lastMonth")}>
-          {lastMonthLabel}
-        </ToggleChip>
-        <ToggleChip selected={preset === "custom"} className="h-9" onClick={() => setPreset("custom")}>
-          {t("periodCustom")}
-        </ToggleChip>
-        {preset === "custom" ? (
-          <>
-            <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-9 w-36" />
-            <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-9 w-36" />
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9"
-              onClick={() => setAppliedCustom({ from: customFrom, to: customTo })}
-            >
-              {t("applyRange")}
-            </Button>
-          </>
-        ) : null}
+        <PeriodActionButtons
+          preset={preset}
+          from={range.from}
+          to={range.to}
+          labels={periodLabels}
+          locale={locale}
+          onPreset={(next) => setPreset(next)}
+          onApplyCustom={({ from, to: toYmd }) => {
+            setAppliedCustom({ from, to: toYmd });
+            setPreset("custom");
+          }}
+        />
         <p className="text-xs text-muted-foreground">{t("matchNote")}</p>
       </div>
 
