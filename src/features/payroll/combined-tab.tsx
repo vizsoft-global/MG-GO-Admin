@@ -3,15 +3,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Building2, Percent, Store, UserCheck, Users } from "lucide-react";
-import { KpiCard } from "@/components/dashboard/kpi-card";
 import { GroupedSections, groupRows } from "@/components/app/app-list-controls";
 import { formatPct } from "@/lib/format/percent";
 import {
+  companyDayHours,
   computeCombinedKpis,
   isoDayLabel,
   payrollRiderMatchesSearch,
   type PayrollPeriod,
 } from "./payroll-formulas";
+import { PayrollKpiCard } from "./payroll-kpi-card";
+import {
+  combinedRiderMatchesKpi,
+  kpiSelected,
+  nextKpiSelection,
+  type CombinedKpiKey,
+} from "./payroll-kpi-selection";
 import { PayrollListToolbar, usePayrollListPrefs } from "./payroll-list-toolbar";
 import { PayrollLegend } from "./payroll-grid";
 import { PayrollManualChangesPanel } from "./payroll-manual-changes";
@@ -23,6 +30,7 @@ import {
 } from "./combined-columns";
 import { CombinedColumnsMenu } from "./combined-columns-menu";
 import { CombinedPayrollGrid } from "./combined-grid";
+import { PayrollRiderCards } from "./payroll-rider-cards";
 import { useCombinedColumns } from "./use-combined-columns";
 import { useCombinedExportBridge } from "./combined-export-bridge";
 import { exportCombinedPayrollXlsx } from "./combined-xlsx";
@@ -34,6 +42,7 @@ import {
   type ColumnSort,
 } from "./payroll-column-filter";
 import { configByKey, resolveColumnLabel } from "./payroll-column-config";
+import { payrollColumnLabel } from "./payroll-column-labels";
 import { usePayrollAdjustmentAudit, usePayrollColumnConfig } from "./use-payroll";
 import type { PayrollRiderRow } from "./payroll-types";
 
@@ -64,7 +73,7 @@ export function CombinedPayrollTab({
 }) {
   const t = useTranslations("pages.payroll");
   const [search, setSearch] = useState("");
-  const { prefs } = usePayrollListPrefs("payroll-combined");
+  const { prefs, update } = usePayrollListPrefs("payroll-combined");
   const audit = usePayrollAdjustmentAudit({ from: month.from, to: month.to });
   const headings = usePayrollColumnConfig();
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
@@ -72,10 +81,23 @@ export function CombinedPayrollTab({
   const bridge = useCombinedExportBridge();
   const [filters, setFilters] = useState<ColumnFilters>({});
   const [sort, setSort] = useState<ColumnSort>(null);
+  /** The card narrowing this sheet; pressing it again clears it. */
+  const [kpi, setKpi] = useState<CombinedKpiKey | null>(null);
+
+  const cardRiders = useMemo(
+    () =>
+      riders.filter((row) =>
+        combinedRiderMatchesKpi(
+          { status: row.status, keeta: companyDayHours(row.projectKey, row.partner) === 10 },
+          kpi,
+        ),
+      ),
+    [riders, kpi],
+  );
 
   const searched = useMemo(
-    () => riders.filter((r) => payrollRiderMatchesSearch(r, search)),
-    [riders, search],
+    () => cardRiders.filter((r) => payrollRiderMatchesSearch(r, search)),
+    [cardRiders, search],
   );
 
   const valueContext = useMemo(() => ({ dates: month.dates, today }), [month.dates, today]);
@@ -110,7 +132,7 @@ export function CombinedPayrollTab({
 
   const identityHeader = useCallback(
     (columnId: "amId" | "mgId" | "name") => {
-      const fallback = t(`riderCols.${columnId}`);
+      const fallback = payrollColumnLabel(columnId, t(`riderCols.${columnId}`));
       return headingConfig ? resolveColumnLabel(columnId, fallback, headingConfig) : fallback;
     },
     [headingConfig, t],
@@ -205,66 +227,112 @@ export function CombinedPayrollTab({
         <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-5 shadow-sm">
           <b>{t("combinedBannerTitle")}</b> {t("combinedBannerBody")}
         </div>
-        <CombinedColumnsMenu
-          columns={columns}
-          labelFor={(columnId) => {
-            if (columnId === COMBINED_DAYS_COLUMN_ID) return dailyGroupLabel;
-            const column = combinedColumn(columnId);
-            return column ? columnLabel(columnId, column.labelKey) : columnId;
-          }}
-          canManage={canManage}
-        />
       </div>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-5">
-        <KpiCard compact label={t("combinedKpi.riders")} value={kpis.riders} icon={Users} />
-        <KpiCard
-          compact
+        <PayrollKpiCard
+          label={t("combinedKpi.riders")}
+          value={kpis.riders}
+          icon={Users}
+          selected={kpi === null}
+          onSelect={() => setKpi(null)}
+        />
+        <PayrollKpiCard
           label={t("combinedKpi.active")}
           value={kpis.active}
           icon={UserCheck}
           accent="success"
+          selected={kpiSelected(kpi, "active")}
+          onSelect={() => setKpi((current) => nextKpiSelection(current, "active"))}
         />
-        <KpiCard
-          compact
+        <PayrollKpiCard
           label={t("combinedKpi.avgEfficiency")}
           value={formatPct(kpis.avgEfficiency)}
           icon={Percent}
+          disabled
+          disabledHint={t("kpi.avgEffHint")}
         />
-        <KpiCard
-          compact
+        <PayrollKpiCard
           label={t("combinedKpi.activeAmericana")}
           value={kpis.activeAmericana}
           icon={Building2}
+          selected={kpiSelected(kpi, "activeAmericana")}
+          onSelect={() => setKpi((current) => nextKpiSelection(current, "activeAmericana"))}
         />
-        <KpiCard compact label={t("combinedKpi.activeKeeta")} value={kpis.activeKeeta} icon={Store} />
+        <PayrollKpiCard
+          label={t("combinedKpi.activeKeeta")}
+          value={kpis.activeKeeta}
+          icon={Store}
+          selected={kpiSelected(kpi, "activeKeeta")}
+          onSelect={() => setKpi((current) => nextKpiSelection(current, "activeKeeta"))}
+        />
       </div>
-      <PayrollListToolbar prefKey="payroll-combined" search={search} onSearchChange={setSearch} />
-      <GroupedSections groups={grouped}>
-        {(rows, group) => (
-          <CombinedPayrollGrid
-            key={group.key}
-            dates={month.dates}
-            rows={rows}
-            today={today}
-            empty={t("emptyRiders")}
-            exportLabel={canExport ? t("downloadTable") : undefined}
-            onExport={canExport ? exportRows : undefined}
-            visibleIds={columns.visibleIds}
-            headingConfig={headingConfig}
-            headingManage={canManage}
-            identityEdit={canManage}
-            filters={filters}
-            onFiltersChange={setFilters}
-            sort={sort}
-            onSortChange={setSort}
-            footer={t("tableFootRange", {
-              shown: rows.length,
-              total: riders.length,
-              range: month.label,
-            })}
+      <PayrollListToolbar
+        prefKey="payroll-combined"
+        search={search}
+        onSearchChange={setSearch}
+        prefs={prefs}
+        onUpdate={update}
+        trailing={
+          <CombinedColumnsMenu
+            columns={columns}
+            labelFor={(columnId) => {
+              if (columnId === COMBINED_DAYS_COLUMN_ID) return dailyGroupLabel;
+              const column = combinedColumn(columnId);
+              return column ? columnLabel(columnId, column.labelKey) : columnId;
+            }}
+            canManage={canManage}
           />
-        )}
-      </GroupedSections>
+        }
+      />
+      {prefs.viewMode === "cards" ? (
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <PayrollRiderCards
+            rows={visibleRows.map((row) => ({
+              id: row.driverId,
+              code: row.amId || "—",
+              name: row.name || "—",
+              driverId: row.driverId,
+              fields: [
+                { label: t("riderCols.mgId"), value: row.mgId || "—" },
+                { label: columnLabel("proj", "projectName"), value: row.partner || "—" },
+                { label: columnLabel("ord", "totalOrders"), value: String(row.finalOrders) },
+                {
+                  label: columnLabel("eff", "efficiency"),
+                  value: formatPct(Number(combinedColumn("eff")?.value(row, valueContext) ?? 0)),
+                },
+              ],
+            }))}
+            empty={t("emptyRiders")}
+          />
+        </div>
+      ) : (
+        <GroupedSections groups={grouped}>
+          {(rows, group) => (
+            <CombinedPayrollGrid
+              key={group.key}
+              dates={month.dates}
+              rows={rows}
+              today={today}
+              empty={t("emptyRiders")}
+              exportLabel={canExport ? t("downloadTable") : undefined}
+              onExport={canExport ? exportRows : undefined}
+              visibleIds={columns.visibleIds}
+              headingConfig={headingConfig}
+              headingManage={canManage}
+              identityEdit={canManage}
+              filters={filters}
+              onFiltersChange={setFilters}
+              sort={sort}
+              onSortChange={setSort}
+              footer={t("tableFootRange", {
+                shown: rows.length,
+                total: riders.length,
+                range: month.label,
+              })}
+            />
+          )}
+        </GroupedSections>
+      )}
       <PayrollLegend riders={searched} />
       <PayrollManualChangesPanel
         rows={audit.data ?? []}

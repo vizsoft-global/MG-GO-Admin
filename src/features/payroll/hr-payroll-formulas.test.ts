@@ -90,6 +90,7 @@ function bundle(opsApproved: boolean, extra: Partial<HrBundle["rows"][number]> =
         sponsor: "MG",
         company: "MG",
         position: "Rider",
+        positionKey: "rider",
         hiringType: "full_time",
         workStart: "2024-01-01",
         jobEnd: "",
@@ -98,7 +99,11 @@ function bundle(opsApproved: boolean, extra: Partial<HrBundle["rows"][number]> =
         workPermitSalary: 26,
         bankNumber: "123456",
         bankName: "NBK",
+        bankCode: "nbk",
+        zoneId: "z1",
         currency: "KWD",
+        vehicleId: "v1",
+        vehicleTypeKey: "bike",
         twoYear: 20,
         fourYear: 0,
         food: 15,
@@ -260,20 +265,22 @@ describe("buildHrPayrollRows", () => {
     assert.equal(hrFooterTotals(rows).food, 30);
   });
 
-  it("splits the employee band the way the sheet does", () => {
+  it("prints the employee band once and keeps the shipped column order", () => {
     const spans = hrGroupSpans(HR_COLUMNS);
+    // One continuous identity block: forcing a break after column four printed
+    // "From Employees" three times over the same block.
     assert.equal(spans[0]?.group, "emp");
-    assert.equal(spans[0]?.count, 4);
-    assert.equal(spans[1]?.group, "emp");
-    assert.equal(spans[2]?.group, "pay");
+    assert.ok((spans[0]?.count ?? 0) > 4);
+    assert.equal(spans.filter((span) => span.group === "emp").length, 1);
     assert.deepEqual(
       HR_COLUMNS.map((column) => column.key),
       [
-        "i", "client", "mg", "name", "civil", "bankNo", "bank", "cur", "payment",
+        // One identity order on every payroll sheet: #, MG ID, Client ID, Name.
+        "i", "mg", "client", "name", "civil", "bankNo", "bank", "cur", "payment",
         "clientName", "zone", "rest", "nationality", "natCat", "status", "start",
         "endDate", "endDesc", "company", "sponsor", "position", "hiring", "section",
         "fixed", "wps", "rate", "vtype", "inc2", "inc4", "offs", "fwd", "fwh", "hourly", "orders",
-        "wd", "ah", "restDpd", "riderDpd", "eff", "salH", "inc2v", "inc4v", "incent",
+        "wd", "ah", "ahApp", "restDpd", "riderDpd", "eff", "salH", "inc2v", "inc4v", "incent",
         "food", "sick", "sickR", "pending", "traffic", "loan", "allow", "ded", "total",
       ],
     );
@@ -285,10 +292,10 @@ describe("buildHrPayrollRows", () => {
     assert.equal(HR_COLUMNS.find((column) => column.key === "vtype")?.group, "cfg");
   });
 
-  it("joins both matching rates and multiplies approved orders by their sum", () => {
+  it("prices each project once: the best matching line wins, it is not summed", () => {
     const rates: HrRateLine[] = [
       { id: "r1", vehicle: "Bike", project: "keeta", zones: ["Hawally"], rate: 0.25 },
-      { id: "r2", vehicle: "Bike", project: "Keeta", zones: ["Hawally"], rate: 0.5 },
+      { id: "r2", vehicle: "Bike", project: "Keeta", zones: ["Hawally"], rate: 0.5, position: "rider" },
     ];
     const rows = buildHrPayrollRows({
       riders: [rider({ driverId: "d1" })],
@@ -296,8 +303,9 @@ describe("buildHrPayrollRows", () => {
       monthDays: 30,
       rates,
     });
-    assert.equal(rows[0]?.cells.rate, `${(0.25).toFixed(3)} · ${(0.5).toFixed(3)}`);
-    assert.equal(rows[0]?.numbers.revenue, 140 * (0.25 + 0.5));
+    // The position-specific line beats the wildcard; one order is never priced twice.
+    assert.equal(rows[0]?.cells.rate, `${(0.5).toFixed(3)} · rider`);
+    assert.equal(rows[0]?.numbers.revenue, 140 * 0.5);
   });
 
   it("prints the missing rate when no config matches the rider", () => {
@@ -328,7 +336,8 @@ describe("buildHrPayrollRows", () => {
       noRateLabel: "No rate",
     });
     assert.equal(rows[0]?.cells.rate, "No rate");
-    assert.equal(rows[0]?.cells.vtype, "—");
+    // The cell shows the rider's real type even when no rate prices it.
+    assert.equal(rows[0]?.cells.vtype, "van");
   });
 
   it("summarises approved incentives separately from allowances", () => {

@@ -15,5 +15,7 @@ export { SortableTableHeadLabel } from "./sortable-table-head-label";
 export { AppEmptyState } from "./app-empty-state";
 export { SearchField } from "./search-field";
 export { AppFormSection } from "./app-form-section";
+export { AppModalFooter } from "./app-modal-footer";
+export { TableFooterExport } from "./table-footer-export";
 export { ModuleIndexPage } from "./module-index-page";
 export { AppHubShell, HUB_GLYPH_TINTS, type HubGroup, type HubTile, type HubStat, type HubPills } from "./app-hub-shell";

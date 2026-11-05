@@ -22,6 +22,7 @@ import {
   appAttendanceTotals,
   appDayColumnId,
   appHoursForDay,
+  PAYROLL_SERIAL_COLUMN,
   riderColumnValue,
 } from "./payroll-rider-columns";
 import {
@@ -35,10 +36,13 @@ import {
   PayrollColumnsMenu,
   PayrollHeadingLabel,
   isMasterDataColumn,
-  stickyIdentityOffset,
   stickyIdentityStyle,
 } from "./payroll-heading";
-import { PayrollListToolbar } from "./payroll-list-toolbar";
+import { identityOffsets, withSerialColumn } from "./payroll-table-identity";
+import { PayrollRowLink } from "./payroll-row-link";
+import { payrollColumnLabel } from "./payroll-column-labels";
+import { PayrollListToolbar, usePayrollListPrefs } from "./payroll-list-toolbar";
+import { PayrollRiderCards } from "./payroll-rider-cards";
 import { PayrollStatusCell } from "./payroll-status-cell";
 import { usePayrollStatusFilterList } from "./payroll-status-context";
 import { payrollAssignField } from "./payroll-assign";
@@ -71,6 +75,7 @@ export function ApplicationAttendanceTab({
 }) {
   const t = useTranslations("pages.payroll");
   const statusList = usePayrollStatusFilterList();
+  const { prefs: listPrefs, update: updateListPrefs } = usePayrollListPrefs("payroll-app-attendance");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<ColumnFilters>({});
   const [sort, setSort] = useState<ColumnSort>(null);
@@ -78,11 +83,16 @@ export function ApplicationAttendanceTab({
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
   const columns = useMemo(
     () =>
-      APP_ATTENDANCE_LEAD_COLUMNS.filter(
-        (column) => !columnHiddenIn(column.id, "app_attendance", headingConfig),
+      withSerialColumn(
+        APP_ATTENDANCE_LEAD_COLUMNS.filter(
+          (column) => !columnHiddenIn(column.id, "app_attendance", headingConfig),
+        ),
+        PAYROLL_SERIAL_COLUMN,
       ),
     [headingConfig],
   );
+  const columnOffsets = useMemo(() => identityOffsets(columns), [columns]);
+  const frozenCount = columnOffsets.filter((offset) => offset >= 0).length;
   const dates = month.dates;
 
   const searched = useMemo(
@@ -165,7 +175,7 @@ export function ApplicationAttendanceTab({
     };
   }, [visibleRows, dates]);
 
-  const columnCount = columns.length + dates.length;
+  const columnCount = columns.length + dates.length + 1;
 
   return (
     <div className="space-y-2">
@@ -173,12 +183,6 @@ export function ApplicationAttendanceTab({
         <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-5 shadow-sm">
           <b>{t("appAttendance.bannerTitle")}</b> {t("appAttendance.bannerBody")}
         </div>
-        <PayrollColumnsMenu
-          view="app_attendance"
-          config={headingConfig}
-          fallbackLabel={fallbackLabel}
-          canManage={canManage}
-        />
       </div>
 
       <div className="grid gap-2 sm:grid-cols-3">
@@ -216,6 +220,16 @@ export function ApplicationAttendanceTab({
         prefKey="payroll-app-attendance"
         search={search}
         onSearchChange={setSearch}
+        prefs={listPrefs}
+        onUpdate={updateListPrefs}
+        trailing={
+          <PayrollColumnsMenu
+            view="app_attendance"
+            config={headingConfig}
+            fallbackLabel={fallbackLabel}
+            canManage={canManage}
+          />
+        }
       />
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -242,6 +256,28 @@ export function ApplicationAttendanceTab({
           </div>
         ) : null}
 
+        {listPrefs.viewMode === "cards" ? (
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <PayrollRiderCards
+              rows={visibleRows.map((row) => {
+                const totalsForRow = appAttendanceTotals(row);
+                return {
+                  id: row.driverId,
+                  code: row.amId || "—",
+                  name: row.name || "—",
+                  driverId: row.driverId,
+                  fields: [
+                    { label: t("riderCols.mgId"), value: row.mgId || "—" },
+                    { label: t("riderCols.appTotalHours"), value: formatHours(totalsForRow.totalHours) },
+                    { label: t("riderCols.appActiveDays"), value: String(totalsForRow.activeDays) },
+                    { label: t("riderCols.appAvgHours"), value: formatHours(totalsForRow.avgHours) },
+                  ],
+                };
+              })}
+              empty={t("emptyRiders")}
+            />
+          </div>
+        ) : (
         <div className="max-h-[min(560px,62dvh)] overflow-auto">
           <table className="w-max min-w-full border-collapse text-xs">
             <thead className="sticky top-0 z-10 bg-card">
@@ -249,10 +285,9 @@ export function ApplicationAttendanceTab({
                 {columns.map((column, index) => {
                   const sticky = stickyIdentityStyle(
                     column.id,
-                    columns
-                      .slice(0, index)
-                      .reduce((sum, col) => sum + stickyIdentityOffset(col.id), 0),
+                    Math.max(columnOffsets[index] ?? 0, 0),
                     "head",
+                    index === frozenCount - 1,
                   );
                   return (
                     <th
@@ -263,7 +298,7 @@ export function ApplicationAttendanceTab({
                       <PayrollColumnHeader
                         label={resolveColumnLabel(
                           column.id,
-                          t(`riderCols.${column.labelKey}`),
+                          payrollColumnLabel(column.id, t(`riderCols.${column.labelKey}`)),
                           headingConfig,
                         )}
                         heading={
@@ -271,7 +306,7 @@ export function ApplicationAttendanceTab({
                           isMasterDataColumn(column.id) ? undefined : (
                             <PayrollHeadingLabel
                               columnKey={column.id}
-                              fallback={t(`riderCols.${column.labelKey}`)}
+                              fallback={payrollColumnLabel(column.id, t(`riderCols.${column.labelKey}`))}
                               config={headingConfig}
                               canManage={canManage}
                             />
@@ -313,6 +348,12 @@ export function ApplicationAttendanceTab({
                     />
                   </th>
                 ))}
+                <th
+                  key="row-action"
+                  scope="col"
+                  aria-label={t("common.openEmployee")}
+                  className={cn(TABLE_HEAD_CLASS, "w-9 px-1 py-2 text-center")}
+                />
               </tr>
             </thead>
             <tbody>
@@ -326,20 +367,22 @@ export function ApplicationAttendanceTab({
                   </td>
                 </tr>
               ) : (
-                visibleRows.map((row) => (
+                visibleRows.map((row, rowIndex) => (
                   <tr key={row.driverId} className="border-b border-border/60 hover:bg-muted/30">
                     {columns.map((column, index) => {
                       const sticky = stickyIdentityStyle(
                         column.id,
-                        columns
-                          .slice(0, index)
-                          .reduce((sum, col) => sum + stickyIdentityOffset(col.id), 0),
+                        Math.max(columnOffsets[index] ?? 0, 0),
+                        "cell",
+                        index === frozenCount - 1,
                       );
                       const value = riderColumnValue(row, column.id, today);
                       const identityField = payrollIdentityField(column.id);
                       const assignField = payrollAssignField(column.id);
                       const display =
-                        column.id === "status" ? (
+                        column.id === "serial" ? (
+                          <span className="tabular-nums text-muted-foreground">{rowIndex + 1}</span>
+                        ) : column.id === "status" ? (
                           <PayrollStatusCell row={row} today={today} canEdit={false} />
                         ) : assignField ? (
                           <PayrollAssignCell row={row} field={assignField} canEdit={canManage} />
@@ -386,6 +429,9 @@ export function ApplicationAttendanceTab({
                         </td>
                       );
                     })}
+                    <td className="w-9 px-1 py-1.5 text-center">
+                      <PayrollRowLink driverId={row.driverId} />
+                    </td>
                   </tr>
                 ))
               )}
@@ -403,10 +449,12 @@ export function ApplicationAttendanceTab({
                     {totals.perDay[i] > 0 ? formatHours(totals.perDay[i]) : "–"}
                   </td>
                 ))}
+                <td className="w-9 px-1 py-1.5" />
               </tr>
             </tfoot>
           </table>
         </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2">
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">

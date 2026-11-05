@@ -17,7 +17,10 @@ import {
   type ColumnFilters,
   type ColumnSort,
 } from "./payroll-column-filter";
-import { PayrollHeadingLabel, stickyIdentityOffset, stickyIdentityStyle } from "./payroll-heading";
+import { PayrollHeadingLabel, stickyIdentityStyle } from "./payroll-heading";
+import { identityOffsets, withSerialColumn } from "./payroll-table-identity";
+import { PayrollRowLink } from "./payroll-row-link";
+import { payrollColumnLabel } from "./payroll-column-labels";
 import { PayrollAssignCell } from "./payroll-identity-cell";
 import { PayrollStatusCell } from "./payroll-status-cell";
 import { usePayrollStatusFilterList } from "./payroll-status-context";
@@ -37,6 +40,17 @@ import {
 } from "./combined-columns";
 import { resolveColumnLabel, type PayrollColumnConfigRow } from "./payroll-column-config";
 import type { PayrollRiderRow } from "./payroll-types";
+
+/**
+ * The frozen identity block on this sheet: the serial, then the SOP trio in the
+ * one order every payroll table uses now (`MG ID`, `Client ID`, `Name`).
+ */
+const COMBINED_IDENTITY_COLUMNS_FOR_GRID = withSerialColumn(
+  COMBINED_IDENTITY_TRIPLE.map((id) => ({ id })),
+  { id: "serial" },
+);
+const COMBINED_IDENTITY_IDS: string[] = COMBINED_IDENTITY_COLUMNS_FOR_GRID.map((column) => column.id);
+const COMBINED_IDENTITY_KEYS = new Set<string>(COMBINED_IDENTITY_IDS);
 
 /**
  * The one Combined Payroll table (SOP items 6, 9, 10, 11).
@@ -129,8 +143,9 @@ export function CombinedPayrollGrid({
     [visibleIds],
   );
   const colCount =
-    COMBINED_IDENTITY_TRIPLE.length +
-    columns.reduce((sum, id) => sum + (id === COMBINED_DAYS_COLUMN_ID ? dates.length : 1), 0);
+    COMBINED_IDENTITY_IDS.length +
+    columns.reduce((sum, id) => sum + (id === COMBINED_DAYS_COLUMN_ID ? dates.length : 1), 0) +
+    1;
 
   const virtualizer = useVirtualizer({
     count: visibleRows.length,
@@ -139,11 +154,10 @@ export function CombinedPayrollGrid({
     overscan: 16,
   });
 
-  const identityOffset = (index: number) =>
-    COMBINED_IDENTITY_TRIPLE.slice(0, index).reduce((sum, id) => sum + stickyIdentityOffset(id), 0);
+  const identityOffsetsByIndex = useMemo(() => identityOffsets(COMBINED_IDENTITY_COLUMNS_FOR_GRID), []);
 
   function identityLabel(columnId: string): string {
-    const fallback = t(`riderCols.${columnId}`);
+    const fallback = payrollColumnLabel(columnId, t(`riderCols.${columnId}`));
     return headingConfig ? resolveColumnLabel(columnId, fallback, headingConfig) : fallback;
   }
 
@@ -153,9 +167,7 @@ export function CombinedPayrollGrid({
   }
 
   function labelOf(columnId: string): string {
-    if (
-      COMBINED_IDENTITY_TRIPLE.includes(columnId as (typeof COMBINED_IDENTITY_TRIPLE)[number])
-    ) {
+    if (COMBINED_IDENTITY_KEYS.has(columnId)) {
       return identityLabel(columnId);
     }
     if (/^d\d+$/.test(columnId)) {
@@ -270,8 +282,13 @@ export function CombinedPayrollGrid({
         <table className="w-max min-w-full border-collapse text-xs">
           <thead className="sticky top-0 z-10 bg-card">
             <tr>
-              {COMBINED_IDENTITY_TRIPLE.map((columnId, index) => {
-                const sticky = stickyIdentityStyle(columnId, identityOffset(index), "head");
+              {COMBINED_IDENTITY_IDS.map((columnId, index) => {
+                const sticky = stickyIdentityStyle(
+                  columnId,
+                  Math.max(identityOffsetsByIndex[index] ?? 0, 0),
+                  "head",
+                  index === COMBINED_IDENTITY_IDS.length - 1,
+                );
                 return (
                   <PayrollColumnHeader
                     key={columnId}
@@ -290,6 +307,12 @@ export function CombinedPayrollGrid({
                 );
               })}
               {columns.map((id) => renderHeader(id))}
+              <th
+                key="row-action"
+                scope="col"
+                aria-label={t("common.openEmployee")}
+                className={cn(TABLE_HEAD_CLASS, "w-9 px-1 py-2 text-center")}
+              />
             </tr>
           </thead>
           <tbody>
@@ -313,8 +336,13 @@ export function CombinedPayrollGrid({
                   const row = visibleRows[item.index];
                   return (
                     <tr key={row.driverId} className="border-b border-border/60 hover:bg-muted/30">
-                      {COMBINED_IDENTITY_TRIPLE.map((columnId, index) => {
-                        const sticky = stickyIdentityStyle(columnId, identityOffset(index));
+                      {COMBINED_IDENTITY_IDS.map((columnId, index) => {
+                        const sticky = stickyIdentityStyle(
+                          columnId,
+                          Math.max(identityOffsetsByIndex[index] ?? 0, 0),
+                          "cell",
+                          index === COMBINED_IDENTITY_IDS.length - 1,
+                        );
                         return (
                           <td
                             key={columnId}
@@ -325,11 +353,18 @@ export function CombinedPayrollGrid({
                             )}
                             style={sticky?.style}
                           >
-                            {identityCell(row, columnId)}
+                            {columnId === "serial" ? (
+                              <span className="tabular-nums text-muted-foreground">{item.index + 1}</span>
+                            ) : (
+                              identityCell(row, columnId)
+                            )}
                           </td>
                         );
                       })}
                       {columns.map((id) => renderBodyCell(row, id))}
+                      <td className="w-9 px-1 py-1.5 text-center">
+                        <PayrollRowLink driverId={row.driverId} />
+                      </td>
                     </tr>
                   );
                 })}

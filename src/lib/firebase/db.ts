@@ -129,6 +129,7 @@ export const COLLECTIONS = {
   employeeSections: "employee_sections",
   nationalityCategories: "nationality_categories",
   bankCodes: "bank_codes",
+  jobPositions: "job_positions",
   sponsorships: "sponsorships",
   vehicleTypes: "vehicle_types",
   /** Workshop ledger. Additive fields live beside the legacy ones; nothing renamed. */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { cn } from "@/lib/utils";
@@ -53,6 +53,9 @@ export function ComparisonDayGrid({
   };
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const toggleRow = useCallback((mgId: string) => {
+    setOpenId((current) => (current === mgId ? null : mgId));
+  }, []);
 
   const headFilter = (id: string, placeholder: string, extra?: string[]) => (
     <ComparisonHeaderFilter
@@ -113,12 +116,12 @@ export function ComparisonDayGrid({
           {riders.map((row) => {
             const open = openId === row.mgId;
             return (
-              <RiderBlock
+              <RiderBlockRow
                 key={row.mgId}
                 row={row}
                 open={open}
                 monthLabel={monthLabel}
-                onToggle={() => setOpenId(open ? null : row.mgId)}
+                onToggle={toggleRow}
               />
             );
           })}
@@ -128,7 +131,14 @@ export function ComparisonDayGrid({
   );
 }
 
-function RiderBlock({
+/**
+ * One rider's row (plus its detail row when opened).
+ *
+ * `memo` + an id-taking `onToggle` matters more than it looks: opening a single
+ * rider used to re-render all ~962 blocks — roughly 35,000 cells — to reveal one
+ * detail row.
+ */
+function RiderBlockImpl({
   row,
   open,
   monthLabel,
@@ -137,11 +147,11 @@ function RiderBlock({
   row: ComparisonRider;
   open: boolean;
   monthLabel: string;
-  onToggle: () => void;
+  onToggle: (mgId: string) => void;
 }) {
   return (
     <>
-      <tr className="cursor-pointer hover:bg-muted/30" onClick={onToggle}>
+      <tr className="cursor-pointer hover:bg-muted/30" onClick={() => onToggle(row.mgId)}>
         <td className={cn(STICKY[0], "border-b border-border px-1 py-1")}>
           {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
         </td>
@@ -172,6 +182,8 @@ function RiderBlock({
     </>
   );
 }
+
+const RiderBlockRow = memo(RiderBlockImpl);
 
 function SubRow({ label, values }: { label: string; values: number[] }) {
   return (

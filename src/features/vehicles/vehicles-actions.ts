@@ -848,5 +848,8 @@ export async function upsertVehicleType(input: {
   revalidatePath("/settings/vehicle-types");
   revalidatePath("/vehicles");
   revalidatePath("/operations");
+  // A catalog type is a rate dimension on the HR sheet, so the sheet must not keep
+  // a stale label or a stale dropdown after this save.
+  revalidatePath("/payroll/hr");
   return { ok: true };
 }

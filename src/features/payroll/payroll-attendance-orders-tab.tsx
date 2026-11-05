@@ -29,6 +29,7 @@ import {
   dayClipboardToken,
   dayColumnId,
   dayOrdersColumnId,
+  PAYROLL_SERIAL_COLUMN,
   riderColumnValue,
   workingHoursColumnId,
 } from "./payroll-rider-columns";
@@ -44,6 +45,7 @@ import {
   type PayrollProjectView,
 } from "./payroll-projects";
 import { PayrollProjectCards, PayrollProjectKpis } from "./payroll-project-cards";
+import { PayrollRiderCards } from "./payroll-rider-cards";
 import { PayrollDailyUploadDialog } from "./payroll-daily-upload-dialog";
 import {
   PayrollHoursCell,
@@ -73,7 +75,10 @@ import {
   hiddenSetFor,
   resolveColumnLabel,
 } from "./payroll-column-config";
-import { PayrollColumnsMenu, PayrollHeadingLabel, stickyIdentityOffset, stickyIdentityStyle } from "./payroll-heading";
+import { PayrollColumnsMenu, PayrollHeadingLabel, stickyIdentityStyle } from "./payroll-heading";
+import { identityOffsets, withSerialColumn } from "./payroll-table-identity";
+import { PayrollRowLink } from "./payroll-row-link";
+import { payrollColumnLabel } from "./payroll-column-labels";
 import { cellParticular } from "./payroll-particulars";
 import { fillTargetCells, tilePasteOntoSelection, visibleFillTargets } from "./payroll-snapshot";
 import {
@@ -125,7 +130,7 @@ export function PayrollAttendanceOrdersTab({
   const [hoursTarget, setHoursTarget] = useState<HoursEditTarget | null>(null);
   const config = projectConfigOf(view);
   const audit = usePayrollAdjustmentAudit({ from: month.from, to: month.to });
-  const { prefs } = usePayrollListPrefs("payroll-ao");
+  const { prefs: listPrefs, update: updateListPrefs } = usePayrollListPrefs("payroll-ao");
   const [filters, setFilters] = useState<ColumnFilters>({});
   const [sort, setSort] = useState<ColumnSort>(null);
   const [rect, setRect] = useState<CellRect | null>(null);
@@ -150,13 +155,18 @@ export function PayrollAttendanceOrdersTab({
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
   const columns = useMemo(
     () =>
-      AO_LEAD_COLUMNS.filter((column) => !columnHiddenIn(column.id, "ao", headingConfig)).filter(
-        // Keeta riders work from the pool: the SOP removes the Restaurant column
-        // rather than printing "(Pool)" on every row.
-        (column) => config.showRestaurant || column.id !== "restaurant",
+      withSerialColumn(
+        AO_LEAD_COLUMNS.filter((column) => !columnHiddenIn(column.id, "ao", headingConfig)).filter(
+          // Keeta riders work from the pool: the SOP removes the Restaurant column
+          // rather than printing "(Pool)" on every row.
+          (column) => config.showRestaurant || column.id !== "restaurant",
+        ),
+        PAYROLL_SERIAL_COLUMN,
       ),
     [headingConfig, config.showRestaurant],
   );
+  const columnOffsets = useMemo(() => identityOffsets(columns), [columns]);
+  const frozenCount = columnOffsets.filter((offset) => offset >= 0).length;
   const dates = month.dates;
   const editable = canManage;
 
@@ -261,7 +271,7 @@ export function PayrollAttendanceOrdersTab({
   }, [projectRiders, dates.length]);
 
   const dayColumnCount = config.dayColumns.length;
-  const columnCount = columns.length + dates.length * dayColumnCount + 2;
+  const columnCount = columns.length + dates.length * dayColumnCount + 3;
 
   const contextFor = useCallback(
     (row: PayrollRiderRow | undefined, dayIndex: number) => {
@@ -571,18 +581,22 @@ export function PayrollAttendanceOrdersTab({
             </Button>
             </>
           ) : null}
-          <PayrollColumnsMenu
-            view="ao"
-            config={headingConfig}
-            fallbackLabel={fallbackLabel}
-            canManage={canManage}
-          />
         </div>
       </div>
       <PayrollListToolbar
         prefKey="payroll-ao"
         search={search}
         onSearchChange={setSearch}
+        prefs={listPrefs}
+        onUpdate={updateListPrefs}
+        trailing={
+          <PayrollColumnsMenu
+            view="ao"
+            config={headingConfig}
+            fallbackLabel={fallbackLabel}
+            canManage={canManage}
+          />
+        }
       />
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         {chips.length || sort ? (
@@ -607,6 +621,30 @@ export function PayrollAttendanceOrdersTab({
             />
           </div>
         ) : null}
+        {listPrefs.viewMode === "cards" ? (
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <PayrollRiderCards
+              rows={visibleRows.map((row) => ({
+                id: row.driverId,
+                code: row.amId || "—",
+                name: row.name || "—",
+                driverId: row.driverId,
+                fields: [
+                  { label: t("riderCols.mgId"), value: row.mgId || "—" },
+                  { label: t("riderCols.restaurant"), value: row.restaurant || "—" },
+                  { label: t("ao.workedDaysShort"), value: String(rowTotals.get(row.driverId)?.workedDays ?? 0) },
+                  {
+                    label: config.usesUploadedHours ? t("ao.totalHoursShort") : t("ao.totalOrdersShort"),
+                    value: config.usesUploadedHours
+                      ? (rowTotals.get(row.driverId)?.totalHours ?? 0).toFixed(1)
+                      : String(rowTotals.get(row.driverId)?.totalOrders ?? 0),
+                  },
+                ],
+              }))}
+              empty={t("emptyRiders")}
+            />
+          </div>
+        ) : (
         <div
           ref={parentRef}
           tabIndex={editable ? 0 : undefined}
@@ -622,8 +660,9 @@ export function PayrollAttendanceOrdersTab({
                 {columns.map((column, index) => {
                   const sticky = stickyIdentityStyle(
                     column.id,
-                    columns.slice(0, index).reduce((sum, col) => sum + stickyIdentityOffset(col.id), 0),
+                    Math.max(columnOffsets[index] ?? 0, 0),
                     "head",
+                    index === frozenCount - 1,
                   );
                   return (
                   <th
@@ -633,11 +672,15 @@ export function PayrollAttendanceOrdersTab({
                     style={sticky?.style}
                   >
                     <PayrollColumnHeader
-                      label={resolveColumnLabel(column.id, t(`riderCols.${column.labelKey}`), headingConfig)}
+                      label={resolveColumnLabel(
+                        column.id,
+                        payrollColumnLabel(column.id, t(`riderCols.${column.labelKey}`)),
+                        headingConfig,
+                      )}
                       heading={
                         <PayrollHeadingLabel
                           columnKey={column.id}
-                          fallback={t(`riderCols.${column.labelKey}`)}
+                          fallback={payrollColumnLabel(column.id, t(`riderCols.${column.labelKey}`))}
                           config={headingConfig}
                           canManage={canManage}
                         />
@@ -708,6 +751,13 @@ export function PayrollAttendanceOrdersTab({
                 <th className={cn(TABLE_HEAD_CLASS, "px-2 py-1 text-end")}>
                   {config.usesUploadedHours ? t("ao.totalHoursShort") : t("ao.totalOrdersShort")}
                 </th>
+                <th
+                  key="row-action"
+                  rowSpan={2}
+                  scope="col"
+                  aria-label={t("common.openEmployee")}
+                  className={cn(TABLE_HEAD_CLASS, "w-9 px-1 py-2 text-center align-bottom")}
+                />
               </tr>
             </thead>
             <tbody>
@@ -723,7 +773,9 @@ export function PayrollAttendanceOrdersTab({
                     {columns.map((column, index) => {
                       const sticky = stickyIdentityStyle(
                         column.id,
-                        columns.slice(0, index).reduce((sum, col) => sum + stickyIdentityOffset(col.id), 0),
+                        Math.max(columnOffsets[index] ?? 0, 0),
+                        "cell",
+                        index === frozenCount - 1,
                       );
                       return (
                       <td
@@ -731,7 +783,9 @@ export function PayrollAttendanceOrdersTab({
                         className={cn("whitespace-nowrap px-2 py-1.5", sticky?.className, column.id === "name" && "font-medium")}
                         style={sticky?.style}
                       >
-                        {column.id === "zoneCategory" ? (
+                        {column.id === "serial" ? (
+                          <span className="tabular-nums text-muted-foreground">{rowIndex + 1}</span>
+                        ) : column.id === "zoneCategory" ? (
                           <ZoneCategoryPill category={row.zoneCategory} />
                         ) : column.id === "status" ? (
                           <PayrollStatusCell row={row} today={today} canEdit={editable} />
@@ -905,12 +959,16 @@ export function PayrollAttendanceOrdersTab({
                         ? (rowTotals.get(row.driverId)?.totalHours ?? 0).toFixed(1)
                         : (rowTotals.get(row.driverId)?.totalOrders ?? 0)}
                     </td>
+                    <td className="w-9 px-1 py-1.5 text-center">
+                      <PayrollRowLink driverId={row.driverId} />
+                    </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
         </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2">
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             <Info className="size-3.5" />
@@ -933,7 +991,7 @@ export function PayrollAttendanceOrdersTab({
                     hidden: hiddenSetFor("ao", headingConfig),
                     today,
                     project: view,
-                    visibleLeadIds: columns.map((column) => column.id),
+                    visibleLeadIds: columns.filter((column) => column.id !== "serial").map((column) => column.id),
                     fileName: projectExportName(view, month.key),
                   })
                 }

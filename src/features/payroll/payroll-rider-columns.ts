@@ -23,6 +23,8 @@ import {
   type CorePayrollStatusKey,
 } from "./payroll-status-options";
 import type { PayrollRiderRow } from "./payroll-types";
+import { orderIdentityColumns } from "./payroll-table-identity";
+import { payrollStatusDisplayLabel } from "./payroll-column-labels";
 
 export type PayrollRiderColumn = {
   id: string;
@@ -30,7 +32,20 @@ export type PayrollRiderColumn = {
   labelKey: string;
 };
 
-export const PAYROLL_SUMMARY_COLUMNS: readonly PayrollRiderColumn[] = [
+/**
+ * The ordinal the operator reads down the side of a sheet.
+ *
+ * It is synthetic: the grid prints the row position, so the column is *not* in
+ * any catalogue below — it never reaches the CSV, the saved column preferences
+ * or a funnel. The grids lead with it via `withSerialColumn`.
+ */
+export const PAYROLL_SERIAL_COLUMN: PayrollRiderColumn = {
+  id: "serial",
+  numeric: false,
+  labelKey: "serial",
+};
+
+export const PAYROLL_SUMMARY_COLUMNS: readonly PayrollRiderColumn[] = orderIdentityColumns<PayrollRiderColumn>([
   { id: "amId", numeric: false, labelKey: "amId" },
   { id: "mgId", numeric: false, labelKey: "mgId" },
   { id: "name", numeric: false, labelKey: "name" },
@@ -64,7 +79,7 @@ export const PAYROLL_SUMMARY_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "absence", numeric: true, labelKey: "absence" },
   { id: "absLh", numeric: true, labelKey: "absLh" },
   { id: "absLo", numeric: true, labelKey: "absLo" },
-] as const;
+]);
 
 /**
  * Columns pinned to the start of the summary table. Their sticky offsets are
@@ -72,7 +87,7 @@ export const PAYROLL_SUMMARY_COLUMNS: readonly PayrollRiderColumn[] = [
  */
 export const PAYROLL_SUMMARY_LOCKED_COLUMNS = ["amId", "mgId", "name"] as const;
 
-export const COMBINED_IDENTITY_COLUMNS: readonly PayrollRiderColumn[] = [
+export const COMBINED_IDENTITY_COLUMNS: readonly PayrollRiderColumn[] = orderIdentityColumns<PayrollRiderColumn>([
   { id: "amId", numeric: false, labelKey: "amId" },
   { id: "mgId", numeric: false, labelKey: "mgId" },
   { id: "name", numeric: false, labelKey: "name" },
@@ -85,7 +100,7 @@ export const COMBINED_IDENTITY_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "status", numeric: false, labelKey: "status" },
   { id: "finalOrders", numeric: true, labelKey: "finalOrders" },
   { id: "actualHours", numeric: true, labelKey: "actualHours" },
-] as const;
+]);
 
 /**
  * Application Attendance leads: the same identity block the Attendance &
@@ -93,7 +108,7 @@ export const COMBINED_IDENTITY_COLUMNS: readonly PayrollRiderColumn[] = [
  * grid. Kept separate from `COMBINED_IDENTITY_COLUMNS` so the Combined tab can
  * grow without silently adding app columns to a payroll table.
  */
-export const APP_ATTENDANCE_LEAD_COLUMNS: readonly PayrollRiderColumn[] = [
+export const APP_ATTENDANCE_LEAD_COLUMNS: readonly PayrollRiderColumn[] = orderIdentityColumns<PayrollRiderColumn>([
   { id: "amId", numeric: false, labelKey: "amId" },
   { id: "mgId", numeric: false, labelKey: "mgId" },
   { id: "name", numeric: false, labelKey: "name" },
@@ -107,9 +122,9 @@ export const APP_ATTENDANCE_LEAD_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "appTotalHours", numeric: true, labelKey: "appTotalHours" },
   { id: "appActiveDays", numeric: true, labelKey: "appActiveDays" },
   { id: "appAvgHours", numeric: true, labelKey: "appAvgHours" },
-] as const;
+]);
 
-export const AO_LEAD_COLUMNS: readonly PayrollRiderColumn[] = [
+export const AO_LEAD_COLUMNS: readonly PayrollRiderColumn[] = orderIdentityColumns<PayrollRiderColumn>([
   { id: "amId", numeric: false, labelKey: "amId" },
   { id: "mgId", numeric: false, labelKey: "mgId" },
   { id: "name", numeric: false, labelKey: "name" },
@@ -122,7 +137,7 @@ export const AO_LEAD_COLUMNS: readonly PayrollRiderColumn[] = [
   { id: "status", numeric: false, labelKey: "status" },
   { id: "finalOrders", numeric: true, labelKey: "finalOrders" },
   { id: "actualHours", numeric: true, labelKey: "actualHours" },
-] as const;
+]);
 
 /** @deprecated Use COMBINED_IDENTITY_COLUMNS / PAYROLL_SUMMARY_COLUMNS. */
 export const RIDER_IDENTITY_COLUMNS = COMBINED_IDENTITY_COLUMNS;
@@ -425,7 +440,7 @@ export function riderColumnValue(
     case "nationality":
       return row.nationality;
     case "status":
-      return resolveRiderStatus(row, todayDate).label;
+      return payrollStatusDisplayLabel(resolveRiderStatus(row, todayDate).label);
     case "totalDays":
       return row.workDays;
     case "totalHours":

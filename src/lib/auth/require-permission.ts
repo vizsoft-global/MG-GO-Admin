@@ -101,6 +101,22 @@ export async function requireAnyPermission(
   return session;
 }
 
+/**
+ * The app Settings area.
+ *
+ * Blocked for a plain `user` staff account and for a partner login; a `manager`
+ * (the day-to-day operator who maintains the catalogues, the rota rules and the
+ * driver app switches) and a super admin keep it. `settings/layout.tsx` applies
+ * the same rule to every `/settings/*` route on the server.
+ */
+export async function requireSettingsAccess(locale: string) {
+  const session = await requireAuth(locale);
+  if (session.isSuperAdmin || session.accessKind === "manager") {
+    return session;
+  }
+  redirect({ href: "/unauthorized", locale });
+}
+
 /** The client/partner login's only landing page. */
 export const PARTNER_HOME = "/client-portal-v2";
 

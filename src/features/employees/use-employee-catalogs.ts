@@ -33,3 +33,8 @@ export function useBankCodes() {
 export function useSponsorships() {
   return useEmployeeCatalog("sponsorships");
 }
+
+/** The job-positions catalog the Profile's Job Position picker reads. */
+export function useJobPositions() {
+  return useEmployeeCatalog("job_positions");
+}

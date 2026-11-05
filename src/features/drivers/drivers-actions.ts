@@ -2452,9 +2452,24 @@ export async function saveDriverPrivateInformation(
       if (!known) return { error: "invalid_sponsorship" };
     }
 
-    const jobPosition = optionalChoice(formData.get("jobPosition"), isJobPosition);
+    /**
+     * A position is a `job_positions` catalog key, so a position an operator adds
+     * in Operations Hub saves without a code change. The compiled six stay the
+     * fallback for a catalog that has not been seeded yet.
+     */
+    const jobPositionRaw = String(formData.get("jobPosition") ?? "").trim();
+    let jobPositionKey: string | null = null;
+    if (jobPositionRaw && jobPositionRaw !== "none") {
+      if (!CATALOG_KEY_RE.test(jobPositionRaw)) return { error: "missing_fields" };
+      if (!isJobPosition(jobPositionRaw)) {
+        const positions = await listEmployeeCatalog("job_positions");
+        const known = positions.some((row) => row.key === jobPositionRaw && row.is_active);
+        if (!known) return { error: "missing_fields" };
+      }
+      jobPositionKey = jobPositionRaw;
+    }
     const hiringType = optionalChoice(formData.get("hiringType"), isHiringType);
-    if (!jobPosition.ok || !hiringType.ok) return { error: "missing_fields" };
+    if (!hiringType.ok) return { error: "missing_fields" };
     const jobEndDescriptionRaw = String(formData.get("jobEndDescription") ?? "").trim();
     const jobEndDescription =
       !jobEndDescriptionRaw || jobEndDescriptionRaw === "none" ? null : jobEndDescriptionRaw;
@@ -2514,7 +2529,7 @@ export async function saveDriverPrivateInformation(
       section_keys: hr.sectionKeys,
       nationality_category_keys: hr.nationalityCategoryKeys,
       sponsorship_key: sponsorshipKey,
-      job_position: jobPosition.value,
+      job_position: jobPositionKey,
       hiring_type: hiringType.value,
       work_start_date: workStart.value,
       job_end_date: jobEnd.value,

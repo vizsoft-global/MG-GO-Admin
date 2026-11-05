@@ -318,7 +318,8 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   ],
   "./rpcs/hr-payroll": [
     "adminHrPayrollSnapshot",
-    "adminSaveHrPayrollCells"
+    "adminSaveHrPayrollCells",
+    "adminHrAppHours"
   ],
   "./rpcs/payouts": [
     "getEarningsOverview",

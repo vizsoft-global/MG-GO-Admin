@@ -74,4 +74,8 @@ qa-esign-*.png
 .tmp-*
 firebase-debug.log
 
+# local dev / QA scratch output (never commit)
+/*.log
+/tscg.*
+
 # function signer key (local).fn-signer.json

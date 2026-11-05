@@ -37,6 +37,7 @@ export const COLLECTIONS = {
   driverGroupMembers: "driver_group_members",
   sourceCompanies: "source_companies",
   vehicles: "vehicles",
+  vehicleTypes: "vehicle_types",
   /** One row per odometer reading, whatever wrote it (`manual`, `service`, `dashcam`, `baseline`). */
   vehicleOdometerReadings: "vehicle_odometer_readings",
   fuelFills: "fuel_fills",
@@ -182,6 +183,7 @@ export const COLLECTIONS = {
   employeeSections: "employee_sections",
   nationalityCategories: "nationality_categories",
   bankCodes: "bank_codes",
+  jobPositions: "job_positions",
   sponsorships: "sponsorships",
   payrollHrPeriods: "payroll_hr_periods",
   driverHrPayroll: "driver_hr_payroll",

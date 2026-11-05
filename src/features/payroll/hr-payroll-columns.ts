@@ -1,4 +1,5 @@
 import type { HrPayrollGroup } from "./hr-payroll-types";
+import { orderIdentityColumns } from "./payroll-table-identity";
 
 export type HrColumnKind = "index" | "text" | "money" | "dec2" | "int" | "pct" | "select";
 
@@ -43,6 +44,13 @@ export function hrColumnIsNumeric(column: HrColumn): boolean {
 
 export const HR_GROUP_ORDER = ["emp", "cfg", "ops", "in", "calc", "imp", "pay"] as const;
 
+/**
+ * The groups that read as their own block on the sheet. Everything before the
+ * first of these is the employee block, so a computed column placed inside it
+ * (Payment) does not split the "From Employees" band in two.
+ */
+const STRUCTURAL_GROUPS = new Set<HrPayrollGroup>(["cfg", "ops", "in", "calc", "imp"]);
+
 export const HR_GROUP_FILL: Record<HrPayrollGroup, string> = {
   emp: "#EDEEF6",
   cfg: "#E7F0FA",
@@ -53,11 +61,10 @@ export const HR_GROUP_FILL: Record<HrPayrollGroup, string> = {
   pay: "#E8E9F2",
 };
 
-const INC = [0, 20, 30, 40] as const;
 const FOOD = [0, 15] as const;
 const SICK = Array.from({ length: 31 }, (_, n) => n);
 
-export const HR_COLUMNS: readonly HrColumn[] = [
+export const HR_COLUMNS_RAW: readonly HrColumn[] = [
   { key: "i", header: "#", group: "emp", kind: "index", width: 56, filter: "contains" },
   { key: "client", header: "Client ID", group: "emp", kind: "text", width: 86, filter: "contains" },
   { key: "mg", header: "MG ID", group: "emp", kind: "text", width: 96, filter: "contains", mono: true },
@@ -84,9 +91,9 @@ export const HR_COLUMNS: readonly HrColumn[] = [
   { key: "fixed", header: "Fixed Salary", group: "emp", kind: "money", width: 130, filter: "contains" },
   { key: "wps", header: "Work Permit Salary", group: "emp", kind: "money", width: 160, filter: "contains" },
   { key: "rate", header: "Rate", group: "cfg", kind: "text", width: 88, filter: "contains" },
-  { key: "vtype", header: "Vehicle Type", group: "cfg", kind: "text", width: 110, filter: "auto" },
-  { key: "inc2", header: "2 Years Increment Applicable", group: "in", kind: "select", width: 200, select: INC, unit: " KWD", editable: "select", filter: "exact" },
-  { key: "inc4", header: "4 Years Increment Applicable", group: "in", kind: "select", width: 200, select: INC, unit: " KWD", editable: "select", filter: "exact" },
+  { key: "vtype", header: "Vehicle Type", group: "cfg", kind: "text", width: 140, editable: "select", filter: "auto" },
+  { key: "inc2", header: "2 Years Increment Applicable", group: "in", kind: "money", width: 200, unit: " KWD", editable: "amount", filter: "contains" },
+  { key: "inc4", header: "4 Years Increment Applicable", group: "in", kind: "money", width: 200, unit: " KWD", editable: "amount", filter: "contains" },
   { key: "offs", header: "No. of Offs", group: "ops", kind: "int", width: 110, filter: "contains" },
   { key: "fwd", header: "F.Working Days", group: "ops", kind: "int", width: 140, filter: "contains" },
   { key: "fwh", header: "F.Working Hours", group: "ops", kind: "int", width: 150, filter: "contains" },
@@ -94,6 +101,11 @@ export const HR_COLUMNS: readonly HrColumn[] = [
   { key: "orders", header: "Count of Orders", group: "ops", kind: "int", width: 140, filter: "contains" },
   { key: "wd", header: "Count of Working Days", group: "ops", kind: "int", width: 180, filter: "contains" },
   { key: "ah", header: "Actual Working Hours", group: "ops", kind: "dec2", width: 170, filter: "contains" },
+  /**
+   * Shift in → Shift out, unioned per day. Sits **beside** the attendance clock
+   * and never prices a salary until the client says which figure is paid.
+   */
+  { key: "ahApp", header: "Worked hours (app)", group: "ops", kind: "dec2", width: 170, filter: "contains" },
   { key: "restDpd", header: "Restaurant DPD", group: "ops", kind: "dec2", width: 140, filter: "contains" },
   { key: "riderDpd", header: "Rider DPD", group: "ops", kind: "dec2", width: 110, filter: "contains" },
   { key: "eff", header: "Efficiency", group: "calc", kind: "pct", width: 110, filter: "contains" },
@@ -112,6 +124,14 @@ export const HR_COLUMNS: readonly HrColumn[] = [
   { key: "total", header: "Total Salary", group: "pay", kind: "money", width: 130, filter: "contains" },
 ];
 
+/**
+ * The sheet in the one identity order every payroll table now uses:
+ * `#` → `MG ID` → `Client ID` → `Employee Name`, then the rest untouched.
+ */
+export const HR_COLUMNS: readonly HrColumn[] = orderIdentityColumns(
+  HR_COLUMNS_RAW.map((column) => ({ id: column.key, column })),
+).map((entry) => entry.column);
+
 export const HR_OPS_KEYS = new Set([
   "offs",
   "fwd",
@@ -119,6 +139,7 @@ export const HR_OPS_KEYS = new Set([
   "orders",
   "wd",
   "ah",
+  "ahApp",
   "restDpd",
   "riderDpd",
   "incent",
@@ -149,15 +170,34 @@ export function visibleHrColumns(shown: ReadonlySet<HrPayrollGroup>): HrColumn[]
   return HR_COLUMNS.filter((column) => shown.has(column.group));
 }
 
+/**
+ * The band row: one band per run of same-group columns.
+ *
+ * The first four columns are identity columns whatever their own group says, so
+ * they always read `emp`, and a run of `emp` columns after them is **merged**
+ * into the same band. Forcing a break after column four printed "From
+ * Employees" three times over one continuous identity block.
+ */
 export function hrGroupSpans(columns: readonly { group: HrPayrollGroup }[]): { group: HrPayrollGroup; count: number }[] {
-  const spans: { group: HrPayrollGroup; count: number }[] = [];
-  columns.forEach((column, idx) => {
-    const group: HrPayrollGroup = idx < 4 ? "emp" : column.group;
+  const firstStructural = columns.findIndex((column) =>
+    STRUCTURAL_GROUPS.has(column.group),
+  );
+  const prefixEnd = firstStructural < 0 ? columns.length : firstStructural;
+  return columns.reduce<{ group: HrPayrollGroup; count: number }[]>((spans, column, idx) => {
+    let group: HrPayrollGroup = column.group;
+    if (idx < 4) group = "emp";
+    else if (!STRUCTURAL_GROUPS.has(column.group) && idx < prefixEnd) {
+      // A computed column inside the employee block (Payment) is carried by that
+      // block's band, so the block prints "From Employees" once.
+      const hasEmpBefore = columns.slice(0, idx).some((item) => item.group === "emp");
+      const hasEmpAfter = columns.slice(idx + 1, prefixEnd).some((item) => item.group === "emp");
+      if (hasEmpBefore && hasEmpAfter) group = "emp";
+    }
     const last = spans[spans.length - 1];
-    if (last && last.group === group && idx !== 4) last.count += 1;
+    if (last && last.group === group) last.count += 1;
     else spans.push({ group, count: 1 });
-  });
-  return spans;
+    return spans;
+  }, []);
 }
 
 export function stickyOffsets(columns: readonly { width: number }[]): number[] {

@@ -1,6 +1,12 @@
-/** Standard index table header cell styling — sentence case, 12px semibold. */
+/**
+ * Standard index table header cell styling — sentence case, 12px bold.
+ *
+ * Req 1.6 of the payroll review: every detailed data table prints its headers
+ * bold. One constant, so Employees, Fleet, Deliveries, Payroll and the rest
+ * cannot drift apart again.
+ */
 export const TABLE_HEAD_CLASS =
-  "text-xs font-semibold normal-case tracking-normal text-muted-foreground";
+  "text-xs font-bold normal-case tracking-normal text-muted-foreground";
 
 /** Inline editors stay plain text until hover or focus. */
 export const INLINE_EDIT_CELL_CLASS =

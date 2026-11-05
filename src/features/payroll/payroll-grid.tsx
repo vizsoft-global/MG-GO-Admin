@@ -9,7 +9,6 @@ import {
   CalendarOff,
   Clock,
   Copy,
-  Download,
   Eraser,
   GraduationCap,
   HeartPulse,
@@ -28,6 +27,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app";
+import { TableFooterExport } from "@/components/app/table-footer-export";
 import { ToggleChip } from "@/components/app/toggle-chip";
 import { cn } from "@/lib/utils";
 import { payrollAssignField } from "./payroll-assign";
@@ -61,6 +61,7 @@ import {
   dayClipboardToken,
   dayColumnId,
   isNumericRiderColumn,
+  PAYROLL_SERIAL_COLUMN,
   PAYROLL_SUMMARY_COLUMNS,
   PAYROLL_SUMMARY_LOCKED_COLUMNS,
   riderColumnValue,
@@ -81,7 +82,10 @@ import {
   resolveColumnLabel,
   type PayrollColumnConfigRow,
 } from "./payroll-column-config";
-import { PayrollHeadingLabel, isMasterDataColumn, stickyIdentityOffset, stickyIdentityStyle } from "./payroll-heading";
+import { PayrollHeadingLabel, isMasterDataColumn, stickyIdentityStyle } from "./payroll-heading";
+import { identityOffsets, withSerialColumn } from "./payroll-table-identity";
+import { PayrollRowLink } from "./payroll-row-link";
+import { payrollColumnLabel } from "./payroll-column-labels";
 import { isEndOfContract } from "./hr-payroll-status";
 
 /**
@@ -200,14 +204,6 @@ export type PayrollGridEditor = {
   onNotice?: (message: string) => void;
 };
 
-function stickyClass(index: number, head = false): string | undefined {
-  const z = head ? "z-20" : "z-[2]";
-  if (index === 0) return `sticky start-0 ${z} min-w-16 w-16 bg-card`;
-  if (index === 1) return `sticky start-16 ${z} min-w-16 w-16 bg-card`;
-  if (index === 2) return `sticky start-32 ${z} min-w-[190px] w-[190px] bg-card`;
-  return undefined;
-}
-
 export function PayrollFillHandle({
   onMouseDown,
 }: {
@@ -271,9 +267,14 @@ export function PayrollDayGrid({
   const editable = Boolean(editor?.canManage);
   const statusList = usePayrollStatusFilterList();
   const identity = useMemo(() => {
-    if (!headingConfig) return COMBINED_IDENTITY_COLUMNS;
-    return COMBINED_IDENTITY_COLUMNS.filter((column) => !columnHiddenIn(column.id, "combined", headingConfig));
+    const lead = headingConfig
+      ? COMBINED_IDENTITY_COLUMNS.filter((column) => !columnHiddenIn(column.id, "combined", headingConfig))
+      : COMBINED_IDENTITY_COLUMNS;
+    // Every payroll sheet leads with the same four columns; the serial is
+    // synthetic, so it never reaches the CSV or the saved preferences.
+    return withSerialColumn(lead, PAYROLL_SERIAL_COLUMN);
   }, [headingConfig]);
+  const identityOffsetsByIndex = useMemo(() => identityOffsets(identity), [identity]);
   const days = dates.length;
   const identityCount = identity.length;
 
@@ -313,7 +314,7 @@ export function PayrollDayGrid({
     return map;
   }, [rows, days]);
 
-  const colCount = identityCount + days;
+  const colCount = identityCount + days + 1;
   const drag = useRef<{
     mode: "select" | "fill";
     r0: number;
@@ -774,14 +775,13 @@ export function PayrollDayGrid({
           <thead className="sticky top-0 z-10 bg-card">
             <tr>
               {identity.map((column, index) => {
-                const fallback = t(`riderCols.${column.labelKey}`);
-                const sticky = headingConfig
-                  ? stickyIdentityStyle(
-                      column.id,
-                      identity.slice(0, index).reduce((sum, col) => sum + stickyIdentityOffset(col.id), 0),
-                      "head",
-                    )
-                  : null;
+                const fallback = payrollColumnLabel(column.id, t(`riderCols.${column.labelKey}`));
+                const sticky = stickyIdentityStyle(
+                  column.id,
+                  Math.max(identityOffsetsByIndex[index] ?? 0, 0),
+                  "head",
+                  index === identityCount - 1,
+                );
                 return (
                 <PayrollColumnHeader
                   key={column.id}
@@ -805,7 +805,7 @@ export function PayrollDayGrid({
                   sort={sort}
                   onSort={setSort}
                   numeric={column.numeric}
-                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2", sticky?.className ?? stickyClass(index, true))}
+                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2", sticky?.className)}
                   style={sticky?.style}
                 />
                 );
@@ -823,6 +823,12 @@ export function PayrollDayGrid({
                   className={cn(TABLE_HEAD_CLASS, "min-w-[52px] px-1 py-2 text-center")}
                 />
               ))}
+              <th
+                key="row-action"
+                scope="col"
+                aria-label={t("common.openEmployee")}
+                className={cn(TABLE_HEAD_CLASS, "w-9 px-1 py-2 text-center")}
+              />
             </tr>
           </thead>
           <tbody>
@@ -844,23 +850,23 @@ export function PayrollDayGrid({
                   return (
                     <tr key={row.driverId} className="border-b border-border/60 hover:bg-muted/30">
                       {identity.map((column, index) => {
-                        const sticky = headingConfig
-                          ? stickyIdentityStyle(
-                              column.id,
-                              identity.slice(0, index).reduce((sum, col) => sum + stickyIdentityOffset(col.id), 0),
-                            )
-                          : null;
+                        const sticky = stickyIdentityStyle(
+                          column.id,
+                          Math.max(identityOffsetsByIndex[index] ?? 0, 0),
+                          "cell",
+                          index === identityCount - 1,
+                        );
                         return (
                         <td
                           key={column.id}
                           className={cn(
                             "whitespace-nowrap px-2 py-1.5",
-                            sticky?.className ?? stickyClass(index),
+                            sticky?.className,
                             column.id === "name" && "font-medium",
                           )}
                           style={sticky?.style}
                         >
-                          {renderIdentityCell(row, column, today, identityEdit || editable)}
+                          {renderIdentityCell(row, column, today, identityEdit || editable, item.index)}
                         </td>
                         );
                       })}
@@ -977,6 +983,9 @@ export function PayrollDayGrid({
                       </td>
                         );
                       })}
+                      <td className="w-9 px-1 py-1.5 text-center">
+                        <PayrollRowLink driverId={row.driverId} />
+                      </td>
                     </tr>
                   );
                 })}
@@ -998,17 +1007,11 @@ export function PayrollDayGrid({
           </tbody>
         </table>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
-        <span>{footer}</span>
-        <button
-          type="button"
-          onClick={() => onExport(visibleRows)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted/50"
-        >
-          <Download className="size-3.5" />
-          {exportLabel}
-        </button>
-      </div>
+      <TableFooterExport
+        summary={footer}
+        exportLabel={exportLabel}
+        onExport={() => onExport(visibleRows)}
+      />
       <PayrollCellMenu
         state={menu}
         onClose={() => setMenu(null)}
@@ -1077,7 +1080,13 @@ function renderIdentityCell(
   column: PayrollRiderColumn,
   today?: string,
   canEdit = false,
+  rowIndex = 0,
 ) {
+  // The serial is the row's position in the filtered list, so it renumbers with
+  // the sort and the funnels instead of remembering where the rider started.
+  if (column.id === "serial") {
+    return <span className="tabular-nums text-muted-foreground">{rowIndex + 1}</span>;
+  }
   if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
   if (column.id === "status") return <PayrollStatusCell row={row} today={today} canEdit={canEdit} />;
   const assign = payrollAssignField(column.id);
@@ -1102,7 +1111,11 @@ function renderSummaryCell(
   column: PayrollRiderColumn,
   today?: string,
   canEdit = false,
+  rowIndex = 0,
 ) {
+  if (column.id === "serial") {
+    return <span className="tabular-nums text-muted-foreground">{rowIndex + 1}</span>;
+  }
   if (column.id === "zoneCategory") return <ZoneCategoryPill category={row.zoneCategory} />;
   if (column.id === "status") return <PayrollStatusCell row={row} today={today} canEdit={canEdit} />;
   const assign = payrollAssignField(column.id);
@@ -1205,8 +1218,10 @@ export function PayrollSummaryTable({
       .filter((id) => !(PAYROLL_SUMMARY_LOCKED_COLUMNS as readonly string[]).includes(id))
       .map((id) => byId.get(id))
       .filter((column): column is PayrollRiderColumn => Boolean(column));
-    return [...locked, ...chosen];
+    return withSerialColumn([...locked, ...chosen], PAYROLL_SERIAL_COLUMN);
   }, [visibleColumnIds]);
+  const columnOffsets = useMemo(() => identityOffsets(columns), [columns]);
+  const frozenCount = columnOffsets.filter((offset) => offset >= 0).length;
 
   const visibleRows = useMemo(() => {
     const filtered = rows.filter((row) => {
@@ -1222,6 +1237,22 @@ export function PayrollSummaryTable({
     return known ? t(`riderCols.${known.labelKey}`) : columnId;
   };
   const chips = activeFilterChips(filters, labelOf);
+  /**
+   * Req 1.9: this sheet is the widest in the app — 962 riders x ~30 columns is
+   * ~28,860 `<td>` elements (measured in Chrome at 1366x768). The body is
+   * virtualised, so about 25 rows stay in the DOM; the sticky identity cells and
+   * the filters keep working because each rendered row is the same row component.
+   */
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: visibleRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 28,
+    overscan: 14,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+  const padTop = virtualItems[0]?.start ?? 0;
+  const padBottom = Math.max(0, virtualizer.getTotalSize() - (virtualItems.at(-1)?.end ?? 0));
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -1253,14 +1284,21 @@ export function PayrollSummaryTable({
           />
         </div>
       ) : null}
-      <div className="max-h-[min(420px,46dvh)] overflow-auto">
+      <div ref={scrollRef} className="max-h-[min(420px,46dvh)] overflow-auto">
         <table className="w-max min-w-full border-collapse text-xs">
           <thead className="sticky top-0 z-10 bg-card">
             <tr>
-              {columns.map((column, index) => (
+              {columns.map((column, index) => {
+                const sticky = stickyIdentityStyle(
+                  column.id,
+                  Math.max(columnOffsets[index] ?? 0, 0),
+                  "head",
+                  index === frozenCount - 1,
+                );
+                return (
                 <PayrollColumnHeader
                   key={column.id}
-                  label={t(`riderCols.${column.labelKey}`)}
+                  label={payrollColumnLabel(column.id, t(`riderCols.${column.labelKey}`))}
                   columnId={column.id}
                   values={rows.map((row) => String(riderColumnValue(row, column.id, today) ?? ""))}
                   fixedList={column.id === "status" ? statusList : undefined}
@@ -1269,64 +1307,85 @@ export function PayrollSummaryTable({
                   sort={sort}
                   onSort={setSort}
                   numeric={column.numeric}
-                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2", stickyClass(index, true))}
+                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2", sticky?.className)}
+                  style={sticky?.style}
                 />
-              ))}
+                );
+              })}
+              <th
+                key="row-action"
+                scope="col"
+                aria-label={t("common.openEmployee")}
+                className={cn(TABLE_HEAD_CLASS, "w-9 px-1 py-2 text-center")}
+              />
             </tr>
           </thead>
           <tbody>
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} className="px-3 py-8 text-center text-xs text-muted-foreground">
+                <td colSpan={columns.length + 1} className="px-3 py-8 text-center text-xs text-muted-foreground">
                   {empty}
                 </td>
               </tr>
             ) : (
-              visibleRows.map((row) => (
+              <>
+                {padTop > 0 ? (
+                  <tr aria-hidden>
+                    <td colSpan={columns.length + 1} style={{ height: padTop, padding: 0 }} />
+                  </tr>
+                ) : null}
+                {virtualItems.map((item) => {
+                  const row = visibleRows[item.index];
+                  const rowIndex = item.index;
+                  if (!row) return null;
+                  return (
                 <tr key={row.driverId} className="border-b border-border/60 hover:bg-muted/30">
-                  {columns.map((column, index) => (
+                  {columns.map((column, index) => {
+                    const sticky = stickyIdentityStyle(
+                      column.id,
+                      Math.max(columnOffsets[index] ?? 0, 0),
+                      "cell",
+                      index === frozenCount - 1,
+                    );
+                    return (
                     <td
                       key={column.id}
-                      className={cn("whitespace-nowrap px-2 py-1.5", stickyClass(index), index === 2 && "font-medium")}
+                      className={cn(
+                        "whitespace-nowrap px-2 py-1.5",
+                        sticky?.className,
+                        column.id === "name" && "font-medium",
+                      )}
+                      style={sticky?.style}
                     >
-                      {renderSummaryCell(row, column, today, canManage)}
+                      {renderSummaryCell(row, column, today, canManage, rowIndex)}
                     </td>
-                  ))}
+                    );
+                  })}
+                  <td className="w-9 px-1 py-1.5 text-center">
+                    <PayrollRowLink driverId={row.driverId} />
+                  </td>
                 </tr>
-              ))
+                  );
+                })}
+                {padBottom > 0 ? (
+                  <tr aria-hidden>
+                    <td colSpan={columns.length + 1} style={{ height: padBottom, padding: 0 }} />
+                  </tr>
+                ) : null}
+              </>
             )}
           </tbody>
         </table>
       </div>
-      {onExport && exportLabel ? (
-        <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
-          <p className="text-xs text-muted-foreground">
-            {t("tableFootRange", {
-              shown: visibleRows.length,
-              total: rows.length,
-              range: rangeLabel ?? "",
-            })}
-          </p>
-          <button
-            type="button"
-            onClick={() => onExport(visibleRows)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold transition-colors hover:bg-muted/50"
-          >
-            <Download className="size-3.5" />
-            {exportLabel}
-          </button>
-        </div>
-      ) : (
-        <div className="border-t border-border px-3 py-2">
-          <p className="text-xs text-muted-foreground">
-            {t("tableFootRange", {
-              shown: visibleRows.length,
-              total: rows.length,
-              range: rangeLabel ?? "",
-            })}
-          </p>
-        </div>
-      )}
+      <TableFooterExport
+        summary={t("tableFootRange", {
+          shown: visibleRows.length,
+          total: rows.length,
+          range: rangeLabel ?? "",
+        })}
+        exportLabel={exportLabel}
+        onExport={onExport ? () => onExport(visibleRows) : undefined}
+      />
     </div>
   );
 }

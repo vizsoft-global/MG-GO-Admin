@@ -2,6 +2,7 @@ import { fieldSearchMatch } from "@/components/app/app-list-controls/search-matc
 import { storesVisibleForPartners } from "@/features/performance/performance-ops-formulas";
 import { formatPct } from "@/lib/format/percent";
 import { hrStatusPaint } from "./hr-payroll-status";
+import { kpiFactsOfCountRow, kpiPredicate, type PayrollKpiKey } from "./payroll-kpi-selection";
 
 export const MONTH_ABBR = [
   "Jan",
@@ -716,6 +717,17 @@ export function periodFromRange(
   };
 }
 
+/**
+ * The month that contains a range.
+ *
+ * HR Payroll is monthly: the callable accepts `YYYY-MM` and answers
+ * `invalid_month` for anything else, so a shared "5–20 October" range must be
+ * clamped to October with a note rather than failing to load.
+ */
+export function payrollMonthContaining(range: PayrollRange, locale = "en"): PayrollMonthMeta | null {
+  return monthMeta(range.from.slice(0, 7), locale);
+}
+
 export function payrollPeriodForPreset(
   preset: PayrollRangePreset,
   todayYmd: string,
@@ -1186,18 +1198,24 @@ export function computePayrollKpis(
   const active = rows.filter((r) => r.status === "Active").length;
   const avgEfficiency =
     riders === 0 ? 0 : rows.reduce((sum, r) => sum + r.efficiency, 0) / riders;
-  const atOrAbove100 = rows.filter((r) => r.efficiency >= 100).length;
-  const unjustifiedRiders = rows.filter((r) => r.unjustified > 0).length;
-  const reduced3Days = rows.reduce((sum, r) => sum + (r.reducedDays ?? 0), 0);
-  const manualAdjustments = rows.reduce((sum, r) => sum + (r.adjustedCells ?? 0), 0);
+  /**
+   * Every figure below is a **count of riders**, produced by the same predicate
+   * the card applies when it filters the sheet (`kpiPredicate`). A sum (total
+   * reduced days, total adjusted cells) cannot be reached by pressing a card, so
+   * the card would print a number the table could never show.
+   */
+  const count = (key: PayrollKpiKey) => {
+    const matches = kpiPredicate(key);
+    return rows.filter((r) => matches(kpiFactsOfCountRow(r))).length;
+  };
   return {
     riders,
     active,
     avgEfficiency,
-    atOrAbove100,
-    unjustifiedRiders,
-    reduced3Days,
-    manualAdjustments,
+    atOrAbove100: count("atOrAbove100"),
+    unjustifiedRiders: count("unjustified"),
+    reduced3Days: count("reduced3Days"),
+    manualAdjustments: count("manualAdjustments"),
   };
 }
 

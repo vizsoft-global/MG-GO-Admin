@@ -28,6 +28,8 @@ import {
   type RequestKpis,
 } from "./payroll-formulas";
 import { ApprovalWorkflowPanel } from "./approval-workflow-panel";
+import { PayrollRowLink } from "./payroll-row-link";
+import { PayrollRiderCards } from "./payroll-rider-cards";
 import { exportRequestsCsv } from "./payroll-csv";
 import type { PayrollRequestRow } from "./payroll-types";
 
@@ -99,6 +101,7 @@ export function RequestsTab({
       { id: "partner", label: t("cols.partner"), categorical: true },
       { id: "dept", label: t("cols.dept"), categorical: true },
       { id: "status", label: t("cols.status"), categorical: true },
+      { id: "employee", label: t("common.openEmployee"), locked: true },
     ],
     [t],
   );
@@ -194,6 +197,7 @@ export function RequestsTab({
             entity={t("queueTitle")}
             columns={requestColumns}
             rowKind="dynamic"
+            entityList
             filteredCount={list.length}
             totalCount={requests.length}
             onExport={
@@ -208,7 +212,27 @@ export function RequestsTab({
                 : undefined
             }
           />
-          <RequestRows columns={requestColumns} prefs={requestPrefs} rows={list} empty={t("emptyRequests")} statusLabel={(row) => t(`status.${row.uiStatus}`)} typeLabel={(row) => t(`tiles.${row.tile}`)} />
+          {requestPrefs.view === "grid" ? (
+            <div className="overflow-hidden rounded-xl border border-border bg-card">
+              <PayrollRiderCards
+                rows={list.map((row) => ({
+                  id: row.id,
+                  code: row.code,
+                  name: row.riderName || "—",
+                  driverId: row.driverId,
+                  fields: [
+                    { label: t("cols.type"), value: t(`tiles.${row.tile}`) },
+                    { label: t("cols.day"), value: row.day || "—" },
+                    { label: t("cols.dept"), value: row.reviewingDept || "—" },
+                    { label: t("cols.status"), value: t(`status.${row.uiStatus}`) },
+                  ],
+                }))}
+                empty={t("emptyRequests")}
+              />
+            </div>
+          ) : (
+            <RequestRows columns={requestColumns} prefs={requestPrefs} rows={list} empty={t("emptyRequests")} statusLabel={(row) => t(`status.${row.uiStatus}`)} typeLabel={(row) => t(`tiles.${row.tile}`)} />
+          )}
         </div>
         <ApprovalWorkflowPanel
           awaitingAction={workflow.awaitingAction}
@@ -292,6 +316,9 @@ function RequestRows({
                           <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-bold", statusPill(row.uiStatus))}>
                             {statusLabel(row)}
                           </span>
+                        ) : null}
+                        {id === "employee" ? (
+                          <PayrollRowLink driverId={row.driverId} />
                         ) : null}
                       </td>
                     ))}

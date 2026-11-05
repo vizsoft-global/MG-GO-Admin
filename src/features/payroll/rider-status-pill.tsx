@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { hrStatusStyle } from "./hr-payroll-status";
 import { resolveRiderStatus } from "./payroll-rider-columns";
+import { payrollStatusDisplayLabel } from "./payroll-column-labels";
 import type { PayrollRiderRow } from "./payroll-types";
 
 /**
@@ -22,6 +23,9 @@ export function RiderStatusPill({
   className?: string;
 }) {
   const status = resolveRiderStatus(row, today);
+  // The stored label for a working rider is `Active`; the printed word is
+  // `Running`. One mapping, so the pill and the Status column cannot disagree.
+  const label = payrollStatusDisplayLabel(status.label);
   return (
     <span
       className={cn(
@@ -29,9 +33,9 @@ export function RiderStatusPill({
         className,
       )}
       style={hrStatusStyle(status.paint)}
-      title={status.date ? `${status.label} · ${status.date}` : status.label}
+      title={status.date ? `${label} · ${status.date}` : label}
     >
-      {status.label}
+      {label}
     </span>
   );
 }

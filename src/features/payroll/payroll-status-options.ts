@@ -1,5 +1,6 @@
 import { PAYROLL_STATUS_CHIP, type DayStatus } from "./payroll-formulas";
 import { HR_STATUS_LABEL, HR_STATUS_ORDER, hrStatusKeyFromLabel } from "./hr-payroll-status";
+import { payrollStatusDisplayLabel } from "./payroll-column-labels";
 
 /** The Status column's only built-in choices, in filter order. */
 export const CORE_PAYROLL_STATUS_KEYS = [
@@ -90,7 +91,11 @@ export function statusFilterLabels(
   customs: readonly string[],
   inUse: readonly string[] = [],
 ): string[] {
-  const cores = CORE_PAYROLL_STATUS_KEYS.map((key) => CORE_PAYROLL_STATUS_LABEL[key]);
+  // The printed word is the display word: a working rider reads **Running** in
+  // the checklist, the pill and the export, exactly as the client's sheet says.
+  const cores = CORE_PAYROLL_STATUS_KEYS.map((key) =>
+    payrollStatusDisplayLabel(CORE_PAYROLL_STATUS_LABEL[key]),
+  );
   const seen = new Set(cores.map((label) => label.toLowerCase()));
   const catalog: string[] = [];
   for (const key of HR_STATUS_ORDER) {
@@ -116,9 +121,12 @@ export function statusFilterLabels(
 export function payrollStatusChoiceFromLabel(label: string): { key: string; label: string } | null {
   const trimmed = label.trim().replace(/\s+/g, " ");
   if (!trimmed || trimmed.length > MAX_STATUS_LABEL || /[\u0000-\u001f\u007f]/.test(trimmed)) return null;
-  const core = CORE_PAYROLL_STATUS_KEYS.find(
-    (key) => CORE_PAYROLL_STATUS_LABEL[key].toLowerCase() === trimmed.toLowerCase(),
-  );
+  const core = CORE_PAYROLL_STATUS_KEYS.find((key) => {
+    // Accept both the stored word ("Active") and the printed one ("Running"),
+    // so a rider saved before the rename still resolves to the same key.
+    const words = [CORE_PAYROLL_STATUS_LABEL[key], payrollStatusDisplayLabel(CORE_PAYROLL_STATUS_LABEL[key])];
+    return words.some((word) => word.toLowerCase() === trimmed.toLowerCase());
+  });
   if (core) return { key: core, label: CORE_PAYROLL_STATUS_LABEL[core] };
   const hr = hrStatusKeyFromLabel(trimmed);
   if (hr) return { key: hr, label: HR_STATUS_LABEL[hr] };

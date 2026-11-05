@@ -883,6 +883,8 @@ export function resolveForSidebar(
   tree: MenuNode[],
   can: (p: Permission) => boolean,
   isSuperAdmin: boolean,
+  /** `isSuperAdmin || accessKind === "manager"` — the same test as `requireSettingsAccess`. */
+  canOpenSettings = isSuperAdmin,
 ): ResolvedMenuNode[] {
   const reg = registryMap();
 
@@ -894,6 +896,13 @@ export function resolveForSidebar(
         const r = reg.get(n.id);
         if (!r || r.hidden) continue;
         if (r.superAdminOnly && !isSuperAdmin) continue;
+        /**
+         * The app-level Settings area is closed to a plain `user` account and to a
+         * partner. `settings/layout.tsx` applies the same rule on the server, so a
+         * row saved in an older `menu_configs` document cannot leak the entry back
+         * into a sidebar that must not show it.
+         */
+        if (r.href.startsWith("/settings") && !canOpenSettings) continue;
         if (r.id === "restaurants") {
           if (!can("restaurants.view") && !can("earnings.view")) continue;
         } else if (r.permissionAnyOf && r.permissionAnyOf.length > 0) {
@@ -934,7 +943,8 @@ export function resolveForSidebar(
 export function buildInitialTree(
   can: (p: Permission) => boolean,
   isSuperAdmin: boolean,
+  canOpenSettings = isSuperAdmin,
 ): ResolvedMenuNode[] {
   const { tree } = mergeMenu([]);
-  return resolveForSidebar(tree, can, isSuperAdmin);
+  return resolveForSidebar(tree, can, isSuperAdmin, canOpenSettings);
 }

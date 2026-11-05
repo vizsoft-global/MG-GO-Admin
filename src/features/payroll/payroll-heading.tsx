@@ -14,6 +14,7 @@ import {
   type PayrollHeadingView,
 } from "./payroll-column-config";
 import { useSavePayrollColumnConfig } from "./use-payroll";
+import { identityWidth, isIdentityColumn } from "./payroll-table-identity";
 
 export function PayrollHeadingLabel({
   columnKey,
@@ -166,25 +167,39 @@ export function PayrollColumnsMenu({
 }
 
 /**
- * Master data. MG ID, Driver ID and Name are read-only everywhere and carry no
- * pencil — not the identity-edit pencil and not the heading-rename one
- * (SOP §7 "MG ID lock" and §11 "no pencil icon").
+ * Master data. The serial, MG ID, Driver ID (client id) and Name are read-only
+ * everywhere and carry no pencil — not the identity-edit pencil and not the
+ * heading-rename one (SOP §7 "MG ID lock" and §11 "no pencil icon").
  */
-export const MASTER_DATA_COLUMNS = ["amId", "mgId", "name"] as const;
+export const MASTER_DATA_COLUMNS = ["serial", "amId", "mgId", "name"] as const;
 
 export function isMasterDataColumn(columnId: string): boolean {
   return (MASTER_DATA_COLUMNS as readonly string[]).includes(columnId);
 }
 
+/**
+ * The frozen identity cell — header or body.
+ *
+ * Widths and the "is this column frozen" question come from
+ * `payroll-table-identity`, so the four leading columns are pinned with one set
+ * of numbers on every payroll table. `edge` marks the last frozen column: it
+ * carries the hairline that separates the pinned block from the scrolling data,
+ * which otherwise looks like one continuous row.
+ */
 export function stickyIdentityStyle(
   columnId: string,
   offset: number,
   kind: "head" | "cell" = "cell",
+  edge = false,
 ): { className: string; style: CSSProperties } | null {
-  if (columnId !== "amId" && columnId !== "mgId" && columnId !== "name") return null;
-  const width = columnId === "name" ? 190 : 64;
+  if (!isIdentityColumn(columnId)) return null;
+  const width = identityWidth(columnId);
+  if (!width) return null;
   return {
-    className: kind === "head" ? "sticky top-0 z-30 bg-card" : "sticky z-20 bg-card",
+    className: cn(
+      kind === "head" ? "sticky top-0 z-30 bg-card" : "sticky z-20 bg-card",
+      edge && "shadow-[inset_-1px_0_0_var(--border)]",
+    ),
     style: {
       ...(kind === "head" ? { top: 0 } : {}),
       insetInlineStart: offset,
@@ -194,8 +209,7 @@ export function stickyIdentityStyle(
   };
 }
 
+/** Frozen width of one identity column; `0` for a column that scrolls. */
 export function stickyIdentityOffset(columnId: string): number {
-  if (columnId === "name") return 190;
-  if (columnId === "amId" || columnId === "mgId") return 64;
-  return 0;
+  return identityWidth(columnId);
 }
