@@ -15,6 +15,7 @@ import {
   listNotificationAutomationRuns,
   listNotificationCampaigns,
   listNotificationCampaignsPage,
+  listNotificationCreators,
   listNotificationTemplates,
   searchDriversForNotification,
 } from "./notifications-actions";
@@ -75,6 +76,14 @@ export function useNotificationTemplates() {
   return useQuery({
     queryKey: queryKeys.notifications.templates(),
     queryFn: () => listNotificationTemplates(),
+  });
+}
+
+export function useNotificationCreators() {
+  return useQuery({
+    queryKey: queryKeys.notifications.creators(),
+    queryFn: () => listNotificationCreators(),
+    staleTime: 60_000,
   });
 }
 
