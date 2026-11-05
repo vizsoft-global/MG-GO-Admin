@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Loader2, Save, Send, ShieldOff } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Loader2, Save, Send, ShieldOff } from "lucide-react";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -85,6 +85,12 @@ export function CreateNotificationPageShell() {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<WizardStepId>("audience");
   const [pending, startTransition] = useTransition();
+
+  // The campaign is saved once, then dispatched. Retrying a failed dispatch must
+  // reuse that document — saving again would leave a duplicate draft behind on
+  // every attempt.
+  const [savedCampaignId, setSavedCampaignId] = useState<string | null>(null);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -271,12 +277,18 @@ export function CreateNotificationPageShell() {
   function goNext() {
     if (!canProceed) return;
     const idx = STEPS.indexOf(step);
-    if (idx < STEPS.length - 1) setStep(STEPS[idx + 1]!);
+    if (idx < STEPS.length - 1) {
+      setDispatchError(null);
+      setStep(STEPS[idx + 1]!);
+    }
   }
 
   function goBack() {
     const idx = STEPS.indexOf(step);
-    if (idx > 0) setStep(STEPS[idx - 1]!);
+    if (idx > 0) {
+      setDispatchError(null);
+      setStep(STEPS[idx - 1]!);
+    }
   }
 
   function handleSaveDraft() {
@@ -287,11 +299,12 @@ export function CreateNotificationPageShell() {
     }
     startTransition(async () => {
       try {
-        const result = await saveNotificationCampaign(buildInput());
+        const result = await saveNotificationCampaign(buildInput(), savedCampaignId);
         if ("error" in result) {
           toast.error(resolveErrorMessage(result.error));
           return;
         }
+        setSavedCampaignId(result.id);
         await invalidateNotificationCaches(queryClient, { campaignId: result.id });
         toast.success(t("savedDraft"));
         router.push(`/${locale}/notifications/${result.id}`);
@@ -307,20 +320,28 @@ export function CreateNotificationPageShell() {
   function handleSubmit() {
     if (!canSubmit) return;
     startTransition(async () => {
+      setDispatchError(null);
       try {
         const input = buildInput();
-        const saved = await saveNotificationCampaign(input);
+        // `savedCampaignId` is the retry anchor: the second attempt updates the
+        // document the first attempt already created instead of inserting a new
+        // one, so a failed dispatch cannot litter the list with duplicates.
+        const saved = await saveNotificationCampaign(input, savedCampaignId);
         if ("error" in saved) {
           toast.error(resolveErrorMessage(saved.error));
           return;
         }
+        setSavedCampaignId(saved.id);
         await invalidateNotificationCaches(queryClient, { campaignId: saved.id });
         if (scheduleMode === "now") {
           if (needsApproval && !auth.can("notifications.approve")) {
             const submitted = await submitNotificationForApproval(saved.id);
             if ("error" in submitted) {
-              toast.error(t("errors.saveFailed"));
-              router.push(`/${locale}/notifications/${saved.id}`);
+              // Stay on Review with the draft id kept, so pressing the same
+              // button again re-submits this campaign rather than creating one.
+              const message = resolveErrorMessage(submitted.error);
+              setDispatchError(message);
+              toast.error(message);
               return;
             }
             toast.success(t("submittedForApproval"));
@@ -329,8 +350,9 @@ export function CreateNotificationPageShell() {
           }
           const sent = await dispatchNotificationCampaign(saved.id);
           if ("error" in sent) {
-            toast.error(resolveErrorMessage(sent.error));
-            router.push(`/${locale}/notifications/${saved.id}`);
+            const message = resolveErrorMessage(sent.error);
+            setDispatchError(message);
+            toast.error(message);
             return;
           }
           await invalidateNotificationCaches(queryClient, { campaignId: saved.id });
@@ -341,8 +363,9 @@ export function CreateNotificationPageShell() {
         } else {
           const scheduled = await scheduleNotificationCampaign(saved.id);
           if ("error" in scheduled) {
-            toast.error(t("errors.saveFailed"));
-            router.push(`/${locale}/notifications/${saved.id}`);
+            const message = resolveErrorMessage(scheduled.error);
+            setDispatchError(message);
+            toast.error(message);
             return;
           }
           await invalidateNotificationCaches(queryClient, { campaignId: saved.id });
@@ -353,7 +376,9 @@ export function CreateNotificationPageShell() {
         // Same reason as handleSaveDraft: an unhandled rejection here killed the
         // whole page while the campaign itself may already have been saved.
         console.error("[notifications] submit failed:", error);
-        toast.error(t("errors.saveFailed"));
+        const message = t("errors.saveFailed");
+        setDispatchError(message);
+        toast.error(message);
       }
     });
   }
@@ -597,6 +622,19 @@ export function CreateNotificationPageShell() {
 
           {step === "review" ? (
             <div className="space-y-3">
+              {dispatchError ? (
+                <div
+                  role="alert"
+                  className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+                >
+                  <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden />
+                  <div className="space-y-1">
+                    <p className="font-semibold">{t("dispatchFailedTitle")}</p>
+                    <p className="text-xs text-destructive/80">{dispatchError}</p>
+                    <p className="text-xs text-muted-foreground">{t("dispatchFailedHint")}</p>
+                  </div>
+                </div>
+              ) : null}
               <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
                 <p>
                   <span className="font-medium">{t("targetMode")}:</span>{" "}
@@ -638,19 +676,31 @@ export function CreateNotificationPageShell() {
           {t("cancel")}
         </Link>
         {step !== "audience" ? (
-          <Button variant="outline" className="h-9 cursor-pointer" disabled={pending} onClick={goBack}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 cursor-pointer"
+            disabled={pending}
+            onClick={goBack}
+          >
             <ArrowLeft className="size-4" />
             {t("wizardBack")}
           </Button>
         ) : null}
         {step !== "review" ? (
-          <Button className="h-9 cursor-pointer" disabled={pending || !canProceed} onClick={goNext}>
+          <Button
+            type="button"
+            className="h-9 cursor-pointer"
+            disabled={pending || !canProceed}
+            onClick={goNext}
+          >
             {t("wizardNext")}
             <ArrowRight className="size-4" />
           </Button>
         ) : (
           <>
             <Button
+              type="button"
               variant="outline"
               className="h-9 cursor-pointer"
               disabled={pending || !canSubmit}
@@ -660,6 +710,7 @@ export function CreateNotificationPageShell() {
               {t("saveDraft")}
             </Button>
             <Button
+              type="button"
               className="h-9 cursor-pointer"
               disabled={pending || !canSubmit}
               onClick={handleSubmit}

@@ -189,6 +189,7 @@ export type NotificationListFilters = {
   fromDate?: string;
   toDate?: string;
   bucket?: NotificationListBucket;
+  createdBy?: string;
 };
 
 export type NotificationActionError =

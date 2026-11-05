@@ -26,6 +26,7 @@ import { resolveScreenshotRestricted } from "./screenshot-restriction";
 import { resolveDriversByLookupIds } from "@/features/drivers/resolve-drivers-by-lookup-ids";
 import { recipientIdsFromCompile } from "./audience-snapshot";
 import { statusesForListBucket } from "./notification-list-buckets";
+import { campaignDateBounds, campaignDayBounds, kuwaitTodayString } from "./campaign-date-range";
 import { searchActiveDrivers } from "@/features/drivers/search-active-drivers";
 import { fetchDriversPage } from "@/features/drivers/drivers-list-actions";
 import { DEFAULT_DRIVERS_SORT } from "@/features/drivers/drivers-list-query";
@@ -891,7 +892,7 @@ function validateCampaignInput(input: SaveCampaignInput): NotificationActionErro
 }
 
 function kuwaitToday(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: KUWAIT_TZ }).format(new Date());
+  return kuwaitTodayString();
 }
 
 function mapCampaign(row: Record<string, unknown>): NotificationCampaignRow {
@@ -908,7 +909,8 @@ export async function getNotificationDashboardKpis(): Promise<NotificationDashbo
   await requireNotificationsView();
   const panel = await notificationsDb();
   const today = kuwaitToday();
-  const start = `${today}T00:00:00+03:00`;
+  const todayBounds = campaignDayBounds(today);
+  const start = todayBounds.fromIso ?? `${today}T00:00:00+03:00`;
 
   const [sentRes, scheduledRes, draftsRes, failedRes, automationsRes, activityRes, campaignsRes] =
     await Promise.all([
@@ -1003,8 +1005,12 @@ function applyNotificationCampaignFilters<
       `title.ilike.%${filters.search.trim()}%,body.ilike.%${filters.search.trim()}%`,
     );
   }
-  if (filters.fromDate) next = next.gte("created_at", `${filters.fromDate}T00:00:00`);
-  if (filters.toDate) next = next.lte("created_at", `${filters.toDate}T23:59:59`);
+  if (filters.fromDate || filters.toDate) {
+    const bounds = campaignDateBounds(filters.fromDate, filters.toDate);
+    if (bounds.fromIso) next = next.gte("created_at", bounds.fromIso);
+    if (bounds.toIso) next = next.lte("created_at", bounds.toIso);
+  }
+  if (filters.createdBy) next = next.eq("created_by", filters.createdBy);
   return next;
 }
 
@@ -1053,6 +1059,39 @@ export async function listNotificationCampaigns(
     page: 0,
   });
   return rows;
+}
+
+export type NotificationCreatorOption = {
+  id: string;
+  label: string;
+  count: number;
+};
+
+export async function listNotificationCreators(): Promise<NotificationCreatorOption[]> {
+  await requireNotificationsView();
+  const panel = await notificationsDb();
+  const { data, error } = await panel.from("notification_campaigns").select("created_by");
+  if (error) throw new Error(error.message);
+
+  const counts = new Map<string, number>();
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const id = typeof row.created_by === "string" ? row.created_by.trim() : "";
+    if (!id) continue;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  if (counts.size === 0) return [];
+
+  const db = await staffDb();
+  const profiles = db ? await loadByIds(db, "profiles", [...counts.keys()]) : new Map<string, Loose>();
+
+  return [...counts.entries()]
+    .map(([id, count]) => {
+      const profile = profiles.get(id);
+      const name = typeof profile?.full_name === "string" ? profile.full_name.trim() : "";
+      const email = typeof profile?.email === "string" ? profile.email.trim() : "";
+      return { id, label: name || email || "Unknown", count };
+    })
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
 }
 
 export type NotificationDispatchItemRow = {
@@ -1247,10 +1286,12 @@ export async function saveNotificationCampaign(
     updated_by: session.id,
   };
 
+  const nowIso = new Date().toISOString();
+
   if (campaignId) {
     const { data, error } = await panel
       .from("notification_campaigns")
-      .update(row)
+      .update({ ...row, updated_at: nowIso })
       .eq("id", campaignId)
       .in("status", ["draft", "pending_approval", "scheduled"])
       .select("id")
@@ -1268,7 +1309,13 @@ export async function saveNotificationCampaign(
 
   const { data, error } = await panel
     .from("notification_campaigns")
-    .insert({ ...row, created_by: session.id, status: "draft" })
+    .insert({
+      ...row,
+      created_at: nowIso,
+      updated_at: nowIso,
+      created_by: session.id,
+      status: "draft",
+    })
     .select("id")
     .single();
   if (error || !data) {

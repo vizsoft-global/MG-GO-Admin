@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Send,
   ShieldOff,
+  X,
 } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
 import {
@@ -56,12 +57,14 @@ import { useAuth } from "@/contexts/auth-context";
 import { downloadCsv } from "@/features/driver-tracking/csv-export";
 import { NOTIFICATION_CATEGORIES } from "./constants";
 import { CampaignAudienceButton } from "./notification-audience-dialog";
-import { NOTIFICATION_LIST_BUCKETS, type NotificationListBucket } from "./notification-list-buckets";
+import { NOTIFICATION_LIST_BUCKETS, parseListBucket, type NotificationListBucket } from "./notification-list-buckets";
 import { cloneNotificationCampaign, exportNotificationCampaignsCsv } from "./notifications-actions";
 import { NotificationsTabBar } from "./notifications-tab-bar";
 import type { NotificationListFilters } from "./types";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
-import { useInfiniteNotificationCampaigns, useNotificationDashboard } from "./use-notifications";
+import { useInfiniteNotificationCampaigns, useNotificationCreators, useNotificationDashboard } from "./use-notifications";
+import { campaignDateBounds, kuwaitTodayString } from "./campaign-date-range";
+import { SearchSelect } from "@/components/ui/search-select";
 import { formatPct } from "@/lib/format/percent";
 import { resolveStatusVariant } from "@/lib/ui/resolve-status-variant";
 
@@ -107,6 +110,9 @@ export function NotificationsPageShell() {
   const canManage = auth.can("notifications.manage");
   const canExport = auth.can("notifications.export");
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentQuery = searchParams.toString();
 
   const toolbarColumns = useMemo((): TableToolbarColumn[] => [
     { id: "title", label: t("colTitle"), locked: true },
@@ -117,19 +123,82 @@ export function NotificationsPageShell() {
     { id: "actions", label: t("colActions") },
   ], [t]);
   const tablePrefs = useTablePrefs("notifications", toolbarColumns);
-  const [bucket, setBucket] = useState<NotificationListBucket>("all");
-  const [category, setCategory] = useState("all");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [bucket, setBucket] = useState<NotificationListBucket>(() =>
+    parseListBucket(searchParams.get("bucket")),
+  );
+  const [category, setCategory] = useState(() => searchParams.get("category") ?? "all");
+  const [fromDate, setFromDate] = useState(() => searchParams.get("from") ?? "");
+  const [toDate, setToDate] = useState(() => searchParams.get("to") ?? "");
+  const [createdBy, setCreatedBy] = useState(() => searchParams.get("createdBy") ?? "all");
   const [, startExport] = useTransition();
+  const { data: creators } = useNotificationCreators();
+  const creatorItems = useMemo(
+    () => [
+      { value: "all", label: t("allCreators") },
+      ...(creators ?? []).map((creator) => ({
+        value: creator.id,
+        label: `${creator.label} (${creator.count})`,
+        hint: creator.label,
+        keywords: [creator.label, creator.id],
+      })),
+    ],
+    [creators, t],
+  );
+  const todayString = kuwaitTodayString();
+  const sentTodaySelected =
+    bucket === "sent" && fromDate === todayString && toDate === todayString;
+  const hasActiveFilters =
+    bucket !== "all" ||
+    category !== "all" ||
+    Boolean(fromDate) ||
+    Boolean(toDate) ||
+    createdBy !== "all";
+  const toggleSentToday = () => {
+    if (sentTodaySelected) {
+      setBucket("all");
+      setFromDate("");
+      setToDate("");
+      return;
+    }
+    setBucket("sent");
+    setFromDate(todayString);
+    setToDate(todayString);
+  };
+  const toggleBucket = (target: NotificationListBucket) => {
+    setBucket((current) => (current === target ? "all" : target));
+  };
+  const clearFilters = () => {
+    setBucket("all");
+    setCategory("all");
+    setFromDate("");
+    setToDate("");
+    setCreatedBy("all");
+  };
+  useEffect(() => {
+    const params = new URLSearchParams(currentQuery);
+    if (bucket === "all") params.delete("bucket");
+    else params.set("bucket", bucket);
+    if (category === "all") params.delete("category");
+    else params.set("category", category);
+    if (fromDate) params.set("from", fromDate);
+    else params.delete("from");
+    if (toDate) params.set("to", toDate);
+    else params.delete("to");
+    if (createdBy === "all") params.delete("createdBy");
+    else params.set("createdBy", createdBy);
+    const nextQuery = params.toString();
+    if (nextQuery === currentQuery) return;
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+  }, [bucket, category, createdBy, currentQuery, fromDate, pathname, router, toDate]);
   const listFilters = useMemo(() => {
     const filters: NotificationListFilters = {};
     if (bucket !== "all") filters.bucket = bucket;
     if (category !== "all") filters.category = category;
     if (fromDate) filters.fromDate = fromDate;
     if (toDate) filters.toDate = toDate;
+    if (createdBy !== "all") filters.createdBy = createdBy;
     return filters;
-  }, [bucket, category, fromDate, toDate]);
+  }, [bucket, category, createdBy, fromDate, toDate]);
   const { data: kpis, isLoading: kpisLoading, refetch: refetchKpis } = useNotificationDashboard();
   const {
     data: campaignPages,
@@ -223,9 +292,24 @@ export function NotificationsPageShell() {
 
       <KpiGrid
         items={[
-          { label: t("kpiSent"), value: kpisLoading ? "…" : String(kpis?.sentToday ?? 0) },
-          { label: t("kpiScheduled"), value: kpisLoading ? "…" : String(kpis?.scheduled ?? 0) },
-          { label: t("kpiDrafts"), value: kpisLoading ? "…" : String(kpis?.drafts ?? 0) },
+          {
+            label: t("kpiSent"),
+            value: kpisLoading ? "…" : String(kpis?.sentToday ?? 0),
+            selected: sentTodaySelected,
+            onClick: toggleSentToday,
+          },
+          {
+            label: t("kpiScheduled"),
+            value: kpisLoading ? "…" : String(kpis?.scheduled ?? 0),
+            selected: bucket === "scheduled",
+            onClick: () => toggleBucket("scheduled"),
+          },
+          {
+            label: t("kpiDrafts"),
+            value: kpisLoading ? "…" : String(kpis?.drafts ?? 0),
+            selected: bucket === "drafts",
+            onClick: () => toggleBucket("drafts"),
+          },
           {
             label: t("kpiDeliveryRate"),
             value: kpisLoading ? "…" : formatPct(kpis?.deliveryRate ?? 0),
@@ -234,7 +318,12 @@ export function NotificationsPageShell() {
             label: t("kpiOpenRate"),
             value: kpisLoading ? "…" : formatPct(kpis?.openRate ?? 0),
           },
-          { label: t("kpiFailed"), value: kpisLoading ? "…" : String(kpis?.failedDeliveries ?? 0) },
+          {
+            label: t("kpiFailed"),
+            value: kpisLoading ? "…" : String(kpis?.failedDeliveries ?? 0),
+            selected: bucket === "failed",
+            onClick: () => toggleBucket("failed"),
+          },
           {
             label: t("kpiAutomations"),
             value: kpisLoading ? "…" : String(kpis?.activeAutomations ?? 0),
@@ -317,6 +406,28 @@ export function NotificationsPageShell() {
                 onChange={(event) => setToDate(event.target.value)}
                 className="h-9 rounded-lg border border-input bg-transparent px-2 text-sm"
               />
+              <SearchSelect
+                items={creatorItems}
+                value={createdBy}
+                onChange={(value) => setCreatedBy(value || "all")}
+                placeholder={t("filterCreatedBy")}
+                searchPlaceholder={t("filterCreatedBy")}
+                recentsKey="notifications-creators"
+                clearable={false}
+                className="w-[190px]"
+              />
+              {hasActiveFilters ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 cursor-pointer text-muted-foreground hover:text-foreground"
+                  onClick={clearFilters}
+                >
+                  <X className="size-3.5" />
+                  {t("clearFilters")}
+                </Button>
+              ) : null}
             </div>
           </div>
         }
