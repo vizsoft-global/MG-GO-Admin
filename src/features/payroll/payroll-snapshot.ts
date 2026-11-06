@@ -729,7 +729,7 @@ export function assemblePayrollSnapshot(input: {
       // Which day shape this rider is priced on. An unset project keeps the
       // Americana behaviour it has always had here; the AO tab is the one place
       // that refuses to guess a card for it.
-      const projectView = viewOfProjectKey(r.projectKey, clients) ?? "americana";
+      const projectView = viewOfProjectKey(r.projectKey) ?? "americana";
       const { zoneId, zoneName } = payrollZoneFor(r, zoneNames);
       const zoneCategory = categoryForZone(zoneMetrics, zoneId);
       const metric = zoneId ? zoneMetrics.find((m) => m.zoneId === zoneId) ?? null : null;
@@ -1150,7 +1150,7 @@ export function snapshotFromRpc(
     for (const day of row.days ?? []) {
       const logged = num(day.h);
       const uploadedHours = day.wh == null ? null : num(day.wh);
-      const projectView = viewOfProjectKey(row.projectKey, clients) ?? "americana";
+      const projectView = viewOfProjectKey(row.projectKey) ?? "americana";
       const cover =
         day.c === "off" || day.c === "sick" || day.c === "accident" ? day.c : null;
       const adjustmentStatus = parseAdjustmentStatus(day.x);
