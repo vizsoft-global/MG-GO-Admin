@@ -181,6 +181,25 @@ function matchesFilter(row: Loose, filter: Filter): boolean {
   }
 }
 
+/** A count must never be inflated by the unfiltered scan the Firestore fallback returns when a
+ *  composite index is missing, so the fallback rows are matched against the same filters. */
+function countMatchingRows(
+  rows: Loose[],
+  filters: Filter[],
+  inField: string | null,
+  chunk: unknown[] | null,
+): number {
+  const chunkFilter: Filter | null =
+    inField && chunk && chunk.length > 0 ? { field: inField, op: "in", value: chunk } : null;
+  let hits = 0;
+  for (const row of rows) {
+    if (!filters.every((filter) => matchesFilter(row, filter))) continue;
+    if (chunkFilter && !matchesFilter(row, chunkFilter)) continue;
+    hits += 1;
+  }
+  return hits;
+}
+
 function splitTop(input: string): string[] {
   const parts: string[] = [];
   let depth = 0;
@@ -672,8 +691,10 @@ class NotificationQuery {
           .get();
         total += snap.data().count;
       } catch {
+        // The safeGet fallback reads the collection without the filters (a missing composite
+        // index lands here), so counting its rows would count campaigns that do not match.
         const rows = await this.safeGet(db, rest, chunk, inFilter?.field ?? null);
-        total += rows.length;
+        total += countMatchingRows(rows, rest, inFilter?.field ?? null, chunk);
       }
     }
     return total;

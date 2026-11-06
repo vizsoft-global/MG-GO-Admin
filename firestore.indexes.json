@@ -3226,6 +3226,48 @@
         { "fieldPath": "driver_id", "order": "ASCENDING" },
         { "fieldPath": "start_date", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "notification_campaigns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "sent_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notification_campaigns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "category", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "sent_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notification_campaigns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "created_by", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notification_campaigns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "created_by", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notification_campaigns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "created_by", "order": "ASCENDING" },
+        { "fieldPath": "sent_at", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
