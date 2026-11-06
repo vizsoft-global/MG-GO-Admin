@@ -211,13 +211,20 @@ function visibleIdentity(
   keys: readonly string[],
   options: PayrollExportOptions | undefined,
   cellsOf: (row: PayrollRiderRow) => Array<string | number>,
+  order?: readonly string[],
 ): {
   headers: string[];
   cells: (row: PayrollRiderRow) => Array<string | number>;
 } {
+  const indexOfKey = new Map(keys.map((key, index) => [key, index]));
+  const sequence = order
+    ? [...new Set(order)].filter((key) => indexOfKey.has(key))
+    : keys;
   const keep: number[] = [];
   const outHeaders: string[] = [];
-  keys.forEach((key, index) => {
+  sequence.forEach((key) => {
+    const index = indexOfKey.get(key);
+    if (index == null) return;
     const header = headerFor(key, headers[index] ?? key, options);
     if (header == null) return;
     keep.push(index);
@@ -405,14 +412,12 @@ export function exportPayrollAttendanceOrdersProjectCsv(
   },
 ) {
   const config = projectConfigOf(options.project, options.clients);
-  const leadIds = options.visibleLeadIds
-    ? AO_LEAD_KEYS.filter((key) => options.visibleLeadIds?.includes(key))
-    : [...AO_LEAD_KEYS];
   const identity = visibleIdentity(
     AO_LEAD_HEADERS,
-    leadIds,
+    AO_LEAD_KEYS,
     { ...options, hidden: options.hidden },
     (row) => aoLeadCells(row, options.today),
+    options.visibleLeadIds,
   );
   const dayHeaders = dates.flatMap((date) =>
     config.dayColumns.map(
@@ -459,16 +464,23 @@ function projectDayHeader(column: ProjectDayColumn): string {
   return "Hours";
 }
 
-export function exportPayrollApplicationAttendanceCsv(  fileKey: string,
+export function exportPayrollApplicationAttendanceCsv(
+  fileKey: string,
   dates: readonly string[],
   rows: readonly PayrollRiderRow[],
-  options?: PayrollExportOptions,
+  options?: PayrollExportOptions & { visibleLeadIds?: readonly string[] },
 ) {
+  const leadIds = options?.visibleLeadIds
+    ? [...new Set(options.visibleLeadIds)].filter((key) =>
+        APP_ATTENDANCE_KEYS.includes(key),
+      )
+    : [...APP_ATTENDANCE_KEYS];
   const identity = visibleIdentity(
     APP_ATTENDANCE_HEADERS,
     APP_ATTENDANCE_KEYS,
     options,
     (row) => appAttendanceLeadCells(row, options?.today),
+    leadIds,
   );
   downloadCsv(
     `MGGO-payroll-app-attendance-${fileKey}`,

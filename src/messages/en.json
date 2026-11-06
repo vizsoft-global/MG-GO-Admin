@@ -10019,6 +10019,19 @@
       "tabAppAttendance": "Application Attendance",
       "tabHrPayroll": "HR Payroll",
       "tabRequests": "Requests",
+      "columnsMenu": {
+        "columns": "Columns",
+        "title": "Show and reorder columns",
+        "hint": "Your order and your hidden columns are saved for you.",
+        "drag": "Drag to reorder",
+        "show": "Show column",
+        "hide": "Hide column",
+        "reset": "Reset order",
+        "pinnedSummary": "MG ID · Driver ID · Name stay pinned and cannot be moved.",
+        "pinnedHr": "MG ID · Client ID · Employee Name stay pinned and cannot be moved.",
+        "pinnedAo": "MG ID · Driver ID · Name stay pinned and cannot be moved.",
+        "pinnedAppAttendance": "MG ID · Driver ID · Name stay pinned and cannot be moved."
+      },
       "hr": {
         "subtitle": "Month sheet for salary, increments and imported adjustments.",
         "title": "HR Payroll",

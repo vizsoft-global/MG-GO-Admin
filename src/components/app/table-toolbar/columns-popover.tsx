@@ -9,6 +9,7 @@ export function ColumnsPopover({
   onToggle,
   onReset,
   onReorder,
+  onMove,
   visibleCount,
 }: {
   columns: TableToolbarColumn[];
@@ -16,6 +17,7 @@ export function ColumnsPopover({
   onToggle: (id: string) => void;
   onReset: () => void;
   onReorder: (activeId: string, overId: string) => void;
+  onMove?: (id: string, dir: -1 | 1) => void;
   visibleCount: number;
 }) {
   return (
@@ -28,6 +30,7 @@ export function ColumnsPopover({
       onToggle={onToggle}
       onReset={onReset}
       onReorder={onReorder}
+      onMove={onMove}
       hiddenCount={Math.max(0, columns.length - visibleCount)}
       iconOnly
     />

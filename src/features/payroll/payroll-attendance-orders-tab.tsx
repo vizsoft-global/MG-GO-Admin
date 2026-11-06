@@ -78,6 +78,9 @@ import {
   resolveColumnLabel,
 } from "./payroll-column-config";
 import { PayrollColumnsMenu, PayrollHeadingLabel, stickyIdentityStyle } from "./payroll-heading";
+import { ColumnOrderMenu } from "@/components/app/column-order-menu";
+import { useListColumns } from "@/hooks/use-list-columns";
+import { PAYROLL_AO_COLUMNS_PREF_KEY } from "@/lib/ui-preferences/types";
 import { identityOffsets, withSerialColumn } from "./payroll-table-identity";
 import { PayrollRowLink } from "./payroll-row-link";
 import { payrollColumnLabel } from "./payroll-column-labels";
@@ -159,18 +162,31 @@ export function PayrollAttendanceOrdersTab({
   const session = usePayrollAdjust();
   const headings = usePayrollColumnConfig();
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
-  const columns = useMemo(
+  /** Columns the operator may show, hide and reorder on this sheet. */
+  const leadColumnIds = useMemo(
     () =>
-      withSerialColumn(
-        AO_LEAD_COLUMNS.filter((column) => !columnHiddenIn(column.id, "ao", headingConfig)).filter(
-          // Keeta riders work from the pool: the SOP removes the Restaurant column
-          // rather than printing "(Pool)" on every row.
-          (column) => config.showRestaurant || column.id !== "restaurant",
-        ),
-        PAYROLL_SERIAL_COLUMN,
-      ),
-    [headingConfig, config.showRestaurant],
+      AO_LEAD_COLUMNS.filter(
+        // Keeta riders work from the pool: the SOP removes the Restaurant column
+        // rather than printing "(Pool)" on every row.
+        (column) => config.showRestaurant || column.id !== "restaurant",
+      ).map((column) => column.id),
+    [config.showRestaurant],
   );
+  /** The heading config still decides what starts hidden; the operator can change it after. */
+  const defaultLeadVisible = useMemo(
+    () => leadColumnIds.filter((id) => !columnHiddenIn(id, "ao", headingConfig)),
+    [leadColumnIds, headingConfig],
+  );
+  const leadColumns = useListColumns(PAYROLL_AO_COLUMNS_PREF_KEY, leadColumnIds, {
+    defaultVisible: defaultLeadVisible,
+  });
+  const columns = useMemo(() => {
+    const byId = new Map(AO_LEAD_COLUMNS.map((column) => [column.id, column]));
+    const ordered = leadColumns.visibleIds
+      .map((id) => byId.get(id))
+      .filter((column): column is NonNullable<typeof column> => Boolean(column));
+    return withSerialColumn(ordered, PAYROLL_SERIAL_COLUMN);
+  }, [leadColumns.visibleIds]);
   const columnOffsets = useMemo(() => identityOffsets(columns), [columns]);
   const frozenCount = columnOffsets.filter((offset) => offset >= 0).length;
   const dates = month.dates;
@@ -612,12 +628,28 @@ export function PayrollAttendanceOrdersTab({
         prefs={listPrefs}
         onUpdate={updateListPrefs}
         trailing={
-          <PayrollColumnsMenu
-            view="ao"
-            config={headingConfig}
-            fallbackLabel={fallbackLabel}
-            canManage={canManage}
-          />
+          <>
+            <ColumnOrderMenu
+              columns={leadColumns}
+              labelFor={labelOf}
+              labels={{
+                columns: t("columnsMenu.columns"),
+                title: t("columnsMenu.title"),
+                hint: t("columnsMenu.hint"),
+                pinned: t("columnsMenu.pinnedAo"),
+                drag: t("columnsMenu.drag"),
+                show: t("columnsMenu.show"),
+                hide: t("columnsMenu.hide"),
+                reset: t("columnsMenu.reset"),
+              }}
+            />
+            <PayrollColumnsMenu
+              view="ao"
+              config={headingConfig}
+              fallbackLabel={fallbackLabel}
+              canManage={canManage}
+            />
+          </>
         }
       />
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
