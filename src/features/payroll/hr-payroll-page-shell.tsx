@@ -89,6 +89,31 @@ export function HrPayrollPageShell() {
   const data = query.data;
   const month = data?.month ?? period;
 
+  /**
+   * The range presets render on their own row directly under the Payroll /
+   * Summary / Configuration tab strip, start-aligned so they line up with the
+   * filter card beneath them.
+   */
+  const rangePills = (
+    <>
+      <PayrollRangePills
+        today={today}
+        preset={preset}
+        customRange={customRange}
+        onPreset={(next) => syncRange(next, null)}
+        onApplyCustom={(range) => {
+          syncRange("custom", range);
+        }}
+        onClearCustom={() => {
+          syncRange("thisMonth", null);
+        }}
+      />
+      {clampedNote ? (
+        <p className="basis-full text-[11px] text-muted-foreground">{clampedNote}</p>
+      ) : null}
+    </>
+  );
+
   return (
     <PayrollActionsBridgeProvider>
     <AppPage className="flex h-[calc(100dvh-1.5rem)] min-h-0 flex-col gap-2 space-y-0 overflow-hidden">
@@ -104,7 +129,7 @@ export function HrPayrollPageShell() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
-        {/* One shared action bar + the shared range pills, exactly as Payroll hub. */}
+        {/* One shared action bar, exactly as Payroll hub. */}
         <div className="flex flex-col items-end gap-2">
           <HrPayrollActionsBar
             onPayPlan={() => router.push("/payroll/pay-plan")}
@@ -113,21 +138,9 @@ export function HrPayrollPageShell() {
             canManage={canManage}
             canUseSettings={isSuperAdmin}
           />
-          <PayrollRangePills
-            today={today}
-            preset={preset}
-            customRange={customRange}
-            onPreset={(next) => syncRange(next, null)}
-            onApplyCustom={(range) => {
-              syncRange("custom", range);
-            }}
-            onClearCustom={() => {
-              syncRange("thisMonth", null);
-            }}
-          />
-          {clampedNote ? (
-            <p className="text-[11px] text-muted-foreground">{clampedNote}</p>
-          ) : null}
+          {/* While the sheet is loading or failed there is no tab strip to host
+              them, so the presets stay here rather than disappearing. */}
+          {data ? null : rangePills}
         </div>
       </div>
       {query.isLoading ? (
@@ -146,6 +159,7 @@ export function HrPayrollPageShell() {
             monthDays={month.days}
             riders={data.riders}
             canManage={canManage}
+            rangePills={rangePills}
           />
         </div>
       )}

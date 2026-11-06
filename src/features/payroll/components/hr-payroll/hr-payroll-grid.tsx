@@ -1,10 +1,10 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { cn } from "@/lib/utils";
-import { HR_FOOTER_KEYS, HR_GROUP_FILL, hrColumnIsNumeric, hrGroupSpans, stickyOffsets } from "../../hr-payroll-columns";
+import { HR_FOOTER_KEYS, HR_GROUP_FILL, hrColumnIsNumeric, hrGroupSpans } from "../../hr-payroll-columns";
 import type { HrColumn } from "../../hr-payroll-columns";
 import { HR_AWAITING, hrFooterTotals, hrSalaryShortfall } from "../../hr-payroll-formulas";
 import { HR_STATUS_ORDER, hrStatusPaint, hrStatusStyle } from "../../hr-payroll-status";
@@ -23,11 +23,16 @@ import { PayrollIdentityCell, hrIdentityField } from "../../payroll-identity-cel
 import { PayrollRowLink } from "../../payroll-row-link";
 import "./hr-payroll.css";
 
+/** Rows painted before the virtualiser has measured the scroll container. */
+const FALLBACK_ROW_COUNT = 40;
+/** Matches the virtualiser's `estimateSize` so the first paint does not jump. */
+const FALLBACK_ROW_HEIGHT = 26;
+
 function HrDataRow({
   row,
   index,
   columns,
-  offsets,
+  boxes,
   flash,
   canManage,
   awaiting,
@@ -47,7 +52,7 @@ function HrDataRow({
   row: HrPayrollRow;
   index: number;
   columns: readonly HrColumn[];
-  offsets: readonly number[];
+  boxes: readonly HrStickyBox[];
   flash: boolean;
   canManage: boolean;
   awaiting: string;
@@ -68,7 +73,7 @@ function HrDataRow({
     <tr className={flash ? "hrpay-flash" : undefined}>
       {columns.map((column, columnIndex) => {
         const paint = column.key === "name" ? hrStatusPaint(row.statusKey, row.jobEndDescription) : null;
-        const sticky = stickyBox(columnIndex, offsets, column.width);
+        const sticky = boxes[columnIndex];
         const tone =
           paint && paint.fill !== "transparent" ? { background: paint.fill, color: paint.text } : undefined;
         return (
@@ -114,9 +119,11 @@ function HrDataRow({
  */
 const HrRow = memo(HrDataRow);
 
+export const HR_STICKY_COLUMNS = 4;
+
 function stickyOnly(index: number): string | undefined {
-  if (index === 3) return "hrpay-sticky hrpay-edge";
-  if (index < 4) return "hrpay-sticky";
+  if (index === HR_STICKY_COLUMNS - 1) return "hrpay-sticky hrpay-edge";
+  if (index < HR_STICKY_COLUMNS) return "hrpay-sticky";
   return undefined;
 }
 
@@ -125,13 +132,26 @@ function withSticky(base: string, index: number): string {
   return sticky ? `${base} ${sticky}` : base;
 }
 
-function stickyBox(
-  index: number,
-  offsets: readonly number[],
-  width: number,
-): { insetInlineStart: number; width: number; minWidth: number } | undefined {
-  if (index >= 4) return undefined;
-  return { insetInlineStart: offsets[index] ?? 0, width, minWidth: width };
+/**
+ * The inline box every frozen cell shares: the offset its column starts at and
+ * the width the browser actually gave that column.
+ *
+ * The widths are **measured** (`measureStickyWidths`) and not the declared
+ * `column.width`, because `table-layout: auto` may hand a column a few pixels
+ * more than the design asked for when a cell is wider than it. A frozen cell
+ * pinned to the declared width then either leaves a sliver of the columns
+ * sliding underneath visible, or overlaps the next frozen cell — which is what
+ * reads as "the frozen columns flicker" while scrolling.
+ */
+export type HrStickyBox = { left: number; insetInlineStart: number; width: number; minWidth: number; maxWidth: number };
+
+function stickyBoxes(widths: readonly number[]): HrStickyBox[] {
+  let at = 0;
+  return widths.map((width) => {
+    const box = { left: at, insetInlineStart: at, width, minWidth: width, maxWidth: width };
+    at += width;
+    return box;
+  });
 }
 
 type HrSortMode = "az" | "za" | "small" | "large" | "colour";
@@ -543,7 +563,41 @@ export function HrPayrollGrid(props: {
 }): JSX.Element {
   const [sort, setSort] = useState<HrSort | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const offsets = useMemo(() => stickyOffsets(props.columns), [props.columns]);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const declaredWidths = useMemo(
+    () => Array.from({ length: HR_STICKY_COLUMNS }, (_, index) => props.columns[index]?.width ?? 0),
+    [props.columns],
+  );
+  const [measuredWidths, setMeasuredWidths] = useState<readonly number[]>([]);
+  /**
+   * The frozen cells must be pinned to the width the browser actually gave the
+   * column, not the width the design asked for: `table-layout: auto` widens a
+   * column when a cell is wider than its declared width, and a frozen cell
+   * pinned to the smaller number leaves a sliver of the sliding columns visible
+   * (or overlaps its neighbour), which is what reads as flicker while scrolling.
+   */
+  useLayoutEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+    const read = () => {
+      const header = table.tHead?.rows[1];
+      if (!header) return;
+      const next = declaredWidths.map((declared, index) => {
+        const cell = header.cells[index];
+        const width = cell ? Math.round(cell.getBoundingClientRect().width) : 0;
+        return width > 0 ? width : declared;
+      });
+      setMeasuredWidths((current) =>
+        current.length === next.length && current.every((width, index) => width === next[index]) ? current : next,
+      );
+    };
+    read();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(read);
+    observer?.observe(table);
+    return () => observer?.disconnect();
+  }, [declaredWidths]);
+  const stickyWidths = measuredWidths.length === declaredWidths.length ? measuredWidths : declaredWidths;
+  const boxes = useMemo(() => stickyBoxes(stickyWidths), [stickyWidths]);
   const ordered = [...props.rows].sort((a, b) => {
     if (props.groupBy !== "none") {
       const group = groupRank(a, props.groupBy).localeCompare(groupRank(b, props.groupBy));
@@ -581,7 +635,7 @@ export function HrPayrollGrid(props: {
       row={row}
       index={index}
       columns={props.columns}
-      offsets={offsets}
+      boxes={boxes}
       flash={props.flash.has(row.driverId)}
       canManage={props.canManage}
       awaiting={props.awaiting}
@@ -606,7 +660,20 @@ export function HrPayrollGrid(props: {
       </tr>,
     );
   } else if (virtualise) {
-    const items = virtualizer.getVirtualItems();
+    const measured = virtualizer.getVirtualItems();
+    // The virtualiser reads `scrollRef.current.clientHeight`, which is 0 until the
+    // browser has laid the sheet out. On that first frame it reports no items, the
+    // body rendered empty and only the sticky footer showed — the page looked like a
+    // table with no rows. Paint the first screenful directly and let the measured
+    // window take over the moment it exists.
+    const unmeasured = measured.length === 0;
+    const items = unmeasured
+      ? ordered.slice(0, FALLBACK_ROW_COUNT).map((_, index) => ({
+          index,
+          start: index * FALLBACK_ROW_HEIGHT,
+          end: (index + 1) * FALLBACK_ROW_HEIGHT,
+        }))
+      : measured;
     body.push(
       <tr key="pad-top" aria-hidden>
         <td colSpan={props.columns.length + 1} style={{ height: items[0]?.start ?? 0, padding: 0 }} />
@@ -621,7 +688,9 @@ export function HrPayrollGrid(props: {
         <td
           colSpan={props.columns.length + 1}
           style={{
-            height: Math.max(0, virtualizer.getTotalSize() - (items.at(-1)?.end ?? 0)),
+            height: unmeasured
+              ? 0
+              : Math.max(0, virtualizer.getTotalSize() - (items.at(-1)?.end ?? 0)),
             padding: 0,
           }}
         />
@@ -647,34 +716,49 @@ export function HrPayrollGrid(props: {
       body.push(renderRow(row, dataIndex));
     }
   }
+  // A band that crosses the frozen column boundary is split in two: the frozen
+  // part (columns 0..3) is sticky, the rest scrolls. Leaving it as one cell made
+  // the top band slide away from the pinned columns and paint over them.
+  const bandCells: { group: HrPayrollGroup; count: number; start: number }[] = [];
   let bandStart = 0;
-  const bands = hrGroupSpans(props.columns).map((span) => {
+  for (const span of hrGroupSpans(props.columns)) {
     const start = bandStart;
-    bandStart += span.count;
-    // A band that spans past the frozen columns must scroll with the table: a
-    // 19-column-wide sticky band would sit on top of the columns sliding under it.
-    const sticky = start < 4 && start + span.count <= 4;
-    const edge = sticky && start + span.count === 4;
+    const end = bandStart + span.count;
+    if (start < HR_STICKY_COLUMNS && end > HR_STICKY_COLUMNS) {
+      bandCells.push({ group: span.group, count: HR_STICKY_COLUMNS - start, start });
+      bandCells.push({ group: span.group, count: end - HR_STICKY_COLUMNS, start: HR_STICKY_COLUMNS });
+    } else {
+      bandCells.push({ group: span.group, count: span.count, start });
+    }
+    bandStart = end;
+  }
+  const bands = bandCells.map((cell) => {
+    const sticky = cell.start < HR_STICKY_COLUMNS;
+    const edge = sticky && cell.start + cell.count === HR_STICKY_COLUMNS;
     const bandClass = edge ? "hrpay-band hrpay-sticky hrpay-edge" : sticky ? "hrpay-band hrpay-sticky" : "hrpay-band";
     return (
       <th
-        key={`${span.group}-${start}`}
+        key={`${cell.group}-${cell.start}`}
         className={bandClass}
-        colSpan={span.count}
+        colSpan={cell.count}
         style={
           sticky
-            ? { background: HR_GROUP_FILL[span.group], insetInlineStart: offsets[start] ?? 0 }
-            : { background: HR_GROUP_FILL[span.group] }
+            ? {
+                background: HR_GROUP_FILL[cell.group],
+                left: boxes[cell.start]?.left ?? 0,
+                insetInlineStart: boxes[cell.start]?.insetInlineStart ?? 0,
+              }
+            : { background: HR_GROUP_FILL[cell.group] }
         }
       >
-        {props.groupLabels[span.group]}
+        {props.groupLabels[cell.group]}
       </th>
     );
   });
   return (
     <>
       <div className="hrpay-scroll" ref={scrollRef}>
-        <table className="hrpay-table">
+        <table className="hrpay-table" ref={tableRef}>
           <thead>
             <tr>
               {bands}
@@ -700,7 +784,7 @@ export function HrPayrollGrid(props: {
                   onSort={(next) => setSort(applyFunnelSort(column, next))}
                   numeric={hrColumnIsNumeric(column)}
                   className={withSticky(cn(TABLE_HEAD_CLASS, "hrpay-colhead"), index)}
-                  style={stickyBox(index, offsets, column.width)}
+                  style={boxes[index]}
                 />
               ))}
               <th
@@ -717,7 +801,7 @@ export function HrPayrollGrid(props: {
                 const summed = footerMoney(column.key, totals);
                 const text = index === riderLabelAt ? props.totalRiders : summed ?? "";
                 return (
-                  <td key={column.key} className={stickyOnly(index)} style={stickyBox(index, offsets, column.width)}>
+                  <td key={column.key} className={stickyOnly(index)} style={boxes[index]}>
                     {text}
                   </td>
                 );
