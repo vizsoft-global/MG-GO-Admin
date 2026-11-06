@@ -47,6 +47,20 @@ export type HrBundleRow = {
   projectKey: string;
   nationality: string;
   nationalityCategory: string;
+  /**
+   * The raw keys behind the two nationality columns and the restaurant.
+   * The labels are what the sheet prints; these are what the inline pickers
+   * bind to, because a label is not an identity.
+   */
+  nationalityCategoryKeys: string[];
+  restaurantId: string;
+  /** The raw keys behind the catalog cells, so the pickers bind to an identity. */
+  sectionKey: string;
+  sponsorKey: string;
+  companyKey: string;
+  /** `YYYY-MM-DD` for an `<input type="date">`. */
+  workStartDate: string;
+  jobEndDate: string;
   statusKey: string;
   statusLabel: string;
   section: string;
@@ -131,6 +145,19 @@ export type HrPayrollRow = {
   bankCode: string;
   zoneId: string;
   projectKey: string;
+  /** Raw keys for the Nationality, Nationality Category and Restaurant cells. */
+  nationalityCode: string;
+  nationalityCategoryKey: string;
+  restaurantId: string;
+  /** Raw keys for the catalog and date cells added in the second inline pass. */
+  sponsorKey: string;
+  sectionKey: string;
+  positionKey: string;
+  companyKey: string;
+  workStartDate: string;
+  jobEndDate: string;
+  /** The raw `drivers.hiring_type` key; the cell prints the enum label. */
+  hiringType: string;
   cells: Record<string, string>;
   numbers: HrPayrollNumbers;
   edit: HrEditState;

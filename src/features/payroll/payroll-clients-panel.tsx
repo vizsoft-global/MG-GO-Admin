@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/table";
 import type { PayrollClientRow } from "./payroll-clients";
 import { PAYROLL_RULE_KINDS } from "./payroll-clients";
-import { useDeletePayrollClient, useUpsertPayrollClient } from "./use-payroll-clients";
+import { useDeletePayrollClient, usePayrollClients, useUpsertPayrollClient } from "./use-payroll-clients";
 
 type Draft = {
   key: string | null;
@@ -119,16 +119,19 @@ function NumberField({
  * every rider's `project_key` points at it.
  */
 export function PayrollClientsPanel({
-  rows,
+  rows: rowsProp,
   title,
   subtitle,
 }: {
-  rows: PayrollClientRow[];
+  /** Server-rendered on `/settings/payroll-clients`; Employee Settings omits it. */
+  rows?: PayrollClientRow[];
   title: string;
   subtitle: string;
 }) {
   const t = useTranslations("pages.settings.payrollClients");
   const router = useRouter();
+  const liveClients = usePayrollClients();
+  const rows = rowsProp ?? liveClients.data ?? [];
   const upsert = useUpsertPayrollClient();
   const remove = useDeletePayrollClient();
   const [open, setOpen] = useState(false);

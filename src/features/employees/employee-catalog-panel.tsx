@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
-import { Plus, Upload } from "lucide-react";
+import { Plus, Trash2, Upload } from "lucide-react";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppListCard } from "@/components/app/app-list-card";
@@ -23,23 +24,35 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { catalogKeyFromLabel, CATALOG_KEY_RE, type EmployeeCatalogKind, type EmployeeCatalogRow } from "./employee-catalogs";
-import { upsertEmployeeCatalog } from "./employee-catalogs-actions";
+import { deleteEmployeeCatalog, upsertEmployeeCatalog } from "./employee-catalogs-actions";
+import { useEmployeeCatalog } from "./use-employee-catalogs";
 import { SponsorshipImportDialog } from "./sponsorship-import-dialog";
+import { queryKeys } from "@/lib/query/query-keys";
 import { toast } from "sonner";
 
 export function EmployeeCatalogPanel({
   kind,
-  rows,
+  rows: rowsProp,
   title,
   subtitle,
 }: {
   kind: EmployeeCatalogKind;
-  rows: EmployeeCatalogRow[];
+  /**
+   * Server-rendered rows for the `/settings/*` page. The Employee Settings
+   * dialog omits it and reads the catalog itself, so opening a catalog inside
+   * the Employees page never needs a route change or a server round trip.
+   */
+  rows?: EmployeeCatalogRow[];
   title: string;
   subtitle: string;
 }) {
   const t = useTranslations("pages.settings.employeeCatalogs");
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const live = useEmployeeCatalog(kind);
+  const rows = useMemo(() => rowsProp ?? live.data ?? [], [rowsProp, live.data]);
+  const [deleteTarget, setDeleteTarget] = useState<EmployeeCatalogRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [key, setKey] = useState("");
@@ -124,6 +137,24 @@ export function EmployeeCatalogPanel({
     toast.success(t("saved"));
     setOpen(false);
     reset();
+    await queryClient.invalidateQueries({ queryKey: queryKeys.employees.catalog(kind) });
+    router.refresh();
+  };
+
+  const remove = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const result = await deleteEmployeeCatalog({ kind, key: deleteTarget.key });
+    setDeleting(false);
+    if ("error" in result) {
+      toast.error(t(`errors.${result.error}`));
+      return;
+    }
+    toast.success(t("deleted"));
+    setDeleteTarget(null);
+    setOpen(false);
+    reset();
+    await queryClient.invalidateQueries({ queryKey: queryKeys.employees.catalog(kind) });
     router.refresh();
   };
 
@@ -307,11 +338,53 @@ export function EmployeeCatalogPanel({
             ) : null}
           </div>
           <AppModalFooter title={editing ? t("edit") : t("add")} subtitle={title}>
+            {editing && !editing.is_system ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setDeleteTarget(editing)}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden />
+                {t("delete")}
+              </Button>
+            ) : null}
             <Button type="button" variant="outline" className="h-9" onClick={() => setOpen(false)}>
               {t("cancel")}
             </Button>
             <Button type="button" className="h-9" disabled={saving} onClick={() => void save()}>
               {t("save")}
+            </Button>
+          </AppModalFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent showCloseButton closeOutside className="w-[min(460px,96vw)]">
+          <div className="px-5 pt-4 pb-2 text-sm text-muted-foreground">
+            {t("deleteBody", { label: deleteTarget?.label_en ?? "" })}
+          </div>
+          <AppModalFooter title={t("deleteTitle")} subtitle={title}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9"
+              onClick={() => setDeleteTarget(null)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              type="button"
+              className="h-9 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={() => void remove()}
+            >
+              {deleting ? t("saving") : t("delete")}
             </Button>
           </AppModalFooter>
         </DialogContent>

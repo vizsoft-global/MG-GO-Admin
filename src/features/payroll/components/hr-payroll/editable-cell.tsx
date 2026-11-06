@@ -11,6 +11,9 @@ import type { HrColumn } from "../../hr-payroll-columns";
 
 const COMMIT_DEBOUNCE_MS = 400;
 
+/** The free-text grid fields: the two bank strings and a job-end description. */
+export type HrTextCellField = "bankNumber" | "currency" | "jobEndDescription";
+
 /**
  * Move focus to the same column on the row below (`Enter`).
  *
@@ -74,13 +77,20 @@ export function HrAmountCell({
     };
   }, []);
 
-  // A saved cell drops the draft so the formatted value shows through again.
-  useEffect(() => {
-    if (status.state === "saved") setDraft(null);
-  }, [status.state]);
-
+  /**
+   * A saved cell drops the draft so the formatted figure shows through again.
+   * Derived rather than synced in an effect: a `setState` in an effect cascades
+   * an extra render on every save, and this is a pure function of the status.
+   */
+  const liveDraft = status.state === "saved" ? null : draft;
   const error = status.state === "error" ? errorText(status.error) : null;
 
+  /**
+   * A cleared box commits zero (see `parseHrAmount`), so deleting a deduction
+   * writes `0` instead of leaving the old figure on screen; anything that is not
+   * a number is refused and keeps the operator's text. Dropping the draft on blur
+   * puts the cell back on the formatted `0.000` figure the sheet prints.
+   */
   function commit(text: string): void {
     if (timer.current != null) {
       window.clearTimeout(timer.current);
@@ -110,7 +120,7 @@ export function HrAmountCell({
           "w-full pe-5 tabular-nums",
           error && "border-destructive ring-1 ring-destructive/40",
         )}
-        value={draft ?? display}
+        value={liveDraft ?? display}
         title={error ?? undefined}
         aria-invalid={error ? true : undefined}
         readOnly={!canEdit}
@@ -168,15 +178,20 @@ export function HrTextCell({
   errorText,
   canEdit,
   onCommit,
+  debounceMs = 600,
+  ariaLabel,
 }: {
   driverId: string;
-  field: "bankNumber" | "currency";
+  field: HrTextCellField;
   columnKey: string;
   value: string;
   status: PayrollCellStatus;
   errorText: (reason: string | undefined) => string;
   canEdit: boolean;
-  onCommit: (driverId: string, field: "bankNumber" | "currency", value: string) => void;
+  onCommit: (driverId: string, field: HrTextCellField, value: string) => void;
+  /** A description is prose, so it waits longer than an account number. */
+  debounceMs?: number;
+  ariaLabel?: string;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
@@ -187,10 +202,7 @@ export function HrTextCell({
     };
   }, []);
 
-  useEffect(() => {
-    if (status.state === "saved") setDraft(null);
-  }, [status.state]);
-
+  const liveDraft = status.state === "saved" ? null : draft;
   const error = status.state === "error" ? errorText(status.error) : null;
 
   function commit(text: string): void {
@@ -207,7 +219,7 @@ export function HrTextCell({
     timer.current = window.setTimeout(() => {
       timer.current = null;
       commit(text);
-    }, 600);
+    }, debounceMs);
   }
 
   return (
@@ -219,7 +231,8 @@ export function HrTextCell({
           "w-full pe-5",
           error && "border-destructive ring-1 ring-destructive/40",
         )}
-        value={draft ?? value}
+        value={liveDraft ?? value}
+        aria-label={ariaLabel}
         title={error ?? undefined}
         aria-invalid={error ? true : undefined}
         readOnly={!canEdit}
@@ -301,6 +314,48 @@ export function HrOptionCell({
         </option>
       ))}
     </select>
+  );
+}
+
+/**
+ * A grid cell bound to a date.
+ *
+ * The picker writes on `change`, which a native date input fires the moment a
+ * day is chosen — no separate commit control, and `onBlur` catches a keyboard
+ * entry the browser did not treat as a change. Clearing the picker sends `""`,
+ * which the callable turns into `FieldValue.delete()`.
+ */
+export function HrDateCell({
+  value,
+  ariaLabel,
+  status,
+  errorText,
+  canEdit,
+  onCommit,
+}: {
+  value: string;
+  ariaLabel: string;
+  status: PayrollCellStatus;
+  errorText: (reason: string | undefined) => string;
+  canEdit: boolean;
+  onCommit: (value: string) => void;
+}) {
+  const error = status.state === "error" ? errorText(status.error) : null;
+  return (
+    <input
+      type="date"
+      className={cn(INLINE_EDIT_CELL_CLASS, "w-full", error && "border-destructive ring-1 ring-destructive/40")}
+      value={value}
+      aria-label={ariaLabel}
+      title={error ?? undefined}
+      disabled={!canEdit}
+      aria-invalid={error ? true : undefined}
+      onChange={(event) => onCommit(event.target.value)}
+      onBlur={(event) => {
+        // A browser that reports the typed value only on blur still commits.
+        if (event.target.value !== value) onCommit(event.target.value);
+      }}
+    />
   );
 }
 
