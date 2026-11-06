@@ -6,11 +6,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Language (mandatory)
 
-Always respond to the user in **Kannada (ಕನ್ನಡ)**.
+Always respond to the user in **English**.
 
-Keep code, file paths, commands, identifiers, and error messages in their original form (usually English). Explanations, summaries, and UI-facing guidance go in Kannada.
+Keep code, file paths, commands, identifiers, and error messages in their original form.
 
-Applies to every agent and subagent working in this repo — this file is the global ruleset; `.cursor/rules/KA.mdc` mirrors it for Cursor.
+Applies to every agent and subagent working in this repo — this file is the global ruleset.
 
 ## Stack — production only
 

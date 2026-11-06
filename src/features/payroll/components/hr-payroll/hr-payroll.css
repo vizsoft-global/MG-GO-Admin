@@ -1,5 +1,8 @@
 .hrpay {
   display: flex;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   min-height: 0;
   flex: 1;
   flex-direction: column;
@@ -64,6 +67,27 @@
   color: #fff;
 }
 
+.hrpay-range-bar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The pills arrive as their own flex row; pin it to the start edge so the
+   chips line up with the filter section below. */
+.hrpay-range-bar > * {
+  justify-content: flex-start;
+}
+
 .hrpay-tabs {
   display: flex;
   gap: 0;
@@ -96,9 +120,9 @@
 
 .hrpay-search,
 .hrpay-select {
-  height: 36px;
-  min-height: 36px;
-  padding: 0 10px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 8px;
   border: 1px solid #d7d7e0;
   border-radius: 8px;
   background: #fff;
@@ -259,6 +283,9 @@
 }
 
 .hrpay-scroll {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
@@ -268,6 +295,8 @@
 }
 
 .hrpay-table {
+  width: max-content;
+  min-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 12.5px;
@@ -359,10 +388,22 @@
   background: #fff;
 }
 
+/*
+ * The frozen headers must outrank the headers that scroll under them.
+ * `.hrpay-table th.hrpay-colhead` sets z-index 3 and is more specific than a
+ * two-class rule, so the sticky twins have to name the element and the table to
+ * win — otherwise both sit at 3, DOM order decides, and the scrolled column
+ * headers paint over the pinned ones, which reads as the frozen header sliding.
+ */
 .hrpay-band.hrpay-sticky,
-.hrpay-colhead.hrpay-sticky,
-.hrpay-filter.hrpay-sticky {
+.hrpay-table th.hrpay-colhead.hrpay-sticky,
+.hrpay-table th.hrpay-filter.hrpay-sticky {
   z-index: 4;
+}
+
+.hrpay-foot td.hrpay-sticky {
+  z-index: 5;
+  background: #f7f7fb;
 }
 
 .hrpay-edge {
@@ -473,9 +514,9 @@
 .hrpay-fbar {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 8px;
-  padding: 12px;
+  gap: 6px;
+  margin-bottom: 0;
+  padding: 6px;
   border: 1px solid #e4e4ea;
   border-radius: 12px;
   background: #fff;
@@ -484,7 +525,8 @@
 .hrpay-fbar label {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  min-width: 0;
   font-size: 11px;
   color: #52525b;
 }
@@ -654,26 +696,29 @@
 
 .hrpay-stage {
   display: flex;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   overflow: auto;
 }
 
 .hrpay-stage .hrpay-kpis {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .hrpay-stage .hrpay-kpi {
-  padding: 10px 12px;
+  padding: 4px 10px;
 }
 
 .hrpay-stage .hrpay-kpi-value {
-  margin-top: 4px;
-  font-size: 24px;
+  margin-top: 0;
+  font-size: 17px;
 }
 
 .hrpay-kpi-lead {
@@ -705,8 +750,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 14px;
-  padding: 8px 12px;
+  gap: 2px 10px;
+  padding: 3px 8px;
   border: 1px solid #e4e4ea;
   border-radius: 12px;
   background: #fff;
@@ -715,12 +760,12 @@
 .hrpay-legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   border: 0;
   background: transparent;
   padding: 0;
   color: #292a3f;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.2;
   cursor: pointer;
 }
@@ -744,18 +789,18 @@
 .hrpay-stiles {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 6px;
+  gap: 5px;
 }
 
 .hrpay-st {
   display: flex;
-  min-height: 52px;
+  min-height: 30px;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   border: 1px solid #e4e4ea;
   border-radius: 10px;
   background: #fff;
-  padding: 6px 8px;
+  padding: 2px 7px;
   text-align: start;
   cursor: pointer;
 }
@@ -766,8 +811,8 @@
 }
 
 .hrpay-st-swatch {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex: none;
   border-radius: 6px;
 }
@@ -783,15 +828,15 @@
 
 .hrpay-st b {
   display: block;
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1;
 }
 
 .hrpay-st span {
   display: block;
   color: #52525b;
-  font-size: 11px;
-  line-height: 1.2;
+  font-size: 10px;
+  line-height: 1.15;
 }
 
 .hrpay-fbar,
@@ -807,8 +852,11 @@
 
 .hrpay-sheet {
   display: flex;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   min-height: 280px;
-  flex: 1 0 280px;
+  flex: 1 1 auto;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid #e4e4ea;
@@ -1124,15 +1172,39 @@
   }
 }
 
-/* The sheet: a fixed header, a scrolling body, and a footer that never scrolls away. */
-.hrpay-sheet {
-  display: flex;
-  min-height: 0;
+/* The sheet: a fixed header, a scrolling body, and a footer that never scrolls away.
+
+   Both extremes were broken, and each caused the report "only the total row is
+   visible". `min-height: 0` let the sheet shrink to nothing once the filters,
+   legend and status tiles had taken the stage, which left the body at 0px and
+   only the summary footer showed. Then a `flex-shrink: 0` floor of 520px made
+   the stage overflow by ~200px at 1366x768 — the controls are ~330px of it — so
+   the table started below the fold and the page looked like it had no table.
+
+   So the sheet fills exactly what the stage has left (`flex: 1 1 0`) and the
+   only floor is the smallest height that still shows a header, a few rows and
+   the total row. Nothing here pushes the table past the fold: on a short screen
+   the stage scrolls as a last resort, and the sheet's own region never collapses
+   under the sticky footer. */
+.hrpay-sheet:not(.hrpay-sheet-summary) {
   flex: 1 1 0;
-  flex-direction: column;
+  min-height: 180px;
 }
 
-.hrpay-sheet > .hrpay-scroll {
+/* Descendant, not child: the grid used to be wrapped in a second sheet, and a
+   wrapper appearing again must not be able to take the floor away. */
+.hrpay-sheet:not(.hrpay-sheet-summary) .hrpay-scroll {
+  flex: 1 1 0;
+  /* Not a 360px floor: the floor belonged on the sheet. A min-height here was
+     what shoved the body out of the stage on every 14" laptop. */
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Last line of defence: even if a branch renders the scroll region without a
+   `.hrpay-sheet` above it, the table body keeps a real height instead of
+   collapsing under the sticky total row. */
+.hrpay-stage .hrpay-scroll {
   flex: 1 1 0;
   min-height: 0;
 }
