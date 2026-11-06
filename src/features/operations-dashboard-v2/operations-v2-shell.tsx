@@ -5,6 +5,7 @@ import { ChevronRight, Download, Info, RefreshCw, Search, Users } from "lucide-r
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { AppTableColumnPicker } from "@/components/app/app-table-column-picker";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -19,6 +20,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/auth-context";
+import { useTableColumnVisibility, type TableColumnVisibilityOption } from "@/hooks/use-table-column-visibility";
 import { downloadCsv } from "@/lib/csv/client-download";
 import { formatKuwaitDateLabel, kuwaitSatFriWeek, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { formatPct, roundPercent } from "@/lib/format/percent";
