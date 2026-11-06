@@ -71,7 +71,7 @@ describe("payroll tables expose the Columns control", () => {
       const source = readFileSync(path, "utf8");
       assert.match(
         source,
-        /(AppTableColumnPicker|TableToolbar|ColumnsPopover|PayrollColumnsMenu|CombinedColumnsMenu)/,
+        /(AppTableColumnPicker|ColumnOrderMenu|TableToolbar|ColumnsPopover|PayrollColumnsMenu|CombinedColumnsMenu)/,
         `${path} renders a table without a Columns control`,
       );
     });

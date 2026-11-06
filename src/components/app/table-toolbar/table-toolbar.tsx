@@ -154,6 +154,7 @@ export function TableToolbar({
               onToggle={prefs.toggleColumn}
               onReset={prefs.resetColumns}
               onReorder={prefs.reorderColumn}
+              onMove={prefs.moveColumn}
               visibleCount={prefs.visibleCount}
             />
           ) : null}

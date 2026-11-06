@@ -40,6 +40,9 @@ import {
   isMasterDataColumn,
   stickyIdentityStyle,
 } from "./payroll-heading";
+import { ColumnOrderMenu } from "@/components/app/column-order-menu";
+import { useListColumns } from "@/hooks/use-list-columns";
+import { PAYROLL_APP_ATTENDANCE_COLUMNS_PREF_KEY } from "@/lib/ui-preferences/types";
 import { identityOffsets, withSerialColumn } from "./payroll-table-identity";
 import { PayrollRowLink } from "./payroll-row-link";
 import { payrollColumnLabel } from "./payroll-column-labels";
@@ -94,16 +97,26 @@ export function ApplicationAttendanceTab({
   const [sort, setSort] = useState<ColumnSort>(null);
   const headings = usePayrollColumnConfig();
   const headingConfig = useMemo(() => configByKey(headings.data), [headings.data]);
-  const columns = useMemo(
-    () =>
-      withSerialColumn(
-        APP_ATTENDANCE_LEAD_COLUMNS.filter(
-          (column) => !columnHiddenIn(column.id, "app_attendance", headingConfig),
-        ),
-        PAYROLL_SERIAL_COLUMN,
-      ),
-    [headingConfig],
+  const leadColumnIds = useMemo(
+    () => APP_ATTENDANCE_LEAD_COLUMNS.map((column) => column.id),
+    [],
   );
+  const defaultLeadVisible = useMemo(
+    () => leadColumnIds.filter((id) => !columnHiddenIn(id, "app_attendance", headingConfig)),
+    [leadColumnIds, headingConfig],
+  );
+  const leadColumns = useListColumns(
+    PAYROLL_APP_ATTENDANCE_COLUMNS_PREF_KEY,
+    leadColumnIds,
+    { defaultVisible: defaultLeadVisible },
+  );
+  const columns = useMemo(() => {
+    const byId = new Map(APP_ATTENDANCE_LEAD_COLUMNS.map((column) => [column.id, column]));
+    const ordered = leadColumns.visibleIds
+      .map((id) => byId.get(id))
+      .filter((column): column is NonNullable<typeof column> => Boolean(column));
+    return withSerialColumn(ordered, PAYROLL_SERIAL_COLUMN);
+  }, [leadColumns.visibleIds]);
   const columnOffsets = useMemo(() => identityOffsets(columns), [columns]);
   const frozenCount = columnOffsets.filter((offset) => offset >= 0).length;
   const dates = month.dates;
@@ -236,12 +249,28 @@ export function ApplicationAttendanceTab({
         prefs={listPrefs}
         onUpdate={updateListPrefs}
         trailing={
-          <PayrollColumnsMenu
-            view="app_attendance"
-            config={headingConfig}
-            fallbackLabel={fallbackLabel}
-            canManage={canManage}
-          />
+          <>
+            <ColumnOrderMenu
+              columns={leadColumns}
+              labelFor={labelOf}
+              labels={{
+                columns: t("columnsMenu.columns"),
+                title: t("columnsMenu.title"),
+                hint: t("columnsMenu.hint"),
+                pinned: t("columnsMenu.pinnedAppAttendance"),
+                drag: t("columnsMenu.drag"),
+                show: t("columnsMenu.show"),
+                hide: t("columnsMenu.hide"),
+                reset: t("columnsMenu.reset"),
+              }}
+            />
+            <PayrollColumnsMenu
+              view="app_attendance"
+              config={headingConfig}
+              fallbackLabel={fallbackLabel}
+              canManage={canManage}
+            />
+          </>
         }
       />
 

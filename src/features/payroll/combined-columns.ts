@@ -1,4 +1,5 @@
 import { formatPct } from "@/lib/format/percent";
+import { mergeColumnOrder } from "@/lib/table-column-order";
 import {
   combinedEfficiencyPct,
   combinedRequiredHours,
@@ -223,10 +224,7 @@ export function normalizeCombinedColumns(
   visible: readonly string[] | undefined,
 ): { order: string[]; visible: Set<string> } {
   const known = new Set(COMBINED_COLUMN_ORDER);
-  const nextOrder = (order ?? []).filter((id) => known.has(id));
-  for (const id of COMBINED_COLUMN_ORDER) {
-    if (!nextOrder.includes(id)) nextOrder.push(id);
-  }
+  const nextOrder = mergeColumnOrder(COMBINED_COLUMN_ORDER, order);
   const visibleSet = new Set((visible ?? []).filter((id) => known.has(id)));
   if (visibleSet.size === 0) for (const id of COMBINED_COLUMN_ORDER) visibleSet.add(id);
   return { order: nextOrder, visible: visibleSet };

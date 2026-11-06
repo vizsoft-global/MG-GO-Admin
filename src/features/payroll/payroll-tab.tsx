@@ -4,13 +4,11 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, Award, Clock, Hand, Percent, UserCheck, Users } from "lucide-react";
 import { GroupedSections, groupRows } from "@/components/app/app-list-controls";
-import { AppTableColumnPicker } from "@/components/app/app-table-column-picker";
+import { ColumnOrderMenu } from "@/components/app/column-order-menu";
 import { PayrollKpiCard } from "./payroll-kpi-card";
 import { kpiSelected, nextKpiSelection, riderMatchesKpi, type PayrollKpiKey } from "./payroll-kpi-selection";
-import {
-  useTableColumnVisibility,
-  type TableColumnVisibilityOption,
-} from "@/hooks/use-table-column-visibility";
+import { useListColumns } from "@/hooks/use-list-columns";
+import { PAYROLL_SUMMARY_COLUMNS_PREF_KEY } from "@/lib/ui-preferences/types";
 import { formatPct } from "@/lib/format/percent";
 import {
   payrollRiderMatchesSearch,
@@ -47,21 +45,25 @@ export function PayrollTab({
   /** The card currently narrowing the table; clicking it again clears it. */
   const [kpi, setKpi] = useState<PayrollKpiKey | null>(null);
   const { prefs, update } = usePayrollListPrefs("payroll-summary");
-  const columnOptions = useMemo<TableColumnVisibilityOption[]>(
+  const columnIds = useMemo(
     () =>
-      PAYROLL_SUMMARY_COLUMNS.map((column) => ({
-        id: column.id,
-        label: t(`riderCols.${column.labelKey}`),
-        locked: (PAYROLL_SUMMARY_LOCKED_COLUMNS as readonly string[]).includes(column.id),
-        defaultVisible: !SUMMARY_HIDDEN_BY_DEFAULT.has(column.id),
-      })),
+      PAYROLL_SUMMARY_COLUMNS.filter(
+        (column) => !(PAYROLL_SUMMARY_LOCKED_COLUMNS as readonly string[]).includes(column.id),
+      ).map((column) => column.id),
+    [],
+  );
+  const defaultVisibleIds = useMemo(
+    () => columnIds.filter((id) => !SUMMARY_HIDDEN_BY_DEFAULT.has(id)),
+    [columnIds],
+  );
+  const columns = useListColumns(PAYROLL_SUMMARY_COLUMNS_PREF_KEY, columnIds, {
+    defaultVisible: defaultVisibleIds,
+  });
+  const columnLabels = useMemo(
+    () => new Map(PAYROLL_SUMMARY_COLUMNS.map((column) => [column.id, t(`riderCols.${column.labelKey}`)])),
     [t],
   );
-  const columnVisibility = useTableColumnVisibility("payroll:summary-columns", columnOptions);
-  const visibleColumnIds = useMemo(
-    () => PAYROLL_SUMMARY_COLUMNS.filter((column) => columnVisibility.isVisible(column.id)).map((column) => column.id),
-    [columnVisibility.isVisible],
-  );
+  const visibleColumnIds = columns.visibleIds;
   const searched = useMemo(
     () =>
       riders.filter(
@@ -197,13 +199,19 @@ export function PayrollTab({
         prefs={prefs}
         onUpdate={update}
         trailing={
-          <AppTableColumnPicker
-            options={columnVisibility.pickerOptions}
-            isVisible={columnVisibility.isVisible}
-            onToggle={columnVisibility.toggle}
-            onReset={columnVisibility.reset}
-            sourceLabel={t("tabPayroll")}
-            hiddenCount={columnVisibility.hiddenToggleableCount}
+          <ColumnOrderMenu
+            columns={columns}
+            labelFor={(id) => columnLabels.get(id) ?? id}
+            labels={{
+              columns: t("columnsMenu.columns"),
+              title: t("columnsMenu.title"),
+              hint: t("columnsMenu.hint"),
+              pinned: t("columnsMenu.pinnedSummary"),
+              drag: t("columnsMenu.drag"),
+              show: t("columnsMenu.show"),
+              hide: t("columnsMenu.hide"),
+              reset: t("columnsMenu.reset"),
+            }}
           />
         }
       />
