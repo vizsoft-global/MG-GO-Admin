@@ -472,7 +472,7 @@ export function exportPayrollApplicationAttendanceCsv(
 ) {
   const leadIds = options?.visibleLeadIds
     ? [...new Set(options.visibleLeadIds)].filter((key) =>
-        APP_ATTENDANCE_KEYS.includes(key),
+        (APP_ATTENDANCE_KEYS as readonly string[]).includes(key),
       )
     : [...APP_ATTENDANCE_KEYS];
   const identity = visibleIdentity(
