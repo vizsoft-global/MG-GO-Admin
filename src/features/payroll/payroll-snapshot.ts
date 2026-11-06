@@ -776,7 +776,7 @@ export function assemblePayrollSnapshot(input: {
           // The rules price what the project pays for. Keeta / Five Guys pay the
           // hours Operations loaded; Americana keeps the attendance clock, which is
           // why that project's figures cannot move from this change.
-          loggedHours: hoursForRules(projectView, logged, uploadedHours, clients),
+          loggedHours: hoursForRules(projectView, logged, uploadedHours),
           attendanceHours: logged,
           workingHours: uploadedHours,
           orders: reconOrders(date),
@@ -1159,7 +1159,7 @@ export function snapshotFromRpc(
         date: String(day.d),
         // Same rule as the local assembly: Keeta / Five Guys are judged on the
         // hours Operations loaded, everything else on the attendance clock.
-        loggedHours: hoursForRules(projectView, logged, uploadedHours, clients),
+        loggedHours: hoursForRules(projectView, logged, uploadedHours),
         attendanceHours: logged,
         workingHours: uploadedHours,
         elapsedHours:
