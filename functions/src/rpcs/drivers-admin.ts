@@ -55,6 +55,24 @@ const BULK_ROW_LIMIT = 2000;
 const DRIVER_SCAN_CAP = SCAN_CAP * 5;
 const OFF_DAYS_RE = /^\s*[0-9]+\s*$/;
 const MONTH_RE = /^(\d{4})-(\d{2})/;
+const CIVIL_ID_RE = /^\d{12}$/;
+const PASSPORT_RE = /^[A-Z0-9]{5,20}$/;
+
+/**
+ * Civil ID, mobile and passport are mandatory on every write path, so approval
+ * refuses an intake still missing one instead of minting a login for an
+ * employee HR cannot reconcile.
+ */
+function missingIdentityFields(intake: Dict): string[] {
+  const missing: string[] = [];
+  const phoneDigits = (textOrNull(intake["phone"]) ?? "").replace(/\D/g, "");
+  const civilId = textOrNull(intake["civil_id"]);
+  const passport = (textOrNull(intake["passport_number"]) ?? "").toUpperCase();
+  if (phoneDigits.length < 8) missing.push("phone");
+  if (!civilId || !CIVIL_ID_RE.test(civilId)) missing.push("civil_id");
+  if (!passport || !PASSPORT_RE.test(passport)) missing.push("passport_number");
+  return missing;
+}
 
 const PAYROLL_WRITE_SLUGS = ["payroll.manage", "payroll.create", "payroll.edit", "payroll.delete"];
 const DRIVER_WRITE_SLUGS = ["drivers.manage", "drivers.create", "drivers.edit"];
@@ -349,6 +367,9 @@ async function checkIntakeForApproval(
   }
   if (!textOrNull(intake["full_name"]) || !textOrNull(intake["employee_id"])) {
     return { ok: false, error: "missing_fields" };
+  }
+  if (missingIdentityFields(intake).length > 0) {
+    return { ok: false, error: "missing_profile_fields" };
   }
   const assignment = await intakeOpsAssignment(db, reader, intakeId, intake);
   if (!assignment.assigned && !(await riderIsNonOperational(intake))) {

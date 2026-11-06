@@ -707,7 +707,7 @@ export function assemblePayrollSnapshot(input: {
       tile,
       day: requestDay(req, month),
       zone: rider.zoneName ?? "—",
-      partner: partnerLabel(rider.projectKey),
+      partner: clientByKey.get(rider.projectKey ?? "")?.name ?? partnerLabel(rider.projectKey),
       reviewingDept: reviewingDeptLabel({
         stepName: req.currentStepLabel,
         roleKey: req.roleKey,

@@ -4,13 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import { Fuel, Wrench } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
-import type {
-  DriverProjectKey,
-  VehicleCarType,
-  VehicleCondition,
-  VehicleFuelCompany,
-  VehicleFuelType,
-} from "./fleet-labels";
+import { driverProjectLabel, type VehicleCarType, type VehicleCondition, type VehicleFuelCompany, type VehicleFuelType } from "./fleet-labels";
 
 type VehicleStatus = "active" | "suspended" | "maintenance";
 
@@ -167,17 +161,21 @@ export function FuelCompanyBadge({ value }: { value: VehicleFuelCompany | null |
   );
 }
 
-export function ProjectBadge({ value }: { value: DriverProjectKey | null | undefined }) {
+export function ProjectBadge({ value }: { value: string | null | undefined }) {
   const t = useTranslations("pages.vehicles");
   if (!value) return <span className="text-muted-foreground">—</span>;
+  const label =
+    value === "keeta"
+      ? t("projectKeeta")
+      : value === "americana"
+        ? t("projectAmericana")
+        : value === "five_guys"
+          ? t("projectFiveGuys")
+          : // A client added in Employee Settings prints its own name, never
+            // another client's label.
+            (driverProjectLabel(value) ?? value);
   return (
-    <SoftPill className="bg-fleet-purple text-fleet-purple-fg">
-      {value === "keeta"
-        ? t("projectKeeta")
-        : value === "americana"
-          ? t("projectAmericana")
-          : t("projectFiveGuys")}
-    </SoftPill>
+    <SoftPill className="bg-fleet-purple text-fleet-purple-fg">{label}</SoftPill>
   );
 }
 

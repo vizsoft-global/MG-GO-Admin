@@ -11,6 +11,7 @@ import { cellParticular } from "./payroll-particulars";
 import {
   projectConfigOf,
   projectRowTotals,
+  type PayrollProjectClient,
   type PayrollProjectView,
   type ProjectDayColumn,
 } from "./payroll-projects";
@@ -352,11 +353,13 @@ export function exportPayrollAttendanceOrdersProjectCsv(
   options: PayrollExportOptions & {
     project: PayrollProjectView;
     fileName: string;
+    /** The active client catalog, so a custom client's day shape is honoured. */
+    clients?: readonly PayrollProjectClient[];
     /** The lead columns the screen is showing, in order. */
     visibleLeadIds?: readonly string[];
   },
 ) {
-  const config = projectConfigOf(options.project);
+  const config = projectConfigOf(options.project, options.clients);
   const leadIds = options.visibleLeadIds
     ? AO_LEAD_KEYS.filter((key) => options.visibleLeadIds?.includes(key))
     : [...AO_LEAD_KEYS];
@@ -381,7 +384,7 @@ export function exportPayrollAttendanceOrdersProjectCsv(
         config.usesUploadedHours ? "Total hours" : "Total orders",
       ],
       rows.map((row) => {
-        const totals = projectRowTotals(options.project, row);
+        const totals = projectRowTotals(options.project, row, options.clients);
         return [
           ...identity.cells(row),
           ...dates.flatMap((_, i) =>

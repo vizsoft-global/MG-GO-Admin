@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,12 @@ import { DriverRestaurantPicker } from "../driver-restaurant-picker";
 import { hasOpsAssignment } from "../driver-assignment";
 import { saveDriverProjectSettings } from "../drivers-actions";
 import { SearchableSelect } from "../form/searchable-select";
-import { DRIVER_PROJECT_LABEL, type DriverProjectKey } from "@/features/fleet/fleet-labels";
+import { normalizePayrollClientKey } from "@/features/payroll/payroll-clients";
+import {
+  payrollClientItems,
+  payrollClientRows,
+  usePayrollClients,
+} from "@/features/payroll/use-payroll-clients";
 import type { DriverAccountStatus, DriverDetailModel } from "../types";
 import { useDriverFormOptions } from "../use-driver-form-options";
 
@@ -44,7 +49,11 @@ export function ProjectTab({
   const tNew = useTranslations("pages.driverNew");
   const queryClient = useQueryClient();
   const optionsQuery = useDriverFormOptions();
-  const [projectKey, setProjectKey] = useState<DriverProjectKey | "">(driver.project_key ?? "");
+  const locale = useLocale();
+  const clientQuery = usePayrollClients();
+  const [projectKey, setProjectKey] = useState<string>(
+    () => normalizePayrollClientKey(driver.project_key) ?? "",
+  );
   const [zoneId, setZoneId] = useState(driver.zone_id ?? "");
   const [restaurantIds, setRestaurantIds] = useState(driver.restaurant_ids);
   const [vehicleId, setVehicleId] = useState(driver.vehicle_id ?? "");
@@ -150,11 +159,10 @@ export function ProjectTab({
     await queryClient.invalidateQueries({ queryKey: queryKeys.drivers.detail(driver.id) });
   };
 
-  const projects: { key: DriverProjectKey | ""; label: string }[] = [
-    { key: "americana", label: DRIVER_PROJECT_LABEL.americana },
-    { key: "keeta", label: DRIVER_PROJECT_LABEL.keeta },
-    { key: "five_guys", label: DRIVER_PROJECT_LABEL.five_guys },
-    { key: "", label: t("projectUnset") },
+  const clientRows = payrollClientRows(clientQuery.data);
+  const clientItems = [
+    { value: "", label: t("projectUnset") },
+    ...payrollClientItems(clientRows, locale, projectKey),
   ];
 
   return (
@@ -186,28 +194,17 @@ export function ProjectTab({
           <h3 className="text-[12px] font-bold uppercase tracking-[0.08em] text-[#B5401F]">{t("assignment")}</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5 sm:col-span-2">
-              <Label className="text-[13px] font-medium text-[#565868]">{t("fields.project")}</Label>
-              <div className="grid grid-cols-3 gap-2" role="group" aria-label={t("fields.project")}>
-                {projects.map((item) => {
-                  const pressed = projectKey === item.key;
-                  return (
-                    <button
-                      key={item.label}
-                      type="button"
-                      disabled={locked}
-                      aria-pressed={pressed}
-                      onClick={() => setProjectKey(item.key)}
-                      className={
-                        pressed
-                          ? "min-h-[42px] rounded-lg border-[1.5px] border-[#292A3F] bg-[#ECECF3] text-sm font-bold text-foreground"
-                          : "min-h-[42px] rounded-lg border border-[#D7D7DF] bg-card text-sm font-medium text-foreground"
-                      }
-                    >
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
+              <Label className="text-[13px] font-medium text-[#565868]">{t("fields.client")}</Label>
+              <SearchableSelect
+                value={projectKey}
+                onValueChange={setProjectKey}
+                items={clientItems}
+                placeholder={t("projectUnset")}
+                searchPlaceholder={t("fields.client")}
+                recentsKey="driver-client"
+                disabled={locked}
+                className={PICKER}
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">

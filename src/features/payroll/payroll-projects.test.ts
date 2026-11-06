@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   dayColumnLabelKey,
+  defaultView,
   hoursForRules,
   projectConfigOf,
   projectCounts,
   projectExportName,
   projectKpis,
   projectRowTotals,
+  resolveProjectViews,
   ridersForProject,
   unassignedProjectCount,
   viewOfProjectKey,
@@ -216,4 +218,73 @@ describe("export name", () => {
     assert.equal(projectExportName("keeta", "2026-11"), "MGHub-Payroll-Keeta-Nov-2026");
     assert.equal(projectExportName("five_guys", "2026-11"), "MGHub-Payroll-FiveGuys-Nov-2026");
   });
+
+describe("catalog-driven cards", () => {
+  const clients = [
+    { key: "americana", name: "Americana", isActive: true, sortOrder: 10 },
+    { key: "keeta", name: "Keeta", usesHours: true, isActive: true, sortOrder: 20 },
+    { key: "five_guys", name: "Five Guys", usesHours: true, isActive: true, sortOrder: 30 },
+    // A client added in Employee Settings: the Americana-style profile.
+    { key: "al_musallam", name: "Al Musallam", usesHours: false, isActive: true, sortOrder: 40 },
+  ];
+
+  it("draws a card for every active client, in catalog order", () => {
+    assert.deepEqual(
+      resolveProjectViews(clients).map((client) => client.key),
+      ["americana", "keeta", "five_guys", "al_musallam"],
+    );
+  });
+
+  it("puts a new client's rider on its own card", () => {
+    const riders = [
+      rider({ driverId: "a", projectKey: "americana" }),
+      rider({ driverId: "m", projectKey: "al_musallam" }),
+      rider({ driverId: "n", projectKey: null }),
+    ];
+    assert.deepEqual(ridersForProject(riders, "al_musallam", clients).map((r) => r.driverId), [
+      "m",
+    ]);
+    assert.equal(projectCounts(riders, clients).al_musallam, 1);
+    assert.equal(unassignedProjectCount(riders, clients), 1);
+  });
+
+  it("counts a rider on a deactivated client as unassigned, not on a hidden card", () => {
+    const withRetired = [
+      ...clients,
+      { key: "retired", name: "Retired", isActive: false, sortOrder: 50 },
+    ];
+    const riders = [rider({ driverId: "r", projectKey: "retired" })];
+    assert.equal(viewOfProjectKey("retired", withRetired), null);
+    assert.equal(unassignedProjectCount(riders, withRetired), 1);
+    assert.ok(!resolveProjectViews(withRetired).some((client) => client.key === "retired"));
+  });
+
+  it("falls back to the three when the catalog is empty", () => {
+    assert.deepEqual(
+      resolveProjectViews([]).map((client) => client.key),
+      ["americana", "keeta", "five_guys"],
+    );
+    assert.equal(defaultView([]), "americana");
+    assert.equal(defaultView([{ key: "zeta", name: "Zeta" }]), "zeta");
+  });
+
+  it("prices a new client on orders unless the catalog says hours", () => {
+    assert.equal(projectConfigOf("al_musallam", clients).usesUploadedHours, false);
+    assert.deepEqual(projectConfigOf("al_musallam", clients).dayColumns, ["payroll", "orders"]);
+    assert.equal(
+      projectConfigOf("al_musallam", clients).label,
+      "Al Musallam",
+    );
+  });
+
+  it("names the export after the client and keeps it a valid file stem", () => {
+    assert.equal(
+      projectExportName("al_musallam", "2026-11", clients),
+      "MGHub-Payroll-Al-Musallam-Nov-2026",
+    );
+    // The seeded names keep their approved spelling.
+    assert.equal(projectExportName("five_guys", "2026-11", clients), "MGHub-Payroll-FiveGuys-Nov-2026");
+  });
+});
+
 });

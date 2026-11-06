@@ -983,6 +983,11 @@ function DriverDetailContent({ id }: { id: string }) {
                             ? t(`approveErrors.${key}` as "approveErrors.save_failed")
                             : t("approveErrors.save_failed"),
                         );
+                        // Civil ID / mobile / passport live on the Profile tab, so
+                        // a refusal lands the operator where the blanks are.
+                        if (key === "missing_profile_fields") {
+                          setActiveTab("private-information");
+                        }
                       }
                     }}
                   >

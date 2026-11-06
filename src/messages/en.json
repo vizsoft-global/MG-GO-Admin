@@ -1566,7 +1566,8 @@
         "employee_id_exists": "This MG ID is already in use.",
         "intake_already_linked": "This driver is already approved.",
         "not_authorized": "You do not have permission.",
-        "save_failed": "Approval failed. Please try again."
+        "save_failed": "Approval failed. Please try again.",
+        "missing_profile_fields": "Add the rider's civil ID, mobile number and passport on Private Information before approving."
       },
       "liveLocationsTitle": "Live driver locations",
       "liveLocationsEmpty": "No employees reporting location right now.",
@@ -1627,12 +1628,31 @@
       "groupZone": "Zone",
       "groupPartner": "Project",
       "groupEmployeeStatus": "Employee status",
-      "groupProject": "Project key",
+      "groupProject": "Client key",
       "groupSection": "Employee Category",
       "groupNationalityCategory": "Nationality category",
       "viewTable": "Table view",
       "viewCards": "Card view",
       "employeesDashboardLink": "Employee dashboard",
+      "employeeSettingsLink": "Employee settings",
+      "employeeSettings": {
+        "title": "Employee settings",
+        "subtitle": "The catalogs every employee form reads.",
+        "close": "Close",
+        "empty": "You do not have permission to edit any employee catalog.",
+        "tiles": {
+          "driverFields": "Employee fields",
+          "serviceTypes": "Service types",
+          "attendanceSettings": "Attendance settings",
+          "vehicleTypes": "Vehicle types",
+          "employeeStatuses": "Employee statuses",
+          "employeeSections": "Employee sections",
+          "nationalityCategories": "Nationality categories",
+          "bankCodes": "Bank codes",
+          "jobPositions": "Job positions",
+          "clients": "Clients"
+        }
+      },
       "employeesDashboard": {
         "title": "Employee dashboard",
         "subtitle": "Live counts by project key, project, status, nationality and section.",
@@ -1929,6 +1949,7 @@
           "duplicate_passport": "Passport already used",
           "invalid_client_id": "Client ID is too long (max 64)",
           "invalid_client_name": "Platform is too long (max 120)",
+          "required_identity": "A new rider needs a mobile number, civil ID and passport",
           "company_category_mismatch": "In-house riders belong to the system company; outsourced riders to a partner company"
         },
         "templateColumns": "Columns",
@@ -2310,7 +2331,8 @@
         "employee_id_exists": "This MG ID is already in use.",
         "intake_already_linked": "This driver is already approved.",
         "not_authorized": "You do not have permission.",
-        "save_failed": "Approval failed. Please try again."
+        "save_failed": "Approval failed. Please try again.",
+        "missing_profile_fields": "Add the rider's civil ID, mobile number and passport on Private Information before approving."
       },
       "archiveDriver": "Archive driver",
       "deleteCta": "Delete employee",
@@ -2701,7 +2723,7 @@
       "fieldClientId": "Client ID",
       "fieldClientName": "Platform",
       "tabPrivateInformation": "Private Information",
-      "tabProject": "Project",
+      "tabProject": "Client",
       "loginVerificationControlsTitle": "Account controls",
       "loginVerificationControlsHint": "Block, freeze, login photo, screenshots, account status and the app passcode — all in one place.",
       "documentsClickToUpload": "Press any box to upload or replace that document. PDF, JPG or PNG.",
@@ -2765,6 +2787,13 @@
           "accountNumber": "Account number (NBK)",
           "bankNumber": "Bank number",
           "currency": "Payment currency",
+          "nationalityCountry": "Nationality (country)",
+          "selectCountry": "Select country",
+          "searchCountry": "Search country…",
+          "searchCategory": "Search nationality category…",
+          "beneficiarySynced": "Synced from the rider's civil ID.",
+          "beneficiaryOverride": "Overridden manually.",
+          "beneficiaryReset": "Reset to civil ID",
           "maskedBankNumber": "Bank number on file",
           "fixedSalary": "Fixed salary (KWD)",
           "workPermitSalary": "Work permit salary (KWD)",
@@ -2796,9 +2825,10 @@
       },
       "project": {
         "title": "Project",
-        "subtitle": "Project, driver status and operational assignment. Project replaces the old Partner field.",
+        "subtitle": "Client, driver status and operational assignment. Client replaces the old Partner field.",
         "fields": {
           "project": "Project",
+          "client": "Client",
           "zone": "Zone",
           "restaurants": "Restaurants",
           "vehicle": "Assign vehicle",
@@ -3115,6 +3145,10 @@
         "save_failed": "Could not save the driver. Please try again.",
         "passport_exists": "This passport number is already registered to another employee.",
         "invalid_passport": "Passport must be letters and digits, up to 20 characters.",
+        "missing_identity_fields": "Civil ID, mobile number and passport are required.",
+        "missing_profile_fields": "Add the rider's civil ID, mobile number and passport before approving.",
+        "invalid_nationality": "Choose a nationality country from the list.",
+        "invalid_project_key": "Choose a client from the catalog.",
         "invalid_bank": "Check bank, civil ID, and account or IBAN.",
         "extra_document_title_required": "Enter a document name.",
         "extra_document_file_required": "Choose a file to upload.",
@@ -8451,6 +8485,48 @@
           "passwordFailed": "Could not change password. Try again."
         }
       },
+      "payrollClients": {
+        "title": "Clients",
+        "subtitle": "The clients a rider can be assigned to. They drive the Employee Client dropdown, HR Payroll's Client Name and the Attendance & Orders cards.",
+        "add": "Add client",
+        "edit": "Edit client",
+        "delete": "Delete",
+        "save": "Save",
+        "cancel": "Cancel",
+        "saved": "Client saved",
+        "deleted": "Client deleted",
+        "empty": "No clients yet. Add one to start assigning riders.",
+        "colKey": "Key",
+        "colName": "Client name",
+        "colNameAr": "Arabic name",
+        "colDayShape": "Day shape",
+        "colRiders": "Riders",
+        "colStatus": "Status",
+        "colActions": "Actions",
+        "active": "Active",
+        "inactive": "Inactive",
+        "system": "System",
+        "keyAuto": "Generated from the name",
+        "fullDayHours": "Full day (hours)",
+        "usesHours": "Hours are uploaded daily",
+        "usesHoursHint": "Attendance & Orders then shows payroll + working hours instead of payroll + orders.",
+        "activeHint": "An inactive client disappears from the dropdown and its card; its riders show as unassigned.",
+        "deactivateWarning": "{count, plural, one {# rider still holds this client.} other {# riders still hold this client.}} They stay assigned, but the card is hidden until you turn it back on.",
+        "deleteConfirm": "Delete {name}? This cannot be undone.",
+        "dayShapeOrders": "Payroll + orders",
+        "dayShapeHours": "Payroll + hours ({hours} h)",
+        "errors": {
+          "not_authorized": "You do not have permission.",
+          "not_configured": "The client catalog is not available on this environment.",
+          "invalid_key": "The key must be lowercase letters, numbers and underscores.",
+          "invalid_name": "Enter a client name.",
+          "client_key_taken": "A client with that key already exists.",
+          "system_client": "A system client cannot be deleted. Deactivate it instead.",
+          "client_has_riders": "This client still has riders. Move them to another client first.",
+          "unknown_client": "That client no longer exists.",
+          "save_failed": "Could not save the client."
+        }
+      },
       "employeeCatalogs": {
         "add": "Add",
         "edit": "Edit",
@@ -10697,7 +10773,8 @@
         "banner": {
           "americana": "each day carries two figures: the credited Payroll day the rules produced and the reconciled Orders count behind it. Payroll cells are editable, Orders stay read-only.",
           "keeta": "each day carries the credited Payroll day and the Working hours loaded for that day. Working hours replace Orders: they are uploaded daily and stay read-only. Payroll cells are editable, with a reason.",
-          "five_guys": "each day carries only the number of hours worked, nothing else. Hours are uploaded daily and can be edited with a reason."
+          "five_guys": "each day carries only the number of hours worked, nothing else. Hours are uploaded daily and can be edited with a reason.",
+          "custom": "each day carries the credited Payroll day and the figure this client loads. Cells are edited on Attendance & Orders, with a reason."
         }
       },
       "headings": {
@@ -10968,6 +11045,8 @@
         "keetaSubtitle": "Payroll + Working hours · own payroll and report",
         "fiveGuys": "Five Guys",
         "fiveGuysSubtitle": "Hours only · own payroll and report",
+        "custom": "Client",
+        "customSubtitle": "Own payroll and report",
         "unassigned": "{count} riders have no project and are not shown on any card. Set their project on the employee record."
       },
       "upload": {

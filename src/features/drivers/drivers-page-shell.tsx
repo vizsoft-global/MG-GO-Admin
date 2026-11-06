@@ -19,11 +19,11 @@ import {
   CheckCircle2,
   Eye,
   FilterX,
-  LayoutDashboard,
   Loader2,
   Pencil,
   Plus,
   RefreshCw,
+  Settings2,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -114,6 +114,8 @@ import {
 } from "./driver-list-ui";
 import { DriverFormSheet } from "./driver-form-sheet";
 import { DriverEditSheet } from "./driver-edit-sheet";
+import { hasAnyDriverListFilter, driverListFilterCount } from "./driver-list-filters";
+import { EmployeeSettingsDialog } from "./employee-settings-dialog";
 import { DriversKpiStrip } from "./drivers-kpi-strip";
 import { DriversColumnHeader, type DriversHeaderLabels } from "./drivers-column-header";
 import {
@@ -384,6 +386,7 @@ function DriversPageContent() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickEditId, setQuickEditId] = useState<string | null>(null);
   const loadMoreRef = useRef<HTMLElement | null>(null);
   const quickEditQuery = useDriverDetail(quickEditId ?? "");
@@ -446,6 +449,38 @@ function DriversPageContent() {
   }, [selectionResetKey]);
 
   const activeFilterCount = countActiveFilters(columnFilters);
+  /**
+   * One Clear filters control, always visible, because a filter the operator
+   * cannot see is the one they cannot remove — the tab, the level, the search
+   * and a `?project=` deep-link all narrow the table, not just the column
+   * funnels the old counter tracked.
+   */
+  const hasAnyFilter = hasAnyDriverListFilter({
+    columnFilterCount: activeFilterCount,
+    search: prefs.appliedQuery,
+    levelFilter,
+    tabFilter,
+    projectParam,
+  });
+  const filterBadgeCount = driverListFilterCount({
+    columnFilterCount: activeFilterCount,
+    search: prefs.appliedQuery,
+    levelFilter,
+    tabFilter,
+    projectParam,
+  });
+
+  const clearAllFilters = () => {
+    setColumnFilters({});
+    setSort(DEFAULT_DRIVERS_SORT);
+    setLevelFilter("all");
+    prefs.setQuery("");
+    setTabFilter("all");
+    setSelectedIds(new Set());
+    // `driversListHref("all")` drops `?project=` / `?tab=`, which is what stops
+    // the deep-link effect from putting the project filter straight back.
+    router.replace(driversListHref("all"));
+  };
 
   function accountStatusLabelFor(status: DriverAccountStatus) {
     switch (status) {
@@ -680,14 +715,17 @@ function DriversPageContent() {
   return (
     <AppPage className="space-y-4">
       <div className="flex justify-end">
-        <Link
-          href="/drivers/dashboard"
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-primary hover:bg-primary/10"
+        <Button
+          type="button"
+          variant="outline"
+          className="h-9 gap-1.5 rounded-lg px-2.5 text-xs"
+          onClick={() => setSettingsOpen(true)}
         >
-          <LayoutDashboard className="h-3.5 w-3.5" aria-hidden />
-          {t("employeesDashboardLink")}
-        </Link>
+          <Settings2 className="h-3.5 w-3.5" aria-hidden />
+          {t("employeeSettingsLink")}
+        </Button>
       </div>
+      <EmployeeSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <DriversKpiStrip
         {...kpiCounts}
         labels={{
@@ -755,20 +793,23 @@ function DriversPageContent() {
                     ))}
                   </SelectContent>
                 </Select>
-                {activeFilterCount > 0 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => setColumnFilters({})}
-                    aria-label={t("clearAllFilters")}
-                  >
-                    <FilterX className="h-3.5 w-3.5" aria-hidden />
-                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-white tabular-nums">
-                      {activeFilterCount}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2 text-xs"
+                  onClick={clearAllFilters}
+                  disabled={!hasAnyFilter || isLoading}
+                  aria-label={t("clearFilters")}
+                  title={t("clearFilters")}
+                >
+                  <FilterX className="h-3.5 w-3.5" aria-hidden />
+                  <span className="hidden sm:inline">{t("clearFilters")}</span>
+                  {hasAnyFilter ? (
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground tabular-nums">
+                      {filterBadgeCount}
                     </span>
-                  </Button>
-                ) : null}
+                  ) : null}
+                </Button>
             <div className="flex shrink-0 items-center gap-1.5">
               <Tooltip>
                 <TooltipTrigger

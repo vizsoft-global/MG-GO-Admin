@@ -67,7 +67,7 @@ import {
   parseImportYesNo,
   parseRiderCategory,
 } from "./import/parse";
-import { isDriverProjectKey, type DriverProjectKey } from "@/features/fleet/fleet-labels";
+import { normalizePayrollClientKey } from "@/features/payroll/payroll-clients";
 import { isPaymentCurrency } from "@/lib/currencies";
 import {
   isHiringType,
@@ -164,7 +164,7 @@ export async function fetchDriverImportLookups(): Promise<
 
 export type ApproveDriverResult =
   | { success: true; driverId: string; passcode: string; createdAuthUserId: string | null }
-  | { error: string };
+  | { error: string; fields?: string[] };
 
 function syntheticDriverEmail(driverCode: string): string {
   return `${driverCode.trim().toLowerCase()}@driver.dpd.local`;
@@ -238,7 +238,7 @@ export async function approveDriverIntake(
   const { data: intake, error: loadError } = await db
     .from("driver_intakes")
     .select(
-      "id, phone, full_name, driver_code, linked, archived_at, partner_id, zone_id, employee_id, civil_id",
+      "id, phone, full_name, driver_code, linked, archived_at, partner_id, zone_id, employee_id, civil_id, passport_number",
     )
     .eq("id", intakeId)
     .is("archived_at", null)
@@ -246,8 +246,11 @@ export async function approveDriverIntake(
 
   if (loadError || !intake) return { error: "save_failed" };
   if (intake.linked) return { error: "intake_already_linked" };
-  if (intakeMissingApprovalFields(intake)) {
-    return { error: "missing_fields" };
+  const missingProfileFields = intakeMissingApprovalFields(intake);
+  if (missingProfileFields.length > 0) {
+    // The panel names the fields so the operator knows which ones to complete;
+    // a bare "missing fields" sent them hunting a blank they could not see.
+    return { error: "missing_profile_fields", fields: missingProfileFields };
   }
 
   const { data: hasAssignment, error: assignmentCheckError } = await db.rpc(
@@ -551,7 +554,7 @@ export async function resolveDriverImportPreview(
     let section_names: string[] = [];
     let nationality_category_keys: string[] = [];
     let nationality_category_names: string[] = [];
-    let project_key: DriverProjectKey | null = null;
+    let project_key: string | null = null;
     let accommodation: string | null = null;
     let work_start_date: string | null = null;
     let sponsorship_key: string | null = null;
@@ -752,8 +755,12 @@ export async function resolveDriverImportPreview(
       if (row.cleared?.project_key) {
         project_key = null;
       } else {
-        const normalized = (row.project_key ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
-        if (isDriverProjectKey(normalized)) project_key = normalized;
+        // A catalog-shaped key is accepted, not only the three the SOP named:
+        // a client added in Employee Settings must be importable. A value that
+        // cannot be a key is rejected rather than stored as a project no card
+        // prices.
+        const normalized = normalizePayrollClientKey(row.project_key);
+        if (normalized) project_key = normalized;
         else status = "invalid_project";
       }
     }

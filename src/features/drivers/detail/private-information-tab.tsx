@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PAYMENT_CURRENCIES, normalizePaymentCurrency } from "@/lib/currencies";
+import { countrySearchSelectItems } from "@/lib/geo/countries";
 import {
   Select,
   SelectContent,
@@ -44,6 +46,11 @@ import {
   OFFS_STRUCTURE_DAYS,
 } from "../driver-private-fields";
 import { saveDriverPrivateInformation } from "../drivers-actions";
+import {
+  firstIdentityError,
+  identityFieldErrors,
+  type IdentityField,
+} from "../driver-identity-required";
 import { FieldBlock, FieldLabel } from "../form/driver-form-primitives";
 import { SearchableSelect } from "../form/searchable-select";
 import type { DriverDetailModel } from "../types";
@@ -157,6 +164,7 @@ function buildForm(driver: DriverDetailModel) {
     phone: driver.phone === "—" ? "" : (driver.phone ?? ""),
     civilId: driver.civil_id === "—" ? "" : (driver.civil_id ?? ""),
     passportNumber: driver.passport_number ?? "",
+    nationality: driver.nationality ?? "",
     nationalityCategoryKeys: Array.isArray(driver.nationality_category_keys)
       ? driver.nationality_category_keys
       : [],
@@ -175,6 +183,7 @@ function buildForm(driver: DriverDetailModel) {
     bankCode: bank?.bank_code ?? "",
     accountNumber: bank?.account_number ?? "",
     iban: bank?.iban ?? "",
+    currency: normalizePaymentCurrency(bank?.currency ?? "KWD"),
     fixedSalary: info.fixed_salary != null ? String(info.fixed_salary) : "",
     workPermitSalary: info.work_permit_salary != null ? String(info.work_permit_salary) : "",
     lastIncrementDate: info.last_increment_date ?? "",
@@ -205,6 +214,18 @@ export function PrivateInformationTab({
   const bank = driver.bank_details;
 
   const [form, setForm] = useState(() => buildForm(driver));
+  /**
+   * The beneficiary Civil ID mirrors the rider's until someone types their own.
+   * Initialising from the stored pair means an existing override survives a
+   * reload, and a record whose two IDs match starts synced again.
+   */
+  const [beneficiaryTouched, setBeneficiaryTouched] = useState(
+    Boolean(
+      driver.bank_details?.beneficiary_civil_id &&
+        driver.bank_details.beneficiary_civil_id !== driver.civil_id,
+    ),
+  );
+  const [showIdentityErrors, setShowIdentityErrors] = useState(false);
   /**
    * The Position picker reads the catalog, so a position added in Operations Hub
    * appears here without a rebuild. The compiled six are the fallback while the
@@ -261,9 +282,43 @@ export function PrivateInformationTab({
 
   const allOpen = open.identity && open.status && open.bank && open.salary;
 
+  const identityErrors = identityFieldErrors({
+    civilId: form.civilId,
+    phone: form.phone,
+    passport: form.passportNumber,
+  });
+  const identityErrorFor = (field: IdentityField): string | null =>
+    showIdentityErrors ? identityErrors[field] ?? null : null;
+  const invalidClass = (field: IdentityField) =>
+    identityErrorFor(field) ? "border-destructive ring-1 ring-destructive" : undefined;
+
   const submit = async () => {
     if (!driver.intake_id) {
       toast.error(t("needsIntake"));
+      return;
+    }
+    /**
+     * Civil ID, mobile and passport are mandatory. A refusal opens the Identity
+     * card and focuses the first bad field rather than toasting something the
+     * operator has to hunt for — a legacy rider can be missing any of the three.
+     */
+    const identityFailure = firstIdentityError({
+      civilId: form.civilId,
+      phone: form.phone,
+      passport: form.passportNumber,
+    });
+    if (identityFailure) {
+      setShowIdentityErrors(true);
+      setOpen((current) => ({ ...current, identity: true }));
+      toast.error(errorText(identityFailure.code));
+      requestAnimationFrame(() => {
+        const focusId: Record<IdentityField, string> = {
+          civilId: "p-civil",
+          phone: "p-phone",
+          passport: "p-passport",
+        };
+        document.getElementById(focusId[identityFailure.field])?.focus();
+      });
       return;
     }
     const data = new FormData();
@@ -272,6 +327,7 @@ export function PrivateInformationTab({
     data.set("phone", form.phone);
     data.set("civilId", form.civilId);
     data.set("passportNumber", form.passportNumber);
+    data.set("nationality", form.nationality);
     data.set("sectionKeys", form.sectionKeys.join(","));
     data.set("nationalityCategoryKeys", form.nationalityCategoryKeys.join(","));
     data.set("riderCategory", form.riderCategory);
@@ -285,6 +341,7 @@ export function PrivateInformationTab({
     data.set("jobEndDescription", form.jobEndDescription);
     data.set("residencyExpiryDate", form.residencyExpiryDate);
     data.set("beneficiaryCivilId", form.beneficiaryCivilId);
+    data.set("paymentCurrency", form.currency);
     data.set("bankCode", form.bankCode);
     data.set("accountNumber", form.accountNumber);
     data.set("iban", form.iban);
@@ -399,7 +456,7 @@ export function PrivateInformationTab({
       <AccordionCard
         id="profile-identity"
         title={t("cards.identity")}
-        count={t("fields.fieldsCount", { count: 12 })}
+        count={t("fields.fieldsCount", { count: 13 })}
         open={open.identity}
         onToggle={() => setOpen((current) => ({ ...current, identity: !current.identity }))}
       >
@@ -421,56 +478,103 @@ export function PrivateInformationTab({
             <Input id="p-employee-id" className={cn(FIELD, "bg-muted")} value={driver.employee_id ?? "—"} readOnly disabled />
           </FieldBlock>
           <FieldBlock>
-            <FieldLabel className={LABEL} htmlFor="p-civil">{t("fields.civilId")}</FieldLabel>
+            <FieldLabel className={LABEL} htmlFor="p-civil" required>
+              {t("fields.civilId")}
+            </FieldLabel>
             <Input
               id="p-civil"
-              className={FIELD}
+              className={cn(FIELD, invalidClass("civilId"))}
               inputMode="numeric"
+              maxLength={12}
+              aria-invalid={Boolean(identityErrorFor("civilId"))}
               value={form.civilId}
               disabled={readonly}
-              onChange={(event) => set("civilId", event.target.value)}
+              onChange={(event) => {
+                const next = event.target.value;
+                // One state update: the beneficiary mirror reads the same value,
+                // which keeps a fast typist from writing the previous keystroke.
+                setForm((current) => ({
+                  ...current,
+                  civilId: next,
+                  beneficiaryCivilId: beneficiaryTouched ? current.beneficiaryCivilId : next,
+                }));
+              }}
             />
+            {identityErrorFor("civilId") ? (
+              <p className="text-[10px] text-destructive">{errorText(identityErrorFor("civilId")!)}</p>
+            ) : null}
           </FieldBlock>
           <FieldBlock>
-            <FieldLabel className={LABEL} htmlFor="p-phone">{t("fields.phone")}</FieldLabel>
+            <FieldLabel className={LABEL} htmlFor="p-phone" required>
+              {t("fields.phone")}
+            </FieldLabel>
             <Input
               id="p-phone"
-              className={FIELD}
+              className={cn(FIELD, invalidClass("phone"))}
               inputMode="tel"
+              maxLength={16}
               placeholder="+965"
+              aria-invalid={Boolean(identityErrorFor("phone"))}
               value={form.phone}
               disabled={readonly}
               onChange={(event) => set("phone", event.target.value)}
             />
+            {identityErrorFor("phone") ? (
+              <p className="text-[10px] text-destructive">{errorText(identityErrorFor("phone")!)}</p>
+            ) : null}
           </FieldBlock>
           <FieldBlock>
-            <FieldLabel className={LABEL} htmlFor="p-passport">{t("fields.passport")}</FieldLabel>
+            <FieldLabel className={LABEL} htmlFor="p-passport" required>
+              {t("fields.passport")}
+            </FieldLabel>
             <Input
               id="p-passport"
-              className={FIELD}
+              className={cn(FIELD, "font-mono uppercase", invalidClass("passport"))}
+              maxLength={20}
+              aria-invalid={Boolean(identityErrorFor("passport"))}
               value={form.passportNumber}
               disabled={readonly}
-              onChange={(event) => set("passportNumber", event.target.value)}
+              onChange={(event) =>
+                set("passportNumber", event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))
+              }
+            />
+            {identityErrorFor("passport") ? (
+              <p className="text-[10px] text-destructive">{errorText(identityErrorFor("passport")!)}</p>
+            ) : null}
+          </FieldBlock>
+          <FieldBlock>
+            <FieldLabel className={LABEL}>{t("fields.nationalityCountry")}</FieldLabel>
+            <SearchableSelect
+              value={form.nationality}
+              onValueChange={(value) => set("nationality", value)}
+              items={countrySearchSelectItems()}
+              placeholder={t("fields.selectCountry")}
+              searchPlaceholder={t("fields.searchCountry")}
+              recentsKey="driver-nationality-country"
+              disabled={readonly}
+              className={cn(FIELD, "w-full")}
             />
           </FieldBlock>
           <FieldBlock>
-            <FieldLabel className={LABEL}>{t("fields.nationality")}</FieldLabel>
-            <Select
-              items={choiceItems(nationRows, locale, t("fields.selectCategory"), form.nationalityCategoryKeys)}
+            <FieldLabel className={LABEL}>{t("fields.nationalityCategory")}</FieldLabel>
+            {/* Twenty-five nationalities plus the four groups: a plain Select is an unsearchable wall. */}
+            <SearchableSelect
               value={form.nationalityCategoryKeys[0] || "none"}
               onValueChange={(value) =>
                 set("nationalityCategoryKeys", !value || value === "none" ? [] : [value])
               }
-            >
-              <SelectTrigger className={cn(FIELD, "w-full")} disabled={readonly}>
-                <SelectValue placeholder={t("fields.selectCategory")} />
-              </SelectTrigger>
-              <SelectContent>
-                {choiceItems(nationRows, locale, t("fields.selectCategory"), form.nationalityCategoryKeys).map((item) => (
-                  <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              items={choiceItems(
+                nationRows,
+                locale,
+                t("fields.selectCategory"),
+                form.nationalityCategoryKeys,
+              )}
+              placeholder={t("fields.selectCategory")}
+              searchPlaceholder={t("fields.searchCategory")}
+              recentsKey="driver-nationality-category"
+              disabled={readonly}
+              className={cn(FIELD, "w-full")}
+            />
           </FieldBlock>
           <FieldBlock>
             <FieldLabel className={LABEL}>{t("fields.category")}</FieldLabel>
@@ -697,10 +801,30 @@ export function PrivateInformationTab({
               id="p-beneficiary"
               className={FIELD}
               inputMode="numeric"
+              maxLength={12}
               value={form.beneficiaryCivilId}
               disabled={readonly}
-              onChange={(event) => set("beneficiaryCivilId", event.target.value)}
+              onChange={(event) => {
+                setBeneficiaryTouched(true);
+                set("beneficiaryCivilId", event.target.value);
+              }}
             />
+            <p className="text-[10px] leading-4 text-muted-foreground">
+              {beneficiaryTouched ? t("fields.beneficiaryOverride") : t("fields.beneficiarySynced")}
+            </p>
+            {beneficiaryTouched ? (
+              <button
+                type="button"
+                disabled={readonly}
+                className="w-fit cursor-pointer text-[10px] font-semibold text-primary underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => {
+                  setBeneficiaryTouched(false);
+                  set("beneficiaryCivilId", form.civilId);
+                }}
+              >
+                {t("fields.beneficiaryReset")}
+              </button>
+            ) : null}
           </FieldBlock>
           <FieldBlock>
             <FieldLabel>{t("fields.bank")}</FieldLabel>
@@ -748,7 +872,28 @@ export function PrivateInformationTab({
           )}
           <FieldBlock>
             <FieldLabel htmlFor="p-currency">{t("fields.currency")}</FieldLabel>
-            <Input id="p-currency" className={FIELD} value="KWD" readOnly disabled />
+            <Select
+              items={PAYMENT_CURRENCIES.map((currency) => ({
+                value: currency.code,
+                label: `${currency.code} · ${currency.name}`,
+              }))}
+              value={form.currency}
+              onValueChange={(value) => {
+                if (!value) return;
+                set("currency", normalizePaymentCurrency(value));
+              }}
+            >
+              <SelectTrigger id="p-currency" className={cn(FIELD, "w-full")} disabled={readonly}>
+                <SelectValue placeholder={t("fields.currency")} />
+              </SelectTrigger>
+              <SelectContent>
+                {PAYMENT_CURRENCIES.map((currency) => (
+                  <SelectItem key={currency.code} value={currency.code}>
+                    {currency.code} · {currency.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </FieldBlock>
         </div>
         {bank?.iban ? (
