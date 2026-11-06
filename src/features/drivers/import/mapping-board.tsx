@@ -17,7 +17,6 @@ import {
 } from "../types";
 
 const NONE = "__none__";
-const REQUIRED = new Set<string>(DRIVER_IMPORT_REQUIRED_FIELDS);
 
 export function DriverMappingBoard({
   headers,
@@ -25,14 +24,18 @@ export function DriverMappingBoard({
   mapping,
   onMappingChange,
   customFields = [],
+  requiredFields = DRIVER_IMPORT_REQUIRED_FIELDS,
 }: {
   headers: string[];
   sampleRow: string[];
   mapping: Partial<Record<DriverImportTargetField, string>>;
   onMappingChange: (next: Partial<Record<DriverImportTargetField, string>>) => void;
   customFields?: { key: string; label: string }[];
+  /** Mode-dependent: an update matches on MG ID alone, so only it carries a star. */
+  requiredFields?: readonly string[];
 }) {
   const t = useTranslations("pages.drivers.import");
+  const REQUIRED = useMemo(() => new Set<string>(requiredFields), [requiredFields]);
 
   const headerItems = useMemo(
     () => [

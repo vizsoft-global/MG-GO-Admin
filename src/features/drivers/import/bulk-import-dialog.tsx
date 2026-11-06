@@ -6,8 +6,8 @@ import { useTranslations } from "next-intl";
 import {
   Building2,
   Download,
-  FileSpreadsheet,
   FilePlus2,
+  FileSpreadsheet,
   History,
   Loader2,
   MapPin,
@@ -54,7 +54,6 @@ import {
 import { importProgressLabel } from "./import-progress";
 import { ImportLogPanel } from "./import-log-panel";
 import type { DriverImportTargetField } from "../types";
-import { DRIVER_IMPORT_REQUIRED_FIELDS } from "../types";
 import { DriverMappingBoard } from "./mapping-board";
 import {
   guessColumnMapping,
@@ -82,8 +81,41 @@ import {
   zonesLookupAoa,
 } from "./lookups";
 import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
+import { ImportStepper } from "./wizard/import-stepper";
+import { ImportStepFields } from "./wizard/step-fields";
+import { ImportStepMode } from "./wizard/step-mode";
+import {
+  IMPORT_WIZARD_STEPS,
+  WIZARD_STEP_LABELS,
+  canLeaveStep,
+  defaultSelectedFields,
+  modeToStrategy,
+  nextWizardStep,
+  previousWizardStep,
+  pinnedTargetFields,
+  requiredTargetFields,
+  stepIndex,
+  toggleSelectedField,
+  type ImportWizardMode,
+  type ImportWizardStep,
+} from "./wizard-state";
 
-type Step = "upload" | "map" | "preview" | "job";
+/**
+ * The dialog keeps its own step names; `preview` and `job` are the wizard's
+ * `dryRun` and `apply`. Renaming twenty call sites to move two of them would have
+ * been a wider diff than the mapping is worth.
+ */
+type Step = ImportWizardStep | "preview" | "job";
+
+function toWizardStep(step: Step): ImportWizardStep {
+  if (step === "preview") return "dryRun";
+  if (step === "job") return "apply";
+  return step;
+}
+
+function fromWizardStep(step: ImportWizardStep): Step {
+  return step;
+}
 
 function previewVariant(
   row: DriverImportPreviewRow,
@@ -111,7 +143,8 @@ export function DriverBulkImportDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const t = useTranslations("pages.drivers.import");
-  const [step, setStep] = useState<Step>("upload");
+  const [step, setStep] = useState<Step>("mode");
+  const [mode, setMode] = useState<ImportWizardMode>("add");
   const [fileName, setFileName] = useState("");
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
@@ -119,7 +152,8 @@ export function DriverBulkImportDialog({
   const [mapping, setMapping] = useState<Partial<Record<DriverImportTargetField, string>>>({});
   const [preview, setPreview] = useState<DriverImportPreviewRow[]>([]);
   const [picked, setPicked] = useState<Set<number>>(new Set());
-  const [duplicateStrategy, setDuplicateStrategy] = useState<"skip" | "update">("update");
+  /** Step 1 decided it; the preview and the job have always read this strategy. */
+  const duplicateStrategy = modeToStrategy(mode);
   const [approveImmediately, setApproveImmediately] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [exporting, startExport] = useTransition();
@@ -176,15 +210,64 @@ export function DriverBulkImportDialog({
   );
   // Null until the operator opens the picker, which keeps the download URL bare
   // and the generated file identical to the un-customised template.
-  const [templateSelection, setTemplateSelection] = useState<Set<string> | null>(
-    null,
-  );
+  const [templateSelection, setTemplateSelection] = useState<Set<string> | null>(null);
   const templateSelected = useMemo(
     () =>
       templateSelection ??
-      new Set(templateColumns.map((column) => column.field)),
-    [templateSelection, templateColumns],
+      new Set<string>(
+        defaultSelectedFields(
+          mode,
+          templateColumns.map((column) => column.field),
+        ),
+      ),
+    [templateSelection, templateColumns, mode],
   );
+
+  const wizardStep = toWizardStep(step);
+
+  /**
+   * Changing the mode rebuilds the selection: an update sheet must not inherit
+   * the create sheet's columns, or the operator silently rewrites fields they
+   * never meant to touch.
+   */
+  const chooseMode = useCallback(
+    (next: ImportWizardMode) => {
+      setMode(next);
+      setTemplateSelection(
+        new Set(
+          defaultSelectedFields(
+            next,
+            templateColumns.map((column) => column.field),
+          ),
+        ),
+      );
+    },
+    [templateColumns],
+  );
+
+  const toggleTemplateField = useCallback(
+    (field: string) => {
+      setTemplateSelection(
+        new Set(
+          toggleSelectedField(
+            [...templateSelected],
+            field as DriverImportTargetField,
+            pinnedTargetFields(mode),
+          ),
+        ),
+      );
+    },
+    [templateSelected, mode],
+  );
+
+  const selectAllTemplateFields = useCallback(() => {
+    setTemplateSelection(new Set(templateColumns.map((column) => column.field)));
+  }, [templateColumns]);
+
+  /** An empty set means "pinned only" — the same seven columns the old picker kept. */
+  const selectRequiredTemplateFields = useCallback(() => {
+    setTemplateSelection(new Set());
+  }, []);
   const summary = useMemo(() => {
     const ready = preview.filter((r) => isImportRowReady(r, duplicateStrategy)).length;
     const duplicate = preview.filter(
@@ -204,7 +287,7 @@ export function DriverBulkImportDialog({
   }, [preview, duplicateStrategy]);
 
   const reset = useCallback(() => {
-    setStep("upload");
+    setStep("mode");
     setFileName("");
     setHeaders([]);
     setRows([]);
@@ -232,7 +315,7 @@ export function DriverBulkImportDialog({
 
   const goPreview = () => {
     if (!headers.length) return;
-    const missingRequired = DRIVER_IMPORT_REQUIRED_FIELDS.filter((field) => !mapping[field]);
+    const missingRequired = requiredTargetFields(mode).filter((field) => !mapping[field]);
     if (missingRequired.length > 0) {
       toast.error(t("mappingRequired"));
       return;
@@ -427,7 +510,36 @@ export function DriverBulkImportDialog({
     });
   };
 
-  const requiredMapped = DRIVER_IMPORT_REQUIRED_FIELDS.every((field) => mapping[field]);
+  const requiredMapped = requiredTargetFields(mode).every((field) => mapping[field]);
+
+  /**
+   * The rail's *Continue*. Every guard lives in `wizard-state` so the rule for
+   * leaving a step is testable without rendering the dialog.
+   */
+  const canAdvance = canLeaveStep(wizardStep, {
+    mode,
+    selectedFieldCount: templateSelected.size,
+    headers,
+    mapping,
+    duplicateHeaderCount: duplicateHeaders.length,
+    readyCount: readyIndexes.filter((index) => picked.has(index)).length,
+  });
+
+  const goNext = () => {
+    const next = nextWizardStep(wizardStep);
+    if (!next) return;
+    if (next === "dryRun") {
+      goPreview();
+      return;
+    }
+    setStep(fromWizardStep(next));
+  };
+
+  const goBack = () => {
+    const previous = previousWizardStep(wizardStep);
+    if (!previous) return;
+    setStep(fromWizardStep(previous));
+  };
 
   return (
     <Dialog
@@ -446,35 +558,55 @@ export function DriverBulkImportDialog({
         closeOutside
       >
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pt-4 pb-3">
-          {step === "upload" ? (
+          <div className="flex gap-1" role="radiogroup" aria-label={t("importMode")}>
+            <SegmentOption
+              selected={panel === "new"}
+              onClick={() => setPanel("new")}
+              variant="success"
+            >
+              <FilePlus2 className="h-3.5 w-3.5" />
+              <span className="px-2">{t("newImport")}</span>
+            </SegmentOption>
+            <SegmentOption
+              selected={panel === "previous"}
+              onClick={() => setPanel("previous")}
+            >
+              <History className="h-3.5 w-3.5" />
+              <span className="px-2">{t("previousImports")}</span>
+            </SegmentOption>
+          </div>
+          {step !== "job" ? (
+            <ImportStepper
+              current={wizardStep}
+              onJump={(next) => setStep(fromWizardStep(next))}
+            />
+          ) : null}
+          {panel === "previous" ? (
+            <ImportJobHistory
+              onView={(jobId) => {
+                setViewingJobId(jobId);
+                setStep("job");
+              }}
+            />
+          ) : null}
+          {panel === "new" && step === "mode" ? (
+            <ImportStepMode mode={mode} onSelect={chooseMode} />
+          ) : null}
+          {panel === "new" && step === "fields" ? (
+            <ImportStepFields
+              columns={templateColumns}
+              selected={templateSelected}
+              pinned={pinnedTargetFields(mode)}
+              mode={mode}
+              onToggle={toggleTemplateField}
+              onSelectAll={selectAllTemplateFields}
+              onRequiredOnly={selectRequiredTemplateFields}
+            />
+          ) : null}
+          {panel === "new" ? (
             <>
-              <div className="flex gap-1" role="radiogroup" aria-label={t("importMode")}>
-                <SegmentOption
-                  selected={panel === "new"}
-                  onClick={() => setPanel("new")}
-                  variant="success"
-                >
-                  <FilePlus2 className={panel === "new" ? "h-3.5 w-3.5" : "h-3.5 w-3.5 opacity-60"} />
-                  <span className="px-2">{t("newImport")}</span>
-                </SegmentOption>
-                <SegmentOption
-                  selected={panel === "previous"}
-                  onClick={() => setPanel("previous")}
-                >
-                  <History className={panel === "previous" ? "h-3.5 w-3.5" : "h-3.5 w-3.5 opacity-60"} />
-                  <span className="px-2">{t("previousImports")}</span>
-                </SegmentOption>
-              </div>
-              {panel === "previous" ? (
-                <ImportJobHistory
-                  onView={(jobId) => {
-                    setViewingJobId(jobId);
-                    setStep("job");
-                  }}
-                />
-              ) : null}
-              {panel === "new" ? (
-            <>
+              {step === "template" ? (
+                <>
               <div className="space-y-1.5 rounded-lg border border-border px-3 py-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("requiredTitle")} <span className="text-destructive">*</span>
@@ -608,6 +740,9 @@ export function DriverBulkImportDialog({
                   {t("downloadPartners")}
                 </Button>
               </div>
+                </>
+              ) : null}
+              {step === "upload" ? (
               <label
                 className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed px-6 py-5 ${
                   dragActive
@@ -646,7 +781,6 @@ export function DriverBulkImportDialog({
                   }}
                 />
               </label>
-            </>
               ) : null}
             </>
           ) : null}
@@ -717,7 +851,7 @@ export function DriverBulkImportDialog({
             </div>
           ) : null}
 
-          {step === "map" && headers.length > 0 ? (
+          {panel === "new" && step === "map" && headers.length > 0 ? (
             <>
               {!requiredMapped ? (
                 <p className="text-xs text-destructive">{t("mappingRequired")}</p>
@@ -731,11 +865,12 @@ export function DriverBulkImportDialog({
                 mapping={mapping}
                 onMappingChange={setMapping}
                 customFields={customFields}
+                requiredFields={requiredTargetFields(mode)}
               />
             </>
           ) : null}
 
-          {step === "preview" ? (
+          {panel === "new" && step === "preview" ? (
             <>
               <p className="text-sm text-muted-foreground">
                 {t("previewSummary", {
@@ -778,19 +913,25 @@ export function DriverBulkImportDialog({
               </div>
               <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
                 <div>
-                  <Label htmlFor="update-by-employee-id" className="text-sm">
-                    {t("duplicateStrategy")}
-                  </Label>
+                  <p className="text-sm font-medium text-foreground">
+                    {mode === "update"
+                      ? t("wizard.modeUpdateTitle")
+                      : t("wizard.modeAddTitle")}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {t("duplicateUpdateHint")}
                   </p>
                 </div>
-                <Switch
-                  id="update-by-employee-id"
-                  checked={duplicateStrategy === "update"}
-                  onCheckedChange={(on) => setDuplicateStrategy(on ? "update" : "skip")}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-md"
                   disabled={importing}
-                />
+                  onClick={() => setStep("mode")}
+                >
+                  {t("changeMode")}
+                </Button>
               </div>
               <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
                 <div>
@@ -903,7 +1044,7 @@ export function DriverBulkImportDialog({
           ) : null}
 
         </div>
-        {step !== "upload" ? (
+        {step === "map" || step === "preview" || step === "job" ? (
           <AppModalFooter
             title={t("title")}
             subtitle={
@@ -1039,18 +1180,33 @@ export function DriverBulkImportDialog({
             ) : null}
           </AppModalFooter>
         ) : (
-          <AppModalFooter title={t("title")} subtitle={t("formats")}>
-            {isActiveImportJob(activeJob?.status ?? "previewed") ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9 cursor-pointer rounded-md"
-                onClick={hideDialog}
-              >
-                {t("hide")}
-              </Button>
-            ) : null}
+          <AppModalFooter
+            title={t("title")}
+            subtitle={t(WIZARD_STEP_LABELS[wizardStep])}
+            meta={t("wizardStepOf", {
+              current: stepIndex(wizardStep) + 1,
+              total: IMPORT_WIZARD_STEPS.length,
+            })}
+          >
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 cursor-pointer rounded-md"
+              disabled={!previousWizardStep(wizardStep) || panel === "previous"}
+              onClick={goBack}
+            >
+              {t("back")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 cursor-pointer rounded-md px-4"
+              disabled={!canAdvance || panel === "previous"}
+              onClick={goNext}
+            >
+              {t("next")}
+            </Button>
           </AppModalFooter>
         )}
       </DialogContent>
