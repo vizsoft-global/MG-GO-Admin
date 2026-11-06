@@ -753,7 +753,20 @@ function tabTotalOf(tab: string, kpis: DriverKpis): number {
  * Intake rows joined to driver status and duty only. Same predicates as
  * `kpisFromRows`. A driver with no intake is not counted.
  */
+/**
+ * Fleet-wide tile counts, cached for the same short window as the roster.
+ *
+ * This is a second full pass over `driver_intakes` and `drivers` on every list
+ * call, and it produces the same five numbers for every page of the same tab.
+ * It is memoised beside `baseRowsCache` so one screen load pays for it once.
+ */
+const kpiCache = new Map<string, { kpis: DriverKpis; at: number }>();
+
 async function fleetKpiCounts(archived: boolean): Promise<DriverKpis> {
+  const key = archived ? "archived" : "live";
+  const now = Date.now();
+  const hit = kpiCache.get(key);
+  if (hit && now - hit.at < BASE_ROWS_TTL_MS) return hit.kpis;
   const db = getFirestore();
   const [intakeSnap, driverSnap] = await Promise.all([
     db.collection(COLLECTIONS.driverIntakes).select("archived_at", "linked_profile_id", "workflow_status").get(),
@@ -763,7 +776,7 @@ async function fleetKpiCounts(archived: boolean): Promise<DriverKpis> {
   const rows = intakeSnap.docs.filter((doc) =>
     archived ? doc.get("archived_at") != null : doc.get("archived_at") == null,
   );
-  return rosterKpis(
+  const kpis = rosterKpis(
     rows.map((doc) => {
       const linked = asStr(doc.get("linked_profile_id"));
       const driver = linked ? driverById.get(linked) : undefined;
@@ -775,6 +788,12 @@ async function fleetKpiCounts(archived: boolean): Promise<DriverKpis> {
       };
     }),
   );
+  if (kpiCache.size >= BASE_ROWS_MAX_ENTRIES && !kpiCache.has(key)) {
+    const oldest = [...kpiCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+    if (oldest) kpiCache.delete(oldest[0]);
+  }
+  kpiCache.set(key, { kpis, at: now });
+  return kpis;
 }
 
 /** Driver, device and today's delivery facts for one already-sorted page. */
@@ -895,16 +914,61 @@ async function hydrateDeferredPage(rows: Dict[], phases: PhaseMarks): Promise<vo
  * index rejected the whole page so the panel kept the previous 953 rows.
  * `searchMatches` runs on this full roster. KPIs stay fleet-wide.
  */
+/**
+ * The unhydrated roster, cached for a short window inside one isolate.
+ *
+ * `adminListDriversPage` re-reads six whole collections on every call, and the
+ * panel used to call it once per 100-rider page: a 975-rider roster was ten full
+ * scans for one screen, then ten more the next time the operator opened it. The
+ * Firestore page snapshot sits above this and answers a repeat request, but its
+ * key contains the offset and it cannot help while a filter is being typed.
+ *
+ * These rows are the **pre-filter** roster, so a cached copy is still correct
+ * for any search, filter, sort or page — all of those are applied afterwards, in
+ * memory. The key must carry `deferLive`: a deferred read deliberately skips the
+ * driver, delivery and device joins, and handing those rows to a caller that
+ * needs them would publish an empty status column.
+ */
+const BASE_ROWS_TTL_MS = 60_000;
+const BASE_ROWS_MAX_ENTRIES = 4;
+const baseRowsCache = new Map<string, { rows: Dict[]; at: number }>();
+
+async function loadBaseRows(
+  archived: boolean,
+  deferLive: boolean,
+  phases: PhaseMarks,
+): Promise<Dict[]> {
+  const key = `${archived ? "archived" : "live"}|${deferLive ? "defer" : "full"}`;
+  const now = Date.now();
+  const hit = baseRowsCache.get(key);
+  if (hit && now - hit.at < BASE_ROWS_TTL_MS) {
+    phases.baseRowsMs = 0;
+    // Copies, not the cached objects: `hydrateDeferredPage` writes live fields
+    // onto the rows it is handed, and that write must not reach the next caller.
+    return hit.rows.map((row) => ({ ...row }));
+  }
+  const rows = await loadDriverRows(archived, null, phases, deferLive);
+  if (!baseRowsCache.has(key) && baseRowsCache.size >= BASE_ROWS_MAX_ENTRIES) {
+    const oldest = [...baseRowsCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+    if (oldest) baseRowsCache.delete(oldest[0]);
+  }
+  baseRowsCache.set(key, { rows, at: now });
+  return rows;
+}
+
 async function loadDriversForList(
   archived: boolean,
   search: string | null,
   phases?: PhaseMarks,
   deferLive = false,
 ): Promise<{ rows: Dict[]; kpis: DriverKpis | null }> {
+  const marks = phases ?? {};
   const term = (search ?? "").trim();
-  const rows = await loadDriverRows(archived, null, phases, term ? false : deferLive);
+  // A search forces the joined read, because the fields the operator is typing
+  // are on the driver document, not on the intake row.
+  const rows = await loadBaseRows(archived, term ? false : deferLive, marks);
   if (!term) {
-    const kpis = deferLive ? await timedPhase(phases ?? {}, "kpiMs", () => fleetKpiCounts(archived)) : null;
+    const kpis = deferLive ? await timedPhase(marks, "kpiMs", () => fleetKpiCounts(archived)) : null;
     return { rows, kpis };
   }
   try {

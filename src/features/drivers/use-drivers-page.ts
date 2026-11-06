@@ -9,7 +9,25 @@ import {
 } from "./drivers-list-actions";
 import type { DriversColumnFilters } from "./drivers-list-query";
 
-export const DRIVERS_PAGE_LIMIT = 100;
+/**
+ * Rows per call.
+ *
+ * This was 100, which turned a 975-rider roster into **ten** sequential
+ * callables — and each one re-read the whole roster server-side before slicing.
+ * 500 makes the same roster two calls, well under the server's 5000 cap and the
+ * client's own 500 clamp in `fetchDriversPage`.
+ */
+export const DRIVERS_PAGE_LIMIT = 500;
+
+/**
+ * How long a loaded page is considered fresh.
+ *
+ * The Query client default is five minutes; this page used 30 s, so returning to
+ * it after a minute always paid for the whole roster again. A stale-while-
+ * revalidate read is the right shape here: paint the rows that are already
+ * loaded, and let the 60 s invalidator refresh them underneath.
+ */
+const DRIVERS_PAGE_STALE_MS = 5 * 60_000;
 
 export function useDriversPage(query: DriversPageQuery) {
   return useInfiniteQuery({
@@ -23,7 +41,7 @@ export function useDriversPage(query: DriversPageQuery) {
         : undefined;
     },
     placeholderData: keepPreviousData,
-    staleTime: 30_000,
+    staleTime: DRIVERS_PAGE_STALE_MS,
   });
 }
 

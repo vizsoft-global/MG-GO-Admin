@@ -1783,6 +1783,10 @@
       },
       "emptyTitle": "No employees yet",
       "emptyDescription": "Add your first employee to get started",
+      "loadFailedTitle": "Could not load employees",
+      "loadFailedDescription": "The list did not come back. Check your connection and try again.",
+      "refreshFailed": "Could not refresh the list — showing the rows already loaded.",
+      "retry": "Try again",
       "passcode": {
         "copied": "Passcode copied",
         "copyFailed": "Could not copy passcode",

@@ -15,6 +15,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useRouter, Link } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
 import {
+  AlertTriangle,
   ArchiveRestore,
   CheckCircle2,
   Eye,
@@ -99,6 +100,7 @@ import {
 } from "./use-drivers";
 import { DriverArchiveDialog } from "./driver-archive-dialog";
 import { useDriversPage } from "./use-drivers-page";
+import { driversListLoadState, driversListShowsEmptySearch } from "./drivers-list-load-state";
 import { DriverBulkImportDialog } from "./import/bulk-import-dialog";
 import { DriversExportDialog } from "./export-drivers-dialog";
 import { isDriverErrorKey } from "./driver-errors";
@@ -332,10 +334,24 @@ function DriversPageContent() {
   );
   const pageQuery = useDriversPage(query);
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = pageQuery;
-  const listFailed = pageQuery.isError;
+  /**
+   * A failed **background** refetch is not a failed list.
+   *
+   * `isError` goes true whenever a refetch fails — including the invalidate this
+   * page fires every minute — while `data` keeps the pages it already holds. The
+   * table used to blank itself on that flag and the toolbar still read the cached
+   * totals, so a dropped request on coming back to the page rendered
+   * "No employees match your search" over a full 975-rider roster. Only a
+   * failure with nothing cached is a real failure; otherwise the rows stay and a
+   * strip says the refresh did not land.
+   */
+  const { hardFailed, refreshFailed } = driversListLoadState({
+    isError: pageQuery.isError,
+    hasData: Boolean(pageQuery.data),
+  });
   const drivers = useMemo(
-    () => (listFailed ? [] : pageQuery.data?.pages.flatMap((p) => p.rows) ?? []),
-    [pageQuery.data, listFailed],
+    () => pageQuery.data?.pages.flatMap((p) => p.rows) ?? [],
+    [pageQuery.data],
   );
   const shownDrivers = useMemo(() => {
     if (levelFilter === "all") return drivers;
@@ -368,8 +384,10 @@ function DriversPageContent() {
   const listView = useGroupedListView(groupedDrivers, prefs.groupBy !== "none", selectionResetKey);
   const firstPage = pageQuery.data?.pages[0];
   const kpiCounts = firstPage?.kpis ?? EMPTY_KPIS;
-  const filteredTotal = listFailed ? 0 : firstPage?.filteredTotal ?? 0;
-  const tabTotal = firstPage?.tabTotal ?? 0;
+  // A hard failure has no roster to count, so the tiles must not keep printing
+  // the pre-failure numbers beside an error.
+  const filteredTotal = hardFailed ? 0 : firstPage?.filteredTotal ?? 0;
+  const tabTotal = hardFailed ? 0 : firstPage?.tabTotal ?? 0;
   const isLoading = pageQuery.isLoading;
 
   useRealtimeInvalidator({
@@ -437,9 +455,20 @@ function DriversPageContent() {
     return () => obs.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, drivers.length]);
 
+  /**
+   * Only a client-side filter needs the whole roster.
+   *
+   * This used to run unconditionally, so opening the page walked every page in
+   * sequence — ten callables for a 975-rider roster, each re-reading the whole
+   * roster server-side — and returning to the page paid for all of them again.
+   * The level filter is the one thing evaluated in memory over `drivers`, so it
+   * is the only case that still has to pull the remaining pages; everything else
+   * loads the next page when the sentinel below the table comes into view.
+   */
   useEffect(() => {
+    if (levelFilter === "all") return;
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+  }, [levelFilter, fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const selectionResetSeen = useRef(selectionResetKey);
   useEffect(() => {
@@ -507,8 +536,15 @@ function DriversPageContent() {
   };
 
   const hasNarrowing = activeFilterCount > 0 || debouncedSearch !== "";
-  const showEmptySearch = !isLoading && drivers.length === 0 && (hasNarrowing || tabTotal > 0);
-  const showEmptyAll = !isLoading && drivers.length === 0 && !showEmptySearch;
+  const showEmptySearch = driversListShowsEmptySearch({
+    loading: isLoading,
+    hardFailed,
+    rowCount: drivers.length,
+    hasNarrowing,
+    tabTotal,
+  });
+  const showEmptyAll = !isLoading && !hardFailed && drivers.length === 0 && !showEmptySearch;
+  const showError = !isLoading && hardFailed;
 
   const scopeIds = listView.scopeRows.map((driver) => driver.id);
   const headerSelection = scopeSelectionState(selectedIds, scopeIds);
@@ -879,9 +915,41 @@ function DriversPageContent() {
           </div>
         }
       >
+        {refreshFailed && !showError ? (
+          <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 flex-1">{t("refreshFailed")}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 cursor-pointer rounded-lg border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+              onClick={() => void handleRefresh()}
+              disabled={isRefreshing}
+            >
+              {isRefreshing ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+              {t("retry")}
+            </Button>
+          </div>
+        ) : null}
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : showError ? (
+          <div className="px-6 py-12 text-center">
+            <p className="text-sm font-medium text-foreground">{t("loadFailedTitle")}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t("loadFailedDescription")}</p>
+            <Button
+              type="button"
+              size="sm"
+              className="mt-4 cursor-pointer rounded-lg"
+              onClick={() => void handleRefresh()}
+              disabled={isRefreshing}
+            >
+              {isRefreshing ? <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" /> : null}
+              {t("retry")}
+            </Button>
           </div>
         ) : showEmptyAll ? (
           <div className="px-6 py-12 text-center">

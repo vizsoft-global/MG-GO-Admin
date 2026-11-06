@@ -1782,6 +1782,10 @@
       },
       "emptyTitle": "لا يوجد موظفون بعد",
       "emptyDescription": "أضف أول موظف للبدء",
+      "loadFailedTitle": "تعذر تحميل الموظفين",
+      "loadFailedDescription": "لم تصل القائمة. تحقق من الاتصال ثم حاول مرة أخرى.",
+      "refreshFailed": "تعذر تحديث القائمة — يتم عرض الصفوف المحمّلة بالفعل.",
+      "retry": "حاول مرة أخرى",
       "passcode": {
         "copied": "تم نسخ الرمز",
         "copyFailed": "تعذر نسخ الرمز",
