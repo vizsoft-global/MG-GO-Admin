@@ -22,7 +22,10 @@ import {
 import { listEmployeeCatalog } from "@/features/employees/employee-catalogs-actions";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { normalizeCountryCode } from "@/lib/geo/countries";
-import { normalizeCivilId, normalizeKuwaitPhone } from "./driver-phone";
+import { normalizeKuwaitPhone } from "./driver-phone";
+import { normalizeIdentity } from "./driver-identity-required";
+import { normalizePayrollClientKey } from "@/features/payroll/payroll-clients";
+import { COLLECTIONS } from "@/lib/firebase/db";
 import { hasOpsAssignment } from "./driver-assignment";
 import {
   isHiringType,
@@ -51,7 +54,7 @@ import {
   resolveCompanyInput,
   type SourceCompany,
 } from "./source-companies";
-import { parseDriverProjectKey } from "@/features/fleet/fleet-labels";
+import { parseDriverProjectKey, isDriverProjectKey } from "@/features/fleet/fleet-labels";
 import { mapDriverDbError, normalizeEmployeeId, normalizePassport } from "./driver-errors";
 import type { RestrictionReason, RestrictionReasonKind } from "./driver-freeze";
 import {
@@ -226,6 +229,27 @@ function parseCsvKeys(formData: FormData, name: string): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+/**
+ * The client key a form asked for.
+ *
+ * A key the `payroll_clients` catalog does not hold is refused rather than
+ * stored: a typo would create a rider no card and no rule set can price. Blank
+ * stays blank — "Unset" is a real state the Employee Client dropdown offers.
+ */
+async function resolveClientKey(
+  raw: unknown,
+): Promise<{ key: string | null } | { error: "invalid_project_key" }> {
+  const normalized = normalizePayrollClientKey(typeof raw === "string" ? raw : null);
+  if (!normalized) return { key: null };
+  // The three SOP clients are always valid, even on an environment whose
+  // `payroll_clients` document has not been seeded yet.
+  if (isDriverProjectKey(normalized)) return { key: normalized };
+  const db = await staffDb();
+  if (!db) return { error: "invalid_project_key" };
+  const snap = await db.collection(COLLECTIONS.payrollClients).doc(normalized).get();
+  return snap.exists ? { key: normalized } : { error: "invalid_project_key" };
 }
 
 function asStringKeys(value: unknown): string[] {
@@ -501,6 +525,7 @@ export async function createDriverIntake(
   const fullName = String(formData.get("fullName") ?? "").trim();
   const phoneRaw = String(formData.get("phone") ?? "").trim();
   const civilId = String(formData.get("civilId") ?? "").trim();
+  const passportRaw = String(formData.get("passportNumber") ?? "").trim();
   const employeeIdRaw = String(formData.get("employeeId") ?? "");
   const employeeId = normalizeEmployeeId(employeeIdRaw);
   const nationalityPatch = formData.has("nationality")
@@ -508,7 +533,9 @@ export async function createDriverIntake(
     : {};
   const riderCategory = parseDriverRiderCategory(String(formData.get("riderCategory") ?? ""));
   const sourceCompanyRaw = String(formData.get("sourceCompany") ?? "");
-  const projectKey = parseDriverProjectKey(formData.get("projectKey"));
+  const clientKey = await resolveClientKey(formData.get("projectKey"));
+  if ("error" in clientKey) return { error: clientKey.error };
+  const projectKey = clientKey.key;
   const clientId = normalizeClientValue(String(formData.get("clientId") ?? ""));
   const clientName = normalizeClientValue(String(formData.get("clientName") ?? ""));
   const accommodation = normalizeClientValue(String(formData.get("accommodation") ?? ""));
@@ -527,15 +554,13 @@ export async function createDriverIntake(
     return { error: "missing_fields" };
   }
 
-  // Optional, but a value that was typed still has to be a real one. Absent is
-  // NULL rather than '' — an empty string is a value, and two of them would
-  // collide on the phone unique index.
-  const phone = phoneRaw ? normalizeKuwaitPhone(phoneRaw) : null;
-  if (phoneRaw && !phone) return { error: "invalid_phone" };
-
-  const civilIdNormalized = civilId ? normalizeCivilId(civilId) : null;
-  if (civilId && !civilIdNormalized) return { error: "invalid_civil_id" };
-
+  // Civil ID, mobile and passport are mandatory on every write path. A blank is
+  // refused by name so the operator is told which field to fill, not handed a
+  // generic failure on a record they cannot see the gap in.
+  const identity = normalizeIdentity({ civilId, phone: phoneRaw, passport: passportRaw });
+  if (!identity.ok) return { error: identity.code };
+  const phone = identity.value.phone;
+  const civilIdNormalized = identity.value.civilId;
   const hr = parseHrFromForm(formData);
   if ("error" in hr) return { error: hr.error };
   const bank = await parseBankFromForm(formData);
@@ -1403,6 +1428,7 @@ async function updateDriverIntakeInner(
   const fullName = String(formData.get("fullName") ?? "").trim();
   const phoneRaw = String(formData.get("phone") ?? "").trim();
   const civilId = String(formData.get("civilId") ?? "").trim();
+  const passportRaw = String(formData.get("passportNumber") ?? "").trim();
   const partnerId = String(formData.get("partnerId") ?? "").trim();
   const zoneId = String(formData.get("zoneId") ?? "").trim();
   const vehicleId = String(formData.get("vehicleId") ?? "").trim();
@@ -1414,7 +1440,9 @@ async function updateDriverIntakeInner(
     : {};
   const riderCategory = parseDriverRiderCategory(String(formData.get("riderCategory") ?? ""));
   const sourceCompanyRaw = String(formData.get("sourceCompany") ?? "");
-  const projectKey = parseDriverProjectKey(formData.get("projectKey"));
+  const clientKey = await resolveClientKey(formData.get("projectKey"));
+  if ("error" in clientKey) return { error: clientKey.error };
+  const projectKey = clientKey.key;
   const clientId = normalizeClientValue(String(formData.get("clientId") ?? ""));
   const clientName = normalizeClientValue(String(formData.get("clientName") ?? ""));
   const accommodation = normalizeClientValue(String(formData.get("accommodation") ?? ""));
@@ -1442,13 +1470,12 @@ async function updateDriverIntakeInner(
     return { error: "missing_fields" };
   }
 
-  // Clearing the field is a legitimate edit, so an empty input means NULL —
-  // not "leave whatever was there".
-  const phone = phoneRaw ? normalizeKuwaitPhone(phoneRaw) : null;
-  if (phoneRaw && !phone) return { error: "invalid_phone" };
-
-  const civilIdNormalized = civilId ? normalizeCivilId(civilId) : null;
-  if (civilId && !civilIdNormalized) return { error: "invalid_civil_id" };
+  // Civil ID, mobile and passport are mandatory; clearing any of them is no
+  // longer an edit the form allows. A legacy rider must be completed here.
+  const identity = normalizeIdentity({ civilId, phone: phoneRaw, passport: passportRaw });
+  if (!identity.ok) return { error: identity.code };
+  const phone = identity.value.phone;
+  const civilIdNormalized = identity.value.civilId;
 
   const hr = parseHrFromForm(formData);
   if ("error" in hr) return { error: hr.error };
@@ -2428,12 +2455,18 @@ export async function saveDriverPrivateInformation(
     if (!fullName) return { error: "missing_fields" };
 
     const phoneRaw = String(formData.get("phone") ?? "").trim();
-    const phone = phoneRaw ? normalizeKuwaitPhone(phoneRaw) : null;
-    if (phoneRaw && !phone) return { error: "invalid_phone" };
-
     const civilRaw = String(formData.get("civilId") ?? "").trim();
-    const civilId = civilRaw ? normalizeCivilId(civilRaw) : null;
-    if (civilRaw && !civilId) return { error: "invalid_civil_id" };
+    const passportRaw = String(formData.get("passportNumber") ?? "").trim();
+    // Civil ID, mobile and passport are mandatory on this save too — the detail
+    // form is where a legacy rider gets completed.
+    const identity = normalizeIdentity({
+      civilId: civilRaw,
+      phone: phoneRaw,
+      passport: passportRaw,
+    });
+    if (!identity.ok) return { error: identity.code };
+    const phone = identity.value.phone;
+    const civilId = identity.value.civilId;
 
     const hr = parseHrFromForm(formData);
     if ("error" in hr) return { error: hr.error };
@@ -2489,9 +2522,15 @@ export async function saveDriverPrivateInformation(
     const workPermitSalary = parseOptionalMoney(formData.get("workPermitSalary"));
     if (!fixedSalary.ok || !workPermitSalary.ok) return { error: "missing_fields" };
 
+    const nationalityRaw = String(formData.get("nationality") ?? "").trim();
     const nationalityPatch = formData.has("nationality")
-      ? { nationality: normalizeCountryCode(String(formData.get("nationality") ?? "")) }
+      ? { nationality: normalizeCountryCode(nationalityRaw) }
       : {};
+    // A typed country that is not an ISO code or a known name is refused rather
+    // than silently stored as NULL.
+    if (nationalityRaw && !nationalityPatch.nationality) {
+      return { error: "invalid_nationality" };
+    }
     const now = new Date().toISOString();
     const db = await staffClient();
 
@@ -2619,7 +2658,9 @@ export async function saveDriverProjectSettings(
 
     const intakeId = String(formData.get("intakeId") ?? "").trim();
     if (!intakeId) return { error: "missing_fields" };
-    const projectKey = parseDriverProjectKey(formData.get("projectKey"));
+    const clientKey = await resolveClientKey(formData.get("projectKey"));
+    if ("error" in clientKey) return { error: clientKey.error };
+    const projectKey = clientKey.key;
     const zoneId = String(formData.get("zoneId") ?? "").trim();
     const vehicleId = String(formData.get("vehicleId") ?? "").trim();
     const vehicleTypeKey = await resolveVehicleTypeKey(String(formData.get("vehicleTypeKey") ?? ""));

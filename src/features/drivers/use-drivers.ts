@@ -21,6 +21,7 @@ import {
   approveDriverIntake,
   resolveDriverImportPreview,
 } from "./drivers-import-actions";
+import { DriverApproveError } from "./driver-approve-error";
 import { invalidateDriverCaches } from "./invalidate-driver-caches";
 import type { DriverImportPreviewRow, DriverListRow } from "./types";
 
@@ -177,7 +178,9 @@ export function useApproveDriverIntake() {
   return useMutation({
     mutationFn: async (intakeId: string) => {
       const result = await approveDriverIntake(intakeId);
-      if ("error" in result) throw new Error(result.error);
+      if ("error" in result) {
+        throw new DriverApproveError(result.error, result.fields ?? []);
+      }
       return result;
     },
     onSuccess: async (data, intakeId) => {

@@ -51,6 +51,7 @@ export function evaluateImportIdentity(
     phone: string | null;
     civil_id: string | null;
     client_id?: string | null;
+    passport_number?: string | null;
   },
   roster: ImportIdentityRoster,
   seen: ImportIdentitySeen,
@@ -176,6 +177,25 @@ export function evaluateImportIdentity(
   }
 
   const existingByEmployeeId = roster.employeeIds.has(empKey);
+  /**
+   * A **new** rider must carry all three identity facts. An update row is left
+   * alone: a blank cell keeps the stored value, and the detail form / approval
+   * are the gates that refuse a legacy record still missing one.
+   */
+  const isNewPerson = !existingByEmployeeId && !uniqueClientOwner;
+  if (isNewPerson) {
+    const passport = row.passport_number?.trim() ?? "";
+    if (!phone || !civilId || !passport) {
+      return result("required_identity", {
+        existingByEmployeeId: false,
+        existingByClientId: false,
+        employeeId,
+        resolvedEmployeeId: employeeId,
+        phone,
+        civilId,
+      });
+    }
+  }
   return result(existingByEmployeeId ? "duplicate_employee_id" : "ok", {
     existingByEmployeeId,
     existingByClientId: uniqueClientOwner === empKey,

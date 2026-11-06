@@ -2,6 +2,8 @@
 
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { cn } from "@/lib/utils";
 import { HR_FOOTER_KEYS, HR_GROUP_FILL, hrColumnIsNumeric, hrGroupSpans } from "../../hr-payroll-columns";
 import type { HrColumn } from "../../hr-payroll-columns";
 import { HR_AWAITING, hrFooterTotals, hrSalaryShortfall } from "../../hr-payroll-formulas";
@@ -781,11 +783,15 @@ export function HrPayrollGrid(props: {
                   sort={funnelSortOf(sort)}
                   onSort={(next) => setSort(applyFunnelSort(column, next))}
                   numeric={hrColumnIsNumeric(column)}
-                  className={withSticky("hrpay-colhead", index)}
+                  className={withSticky(cn(TABLE_HEAD_CLASS, "hrpay-colhead"), index)}
                   style={boxes[index]}
                 />
               ))}
-              <th key="row-action" className="hrpay-colhead w-9 text-center" scope="col" />
+              <th
+                key="row-action"
+                className={cn(TABLE_HEAD_CLASS, "hrpay-colhead w-9 text-center")}
+                scope="col"
+              />
             </tr>
           </thead>
           <tbody>{body}</tbody>

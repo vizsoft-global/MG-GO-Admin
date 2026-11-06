@@ -54,8 +54,14 @@ import {
 } from "./payroll-column-config";
 import { exportPayrollHubCsv } from "./payroll-csv";
 import { usePayrollColumnConfig, usePayrollRangeSnapshot } from "./use-payroll";
+import { payrollClientRows, usePayrollClients } from "./use-payroll-clients";
+import {
+  defaultView,
+  projectClientsFromCatalog,
+  projectConfigOf,
+  type PayrollProjectView,
+} from "./payroll-projects";
 import type { PayrollHubTab, PayrollSlicers } from "./payroll-types";
-import type { PayrollProjectView } from "./payroll-projects";
 
 const TABS: PayrollHubTab[] = [
   "payroll",
@@ -114,9 +120,26 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
   const [slicers, setSlicers] = useState<PayrollSlicers>(EMPTY_OPS_SLICERS);
   const [statusFilter, setStatusFilter] = useState<PayrollStatusFilter | null>(null);
   const [zoneCategory, setZoneCategory] = useState<PayrollZoneCategoryFilter | null>(null);
-  const [aoView, setAoView] = useState<PayrollProjectView>("americana");
+  const [requestedAoView, setAoView] = useState<PayrollProjectView>("americana");
   const [offOpen, setOffOpen] = useState(false);
   const combinedExport = useCombinedExportBridgeValue();
+  /**
+   * The client cards come from the catalog, so a client added in Employee
+   * Settings appears here on the next read instead of after a deploy.
+   */
+  const clientQuery = usePayrollClients();
+  const projectViews = useMemo(
+    () => projectClientsFromCatalog(payrollClientRows(clientQuery.data)),
+    [clientQuery.data],
+  );
+  /**
+   * A client the catalog no longer holds (deleted, or its card turned off) must
+   * not leave the tab scoped to a hidden card. Deriving the value during render
+   * keeps that clamp without a `setState` in an effect.
+   */
+  const aoView = projectViews.some((client) => client.key === requestedAoView)
+    ? requestedAoView
+    : defaultView(projectViews);
 
   const period = useMemo(
     () => payrollPeriodForPreset(preset, today, customRange, locale),
@@ -344,7 +367,9 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           )}
         />
       </div>
-      {data && tab !== "settings" && !(tab === "attendance-orders" && aoView === "five_guys") ? (
+      {data &&
+      tab !== "settings" &&
+      !(tab === "attendance-orders" && !projectConfigOf(aoView, projectViews).showDayStatus) ? (
         <PayrollLegend
           riders={data.riders}
           selected={statusFilter}
@@ -383,12 +408,13 @@ export function PayrollPageShell({ initialTab = "payroll" }: { initialTab?: Payr
           canManage={canManage}
           today={today}
           view={aoView}
+          views={projectViews}
           onViewChange={(next) => {
             setAoView(next);
-            // Five Guys has no day status, so a chip chosen on another project
-            // would filter nothing visible — clear it instead of leaving a filter
-            // the operator cannot see.
-            if (next === "five_guys") setStatusFilter(null);
+            // A client with no day status has no chip to filter on, so a chip
+            // chosen on another client would filter nothing visible — clear it
+            // instead of leaving a filter the operator cannot see.
+            if (!projectConfigOf(next, projectViews).showDayStatus) setStatusFilter(null);
           }}
         />
       ) : tab === "app-attendance" ? (

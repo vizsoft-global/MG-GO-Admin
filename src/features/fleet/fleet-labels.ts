@@ -1,4 +1,7 @@
+import { normalizePayrollClientKey } from "@/features/payroll/payroll-clients";
+
 export const VEHICLE_CAR_TYPES = ["company", "rent", "maintenance"] as const;
+
 export type VehicleCarType = (typeof VEHICLE_CAR_TYPES)[number];
 
 export const VEHICLE_CONDITIONS = [
@@ -36,7 +39,16 @@ export const DRIVER_PROJECT_LABEL: Record<DriverProjectKey, string> = {
 /** The project a rider is on, as the operator should read it. */
 export function driverProjectLabel(key: string | null | undefined): string | null {
   const parsed = parseDriverProjectKey(key);
-  return parsed ? DRIVER_PROJECT_LABEL[parsed] : null;
+  if (parsed) return DRIVER_PROJECT_LABEL[parsed];
+  // A client the catalog added after this file was written still prints
+  // something an operator can read, rather than "—" or a raw slug.
+  const slug = normalizePayrollClientKey(key);
+  if (!slug) return null;
+  return slug
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 export function isVehicleCarType(value: string | null | undefined): value is VehicleCarType {

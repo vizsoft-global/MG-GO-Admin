@@ -3,23 +3,18 @@ import { describe, it } from "node:test";
 import { intakeMissingApprovalFields } from "./driver-approve-validation";
 import { validateDriverForm } from "./driver-form-validation";
 import { formatPhoneDisplay, NO_PHONE_DISPLAY } from "./driver-phone";
-import {
-  guessColumnMapping,
-  mapRowsFromSheet,
-  parseImportActive,
-} from "./import/parse";
-import {
-  DRIVER_IMPORT_HEADERS,
-  DRIVER_IMPORT_SAMPLE_ROW,
-} from "./import/template";
+import { guessColumnMapping } from "./import/parse";
+import { DRIVER_IMPORT_HEADERS } from "./import/template";
 import { DRIVER_IMPORT_REQUIRED_FIELDS } from "./types";
 import type { DriverDocumentType } from "./types";
 
 /**
- * Mobile number and civil ID are optional contact details, not credentials —
- * the driver app signs in with employee ID + a minted passcode. These cases pin
- * the two halves of that: a blank field is accepted everywhere, and a field
- * that was filled in is still held to its format.
+ * Civil ID, mobile number and passport are mandatory on every write path.
+ *
+ * These cases pin the three facts the operator is held to: a blank is refused by
+ * name, a half-typed value is refused as invalid, and approval names the fields
+ * a legacy record still owes. The bulk sheet marks the same three columns as
+ * required so a new rider cannot be created without them.
  */
 
 const noDocuments = {} as Record<DriverDocumentType, File | null>;
@@ -29,6 +24,7 @@ function formInput(overrides: Partial<Parameters<typeof validateDriverForm>[0]>)
     fullName: "Ahmed Ali",
     phone: "99123456",
     civilId: "281010100001",
+    passportNumber: "P1234567",
     employeeId: "12345",
     partnerId: "",
     zoneId: "zone-1",
@@ -38,20 +34,33 @@ function formInput(overrides: Partial<Parameters<typeof validateDriverForm>[0]>)
   };
 }
 
-describe("validateDriverForm — optional phone and civil ID", () => {
-  it("accepts a driver with neither", () => {
-    const errors = validateDriverForm(formInput({ phone: "", civilId: "" }));
-    assert.deepEqual(errors, {});
+describe("validateDriverForm — identity is required", () => {
+  it("accepts a complete driver", () => {
+    assert.deepEqual(validateDriverForm(formInput({})), {});
   });
 
-  it("still rejects a half-typed phone", () => {
-    const errors = validateDriverForm(formInput({ phone: "9912" }));
-    assert.equal(errors.phone, "invalid_phone");
+  it("refuses a blank phone or civil ID by name", () => {
+    assert.equal(validateDriverForm(formInput({ phone: "" })).phone, "missing_fields");
+    assert.equal(validateDriverForm(formInput({ civilId: "" })).civilId, "missing_fields");
   });
 
-  it("still rejects a half-typed civil ID", () => {
-    const errors = validateDriverForm(formInput({ civilId: "2810101" }));
-    assert.equal(errors.civilId, "invalid_civil_id");
+  it("refuses a blank passport", () => {
+    assert.equal(
+      validateDriverForm(formInput({ passportNumber: "" })).passportNumber,
+      "missing_fields",
+    );
+  });
+
+  it("refuses a half-typed value as invalid, not missing", () => {
+    assert.equal(validateDriverForm(formInput({ phone: "9912" })).phone, "invalid_phone");
+    assert.equal(
+      validateDriverForm(formInput({ civilId: "2810101" })).civilId,
+      "invalid_civil_id",
+    );
+    assert.equal(
+      validateDriverForm(formInput({ passportNumber: "P12" })).passportNumber,
+      "invalid_passport",
+    );
   });
 
   it("keeps full name and employee ID mandatory", () => {
@@ -70,31 +79,39 @@ describe("intakeMissingApprovalFields", () => {
     driver_code: "10001",
     civil_id: "281010100001",
     employee_id: "12345",
+    passport_number: "P1234567",
   };
 
-  it("approves an intake with no phone and no civil ID", () => {
-    assert.equal(
-      intakeMissingApprovalFields({ ...base, phone: null, civil_id: null }),
-      false,
-    );
+  it("approves a complete intake", () => {
+    assert.deepEqual(intakeMissingApprovalFields(base), []);
   });
 
-  it("treats blank strings the same as absent", () => {
-    assert.equal(
-      intakeMissingApprovalFields({ ...base, phone: "   ", civil_id: "" }),
-      false,
+  it("names every identity field a legacy intake still owes", () => {
+    assert.deepEqual(
+      intakeMissingApprovalFields({ ...base, phone: null, civil_id: null, passport_number: null }),
+      ["civil_id", "phone", "passport_number"],
+    );
+    assert.deepEqual(
+      intakeMissingApprovalFields({ ...base, phone: "   ", civil_id: "", passport_number: "" }),
+      ["civil_id", "phone", "passport_number"],
     );
   });
 
   it("refuses a malformed value that is present", () => {
-    assert.equal(intakeMissingApprovalFields({ ...base, phone: "9912" }), true);
-    assert.equal(intakeMissingApprovalFields({ ...base, civil_id: "281" }), true);
+    assert.deepEqual(intakeMissingApprovalFields({ ...base, phone: "9912" }), ["phone"]);
+    assert.deepEqual(intakeMissingApprovalFields({ ...base, civil_id: "281" }), ["civil_id"]);
+    assert.deepEqual(
+      intakeMissingApprovalFields({ ...base, passport_number: "P1" }),
+      ["passport_number"],
+    );
   });
 
   it("still requires name, driver code and employee ID", () => {
-    assert.equal(intakeMissingApprovalFields({ ...base, full_name: "" }), true);
-    assert.equal(intakeMissingApprovalFields({ ...base, driver_code: "" }), true);
-    assert.equal(intakeMissingApprovalFields({ ...base, employee_id: null }), true);
+    assert.deepEqual(intakeMissingApprovalFields({ ...base, full_name: "" }), ["full_name"]);
+    assert.deepEqual(intakeMissingApprovalFields({ ...base, driver_code: "" }), ["driver_code"]);
+    assert.deepEqual(intakeMissingApprovalFields({ ...base, employee_id: null }), [
+      "employee_id",
+    ]);
   });
 });
 
@@ -107,76 +124,19 @@ describe("formatPhoneDisplay", () => {
   });
 });
 
-describe("bulk import — phone and civil ID are no longer required columns", () => {
-  it("does not force the operator to map them", () => {
+describe("bulk import — identity columns are required", () => {
+  it("forces the operator to map all three", () => {
     const required = [...DRIVER_IMPORT_REQUIRED_FIELDS] as string[];
-    assert.ok(!required.includes("phone"));
-    assert.ok(!required.includes("civil_id"));
+    assert.ok(required.includes("phone"));
+    assert.ok(required.includes("civil_id"));
+    assert.ok(required.includes("passport_number"));
     assert.ok(!required.includes("restaurant_ids"));
-    assert.deepEqual(required, ["full_name", "employee_id"]);
   });
 
-  it("still auto-maps them when the sheet has them", () => {
+  it("still auto-maps them from the template headings", () => {
     const mapping = guessColumnMapping([...DRIVER_IMPORT_HEADERS]);
     assert.equal(mapping.phone, "Phone");
     assert.equal(mapping.civil_id, "Civil ID");
-  });
-});
-
-describe("parseImportActive", () => {
-  it("reads a blank cell as 'no opinion', not as no", () => {
-    assert.equal(parseImportActive(""), null);
-    assert.equal(parseImportActive(null), null);
-    assert.equal(parseImportActive("   "), null);
-  });
-
-  it("accepts the spellings an operator actually types", () => {
-    for (const yes of ["yes", "Yes", "Y", "TRUE", "1", "active", "approved"]) {
-      assert.equal(parseImportActive(yes), true, yes);
-    }
-    for (const no of ["no", "N", "false", "0", "inactive", "pending"]) {
-      assert.equal(parseImportActive(no), false, no);
-    }
-  });
-
-  it("refuses anything else rather than silently not approving", () => {
-    assert.equal(parseImportActive("maybe"), "invalid");
-    assert.equal(parseImportActive("نعم"), "invalid");
-  });
-});
-
-describe("mapRowsFromSheet — Active column", () => {
-  const headers = [...DRIVER_IMPORT_HEADERS];
-  const mapping = guessColumnMapping(headers);
-  // Addressed by header rather than by position: the template's column order is
-  // a presentation choice and has already been changed once.
-  const columnAt = (header: string) => {
-    const index = headers.indexOf(header);
-    assert.notEqual(index, -1, `template has no ${header} column`);
-    return index;
-  };
-
-  it("maps the Active cell from the template", () => {
-    assert.equal(mapping.active, "Active");
-    const [row] = mapRowsFromSheet(headers, [[...DRIVER_IMPORT_SAMPLE_ROW]], mapping);
-    assert.equal(row!.active, "yes");
-    assert.equal(row!.phone, "+96599123456");
-    assert.equal(row!.civil_id, "281010100001");
-  });
-
-  it("keeps a row whose phone and civil ID cells are blank", () => {
-    const blanked = [...DRIVER_IMPORT_SAMPLE_ROW];
-    blanked[columnAt("Phone")] = "";
-    blanked[columnAt("Civil ID")] = "";
-    const [row] = mapRowsFromSheet(headers, [blanked], mapping);
-    assert.equal(row!.phone, null);
-    assert.equal(row!.civil_id, null);
-    assert.equal(row!.full_name, "Ahmed Ali");
-  });
-
-  it("does not resurrect an empty row that only carries an Active cell", () => {
-    const onlyActive = headers.map(() => "");
-    onlyActive[columnAt("Active")] = "yes";
-    assert.equal(mapRowsFromSheet(headers, [onlyActive], mapping).length, 0);
+    assert.equal(mapping.passport_number, "Passport");
   });
 });

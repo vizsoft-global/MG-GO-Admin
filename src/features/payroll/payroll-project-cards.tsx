@@ -4,41 +4,43 @@ import { useTranslations } from "next-intl";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  PAYROLL_PROJECT_VIEWS,
   projectConfigOf,
+  type PayrollProjectClient,
   type PayrollProjectView,
   type ProjectKpis,
 } from "./payroll-projects";
 
 /**
- * The three project cards above the Attendance & Orders table.
+ * The client cards above the Attendance & Orders table.
  *
- * The card is the project selector — the old Project Name filter is retired,
- * because a filter that can show two projects at once is exactly what this tab
+ * The card is the client selector — the old Project Name filter is retired,
+ * because a filter that can show two clients at once is exactly what this tab
  * must never do. Choosing a card re-scopes the filters, the chips, the KPIs, the
- * table, the manual-changes record and the export to that project alone.
+ * table, the manual-changes record and the export to that client alone.
  */
 export function PayrollProjectCards({
   view,
+  views,
   counts,
   onSelect,
 }: {
   view: PayrollProjectView;
+  views: readonly PayrollProjectClient[];
   counts: Record<PayrollProjectView, number>;
   onSelect: (next: PayrollProjectView) => void;
 }) {
   const t = useTranslations("pages.payroll.projects");
   return (
     <div className="grid gap-2 sm:grid-cols-3">
-      {PAYROLL_PROJECT_VIEWS.map((key) => {
-        const config = projectConfigOf(key);
-        const active = key === view;
+      {views.map((client) => {
+        const config = projectConfigOf(client.key, views);
+        const active = client.key === view;
         return (
           <button
-            key={key}
+            key={client.key}
             type="button"
             aria-pressed={active}
-            onClick={() => onSelect(key)}
+            onClick={() => onSelect(client.key)}
             className={cn(
               "flex items-start justify-between gap-2 rounded-xl border px-3 py-2 text-start transition-colors",
               active
@@ -48,7 +50,7 @@ export function PayrollProjectCards({
           >
             <span className="min-w-0">
               <span className="flex items-center gap-1.5 text-sm font-semibold">
-                {t(config.labelKey)}
+                {config.label ?? t(config.labelKey)}
                 {active ? <Check className="size-3.5" /> : null}
               </span>
               <span
@@ -60,7 +62,9 @@ export function PayrollProjectCards({
                 {t(config.subtitleKey)}
               </span>
             </span>
-            <span className="shrink-0 text-xl font-bold tabular-nums">{counts[key]}</span>
+            <span className="shrink-0 text-xl font-bold tabular-nums">
+              {counts[client.key] ?? 0}
+            </span>
           </button>
         );
       })}
@@ -68,16 +72,18 @@ export function PayrollProjectCards({
   );
 }
 
-/** The four cards, project-aware: orders for Americana, hours for the other two. */
+/** The four cards, client-aware: orders for Americana, hours for the other two. */
 export function PayrollProjectKpis({
   view,
+  views,
   kpis,
 }: {
   view: PayrollProjectView;
+  views: readonly PayrollProjectClient[];
   kpis: ProjectKpis;
 }) {
   const t = useTranslations("pages.payroll.ao");
-  const config = projectConfigOf(view);
+  const config = projectConfigOf(view, views);
   const tiles = config.usesUploadedHours
     ? [
         { label: t("kpiRiders"), value: String(kpis.riders) },

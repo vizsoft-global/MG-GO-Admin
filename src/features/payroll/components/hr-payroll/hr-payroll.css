@@ -332,9 +332,10 @@
   min-height: 32px;
   overflow: visible;
   padding: 1px 6px;
-  background: #fafafa;
-  font-size: 12px;
-  font-weight: 700;
+  /* One header paint for every payroll sheet: the colour, size and weight come
+     from `TABLE_HEAD_CLASS` on the cell, so the HR sheet and the Payroll tabs
+     cannot drift apart. Only the sticky geometry lives here. */
+  background: var(--card);
   text-align: start;
 }
 

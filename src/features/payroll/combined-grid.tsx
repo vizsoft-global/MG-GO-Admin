@@ -494,7 +494,7 @@ function DayCell({
         Boolean(info?.adjusted) && "outline outline-2 outline-orange-400",
       )}
     >
-      {text}
+      {text || "—"}
     </td>
   );
 }

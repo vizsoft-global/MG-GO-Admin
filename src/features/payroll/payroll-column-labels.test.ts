@@ -38,6 +38,36 @@ describe("payroll column labels", () => {
     assert.equal(payrollColumnLabel("restaurant", "Restaurant"), "Restaurant");
   });
 
+  it("owns the wording the HR sheet shares with the Payroll tabs", () => {
+    // The same catalog row was "Client" on one sheet and "Client Name" on the other.
+    assert.equal(payrollColumnLabel("partner", "Client Name"), "Client");
+    assert.equal(payrollColumnLabel("clientName", "Client"), "Client");
+    // A restaurant's client id and the person's client id are one column name.
+    assert.equal(payrollColumnLabel("restaurantId", "Client ID"), "Client ID");
+    // Catalog casing and the two-word total were the other two disagreements.
+    assert.equal(payrollColumnLabel("vtype", "Vehicle type"), "Vehicle Type");
+    assert.equal(payrollColumnLabel("total", "Total"), "Total Salary");
+  });
+
+  it("prints the HR sheet's identity headers exactly as the Payroll tabs do", () => {
+    // This is the resolution the HR tab performs: the canonical map first, the
+    // HR catalogue's own word as the fallback.
+    const resolveHr = (key: string, fallback: string) => payrollColumnLabel(key, fallback);
+    assert.deepEqual(
+      HR_COLUMNS.slice(0, 4).map((column) => resolveHr(column.key, column.header)),
+      ["#", "MG ID", "Client ID", "Employee Name"],
+    );
+    // The two labels that used to disagree with Payroll.
+    assert.equal(
+      resolveHr("status", HR_COLUMNS.find((column) => column.key === "status")?.header ?? ""),
+      "Status",
+    );
+    assert.equal(
+      resolveHr("vtype", HR_COLUMNS.find((column) => column.key === "vtype")?.header ?? ""),
+      "Vehicle Type",
+    );
+  });
+
   it("reads Running, not Active, for a working rider", () => {
     assert.equal(PAYROLL_STATUS_LABELS.active, "Running");
     assert.equal(payrollStatusDisplayLabel("Active"), "Running");

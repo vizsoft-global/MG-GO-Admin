@@ -14,6 +14,7 @@ import {
   type HrColumn,
 } from "../../hr-payroll-columns";
 import { downloadHrWorkbook, hrExportCell } from "../../hr-payroll-export";
+import { payrollColumnLabel } from "../../payroll-column-labels";
 import { useRegisterPayrollActions } from "../../payroll-actions-bridge";
 import {
   HR_AWAITING,
@@ -440,8 +441,14 @@ export function HrPayrollTab(props: {
     }),
     [t],
   );
-  const headers = useMemo<Record<string, string>>(
-    () => ({
+  const headers = useMemo<Record<string, string>>(() => {
+    /**
+     * The same canonical wording the Payroll tabs use. Every key still carries
+     * the HR translation as its fallback, so a column this map does not own keeps
+     * the HR catalogue's own word; the shared ones (MG ID, Client ID, Employee
+     * Name, Client, Status, Vehicle Type, Total Salary) cannot drift again.
+     */
+    const raw: Record<string, string> = {
       i: t("cols.i"),
       client: t("cols.client"),
       mg: t("cols.mg"),
@@ -495,9 +502,13 @@ export function HrPayrollTab(props: {
       allow: t("cols.allow"),
       ded: t("cols.ded"),
       total: t("cols.total"),
-    }),
-    [t],
-  );
+    };
+    const out: Record<string, string> = {};
+    for (const [key, fallback] of Object.entries(raw)) {
+      out[key] = payrollColumnLabel(key, fallback);
+    }
+    return out;
+  }, [t]);
   const groupLabels = useMemo<Record<HrPayrollGroup, string>>(
     () => ({
       emp: t("groups.emp"),

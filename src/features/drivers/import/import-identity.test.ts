@@ -75,7 +75,13 @@ describe("evaluateImportIdentity", () => {
   it("refuses a second sheet row with the same employee ID even when Update is on", () => {
     const seen = emptySeen();
     const first = evaluateImportIdentity(
-      { full_name: "A", employee_id: "EMP1", phone: null, civil_id: null },
+      {
+        full_name: "A",
+        employee_id: "EMP1",
+        phone: "99111111",
+        civil_id: "281010100001",
+        passport_number: "P1234567",
+      },
       roster(),
       seen,
     );
@@ -90,9 +96,26 @@ describe("evaluateImportIdentity", () => {
     assert.equal(isImportRowReady(second, "update"), false);
   });
 
-  it("accepts a brand-new alphanumeric employee ID as create", () => {
+  it("requires identity on a brand-new rider", () => {
     const result = evaluateImportIdentity(
       { full_name: "Sara", employee_id: "EMP2048", phone: null, civil_id: null },
+      roster(),
+      emptySeen(),
+    );
+    assert.equal(result.status, "required_identity");
+    assert.equal(result.existingByEmployeeId, false);
+    assert.equal(isImportRowReady(result, "skip"), false);
+  });
+
+  it("accepts a brand-new rider who carries all three identity facts", () => {
+    const result = evaluateImportIdentity(
+      {
+        full_name: "Sara",
+        employee_id: "EMP2048",
+        phone: "99112233",
+        civil_id: "281010100001",
+        passport_number: "P1234567",
+      },
       roster(),
       emptySeen(),
     );
@@ -170,12 +193,26 @@ describe("evaluateImportIdentity", () => {
   it("lets two creates share a Client ID that is not yet in the roster", () => {
     const seen = emptySeen();
     const first = evaluateImportIdentity(
-      { full_name: "A", employee_id: "EMP1", phone: null, civil_id: null, client_id: "NEW-1" },
+      {
+        full_name: "A",
+        employee_id: "EMP1",
+        phone: "99111111",
+        civil_id: "281010100001",
+        passport_number: "P1111111",
+        client_id: "NEW-1",
+      },
       roster(),
       seen,
     );
     const second = evaluateImportIdentity(
-      { full_name: "B", employee_id: "EMP2", phone: null, civil_id: null, client_id: "NEW-1" },
+      {
+        full_name: "B",
+        employee_id: "EMP2",
+        phone: "99222222",
+        civil_id: "282010100002",
+        passport_number: "P2222222",
+        client_id: "NEW-1",
+      },
       roster(),
       seen,
     );

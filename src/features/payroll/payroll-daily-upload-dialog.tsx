@@ -17,7 +17,7 @@ import {
   type UploadPreview,
   type UploadRosterEntry,
 } from "./payroll-daily-upload";
-import { projectConfigOf, type PayrollProjectView } from "./payroll-projects";
+import { projectConfigOf, type PayrollProjectClient, type PayrollProjectView } from "./payroll-projects";
 import type { PayrollRiderRow } from "./payroll-types";
 
 /** `MGHub-Keeta-Working-hours-template.csv` */
@@ -42,6 +42,7 @@ export function PayrollDailyUploadDialog({
   open,
   onOpenChange,
   view,
+  views,
   riders,
   monthPrefix,
   today,
@@ -49,6 +50,8 @@ export function PayrollDailyUploadDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   view: PayrollProjectView;
+  /** The active client catalog, so a custom client's day shape is honoured. */
+  views?: readonly PayrollProjectClient[];
   riders: readonly PayrollRiderRow[];
   /** `YYYY-MM` of the month being shown. */
   monthPrefix: string;
@@ -61,6 +64,7 @@ export function PayrollDailyUploadDialog({
           <UploadForm
             key={view}
             view={view}
+            views={views}
             riders={riders}
             monthPrefix={monthPrefix}
             today={today}
@@ -74,12 +78,14 @@ export function PayrollDailyUploadDialog({
 
 function UploadForm({
   view,
+  views,
   riders,
   monthPrefix,
   today,
   onClose,
 }: {
   view: PayrollProjectView;
+  views?: readonly PayrollProjectClient[];
   riders: readonly PayrollRiderRow[];
   monthPrefix: string;
   today: string;
@@ -94,7 +100,7 @@ function UploadForm({
   const [preview, setPreview] = useState<UploadPreview | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const config = projectConfigOf(view);
+  const config = projectConfigOf(view, views);
   const hours = config.usesUploadedHours;
   const valueHeader = hours ? t("hoursColumn") : t("ordersColumn");
 
@@ -176,7 +182,7 @@ function UploadForm({
       <div className="space-y-3 px-5 pt-4 pb-2">
         <div className="space-y-1">
           <p className="text-sm font-semibold">
-            {t("title", { project: tProjects(config.labelKey) })}
+            {t("title", { project: config.label ?? tProjects(config.labelKey) })}
           </p>
           <p className="text-xs text-muted-foreground">{t("hint")}</p>
         </div>

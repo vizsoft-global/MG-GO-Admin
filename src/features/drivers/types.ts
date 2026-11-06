@@ -1,5 +1,4 @@
 import type { DriverBankDetails } from "@/features/employees/bank-details";
-import type { DriverProjectKey } from "@/features/fleet/fleet-labels";
 import type { DriverPrivateInfo } from "./driver-private-fields";
 
 export const DOCUMENT_TYPES = [
@@ -260,7 +259,8 @@ export type DriverDetailModel = {
   client_name: string | null;
   source_company: string | null;
   accommodation: string | null;
-  project_key: DriverProjectKey | null;
+  /** A `payroll_clients` key. Open on purpose: the catalog is the list. */
+  project_key: string | null;
   avatar_url: string | null;
   partner_name: string;
   zone_label: string;
@@ -347,15 +347,22 @@ export const DRIVER_IMPORT_FIELDS = [
 ] as const;
 
 /**
- * Phone and civil ID are deliberately absent: a sheet without those columns
- * is still a valid sheet. Employee ID stays because it is half the app
- * credential. Zone and restaurant are an either/or — mapping must include
- * at least one of them, and the download sample always ships both so the
- * sheet teaches the same rule as Add / Edit.
+ * The columns a sheet must map.
+ *
+ * Civil ID, mobile number and passport are mandatory on every write path, so the
+ * sheet names them too: a new rider cannot be created without them, and an
+ * update row that leaves one blank keeps the stored value (a blank cell is "no
+ * opinion", not a clear). Employee ID stays because it is half the app
+ * credential. Zone and restaurant are an either/or — mapping must include at
+ * least one of them, and the download sample always ships both so the sheet
+ * teaches the same rule as Add / Edit.
  */
 export const DRIVER_IMPORT_REQUIRED_FIELDS = [
   "full_name",
   "employee_id",
+  "phone",
+  "civil_id",
+  "passport_number",
 ] as const;
 
 export type DriverImportRequiredField = (typeof DRIVER_IMPORT_REQUIRED_FIELDS)[number];
@@ -375,6 +382,7 @@ export type DriverImportPreviewStatus =
   | "invalid_civil_id"
   | "invalid_employee_id"
   | "invalid_passport"
+  | "required_identity"
   | "invalid_date"
   | "invalid_yes_no"
   | "invalid_employee_status"
@@ -558,7 +566,7 @@ export type DriverImportPreviewRow = Omit<
   section_names: string[];
   nationality_category_keys: string[];
   nationality_category_names: string[];
-  project_key: DriverProjectKey | null;
+  project_key: string | null;
   accommodation: string | null;
   /** `YYYY-MM-DD` written to `work_start_date`. */
   work_start_date: string | null;

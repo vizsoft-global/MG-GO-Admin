@@ -3,12 +3,27 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, Timestamp, type DocumentSnapshot } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
-import { daysInMonth, kuwaitDayString, monthKey, monthLabel, parseMonthKey } from "../core/kuwait";
+import {
+  KUWAIT_OFFSET_MS,
+  daysInMonth,
+  kuwaitDayString,
+  monthKey,
+  monthLabel,
+  parseMonthKey,
+} from "../core/kuwait";
 import { parseIdList } from "../core/query";
 import { loadAppSettings } from "../core/settings";
 import { requireStaff, type StaffContext } from "../core/staff";
 import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
 import { PAYROLL_ATTENDANCE_FIELDS, PAYROLL_RECON_FIELDS, payrollHoursFromFields } from "./payroll-read-plan";
+import {
+  addShiftWindow,
+  appUsageHoursByDay,
+  previousKuwaitDay,
+  shiftSessionWindow,
+  type InstantSpan,
+  type ShiftWindowsByDriver,
+} from "../core/app-usage-hours";
 import { isKeetaProjectKey } from "./_shared";
 import { applyPayrollManualOrders } from "./payroll-edits";
 import { loadNationalityLabels, nationalityLabel } from "../core/nationality-label";
@@ -18,6 +33,12 @@ const GET_ALL_CHUNK = 300;
 
 /** A month of attendance for 900 riders is ~27k rows; the SQL read the same. */
 const SCAN_CAP = 40_000;
+
+/** One month of app duty sessions is far smaller than the attendance scan. */
+const SESSION_SCAN_CAP = 20_000;
+
+/** A month of rota rows is one row per rider per day, so the same order as attendance. */
+const SHIFT_SCAN_CAP = 40_000;
 
 /** `payroll_month_snapshot`'s legacy duty day, used as the client fallback. */
 const DEFAULT_DAY_HOURS = 12;
@@ -51,6 +72,23 @@ function trimmedOrNull(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+/** `HH:mm` on the Kuwait wall clock, which is what the app screens print. */
+function kuwaitClock(atMs: number): string {
+  const shifted = new Date(atMs + KUWAIT_OFFSET_MS);
+  const hours = shifted.getUTCHours();
+  const minutes = shifted.getUTCMinutes();
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+/** One rider's app usage on one Kuwait day, folded from `driver_sessions`. */
+interface SessionDaySummary {
+  shiftIn: string;
+  shiftOut: string | null;
+  hours: number;
+  earliestOnlineMs: number;
+  latestOfflineMs: number | null;
 }
 
 function asDate(value: unknown): Date | null {
@@ -239,13 +277,23 @@ async function loadPayrollContext(input: {
   const { month, zoneMonth, start, lastDay, days } = input;
   const phases = input.phases ?? {};
   const firstDay = kuwaitDayString(start);
+  // Half-open month window for the app duty sessions. `start` is the Kuwait
+  // midnight already parsed by the caller, so the end is the first instant of
+  // the following month rather than a calendar guess.
+  const startStamp = Timestamp.fromDate(start);
+  const endStamp = Timestamp.fromDate(new Date(start.getTime() + days * DAY_MS));
 
-  const [driverSnap, attendanceSnap, clientsSnap, zonesSnap, restaurantsSnap, adjustmentsSnap, offSnap, orderSnap, hoursSnap] =
+  const [driverSnap, attendanceSnap, clientsSnap, zonesSnap, restaurantsSnap, adjustmentsSnap, offSnap, orderSnap, hoursSnap, sessionsSnap, shiftsSnap] =
     await timedPhase(phases, "fanoutMs", () => Promise.all([
       db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get(),
       db
         .collection(COLLECTIONS.attendanceLogs)
-        .where("log_date", ">=", firstDay)
+        // One day before the month, because a log stamped on the previous day can
+        // run into the first day of this one — and the Application Attendance
+        // hours are split at midnight, so that first morning is real work here.
+        // `workedByDriverDay` is keyed by `log_date`, so the extra row is inert
+        // for the grid.
+        .where("log_date", ">=", previousKuwaitDay(firstDay))
         .where("log_date", "<=", lastDay)
         .select(...PAYROLL_ATTENDANCE_FIELDS)
         .limit(SCAN_CAP)
@@ -268,6 +316,43 @@ async function loadPayrollContext(input: {
         .collection(COLLECTIONS.payrollDayHours)
         .where("work_date", ">=", firstDay)
         .where("work_date", "<=", lastDay)
+        .get(),
+      // App sign-in / sign-out spans for the same month. These are the rider's
+      // own clock (`driver_sessions`), which is a different fact from the
+      // attendance clock: the Application Attendance tab reports them and no
+      // pay formula reads them.
+      db
+        .collection(COLLECTIONS.driverSessions)
+        .where("went_online_at", ">=", startStamp)
+        .where("went_online_at", "<", endStamp)
+        .select("driver_id", "went_online_at", "went_offline_at")
+        .limit(SESSION_SCAN_CAP)
+        .get(),
+      // The rota, so app usage can be measured against the hours the rider was
+      // actually scheduled. One day back for the same reason as attendance: a
+      // shift dated on the previous day can end inside this month.
+      db
+        .collection(COLLECTIONS.driverDailyShifts)
+        .where("shift_date", ">=", previousKuwaitDay(firstDay))
+        .where("shift_date", "<=", lastDay)
+        .select(
+          "driver_id",
+          "shift_date",
+          "is_off",
+          "session1_start",
+          "session1_end",
+          "session1_start_day_offset",
+          "session1_end_day_offset",
+          "session2_start",
+          "session2_end",
+          "session2_start_day_offset",
+          "session2_end_day_offset",
+          "session1_start_at",
+          "session1_end_at",
+          "session2_start_at",
+          "session2_end_at",
+        )
+        .limit(SHIFT_SCAN_CAP)
         .get(),
     ]));
 
@@ -375,13 +460,86 @@ async function loadPayrollContext(input: {
   }
 
   const workedByDriverDay = new Map<string, number>();
+  const attendanceSpansByDriver = new Map<string, InstantSpan[]>();
   for (const doc of attendanceSnap.docs) {
     const driverId = asString(doc.get("driver_id"));
     const logDate = asString(doc.get("log_date"));
     if (!driverId || !logDate) continue;
     const key = `${driverId}|${logDate}`;
     workedByDriverDay.set(key, (workedByDriverDay.get(key) ?? 0) + hoursFromLog(doc));
+    // The raw instants are what the Application Attendance tab needs: its number
+    // is split at midnight and clipped to the shift, and a summed hour count
+    // cannot be undone into a span.
+    const checkIn = asDate(doc.get("check_in_at"));
+    const checkOut = asDate(doc.get("check_out_at"));
+    if (!checkIn || !checkOut) continue;
+    const held = attendanceSpansByDriver.get(driverId);
+    const span = { startMs: checkIn.getTime(), endMs: checkOut.getTime() };
+    if (held) held.push(span);
+    else attendanceSpansByDriver.set(driverId, [span]);
   }
+
+  /**
+   * The rota, as absolute instants per driver-day.
+   *
+   * `is_off` rows are skipped rather than treated as an empty window: an OFF day
+   * the rider worked anyway must not read as zero hours, and "no window" is the
+   * same answer for a day with no rota at all.
+   *
+   * The window is built from the **wall clock plus the end-of-day offset**, not
+   * from `session1_start_at` / `session1_end_at`. A rider-submitted row and a
+   * roster-imported row both store only `session1_start: "17:00:00"` and
+   * `session1_end_day_offset: 1`; the instant fields are written by a different
+   * path and are absent on the rows the fleet actually holds. Reading the
+   * instants alone therefore produced **no window at all**, every day fell back
+   * to the uncapped branch, and the tab printed 23 h.
+   */
+  const shiftWindows: ShiftWindowsByDriver = new Map();
+  for (const doc of shiftsSnap.docs) {
+    const driverId = asString(doc.get("driver_id"));
+    if (!driverId || doc.get("is_off") === true) continue;
+    const shiftDate = asString(doc.get("shift_date"));
+    if (!shiftDate) continue;
+    for (const [startField, endField, startOffsetField, endOffsetField, startAtField, endAtField] of [
+      [
+        "session1_start",
+        "session1_end",
+        "session1_start_day_offset",
+        "session1_end_day_offset",
+        "session1_start_at",
+        "session1_end_at",
+      ],
+      [
+        "session2_start",
+        "session2_end",
+        "session2_start_day_offset",
+        "session2_end_day_offset",
+        "session2_start_at",
+        "session2_end_at",
+      ],
+    ] as const) {
+      const window = shiftSessionWindow({
+        shiftDate,
+        start: doc.get(startField),
+        end: doc.get(endField),
+        startDayOffset: doc.get(startOffsetField),
+        endDayOffset: doc.get(endOffsetField),
+        startAt: asDate(doc.get(startAtField)),
+        endAt: asDate(doc.get(endAtField)),
+      });
+      if (window) addShiftWindow(shiftWindows, driverId, window);
+    }
+  }
+
+  /**
+   * App-usage hours per rider-day: attendance spans split at midnight, then
+   * clipped to that day's shift windows. Display only — the Application
+   * Attendance tab reads it and no pay formula does.
+   */
+  const appHoursByDriverDay = appUsageHoursByDay({
+    spansByDriver: attendanceSpansByDriver,
+    windows: shiftWindows,
+  });
 
   // Newest adjustment per (driver, day), because the table is append-only and an
   // 'auto' row is a revert rather than a delete. Equal timestamps break on the
@@ -425,6 +583,50 @@ async function loadPayrollContext(input: {
     loadedHours.set(`${driverId}|${workDate}`, hours);
   }
 
+  /**
+   * App Shift In / Shift Out per (driver, Kuwait day), read from the rider's own
+   * think `driver_sessions` rows. A rider can open and close the app more than
+   * once in a day, so the day reports the earliest sign-in, the latest sign-out
+   * and the sum of the closed spans — an open session contributes 0 h and leaves
+   * Shift Out empty, exactly like an open attendance log.
+   */
+  const sessionsByDriverDay = new Map<string, SessionDaySummary>();
+  for (const doc of sessionsSnap.docs) {
+    const driverId = asString(doc.get("driver_id"));
+    const wentOnline = asDate(doc.get("went_online_at"));
+    if (!driverId || !wentOnline) continue;
+    const onlineMs = wentOnline.getTime();
+    const wentOffline = asDate(doc.get("went_offline_at"));
+    const offlineMs = wentOffline ? wentOffline.getTime() : null;
+    const spanHours = offlineMs != null && offlineMs > onlineMs
+      ? (offlineMs - onlineMs) / (60 * 60 * 1000)
+      : 0;
+    const key = `${driverId}|${kuwaitDayString(wentOnline)}`;
+    const held = sessionsByDriverDay.get(key);
+    if (!held) {
+      sessionsByDriverDay.set(key, {
+        shiftIn: kuwaitClock(onlineMs),
+        shiftOut: offlineMs != null ? kuwaitClock(offlineMs) : null,
+        hours: spanHours,
+        earliestOnlineMs: onlineMs,
+        latestOfflineMs: offlineMs,
+      });
+      continue;
+    }
+    const earliestOnlineMs = Math.min(held.earliestOnlineMs, onlineMs);
+    let latestOfflineMs = held.latestOfflineMs;
+    if (offlineMs != null) {
+      latestOfflineMs = latestOfflineMs == null ? offlineMs : Math.max(latestOfflineMs, offlineMs);
+    }
+    sessionsByDriverDay.set(key, {
+      shiftIn: kuwaitClock(earliestOnlineMs),
+      shiftOut: latestOfflineMs != null ? kuwaitClock(latestOfflineMs) : null,
+      hours: held.hours + spanHours,
+      earliestOnlineMs,
+      latestOfflineMs,
+    });
+  }
+
   return {
     month,
     zoneMonth,
@@ -445,6 +647,8 @@ async function loadPayrollContext(input: {
     verifiedByDriverDay,
     offStructure,
     workedByDriverDay,
+    appHoursByDriverDay,
+    sessionsByDriverDay,
     adjustmentByDriverDay,
     manualOrders,
     loadedHours,
@@ -845,6 +1049,7 @@ async function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: Staff
         const cover = covers.get(key);
         const hours = ctx.workedByDriverDay.get(key) ?? 0;
         const adjustment = ctx.adjustmentByDriverDay.get(key);
+        const session = ctx.sessionsByDriverDay.get(key);
         const reconHit = reconOrdersFor(ctx.recon, day, employeeId, driverCode);
         const counted = applyPayrollManualOrders(
           ctx.manualOrders.get(key) ?? null,
@@ -860,9 +1065,21 @@ async function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: Staff
           o: counted.orders,
           do: counted.displayOrders,
           mo: counted.overridden ? counted.orders : null,
-          // Whether an attendance log exists at all: a check-in with no check-out
-          // is 0 h and is still a worked day, not an absent one.
-          k: ctx.workedByDriverDay.has(key),
+          // App session (login → close) for the day. `sh` is the active-hours
+          // figure the Application attendance tab prints; `si` / `so` are the
+          // Kuwait wall-clock stamps of the first login and last close.
+          si: session?.shiftIn ?? null,
+          so: session?.shiftOut ?? null,
+          sh: session ? Math.round(session.hours * 100) / 100 : null,
+          // App-usage hours for this day: the attendance span split at Kuwait
+          // midnight and clipped to the rider's shift. Display only — the
+          // Application Attendance tab prints it and no pay formula reads it, so
+          // `h` above (which `ACT` rules price) is deliberately untouched.
+          ah: ctx.appHoursByDriverDay.get(key) ?? null,
+          // Whether an attendance log or an app session exists at all: a
+          // check-in with no check-out is 0 h and is still a worked day, not
+          // an absent one.
+          k: ctx.workedByDriverDay.has(key) || Boolean(session),
           c: cover ? (cover.acc ? "accident" : cover.sick ? "sick" : "off") : null,
           ca: cover ? Boolean(cover.acc ? cover.accA : cover.sick ? cover.sickA : cover.offA) : false,
           x: asString(adjustment?.["adjusted_status"]),
