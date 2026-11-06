@@ -70,6 +70,14 @@ export type PayrollDayInfo = {
    * sees it.
    */
   elapsedHours?: number;
+  /**
+   * Mobile-app shift window, Kuwait `HH:mm`: the app login that opened the
+   * rider's first attendance log and the logout / close that closed the last
+   * one. `null` on either side means the app never reported it (an open shift
+   * has no Shift out yet), which the Application Attendance grid prints as `—`.
+   */
+  shiftIn?: string | null;
+  shiftOut?: string | null;
   /** What the day would be with no hand adjustment, and which rule said so. */
   autoStatus: DayStatus;
   autoHours: number;

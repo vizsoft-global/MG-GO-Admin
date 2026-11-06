@@ -40,6 +40,7 @@ import {
   rulesForClient,
   zoneCategoryFor,
   type AdjustmentStatus,
+  type DaySource,
   type PayrollClientConfig,
   type PayrollRule,
   type ZoneCategory,
@@ -226,6 +227,10 @@ type RawDayRow = {
   ca: boolean | null;
   /** True when an attendance log exists for the date. */
   k: boolean | null;
+  /** Kuwait `HH:mm` of the app login that opened the day's first log. */
+  si?: string | null;
+  /** Kuwait `HH:mm` of the logout / close that closed the day's last log. */
+  so?: string | null;
   x: string | null;
   xh: number | string | null;
 };
@@ -394,6 +399,10 @@ type DayFactsInput = {
   workingHours?: number | null;
   /** Display-only elapsed hours for a still-open log (today). */
   elapsedHours?: number;
+  /** Kuwait `HH:mm` of the app login that opened the day's first log. */
+  shiftIn?: string | null;
+  /** Kuwait `HH:mm` of the logout / close that closed the day's last log. */
+  shiftOut?: string | null;
   orders: number;
   displayOrders?: number;
   ordersOverridden?: boolean;
@@ -407,6 +416,24 @@ function zoneRuleFacts(metric: PayrollZoneMetricRow | null): { zoneDpd: number |
   if (!metric) return { zoneDpd: null, zoneRiders: null };
   const zoneDpd = metric.dpdUsed != null && metric.dpdUsed > 0 ? metric.dpdUsed : metric.dpd;
   return { zoneDpd, zoneRiders: metric.riderDays };
+}
+
+/**
+ * Does this day hold a fact the payroll can be judged on?
+ *
+ * A client upload, the rider's own clock-in, a loaded order count, an approved
+ * Operations cover, or a hand adjustment. With none of those, whatever the
+ * client's default produces is not a measurement — it would print `12` or `3`
+ * for a day nobody uploaded and nobody worked — so the day reads `-` until one
+ * of them arrives. This is the SOP rule that the client owns the hours.
+ */
+function hasDayEvidence(facts: DayFactsInput): boolean {
+  if (facts.workingHours != null) return true;
+  if (facts.hasCheckIn) return true;
+  if (facts.orders > 0) return true;
+  if (facts.cover != null) return true;
+  const adjustment = facts.adjustment;
+  return adjustment != null && adjustment.status !== "auto";
 }
 
 function dayInfoFrom(
@@ -437,13 +464,28 @@ function dayInfoFrom(
     coverApproved: facts.coverApproved,
     hasCheckIn: facts.hasCheckIn,
   };
-  const outcome = evalDay({
-    ...base,
-    adjustment: facts.adjustment
-      ? { status: facts.adjustment.status, hours: facts.adjustment.hours }
-      : null,
-  });
-  const auto = outcome.adjusted ? evalDay({ ...base, adjustment: null }) : outcome;
+  // A day with nothing behind it reads `-`, never the client's `12` / `3`
+  // default: no upload, no clock-in, no order, no cover and no hand adjustment
+  // means nobody has said anything about this day yet.
+  const measured = hasDayEvidence(facts);
+  const outcome = measured
+    ? evalDay({
+        ...base,
+        adjustment: facts.adjustment
+          ? { status: facts.adjustment.status, hours: facts.adjustment.hours }
+          : null,
+      })
+    : {
+        status: "blank" as DayStatus,
+        hours: 0,
+        source: "default" as DaySource,
+        ruleLabel: null,
+        ruleIndex: undefined,
+        adjusted: false,
+        unjustified: false,
+      };
+  const auto =
+    measured && outcome.adjusted ? evalDay({ ...base, adjustment: null }) : outcome;
   return {
     status: outcome.status,
     unjustified: outcome.unjustified,
@@ -468,6 +510,8 @@ function dayInfoFrom(
       adjustmentReason: facts.adjustment?.reason ?? null,
       creditedHours: outcome.hours,
       elapsedHours: facts.elapsedHours ?? 0,
+      shiftIn: facts.shiftIn ?? null,
+      shiftOut: facts.shiftOut ?? null,
     },
   };
 }
@@ -1110,6 +1154,8 @@ export function snapshotFromRpc(
         cover,
         coverApproved: Boolean(day.ca),
         hasCheckIn: Boolean(day.k) || logged > 0,
+        shiftIn: day.si ?? null,
+        shiftOut: day.so ?? null,
         adjustment: adjustmentStatus
           ? {
               driverId: row.driverId,

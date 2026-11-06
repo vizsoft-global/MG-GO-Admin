@@ -10452,7 +10452,11 @@
         "daysHint": "Days with any app usage",
         "avgHint": "Across days with usage",
         "totalsRow": "All shown riders",
-        "footNote": "Days without a check-in or check-out show no hours, not zero hours."
+        "footNote": "Days without a check-in or check-out show no hours, not zero hours.",
+        "shiftWindow": "Shift In → Shift Out",
+        "shiftTitle": "Shift In {in} → Shift Out {out}",
+        "noShift": "No app session",
+        "stillIn": "still in"
       },
       "riderStatus": {
         "active": "Active",

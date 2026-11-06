@@ -3,7 +3,14 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, Timestamp, type DocumentSnapshot } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
-import { daysInMonth, kuwaitDayString, monthKey, monthLabel, parseMonthKey } from "../core/kuwait";
+import {
+  KUWAIT_OFFSET_MS,
+  daysInMonth,
+  kuwaitDayString,
+  monthKey,
+  monthLabel,
+  parseMonthKey,
+} from "../core/kuwait";
 import { parseIdList } from "../core/query";
 import { loadAppSettings } from "../core/settings";
 import { requireStaff, type StaffContext } from "../core/staff";
@@ -18,6 +25,9 @@ const GET_ALL_CHUNK = 300;
 
 /** A month of attendance for 900 riders is ~27k rows; the SQL read the same. */
 const SCAN_CAP = 40_000;
+
+/** One month of app duty sessions is far smaller than the attendance scan. */
+const SESSION_SCAN_CAP = 20_000;
 
 /** `payroll_month_snapshot`'s legacy duty day, used as the client fallback. */
 const DEFAULT_DAY_HOURS = 12;
@@ -51,6 +61,23 @@ function trimmedOrNull(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+/** `HH:mm` on the Kuwait wall clock, which is what the app screens print. */
+function kuwaitClock(atMs: number): string {
+  const shifted = new Date(atMs + KUWAIT_OFFSET_MS);
+  const hours = shifted.getUTCHours();
+  const minutes = shifted.getUTCMinutes();
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+/** One rider's app usage on one Kuwait day, folded from `driver_sessions`. */
+interface SessionDaySummary {
+  shiftIn: string;
+  shiftOut: string | null;
+  hours: number;
+  earliestOnlineMs: number;
+  latestOfflineMs: number | null;
 }
 
 function asDate(value: unknown): Date | null {
@@ -239,8 +266,13 @@ async function loadPayrollContext(input: {
   const { month, zoneMonth, start, lastDay, days } = input;
   const phases = input.phases ?? {};
   const firstDay = kuwaitDayString(start);
+  // Half-open month window for the app duty sessions. `start` is the Kuwait
+  // midnight already parsed by the caller, so the end is the first instant of
+  // the following month rather than a calendar guess.
+  const startStamp = Timestamp.fromDate(start);
+  const endStamp = Timestamp.fromDate(new Date(start.getTime() + days * DAY_MS));
 
-  const [driverSnap, attendanceSnap, clientsSnap, zonesSnap, restaurantsSnap, adjustmentsSnap, offSnap, orderSnap, hoursSnap] =
+  const [driverSnap, attendanceSnap, clientsSnap, zonesSnap, restaurantsSnap, adjustmentsSnap, offSnap, orderSnap, hoursSnap, sessionsSnap] =
     await timedPhase(phases, "fanoutMs", () => Promise.all([
       db.collection(COLLECTIONS.drivers).where("archived_at", "==", null).get(),
       db
@@ -268,6 +300,17 @@ async function loadPayrollContext(input: {
         .collection(COLLECTIONS.payrollDayHours)
         .where("work_date", ">=", firstDay)
         .where("work_date", "<=", lastDay)
+        .get(),
+      // App sign-in / sign-out spans for the same month. These are the rider's
+      // own clock (`driver_sessions`), which is a different fact from the
+      // attendance clock: the Application Attendance tab reports them and no
+      // pay formula reads them.
+      db
+        .collection(COLLECTIONS.driverSessions)
+        .where("went_online_at", ">=", startStamp)
+        .where("went_online_at", "<", endStamp)
+        .select("driver_id", "went_online_at", "went_offline_at")
+        .limit(SESSION_SCAN_CAP)
         .get(),
     ]));
 
@@ -425,6 +468,50 @@ async function loadPayrollContext(input: {
     loadedHours.set(`${driverId}|${workDate}`, hours);
   }
 
+  /**
+   * App Shift In / Shift Out per (driver, Kuwait day), read from the rider's own
+   * think `driver_sessions` rows. A rider can open and close the app more than
+   * once in a day, so the day reports the earliest sign-in, the latest sign-out
+   * and the sum of the closed spans — an open session contributes 0 h and leaves
+   * Shift Out empty, exactly like an open attendance log.
+   */
+  const sessionsByDriverDay = new Map<string, SessionDaySummary>();
+  for (const doc of sessionsSnap.docs) {
+    const driverId = asString(doc.get("driver_id"));
+    const wentOnline = asDate(doc.get("went_online_at"));
+    if (!driverId || !wentOnline) continue;
+    const onlineMs = wentOnline.getTime();
+    const wentOffline = asDate(doc.get("went_offline_at"));
+    const offlineMs = wentOffline ? wentOffline.getTime() : null;
+    const spanHours = offlineMs != null && offlineMs > onlineMs
+      ? (offlineMs - onlineMs) / (60 * 60 * 1000)
+      : 0;
+    const key = `${driverId}|${kuwaitDayString(wentOnline)}`;
+    const held = sessionsByDriverDay.get(key);
+    if (!held) {
+      sessionsByDriverDay.set(key, {
+        shiftIn: kuwaitClock(onlineMs),
+        shiftOut: offlineMs != null ? kuwaitClock(offlineMs) : null,
+        hours: spanHours,
+        earliestOnlineMs: onlineMs,
+        latestOfflineMs: offlineMs,
+      });
+      continue;
+    }
+    const earliestOnlineMs = Math.min(held.earliestOnlineMs, onlineMs);
+    let latestOfflineMs = held.latestOfflineMs;
+    if (offlineMs != null) {
+      latestOfflineMs = latestOfflineMs == null ? offlineMs : Math.max(latestOfflineMs, offlineMs);
+    }
+    sessionsByDriverDay.set(key, {
+      shiftIn: kuwaitClock(earliestOnlineMs),
+      shiftOut: latestOfflineMs != null ? kuwaitClock(latestOfflineMs) : null,
+      hours: held.hours + spanHours,
+      earliestOnlineMs,
+      latestOfflineMs,
+    });
+  }
+
   return {
     month,
     zoneMonth,
@@ -445,6 +532,7 @@ async function loadPayrollContext(input: {
     verifiedByDriverDay,
     offStructure,
     workedByDriverDay,
+    sessionsByDriverDay,
     adjustmentByDriverDay,
     manualOrders,
     loadedHours,
@@ -845,6 +933,7 @@ async function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: Staff
         const cover = covers.get(key);
         const hours = ctx.workedByDriverDay.get(key) ?? 0;
         const adjustment = ctx.adjustmentByDriverDay.get(key);
+        const session = ctx.sessionsByDriverDay.get(key);
         const reconHit = reconOrdersFor(ctx.recon, day, employeeId, driverCode);
         const counted = applyPayrollManualOrders(
           ctx.manualOrders.get(key) ?? null,
@@ -860,9 +949,16 @@ async function buildSnapshot(ctx: PayrollContext, slicers: Slicers, staff: Staff
           o: counted.orders,
           do: counted.displayOrders,
           mo: counted.overridden ? counted.orders : null,
-          // Whether an attendance log exists at all: a check-in with no check-out
-          // is 0 h and is still a worked day, not an absent one.
-          k: ctx.workedByDriverDay.has(key),
+          // App session (login → close) for the day. `sh` is the active-hours
+          // figure the Application attendance tab prints; `si` / `so` are the
+          // Kuwait wall-clock stamps of the first login and last close.
+          si: session?.shiftIn ?? null,
+          so: session?.shiftOut ?? null,
+          sh: session ? Math.round(session.hours * 100) / 100 : null,
+          // Whether an attendance log or an app session exists at all: a
+          // check-in with no check-out is 0 h and is still a worked day, not
+          // an absent one.
+          k: ctx.workedByDriverDay.has(key) || Boolean(session),
           c: cover ? (cover.acc ? "accident" : cover.sick ? "sick" : "off") : null,
           ca: cover ? Boolean(cover.acc ? cover.accA : cover.sick ? cover.sickA : cover.offA) : false,
           x: asString(adjustment?.["adjusted_status"]),

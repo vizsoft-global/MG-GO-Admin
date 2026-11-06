@@ -946,7 +946,7 @@ export function PayrollDayGrid({
                               adjusted && "outline outline-2 outline-orange-400",
                             )}
                           >
-                            {label}
+                            {label || "—"}
                             {adjusted ? (
                               <span
                                 aria-hidden

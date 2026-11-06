@@ -171,6 +171,40 @@ export function appHoursForDay(row: PayrollRiderRow, dayIndex: number): number {
   return info.loggedHours || (info.elapsedHours ?? 0);
 }
 
+/**
+ * Shift-in / shift-out clock labels for one app-attendance day cell.
+ *
+ * These come from `driver_sessions` (the rider app's own open/close pair), not
+ * from `attendance_logs`, because this tab answers "when was the app in use?".
+ * A day with no session, or with a session still open, prints only the edge it
+ * has — a guessed shift-out would be a fact the server never recorded.
+ */
+export function appShiftForDay(
+  row: PayrollRiderRow,
+  dayIndex: number,
+): { shiftIn: string | null; shiftOut: string | null } {
+  const info = row.dayInfo[dayIndex];
+  if (!info) return { shiftIn: null, shiftOut: null };
+  return {
+    shiftIn: info.shiftIn ?? null,
+    shiftOut: info.shiftOut ?? null,
+  };
+}
+
+/** Earliest shift-in and latest shift-out a rider recorded across the month. */
+export function appShiftWindowForRider(row: PayrollRiderRow): {
+  shiftIn: string | null;
+  shiftOut: string | null;
+} {
+  let shiftIn: string | null = null;
+  let shiftOut: string | null = null;
+  for (const info of row.dayInfo) {
+    if (!shiftIn && info.shiftIn) shiftIn = info.shiftIn;
+    if (info.shiftOut) shiftOut = info.shiftOut;
+  }
+  return { shiftIn, shiftOut };
+}
+
 export function appAttendanceTotals(row: PayrollRiderRow): {
   totalHours: number;
   activeDays: number;
