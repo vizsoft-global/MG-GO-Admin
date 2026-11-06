@@ -32,6 +32,8 @@ import { columnFilterActive, type ColumnFilters } from "../../payroll-column-fil
 import type { HrRateEvent, HrRateLine } from "../../hr-rate";
 import { listHrRateCatalog, saveHrRateLines } from "../../hr-rate-actions";
 import { listEmployeeCatalog } from "@/features/employees/employee-catalogs-actions";
+import { masterFilterValues } from "../../hr-inline-cells";
+import { HIRING_TYPES, JOB_END_DESCRIPTIONS } from "@/features/drivers/driver-private-fields";
 import type {
   HrBundle,
   HrCellPatch,
@@ -46,6 +48,7 @@ import type {
 } from "../../hr-payroll-types";
 import { EMPTY_HR_SHEET_FILTERS } from "../../hr-payroll-types";
 import { usePayrollCellMutation } from "../../use-payroll-cell-mutation";
+import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import { subscribePayrollWrites, notifyPayrollWrite } from "../../payroll-sync";
 import { fetchHrPayrollBundle, fetchHrAppHours, listHrIdentityOptions, saveHrIdentityCells, saveHrPayrollCells, saveHrVehicleType, type HrIdentityPatch } from "../../payroll-actions";
 import { listVehicleTypes } from "@/features/vehicles/vehicles-actions";
@@ -133,6 +136,11 @@ function historyField(field: HrRateEvent["field"], t: (key: "config.rateChanged"
   }
 }
 
+/**
+ * One filter list: the values the sheet actually holds, then the rest of the
+ * catalog behind it. Defined in `hr-inline-cells.ts` so the test can pin it.
+ */
+
 
 export function HrPayrollTab(props: {
   monthKey: string;
@@ -145,6 +153,12 @@ export function HrPayrollTab(props: {
 }): JSX.Element {
   const { monthKey, monthLabel, monthDays, riders, canManage, rangePills } = props;
   const t = useTranslations("pages.payroll.hr");
+  /**
+   * The two compiled enums are labelled where the employee profile already
+   * labels them, so the sheet and the profile cannot print different words for
+   * the same stored key.
+   */
+  const tEnum = useTranslations("pages.drivers.detail.options");
   const locale = useLocale();
   const queryClient = useQueryClient();
   const bundleQuery = useQuery({
@@ -189,9 +203,69 @@ export function HrPayrollTab(props: {
       banks: (identityOptionsQuery.data?.banks ?? []).map((bank) => ({ value: bank.key, label: bank.label })),
       zones: (identityOptionsQuery.data?.zones ?? []).map((zone) => ({ value: zone.id, label: zone.name })),
       clients: (identityOptionsQuery.data?.clients ?? []).map((client) => ({ value: client.key, label: client.label })),
+      /** The employee profile's country master, so the two cannot disagree. */
+      nationalities: (identityOptionsQuery.data?.nationalities ?? []).map((country) => ({
+        value: country.code,
+        label: country.label,
+      })),
+      /** `nationality_categories`, the catalog Employee Settings edits. */
+      nationalityCategories: (identityOptionsQuery.data?.nationalityCategories ?? []).map((category) => ({
+        value: category.key,
+        label: category.label,
+      })),
+      /** The live restaurant directory. */
+      restaurants: (identityOptionsQuery.data?.restaurants ?? []).map((restaurant) => ({
+        value: restaurant.id,
+        label: restaurant.name,
+      })),
+      sponsorships: (identityOptionsQuery.data?.sponsorships ?? []).map((sponsor) => ({
+        value: sponsor.key,
+        label: sponsor.label,
+      })),
+      sections: (identityOptionsQuery.data?.sections ?? []).map((section) => ({
+        value: section.key,
+        label: section.label,
+      })),
+      positions: (identityOptionsQuery.data?.positions ?? []).map((position) => ({
+        value: position.key,
+        label: position.label,
+      })),
+      companies: (identityOptionsQuery.data?.companies ?? []).map((company) => ({
+        value: company.key,
+        label: company.label,
+      })),
+      /**
+       * These two are compiled on the employee profile (`HIRING_TYPES`,
+       * `JOB_END_DESCRIPTIONS`), not catalogs, so the sheet reuses the same
+       * labels the profile prints rather than inventing a second vocabulary.
+       */
+      hiringTypes: HIRING_TYPES.map((value) => ({
+        value,
+        label: tEnum(`hiringType.${value}`),
+      })),
+      jobEndDescriptions: JOB_END_DESCRIPTIONS.map((value) => ({
+        value,
+        label: tEnum(`jobEndDescription.${value}`),
+      })),
     }),
-    [identityOptionsQuery.data],
+    [identityOptionsQuery.data, tEnum],
   );
+  /**
+   * A catalog edited in Employee Settings must reach this sheet without a page
+   * refresh: the poller invalidates the option read, and the sheet re-reads it on
+   * the next tick. 60 s is the same cadence the other list pages use.
+   */
+  useRealtimeInvalidator({
+    channel: "admin-hr-payroll-catalogs",
+    tables: [
+      { table: "nationality_categories" },
+      { table: "restaurants" },
+      { table: "bank_codes" },
+      { table: "zones" },
+      { table: "payroll_clients" },
+    ],
+    invalidateKeys: [["hr-identity-options"]],
+  });
   /**
    * App-open hours (Shift in → Shift out) for every rider in the month. Display
    * only — it fills one column and enters no pay formula.
@@ -309,6 +383,12 @@ export function HrPayrollTab(props: {
         return t("vehicleTypeFailed");
       case "bank_code":
         return t("cellErrors.bank");
+      case "nationality":
+        return t("cellErrors.nationality");
+      case "nationality_category":
+        return t("cellErrors.nationalityCategory");
+      case "restaurant":
+        return t("cellErrors.restaurant");
       case "zone":
         return t("cellErrors.zone");
       case "project":
@@ -339,9 +419,16 @@ export function HrPayrollTab(props: {
         bankCode?: string;
         zoneId?: string;
         projectKey?: string;
+        nationality?: string;
+        natCat?: string;
+        rest?: string;
+        nationalityCode?: string;
+        nationalityCategoryKey?: string;
+        restaurantId?: string;
       }
     >
   >({});
+
   const identityWrite = usePayrollCellMutation<
     {
       driverId: string;
@@ -352,6 +439,9 @@ export function HrPayrollTab(props: {
         cur?: string;
         zone?: string;
         clientName?: string;
+        nationality?: string;
+        natCat?: string;
+        rest?: string;
       };
     },
     { saved: number; skipped: number }
@@ -559,6 +649,31 @@ export function HrPayrollTab(props: {
       identityDraft,
     ],
   );
+
+  /**
+   * The two toolbar filters backed by an editable master.
+   *
+   * The sheet's cells print labels, so these lists are labels: what the sheet
+   * holds, then the rest of the catalog. A restaurant or nationality added in
+   * Employee Settings is therefore selectable here on the next refresh, before
+   * any rider carries it.
+   */
+  const nationalityFilterValues = useMemo(
+    () =>
+      masterFilterValues(
+        uniqueValues(rows, "nationality", new Set(["—", t("noRate")])),
+        identityOptions.nationalities.map((country) => country.label),
+      ),
+    [rows, identityOptions.nationalities, t],
+  );
+  const storeFilterValues = useMemo(
+    () =>
+      masterFilterValues(
+        uniqueValues(rows, "rest", new Set(["—", t("noRate")])),
+        identityOptions.restaurants.map((restaurant) => restaurant.label),
+      ),
+    [rows, identityOptions.restaurants, t],
+  );
   const missingRates = useMemo(() => {
     if (rows.length === 0) return null;
     const noRate = t("noRate");
@@ -628,6 +743,9 @@ export function HrPayrollTab(props: {
       cur?: string;
       zone?: string;
       clientName?: string;
+      nationality?: string;
+      natCat?: string;
+      rest?: string;
     } = {};
     if (patch.bankNumber !== undefined) display.bankNo = patch.bankNumber;
     if (patch.currency !== undefined) display.cur = patch.currency;
@@ -640,6 +758,22 @@ export function HrPayrollTab(props: {
     if (patch.projectKey !== undefined) {
       display.clientName =
         identityOptions.clients.find((client) => client.value === patch.projectKey)?.label ?? patch.projectKey;
+    }
+    if (patch.nationalityCode !== undefined) {
+      display.nationality =
+        identityOptions.nationalities.find((country) => country.value === patch.nationalityCode)?.label ??
+        patch.nationalityCode;
+    }
+    if (patch.nationalityCategoryKey !== undefined) {
+      display.natCat =
+        identityOptions.nationalityCategories.find(
+          (category) => category.value === patch.nationalityCategoryKey,
+        )?.label ?? patch.nationalityCategoryKey;
+    }
+    if (patch.restaurantId !== undefined) {
+      display.rest =
+        identityOptions.restaurants.find((restaurant) => restaurant.value === patch.restaurantId)?.label ??
+        patch.restaurantId;
     }
     identityWrite.mutation.mutate({ driverId, patch, display });
   }
@@ -1080,7 +1214,7 @@ export function HrPayrollTab(props: {
                 onChange={(event) => setSheetFilters((current) => ({ ...current, nationality: event.target.value }))}
               >
                 <option value="">{t("all")}</option>
-                {uniqueValues(rows, "nationality", new Set(["—", t("noRate")])).map((value) => (
+                {nationalityFilterValues.map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
               </select>
@@ -1108,7 +1242,7 @@ export function HrPayrollTab(props: {
                 onChange={(event) => setSheetFilters((current) => ({ ...current, store: event.target.value }))}
               >
                 <option value="">{t("all")}</option>
-                {uniqueValues(rows, "rest", new Set(["—", t("noRate")])).map((value) => (
+                {storeFilterValues.map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
               </select>

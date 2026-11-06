@@ -10096,7 +10096,10 @@
           "sick": "Sick leave must be a whole number of days from 0 to 30.",
           "bank": "That bank is not in the bank-codes catalog.",
           "zone": "That zone does not exist.",
-          "client": "That client is not in the payroll clients list."
+          "client": "That client is not in the payroll clients list.",
+          "nationality": "That nationality is not a valid country code.",
+          "nationalityCategory": "That nationality category is not in the catalog. Add it in Employee Settings first.",
+          "restaurant": "That restaurant is not in the restaurant directory."
         },
         "emptyIdentity": "—",
         "footerSummary": "Showing {shown} of {total} riders · {month}",

@@ -236,6 +236,28 @@ export function buildHrPayrollRows(args: {
         bankCode?: string;
         zoneId?: string;
         projectKey?: string;
+        nationality?: string;
+        natCat?: string;
+        rest?: string;
+        nationalityCode?: string;
+        nationalityCategoryKey?: string;
+        restaurantId?: string;
+        sponsor?: string;
+        section?: string;
+        position?: string;
+        company?: string;
+        start?: string;
+        endDate?: string;
+        endDesc?: string;
+        hiring?: string;
+        sponsorKey?: string;
+        sectionKey?: string;
+        positionKey?: string;
+        companyKey?: string;
+        workStartDate?: string;
+        jobEndDate?: string;
+        jobEndDescription?: string;
+        hiringType?: string;
       }
     >
   >;
@@ -357,9 +379,21 @@ export function buildHrPayrollRows(args: {
       if (identityEdit.cur !== undefined) cells.cur = dash(identityEdit.cur);
       if (identityEdit.zone !== undefined) cells.zone = dash(identityEdit.zone);
       if (identityEdit.clientName !== undefined) cells.clientName = dash(identityEdit.clientName);
+      if (identityEdit.nationality !== undefined) cells.nationality = dash(identityEdit.nationality);
+      if (identityEdit.natCat !== undefined) cells.natCat = dash(identityEdit.natCat);
+      if (identityEdit.rest !== undefined) cells.rest = dash(identityEdit.rest);
+      if (identityEdit.sponsor !== undefined) cells.sponsor = dash(identityEdit.sponsor);
+      if (identityEdit.section !== undefined) cells.section = dash(identityEdit.section);
+      if (identityEdit.position !== undefined) cells.position = dash(identityEdit.position);
+      if (identityEdit.company !== undefined) cells.company = dash(identityEdit.company);
+      if (identityEdit.start !== undefined) cells.start = dash(identityEdit.start);
+      if (identityEdit.endDate !== undefined) cells.endDate = dash(identityEdit.endDate);
+      if (identityEdit.endDesc !== undefined) cells.endDesc = dash(identityEdit.endDesc);
+      if (identityEdit.hiring !== undefined) cells.hiring = dash(identityEdit.hiring);
     }
     const zoneShown = identityEdit?.zone !== undefined ? dash(identityEdit.zone) : zone;
-    const searchBlob = [name, mgId, identity?.civilId ?? "", zone, restaurant, clientId]
+    const restaurantShown = identityEdit?.rest !== undefined ? dash(identityEdit.rest) : restaurant;
+    const searchBlob = [name, mgId, identity?.civilId ?? "", zone, restaurantShown, clientId]
       .join(" ")
       .toLowerCase();
     const numbers: HrPayrollNumbers = {
@@ -398,6 +432,18 @@ export function buildHrPayrollRows(args: {
       bankCode: identityEdit?.bankCode ?? byId.get(rider.driverId)?.bankCode ?? "",
       zoneId: identityEdit?.zoneId ?? byId.get(rider.driverId)?.zoneId ?? "",
       projectKey: identityEdit?.projectKey ?? byId.get(rider.driverId)?.projectKey ?? "",
+      nationalityCode:
+        identityEdit?.nationalityCode ?? identity?.nationality ?? rider.nationalityCode ?? rider.nationality ?? "",
+      nationalityCategoryKey:
+        identityEdit?.nationalityCategoryKey ?? identity?.nationalityCategoryKeys?.[0] ?? "",
+      restaurantId: identityEdit?.restaurantId ?? identity?.restaurantId ?? rider.restaurantId ?? "",
+      sponsorKey: identityEdit?.sponsorKey ?? identity?.sponsorKey ?? "",
+      sectionKey: identityEdit?.sectionKey ?? identity?.sectionKey ?? "",
+      positionKey: identityEdit?.positionKey ?? identity?.positionKey ?? "",
+      companyKey: identityEdit?.companyKey ?? identity?.companyKey ?? "",
+      workStartDate: identityEdit?.workStartDate ?? identity?.workStartDate ?? "",
+      jobEndDate: identityEdit?.jobEndDate ?? identity?.jobEndDate ?? "",
+      hiringType: identityEdit?.hiringType ?? identity?.hiringType ?? "",
       cells,
       numbers,
       edit,
