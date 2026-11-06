@@ -729,7 +729,7 @@ export function assemblePayrollSnapshot(input: {
       // Which day shape this rider is priced on. An unset project keeps the
       // Americana behaviour it has always had here; the AO tab is the one place
       // that refuses to guess a card for it.
-      const projectView = viewOfProjectKey(r.projectKey) ?? "americana";
+      const projectView = viewOfProjectKey(r.projectKey, clients) ?? "americana";
       const { zoneId, zoneName } = payrollZoneFor(r, zoneNames);
       const zoneCategory = categoryForZone(zoneMetrics, zoneId);
       const metric = zoneId ? zoneMetrics.find((m) => m.zoneId === zoneId) ?? null : null;
@@ -776,7 +776,7 @@ export function assemblePayrollSnapshot(input: {
           // The rules price what the project pays for. Keeta / Five Guys pay the
           // hours Operations loaded; Americana keeps the attendance clock, which is
           // why that project's figures cannot move from this change.
-          loggedHours: hoursForRules(projectView, logged, uploadedHours),
+          loggedHours: hoursForRules(projectView, logged, uploadedHours, clients),
           attendanceHours: logged,
           workingHours: uploadedHours,
           orders: reconOrders(date),
@@ -1150,7 +1150,7 @@ export function snapshotFromRpc(
     for (const day of row.days ?? []) {
       const logged = num(day.h);
       const uploadedHours = day.wh == null ? null : num(day.wh);
-      const projectView = viewOfProjectKey(row.projectKey) ?? "americana";
+      const projectView = viewOfProjectKey(row.projectKey, clients) ?? "americana";
       const cover =
         day.c === "off" || day.c === "sick" || day.c === "accident" ? day.c : null;
       const adjustmentStatus = parseAdjustmentStatus(day.x);
@@ -1159,7 +1159,7 @@ export function snapshotFromRpc(
         date: String(day.d),
         // Same rule as the local assembly: Keeta / Five Guys are judged on the
         // hours Operations loaded, everything else on the attendance clock.
-        loggedHours: hoursForRules(projectView, logged, uploadedHours),
+        loggedHours: hoursForRules(projectView, logged, uploadedHours, clients),
         attendanceHours: logged,
         workingHours: uploadedHours,
         elapsedHours:
