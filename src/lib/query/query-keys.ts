@@ -401,7 +401,8 @@ export const queryKeys = {
   },
   notifications: {
     all: () => ["notifications"] as const,
-    dashboard: () => ["notifications", "dashboard"] as const,
+    dashboard: (scope: Record<string, unknown> = {}) =>
+      ["notifications", "dashboard", scope] as const,
     list: (filters: Record<string, unknown> = {}) =>
       ["notifications", "list", filters] as const,
     detail: (id: string) => ["notifications", "detail", id] as const,
