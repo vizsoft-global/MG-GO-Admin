@@ -45,6 +45,19 @@ describe("appHoursForDay", () => {
     const row = rowOf([]);
     assert.equal(appHoursForDay(row, 0), 0);
   });
+
+  it("holds the raw fallback to one working day", () => {
+    // The production report: a rider whose log was closed by the midnight
+    // auto-checkout read 23.06 h because the snapshot carried no clipped
+    // figure at all. The tab must never print more than a working day.
+    assert.equal(appHoursForDay(rowOf([{ loggedHours: 23.06 }]), 0), 12);
+    assert.equal(appHoursForDay(rowOf([{ appHours: 0, loggedHours: 0, elapsedHours: 14.8 }]), 0), 12);
+  });
+
+  it("leaves an honest figure below the cap alone", () => {
+    assert.equal(appHoursForDay(rowOf([{ loggedHours: 7.25 }]), 0), 7.25);
+    assert.equal(appHoursForDay(rowOf([{ appHours: 10 }]), 0), 10);
+  });
 });
 
 describe("appAttendanceTotals", () => {

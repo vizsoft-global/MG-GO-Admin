@@ -160,6 +160,21 @@ export function payrollVehicleKind(key: string | null): string {
 }
 
 /**
+ * The most a single day may print, mirroring `MAX_DAY_HOURS` on the server.
+ *
+ * The cap lives in both places on purpose: the server figure is already clipped,
+ * but the fallback branches below read a raw clock-in → clock-out span, and a
+ * rider who forgot to clock out would otherwise paint 23 h again the moment the
+ * snapshot is stale or the payload came from an older deploy.
+ */
+const MAX_APP_DAY_HOURS = 12;
+
+function capAppDayHours(hours: number): number {
+  if (!Number.isFinite(hours) || hours <= 0) return 0;
+  return Math.min(hours, MAX_APP_DAY_HOURS);
+}
+
+/**
  * App-usage hours for one day.
  *
  * Prefers the server's `appHours` — the attendance span split at Kuwait midnight
@@ -179,10 +194,10 @@ export function appHoursForDay(row: PayrollRiderRow, dayIndex: number): number {
   if (!info) return 0;
   const elapsed = info.elapsedHours ?? 0;
   const clipped = info.appHours;
-  if (typeof clipped === "number") return clipped > 0 ? clipped : elapsed;
+  if (typeof clipped === "number") return capAppDayHours(clipped > 0 ? clipped : elapsed);
   // No server figure (older deploy, or the local table fallback): the previous
   // behaviour, so the tab degrades rather than blanking.
-  return info.loggedHours > 0 ? info.loggedHours : elapsed;
+  return capAppDayHours(info.loggedHours > 0 ? info.loggedHours : elapsed);
 }
 
 /**

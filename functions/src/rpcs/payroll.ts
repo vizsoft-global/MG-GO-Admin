@@ -20,6 +20,7 @@ import {
   addShiftWindow,
   appUsageHoursByDay,
   previousKuwaitDay,
+  shiftSessionWindow,
   type InstantSpan,
   type ShiftWindowsByDriver,
 } from "../core/app-usage-hours";
@@ -338,6 +339,14 @@ async function loadPayrollContext(input: {
           "driver_id",
           "shift_date",
           "is_off",
+          "session1_start",
+          "session1_end",
+          "session1_start_day_offset",
+          "session1_end_day_offset",
+          "session2_start",
+          "session2_end",
+          "session2_start_day_offset",
+          "session2_end_day_offset",
           "session1_start_at",
           "session1_end_at",
           "session2_start_at",
@@ -476,19 +485,49 @@ async function loadPayrollContext(input: {
    * `is_off` rows are skipped rather than treated as an empty window: an OFF day
    * the rider worked anyway must not read as zero hours, and "no window" is the
    * same answer for a day with no rota at all.
+   *
+   * The window is built from the **wall clock plus the end-of-day offset**, not
+   * from `session1_start_at` / `session1_end_at`. A rider-submitted row and a
+   * roster-imported row both store only `session1_start: "17:00:00"` and
+   * `session1_end_day_offset: 1`; the instant fields are written by a different
+   * path and are absent on the rows the fleet actually holds. Reading the
+   * instants alone therefore produced **no window at all**, every day fell back
+   * to the uncapped branch, and the tab printed 23 h.
    */
   const shiftWindows: ShiftWindowsByDriver = new Map();
   for (const doc of shiftsSnap.docs) {
     const driverId = asString(doc.get("driver_id"));
     if (!driverId || doc.get("is_off") === true) continue;
-    for (const [startField, endField] of [
-      ["session1_start_at", "session1_end_at"],
-      ["session2_start_at", "session2_end_at"],
+    const shiftDate = asString(doc.get("shift_date"));
+    if (!shiftDate) continue;
+    for (const [startField, endField, startOffsetField, endOffsetField, startAtField, endAtField] of [
+      [
+        "session1_start",
+        "session1_end",
+        "session1_start_day_offset",
+        "session1_end_day_offset",
+        "session1_start_at",
+        "session1_end_at",
+      ],
+      [
+        "session2_start",
+        "session2_end",
+        "session2_start_day_offset",
+        "session2_end_day_offset",
+        "session2_start_at",
+        "session2_end_at",
+      ],
     ] as const) {
-      const from = asDate(doc.get(startField));
-      const to = asDate(doc.get(endField));
-      if (!from || !to || to.getTime() <= from.getTime()) continue;
-      addShiftWindow(shiftWindows, driverId, { startMs: from.getTime(), endMs: to.getTime() });
+      const window = shiftSessionWindow({
+        shiftDate,
+        start: doc.get(startField),
+        end: doc.get(endField),
+        startDayOffset: doc.get(startOffsetField),
+        endDayOffset: doc.get(endOffsetField),
+        startAt: asDate(doc.get(startAtField)),
+        endAt: asDate(doc.get(endAtField)),
+      });
+      if (window) addShiftWindow(shiftWindows, driverId, window);
     }
   }
 
