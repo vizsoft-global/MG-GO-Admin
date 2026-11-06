@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -139,8 +139,10 @@ export function HrPayrollTab(props: {
   monthDays: number;
   riders: readonly PayrollRiderRow[];
   canManage: boolean;
+  /** Range presets, rendered above the tab strip at the start edge. */
+  rangePills?: ReactNode;
 }): JSX.Element {
-  const { monthKey, monthLabel, monthDays, riders, canManage } = props;
+  const { monthKey, monthLabel, monthDays, riders, canManage, rangePills } = props;
   const t = useTranslations("pages.payroll.hr");
   const locale = useLocale();
   const queryClient = useQueryClient();
@@ -815,8 +817,7 @@ export function HrPayrollTab(props: {
     switch (view) {
       case "payroll":
         return (
-          <div className="hrpay-sheet">
-            <HrPayrollGrid
+          <HrPayrollGrid
               columns={visible}
               rows={filtered}
               sourceRows={sheeted}
@@ -878,7 +879,6 @@ export function HrPayrollTab(props: {
                 />
               }
             />
-          </div>
         );
       case "summary":
         return (
@@ -1014,6 +1014,7 @@ export function HrPayrollTab(props: {
           {t("viewConfig")}
         </button>
       </div>
+      {rangePills ? <div className="hrpay-range-bar">{rangePills}</div> : null}
       {view === "payroll" ? (
         <div className="hrpay-stage">
           <div className="hrpay-fbar">
