@@ -177,6 +177,8 @@ export type NotificationDashboardKpis = {
   drafts: number;
   deliveryRate: number;
   failedDeliveries: number;
+  /** Campaigns in a failure status — the number the "Failed" list bucket shows. */
+  failedCampaigns: number;
   openRate: number;
   activeAutomations: number;
   recentActivity: number;
@@ -190,6 +192,18 @@ export type NotificationListFilters = {
   toDate?: string;
   bucket?: NotificationListBucket;
   createdBy?: string;
+  /** Timestamp the date range applies to. "sent" buckets filter by send time. */
+  dateField?: "created_at" | "sent_at";
+};
+
+/** The non-bucket scope shared by the grid and the metric cards, so a card's number is the
+ *  number of rows the grid renders after that card is clicked. */
+export type NotificationDashboardScope = {
+  category?: string;
+  fromDate?: string;
+  toDate?: string;
+  createdBy?: string;
+  search?: string;
 };
 
 export type NotificationActionError =

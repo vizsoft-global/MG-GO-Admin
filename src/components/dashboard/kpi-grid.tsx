@@ -11,6 +11,10 @@ export type KpiGridItem = {
   caption?: ReactNode;
   selected?: boolean;
   onClick?: () => void;
+  /** Whole card links to the filtered view of this metric. */
+  href?: string;
+  /** Force the empty-widget shell when the metric is zero. */
+  empty?: boolean;
 };
 
 /** Widest row the strip is allowed to form. Fewer KPIs than this must spread across the
@@ -49,6 +53,8 @@ export function KpiGrid({
           compact={compact}
           selected={kpi.selected}
           onClick={kpi.onClick}
+          href={kpi.href}
+          empty={kpi.empty}
         />
       ))}
     </div>

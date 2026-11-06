@@ -19,12 +19,12 @@ import {
   listNotificationTemplates,
   searchDriversForNotification,
 } from "./notifications-actions";
-import type { NotificationListFilters } from "./types";
+import type { NotificationDashboardScope, NotificationListFilters } from "./types";
 
-export function useNotificationDashboard() {
+export function useNotificationDashboard(scope: NotificationDashboardScope = {}) {
   return useQuery({
-    queryKey: queryKeys.notifications.dashboard(),
-    queryFn: () => getNotificationDashboardKpis(),
+    queryKey: queryKeys.notifications.dashboard(scope),
+    queryFn: () => getNotificationDashboardKpis(scope),
   });
 }
 

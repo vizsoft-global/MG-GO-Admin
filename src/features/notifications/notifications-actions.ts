@@ -1,5 +1,6 @@
 "use server";
 
+import { FieldPath } from "firebase-admin/firestore";
 import type { DocumentData, Firestore, Query } from "firebase-admin/firestore";
 
 import { logAdminMutation, logAdminRead } from "@/lib/audit/log-admin-activity";
@@ -25,8 +26,9 @@ import { pickLatestPushTokenByDriver } from "./push-token-select";
 import { resolveScreenshotRestricted } from "./screenshot-restriction";
 import { resolveDriversByLookupIds } from "@/features/drivers/resolve-drivers-by-lookup-ids";
 import { recipientIdsFromCompile } from "./audience-snapshot";
-import { statusesForListBucket } from "./notification-list-buckets";
-import { campaignDateBounds, campaignDayBounds, kuwaitTodayString } from "./campaign-date-range";
+import { statusesForListBucket, type NotificationListBucket } from "./notification-list-buckets";
+import { dateFieldForBucket } from "./notification-filter-state";
+import { campaignDateBounds, campaignDayBounds, kuwaitTodayString, type CampaignDateBounds } from "./campaign-date-range";
 import { searchActiveDrivers } from "@/features/drivers/search-active-drivers";
 import { fetchDriversPage } from "@/features/drivers/drivers-list-actions";
 import { DEFAULT_DRIVERS_SORT } from "@/features/drivers/drivers-list-query";
@@ -42,6 +44,7 @@ import type {
   NotificationCampaignRow,
   NotificationCategory,
   NotificationDashboardKpis,
+  NotificationDashboardScope,
   NotificationListFilters,
   NotificationScreenshotEventRow,
   NotificationTemplateRow,
@@ -624,8 +627,16 @@ class NotificationQuery {
       const rangeField = filters.find(
         (filter) => filter.op === "gte" || filter.op === "gt" || filter.op === "lte" || filter.op === "lt",
       )?.field;
-      if (ordered && order && (!rangeField || order.field === rangeField)) {
-        query = query.orderBy(order.field, order.ascending ? "asc" : "desc");
+      // Ordering by a field Firestore has never seen silently drops those documents from the
+      // result set, which is how a bucket could count 24 rows but render 6. Only order by the
+      // range field (where every match must have a value); otherwise order by the document id,
+      // which can never be missing, and let `sortRows` put the page in the requested order.
+      if (ordered && order) {
+        if (rangeField && order.field === rangeField && order.field !== "id") {
+          query = query.orderBy(order.field, order.ascending ? "asc" : "desc");
+        } else if (!rangeField) {
+          query = query.orderBy(FieldPath.documentId());
+        }
       }
       if (capped) query = query.limit(READ_CAP);
       const snap = await query.get();
@@ -905,35 +916,35 @@ function mapCampaign(row: Record<string, unknown>): NotificationCampaignRow {
   };
 }
 
-export async function getNotificationDashboardKpis(): Promise<NotificationDashboardKpis> {
+export async function getNotificationDashboardKpis(
+  scope: NotificationDashboardScope = {},
+): Promise<NotificationDashboardKpis> {
   await requireNotificationsView();
   const panel = await notificationsDb();
   const today = kuwaitToday();
   const todayBounds = campaignDayBounds(today);
   const start = todayBounds.fromIso ?? `${today}T00:00:00+03:00`;
 
-  const [sentRes, scheduledRes, draftsRes, failedRes, automationsRes, activityRes, campaignsRes] =
+  const base = () =>
+    panel.from("notification_campaigns").select("id", { count: "exact", head: true });
+
+  const [sentRes, scheduledRes, draftsRes, failedRes, failedCampaignsRes, automationsRes, activityRes, campaignsRes] =
     await Promise.all([
-      // QA #15: "Sent today" matches the campaign list — every campaign that was
-      // dispatched today counts, including one that failed part-way. Excluding
-      // `failed` made the KPI read 0 while the list showed the row.
-      panel
-        .from("notification_campaigns")
-        .select("id", { count: "exact", head: true })
-        .gte("sent_at", start)
-        .in("status", ["sent", "delivered", "opened", "clicked", "failed"]),
-      panel
-        .from("notification_campaigns")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "scheduled"),
-      panel
-        .from("notification_campaigns")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "draft"),
+      // Each card counts with the exact status set and scope its list bucket uses, so the
+      // number on the card is the number of rows the grid renders once it is clicked.
+      applyNotificationCardScope(
+        base(),
+        "sent",
+        scope,
+        campaignDayBounds(today),
+      ),
+      applyNotificationCardScope(base(), "scheduled", scope),
+      applyNotificationCardScope(base(), "drafts", scope),
       panel
         .from("notification_campaigns")
         .select("failed_count")
         .gte("created_at", start),
+      applyNotificationCardScope(base(), "failed", scope),
       panel
         .from("notification_automations")
         .select("id", { count: "exact", head: true })
@@ -974,6 +985,7 @@ export async function getNotificationDashboardKpis(): Promise<NotificationDashbo
     drafts: draftsRes.count ?? 0,
     deliveryRate: totalRecipients > 0 ? Math.round((totalDelivered / totalRecipients) * 100) : 0,
     failedDeliveries: failedToday,
+    failedCampaigns: failedCampaignsRes.count ?? 0,
     openRate: totalDelivered > 0 ? Math.round((totalOpened / totalDelivered) * 100) : 0,
     activeAutomations: automationsRes.count ?? 0,
     recentActivity: activityRes.count ?? 0,
@@ -991,9 +1003,7 @@ function applyNotificationCampaignFilters<
 >(query: T, filters: NotificationListFilters): T {
   let next = query;
   if (filters.bucket && filters.bucket !== "all") {
-    const statuses = statusesForListBucket(filters.bucket);
-    if (statuses?.length === 1) next = next.eq("status", statuses[0]);
-    else if (statuses && statuses.length > 1) next = next.in("status", [...statuses]);
+    next = applyNotificationBucketStatuses(next, filters.bucket);
   } else if (filters.status && filters.status !== "all") {
     next = next.eq("status", filters.status);
   }
@@ -1005,13 +1015,69 @@ function applyNotificationCampaignFilters<
       `title.ilike.%${filters.search.trim()}%,body.ilike.%${filters.search.trim()}%`,
     );
   }
-  if (filters.fromDate || filters.toDate) {
-    const bounds = campaignDateBounds(filters.fromDate, filters.toDate);
-    if (bounds.fromIso) next = next.gte("created_at", bounds.fromIso);
-    if (bounds.toIso) next = next.lte("created_at", bounds.toIso);
-  }
+  next = applyNotificationPeriodScope(
+    next,
+    filters.dateField ?? dateFieldForBucket(filters.bucket ?? "all"),
+    campaignDateBounds(filters.fromDate, filters.toDate),
+  );
   if (filters.createdBy) next = next.eq("created_by", filters.createdBy);
   return next;
+}
+
+/** Same period + category + creator scope as the grid, so a metric card and the rows it opens
+ *  can never disagree about which campaigns they are counting. */
+function applyNotificationCardScope<
+  T extends {
+    eq: (column: string, value: string) => T;
+    in: (column: string, value: string[]) => T;
+    or: (filters: string) => T;
+    gte: (column: string, value: string) => T;
+    lte: (column: string, value: string) => T;
+  },
+>(
+  query: T,
+  bucket: NotificationListBucket,
+  scope: NotificationDashboardScope,
+  day?: CampaignDateBounds,
+): T {
+  let next = applyNotificationBucketStatuses(query, bucket);
+  if (scope.category && scope.category !== "all") next = next.eq("category", scope.category);
+  if (scope.createdBy && scope.createdBy !== "all") {
+    next = next.eq("created_by", scope.createdBy);
+  }
+  if (scope.search?.trim()) {
+    next = next.or(
+      `title.ilike.%${scope.search.trim()}%,body.ilike.%${scope.search.trim()}%`,
+    );
+  }
+  const bounds = day ?? campaignDateBounds(scope.fromDate, scope.toDate);
+  return applyNotificationPeriodScope(next, dateFieldForBucket(bucket), bounds);
+}
+
+function applyNotificationPeriodScope<
+  T extends {
+    gte: (column: string, value: string) => T;
+    lte: (column: string, value: string) => T;
+  },
+>(query: T, dateField: "created_at" | "sent_at", bounds: CampaignDateBounds): T {
+  let next = query;
+  if (bounds.fromIso) next = next.gte(dateField, bounds.fromIso);
+  if (bounds.toIso) next = next.lte(dateField, bounds.toIso);
+  return next;
+}
+
+/** Single source of truth for "which statuses does this bucket mean", shared by the list
+ *  query and the metric cards so a card's number always matches the rows it opens. */
+function applyNotificationBucketStatuses<
+  T extends {
+    eq: (column: string, value: string) => T;
+    in: (column: string, value: string[]) => T;
+  },
+>(query: T, bucket: NotificationListBucket): T {
+  const statuses = statusesForListBucket(bucket);
+  if (!statuses || statuses.length === 0) return query;
+  if (statuses.length === 1) return query.eq("status", statuses[0]);
+  return query.in("status", [...statuses]);
 }
 
 export async function listNotificationCampaignsPage(params: {
