@@ -11,6 +11,7 @@ import { staffDb } from "@/lib/firebase/staff-db";
 import {
   DEFAULT_PAYROLL_CLIENTS,
   PAYROLL_CLIENT_KEY_RE,
+  isPayrollRuleKind,
   normalizePayrollClientKey,
   payrollClientKeyFromName,
   type PayrollClientInput,
@@ -82,6 +83,12 @@ function num(value: unknown, fallback: number): number {
   return fallback;
 }
 
+/** The default-result kind a day with no matching rule falls back to. */
+function ruleKind(value: unknown): string {
+  const kind = text(value);
+  return isPayrollRuleKind(kind) ? kind : "12";
+}
+
 function parseRow(key: string, data: Record<string, unknown> | undefined): PayrollClientRow {
   const row = data ?? {};
   return {
@@ -101,6 +108,10 @@ function parseRow(key: string, data: Record<string, unknown> | undefined): Payro
     defaultOffDays: num(row.default_off_days, 2),
     goodThreshold: num(row.good_threshold, 110),
     averageThreshold: num(row.average_threshold, 70),
+    defaultResultKind:
+      typeof (row.default_result as { kind?: unknown } | null)?.kind === "string"
+        ? String((row.default_result as { kind: string }).kind)
+        : "12",
     riderCount: 0,
   };
 }
@@ -179,7 +190,7 @@ export async function upsertPayrollClient(
       name_ar: text(input.nameAr),
       is_system: false,
       is_active: bool(input.isActive, true),
-      sort_order: Date.now() % 1_000_000,
+      sort_order: num(input.sortOrder, Date.now() % 1_000_000),
       uses_zone: bool(input.usesZone, seeded?.usesZone ?? true),
       uses_orders: bool(input.usesOrders, seeded?.usesOrders ?? true),
       uses_hours: bool(input.usesHours, seeded?.usesHours ?? false),
@@ -190,6 +201,7 @@ export async function upsertPayrollClient(
       default_off_days: num(input.defaultOffDays, seeded?.defaultOffDays ?? 2),
       good_threshold: num(input.goodThreshold, seeded?.goodThreshold ?? 110),
       average_threshold: num(input.averageThreshold, seeded?.averageThreshold ?? 70),
+      default_result: { kind: ruleKind(input.defaultResultKind), hours: null },
       created_at: FieldValue.serverTimestamp(),
       updated_at: FieldValue.serverTimestamp(),
     };
@@ -234,6 +246,17 @@ export async function upsertPayrollClient(
   ] as const) {
     if (input[field] !== undefined) patch[column] = num(input[field], fallback);
   }
+  if (input.defaultResultKind !== undefined) {
+    const current = before.default_result as { hours?: unknown } | null | undefined;
+    // Only the fallback kind changes here; the hours a `CUS` default carried
+    // survive, so opening the client cannot silently zero a configured amount.
+    patch.default_result = {
+      ...(current ?? {}),
+      kind: ruleKind(input.defaultResultKind),
+      hours: current?.hours ?? null,
+    };
+  }
+  if (input.sortOrder !== undefined) patch.sort_order = num(input.sortOrder, 100);
   await ref.set(patch, { merge: true });
   void logAdminMutation({
     action: "update",

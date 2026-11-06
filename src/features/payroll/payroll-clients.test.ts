@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   DEFAULT_PAYROLL_CLIENTS,
+  PAYROLL_RULE_KINDS,
   findPayrollClient,
+  isPayrollRuleKind,
   normalizePayrollClientKey,
   payrollClientExportName,
   payrollClientKeyFromName,
   payrollClientLabel,
+  resolvePayrollClientToken,
 } from "./payroll-clients";
 
 /**
@@ -73,4 +76,81 @@ describe("labels and export names", () => {
     assert.equal(payrollClientExportName("client_2", "Client #2"), "Client-2");
     assert.equal(payrollClientExportName("keeta", null), "Keeta");
   });
+
+describe("resolvePayrollClientToken", () => {
+  const rows = [
+    { ...DEFAULT_PAYROLL_CLIENTS[0]! },
+    {
+      ...DEFAULT_PAYROLL_CLIENTS[0]!,
+      key: "al_musallam",
+      name: "Al Musallam",
+      nameAr: "المسلم",
+      isSystem: false,
+      riderCount: 0,
+    },
+    {
+      ...DEFAULT_PAYROLL_CLIENTS[0]!,
+      key: "retired",
+      name: "Retired Client",
+      nameAr: "",
+      isActive: false,
+      isSystem: false,
+      riderCount: 0,
+    },
+  ];
+
+  it("resolves a key the sheet typed in any spelling", () => {
+    assert.deepEqual(resolvePayrollClientToken("al_musallam", rows), {
+      status: "ok",
+      key: "al_musallam",
+    });
+    assert.deepEqual(resolvePayrollClientToken("Al Musallam", rows), {
+      status: "ok",
+      key: "al_musallam",
+    });
+    assert.deepEqual(resolvePayrollClientToken("المسلم", rows), {
+      status: "ok",
+      key: "al_musallam",
+    });
+  });
+
+  it("always knows the three SOP clients, even before the catalog is seeded", () => {
+    assert.deepEqual(resolvePayrollClientToken("Keeta", []), { status: "ok", key: "keeta" });
+    assert.deepEqual(resolvePayrollClientToken("five guys", []), {
+      status: "ok",
+      key: "five_guys",
+    });
+  });
+
+  it("refuses a name the catalog does not hold", () => {
+    assert.deepEqual(resolvePayrollClientToken("Not A Client", rows), { status: "unknown" });
+    assert.deepEqual(resolvePayrollClientToken("retired", rows), { status: "ok", key: "retired" });
+    // A retired client's *name* is not a live assignment target.
+    assert.deepEqual(resolvePayrollClientToken("Retired Client", rows), { status: "unknown" });
+  });
+
+  it("reads a blank cell as no opinion", () => {
+    assert.deepEqual(resolvePayrollClientToken("", rows), { status: "empty" });
+    assert.deepEqual(resolvePayrollClientToken(null, rows), { status: "empty" });
+  });
+});
+
+describe("default-result kinds", () => {
+  it("offers exactly the kinds the payroll engine prices", () => {
+    assert.deepEqual([...PAYROLL_RULE_KINDS], [
+      "12",
+      "3h",
+      "HALF",
+      "ACT",
+      "ABS",
+      "ALH",
+      "ALO",
+      "CUS",
+    ]);
+    assert.equal(isPayrollRuleKind("HALF"), true);
+    assert.equal(isPayrollRuleKind("half"), false);
+    assert.equal(isPayrollRuleKind(""), false);
+  });
+});
+
 });

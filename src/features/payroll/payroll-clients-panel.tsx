@@ -16,6 +16,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -24,6 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { PayrollClientRow } from "./payroll-clients";
+import { PAYROLL_RULE_KINDS } from "./payroll-clients";
 import { useDeletePayrollClient, useUpsertPayrollClient } from "./use-payroll-clients";
 
 type Draft = {
@@ -32,7 +40,17 @@ type Draft = {
   nameAr: string;
   isActive: boolean;
   usesHours: boolean;
+  usesZone: boolean;
+  usesOrders: boolean;
   fullDayHours: string;
+  halfDayHours: string;
+  reducedHours: string;
+  requiredHoursPerDay: string;
+  defaultOffDays: string;
+  goodThreshold: string;
+  averageThreshold: string;
+  defaultResultKind: string;
+  sortOrder: string;
   riderCount: number;
 };
 
@@ -42,9 +60,54 @@ const EMPTY_DRAFT: Draft = {
   nameAr: "",
   isActive: true,
   usesHours: false,
+  usesZone: true,
+  usesOrders: true,
   fullDayHours: "12",
+  halfDayHours: "6",
+  reducedHours: "3",
+  requiredHoursPerDay: "12",
+  defaultOffDays: "2",
+  goodThreshold: "110",
+  averageThreshold: "70",
+  defaultResultKind: "12",
+  sortOrder: "100",
   riderCount: 0,
 };
+
+/**
+ * One numeric control in the client dialog's payroll-rules block. Kept as a
+ * component so the seven figures cannot drift in height or labelling.
+ */
+function NumberField({
+  id,
+  label,
+  value,
+  onChange,
+  step = "1",
+  min = 0,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  step?: string;
+  min?: number;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type="number"
+        min={min}
+        step={step}
+        className="h-9"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </div>
+  );
+}
 
 /**
  * The client catalog: the Employee Client dropdown, the HR Payroll Client Name
@@ -84,7 +147,17 @@ export function PayrollClientsPanel({
       nameAr: row.nameAr,
       isActive: row.isActive,
       usesHours: row.usesHours,
+      usesZone: row.usesZone,
+      usesOrders: row.usesOrders,
       fullDayHours: String(row.fullDayHours),
+      halfDayHours: String(row.halfDayHours),
+      reducedHours: String(row.reducedHours),
+      requiredHoursPerDay: String(row.requiredHoursPerDay),
+      defaultOffDays: String(row.defaultOffDays),
+      goodThreshold: String(row.goodThreshold),
+      averageThreshold: String(row.averageThreshold),
+      defaultResultKind: row.defaultResultKind ?? "12",
+      sortOrder: String(row.sortOrder),
       riderCount: row.riderCount,
     });
     setOpen(true);
@@ -101,7 +174,19 @@ export function PayrollClientsPanel({
       nameAr: draft.nameAr,
       isActive: draft.isActive,
       usesHours: draft.usesHours,
+      usesZone: draft.usesZone,
+      usesOrders: draft.usesOrders,
       fullDayHours: Number(draft.fullDayHours) || 12,
+      halfDayHours: Number(draft.halfDayHours) || 6,
+      reducedHours: Number(draft.reducedHours) || 3,
+      requiredHoursPerDay: Number(draft.requiredHoursPerDay) || 12,
+      defaultOffDays: Number.isFinite(Number(draft.defaultOffDays))
+        ? Number(draft.defaultOffDays)
+        : 2,
+      goodThreshold: Number(draft.goodThreshold) || 110,
+      averageThreshold: Number(draft.averageThreshold) || 70,
+      defaultResultKind: draft.defaultResultKind,
+      sortOrder: Number(draft.sortOrder) || 100,
     });
     if ("error" in result) {
       toast.error(t(`errors.${result.error}`));
@@ -222,8 +307,8 @@ export function PayrollClientsPanel({
   function renderEditor() {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent showCloseButton closeOutside className="w-[min(560px,96vw)]">
-          <div className="space-y-4 p-1">
+        <DialogContent showCloseButton closeOutside className="w-[min(620px,96vw)]">
+          <div className="max-h-[min(72dvh,680px)] space-y-4 overflow-y-auto p-1">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="payroll-client-name">{t("colName")}</Label>
@@ -288,6 +373,97 @@ export function PayrollClientsPanel({
                   checked={draft.isActive}
                   onCheckedChange={(checked) => setDraft({ ...draft, isActive: checked })}
                 />
+              </div>
+            </div>
+            <div className="space-y-3 border-t border-border pt-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                {t("rulesHeading")}
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <NumberField
+                  id="payroll-client-half"
+                  label={t("halfDayHours")}
+                  value={draft.halfDayHours}
+                  step="0.5"
+                  onChange={(next) => setDraft({ ...draft, halfDayHours: next })}
+                />
+                <NumberField
+                  id="payroll-client-reduced"
+                  label={t("reducedHours")}
+                  value={draft.reducedHours}
+                  step="0.5"
+                  onChange={(next) => setDraft({ ...draft, reducedHours: next })}
+                />
+                <NumberField
+                  id="payroll-client-required"
+                  label={t("requiredHoursPerDay")}
+                  value={draft.requiredHoursPerDay}
+                  step="0.5"
+                  onChange={(next) => setDraft({ ...draft, requiredHoursPerDay: next })}
+                />
+                <NumberField
+                  id="payroll-client-off-days"
+                  label={t("defaultOffDays")}
+                  value={draft.defaultOffDays}
+                  onChange={(next) => setDraft({ ...draft, defaultOffDays: next })}
+                />
+                <NumberField
+                  id="payroll-client-good"
+                  label={t("goodThreshold")}
+                  value={draft.goodThreshold}
+                  onChange={(next) => setDraft({ ...draft, goodThreshold: next })}
+                />
+                <NumberField
+                  id="payroll-client-average"
+                  label={t("averageThreshold")}
+                  value={draft.averageThreshold}
+                  onChange={(next) => setDraft({ ...draft, averageThreshold: next })}
+                />
+                <NumberField
+                  id="payroll-client-sort"
+                  label={t("sortOrder")}
+                  value={draft.sortOrder}
+                  onChange={(next) => setDraft({ ...draft, sortOrder: next })}
+                />
+                <div className="space-y-1.5">
+                  <Label htmlFor="payroll-client-default-result">{t("defaultResult")}</Label>
+                  <Select
+                    items={PAYROLL_RULE_KINDS.map((kind) => ({ value: kind, label: kind }))}
+                    value={draft.defaultResultKind}
+                    onValueChange={(kind) => {
+                      if (kind) setDraft({ ...draft, defaultResultKind: kind });
+                    }}
+                  >
+                    <SelectTrigger id="payroll-client-default-result" className="h-9 w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAYROLL_RULE_KINDS.map((kind) => (
+                        <SelectItem key={kind} value={kind}>
+                          {kind}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                  <Label htmlFor="payroll-client-uses-zone">{t("usesZone")}</Label>
+                  <Switch
+                    id="payroll-client-uses-zone"
+                    checked={draft.usesZone}
+                    onCheckedChange={(checked) => setDraft({ ...draft, usesZone: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                  <Label htmlFor="payroll-client-uses-orders">{t("usesOrders")}</Label>
+                  <Switch
+                    id="payroll-client-uses-orders"
+                    checked={draft.usesOrders}
+                    onCheckedChange={(checked) => setDraft({ ...draft, usesOrders: checked })}
+                  />
+                </div>
               </div>
             </div>
             {draft.key && draft.riderCount > 0 && !draft.isActive ? (

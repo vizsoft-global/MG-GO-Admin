@@ -67,7 +67,10 @@ import {
   parseImportYesNo,
   parseRiderCategory,
 } from "./import/parse";
-import { normalizePayrollClientKey } from "@/features/payroll/payroll-clients";
+import {
+  resolvePayrollClientToken,
+  type PayrollClientRow,
+} from "@/features/payroll/payroll-clients";
 import { isPaymentCurrency } from "@/lib/currencies";
 import {
   isHiringType,
@@ -385,6 +388,7 @@ export async function resolveDriverImportPreview(
     { data: sponsorshipRows },
     { data: vehicleTypeRows },
     { data: assetRows },
+    { data: payrollClientRows },
   ] = await Promise.all([
     db.from("partners").select("id, name"),
     db.from("zones").select("id, name, code"),
@@ -412,6 +416,7 @@ export async function resolveDriverImportPreview(
     db.from("sponsorships").select("key, label_en, label_ar, is_active"),
     db.from("vehicle_types").select("key, label_en, label_ar, is_active"),
     db.from("asset_catalog").select("id, name, code, is_active"),
+    db.from("payroll_clients").select("key, name, name_ar, is_active"),
   ]);
   const companies: SourceCompany[] = companyRows ?? [];
   const vehicleTypeCatalog = (vehicleTypeRows ?? []).map((row) => ({
@@ -453,6 +458,31 @@ export async function resolveDriverImportPreview(
       restaurant_code: r.restaurant_code,
     })),
   );
+  /**
+   * The client catalog the Project/Client cell resolves against. A sheet may name
+   * a client by key or by its English / Arabic label; a value that matches
+   * nothing is refused, so a typo cannot store a rider on a project no card and
+   * no rule set can price.
+   */
+  const payrollClientIndex: PayrollClientRow[] = (payrollClientRows ?? []).map((row) => ({
+    key: String(row.key ?? "").trim().toLowerCase(),
+    name: String(row.name ?? ""),
+    nameAr: String(row.name_ar ?? ""),
+    isActive: row.is_active !== false,
+    isSystem: false,
+    sortOrder: 100,
+    usesZone: true,
+    usesOrders: true,
+    usesHours: false,
+    fullDayHours: 12,
+    halfDayHours: 6,
+    reducedHours: 3,
+    requiredHoursPerDay: 12,
+    defaultOffDays: 2,
+    goodThreshold: 110,
+    averageThreshold: 70,
+    riderCount: 0,
+  }));
 
   const vehicleByLabel = new Map<
     string,
@@ -755,13 +785,9 @@ export async function resolveDriverImportPreview(
       if (row.cleared?.project_key) {
         project_key = null;
       } else {
-        // A catalog-shaped key is accepted, not only the three the SOP named:
-        // a client added in Employee Settings must be importable. A value that
-        // cannot be a key is rejected rather than stored as a project no card
-        // prices.
-        const normalized = normalizePayrollClientKey(row.project_key);
-        if (normalized) project_key = normalized;
-        else status = "invalid_project";
+        const clientHit = resolvePayrollClientToken(row.project_key, payrollClientIndex);
+        if (clientHit.status === "ok") project_key = clientHit.key;
+        else if (clientHit.status === "unknown") status = "invalid_project";
       }
     }
 

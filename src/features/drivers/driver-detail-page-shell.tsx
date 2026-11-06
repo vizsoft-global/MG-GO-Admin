@@ -61,6 +61,7 @@ import {
   useRegenerateDriverPasscode,
 } from "./use-drivers";
 import { isDriverErrorKey } from "./driver-errors";
+import { isDriverApproveError } from "./driver-approve-error";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
 import { queryKeys } from "@/lib/query/query-keys";
 import { PrivateInformationTab } from "./detail/private-information-tab";
@@ -332,6 +333,8 @@ function DriverDetailContent({ id }: { id: string }) {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [holdApproveSlot, setHoldApproveSlot] = useState(false);
+  /** Bumped when an approval refusal has to open and highlight the Identity card. */
+  const [identityFocusToken, setIdentityFocusToken] = useState(0);
   const editRouteConsumedRef = useRef(false);
   const suppressEditOpenUntilRef = useRef(0);
 
@@ -690,7 +693,13 @@ function DriverDetailContent({ id }: { id: string }) {
 
   const renderTabPanel = () => {
     if (activeTab === "private-information") {
-      return <PrivateInformationTab driver={driver} canManage={canManage} />;
+      return (
+        <PrivateInformationTab
+          driver={driver}
+          canManage={canManage}
+          focusIdentityToken={identityFocusToken}
+        />
+      );
     }
 
     if (activeTab === "project") {
@@ -974,8 +983,9 @@ function DriverDetailContent({ id }: { id: string }) {
                         });
                         if (returnsToFilteredList) router.push(exitHref);
                       } catch (err) {
-                        const key =
-                          err instanceof Error && isDriverErrorKey(err.message)
+                        const key = isDriverApproveError(err)
+                          ? err.code
+                          : err instanceof Error && isDriverErrorKey(err.message)
                             ? err.message
                             : "save_failed";
                         toast.error(
@@ -984,9 +994,11 @@ function DriverDetailContent({ id }: { id: string }) {
                             : t("approveErrors.save_failed"),
                         );
                         // Civil ID / mobile / passport live on the Profile tab, so
-                        // a refusal lands the operator where the blanks are.
+                        // a refusal opens it, shows the red fields and focuses the
+                        // first one instead of leaving the operator to hunt.
                         if (key === "missing_profile_fields") {
                           setActiveTab("private-information");
+                          setIdentityFocusToken((token) => token + 1);
                         }
                       }
                     }}

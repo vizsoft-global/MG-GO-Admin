@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "@/i18n/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -70,6 +70,13 @@ function catalogRows(
 const GRID = "grid grid-cols-1 gap-x-5 gap-y-4 pt-[18px] sm:grid-cols-2 xl:grid-cols-4";
 const W2 = "xl:col-span-2";
 const LABEL = "text-sm font-semibold text-muted-foreground";
+
+/** The input each mandatory identity field renders, for focus and jump actions. */
+const IDENTITY_INPUT_ID: Record<IdentityField, string> = {
+  civilId: "p-civil",
+  phone: "p-phone",
+  passport: "p-passport",
+};
 
 function catalogItems(rows: readonly EmployeeCatalogRow[], locale: string) {
   return rows
@@ -193,9 +200,16 @@ function buildForm(driver: DriverDetailModel) {
 export function PrivateInformationTab({
   driver,
   canManage,
+  focusIdentityToken = 0,
 }: {
   driver: DriverDetailModel;
   canManage: boolean;
+  /**
+   * Incremented by the page when an action (approve) refused because identity
+   * fields are missing: the tab opens the Identity card, shows the red fields
+   * and focuses the first blank.
+   */
+  focusIdentityToken?: number;
 }) {
   const t = useTranslations("pages.driverDetail.profile");
   const tNew = useTranslations("pages.driverNew");
@@ -291,6 +305,40 @@ export function PrivateInformationTab({
     showIdentityErrors ? identityErrors[field] ?? null : null;
   const invalidClass = (field: IdentityField) =>
     identityErrorFor(field) ? "border-destructive ring-1 ring-destructive" : undefined;
+  /** A legacy rider's gaps, listed by name so the operator knows what is owed. */
+  const missingIdentityFields = Object.keys(identityErrors) as IdentityField[];
+
+  const focusIdentityField = (field: IdentityField) => {
+    setShowIdentityErrors(true);
+    setOpen((current) => ({ ...current, identity: true }));
+    requestAnimationFrame(() => document.getElementById(IDENTITY_INPUT_ID[field])?.focus());
+  };
+
+  // An approval refusal lands here: open the card, show the red fields, focus
+  // the first thing the record still owes. The state changes and the focus run
+  // in a frame so this stays an external-system effect, not a synchronous
+  // cascade during render.
+  useEffect(() => {
+    if (!focusIdentityToken) return;
+    const frame = requestAnimationFrame(() => {
+      setShowIdentityErrors(true);
+      setOpen((current) => ({ ...current, identity: true }));
+      requestAnimationFrame(() => {
+        const first = Object.keys(
+          identityFieldErrors({
+            civilId: form.civilId,
+            phone: form.phone,
+            passport: form.passportNumber,
+          }),
+        )[0] as IdentityField | undefined;
+        document.getElementById(IDENTITY_INPUT_ID[first ?? "civilId"])?.focus();
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+    // Only the token should trigger this; `form` changes on every keystroke and
+    // must not steal focus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusIdentityToken]);
 
   const submit = async () => {
     if (!driver.intake_id) {
@@ -312,12 +360,7 @@ export function PrivateInformationTab({
       setOpen((current) => ({ ...current, identity: true }));
       toast.error(errorText(identityFailure.code));
       requestAnimationFrame(() => {
-        const focusId: Record<IdentityField, string> = {
-          civilId: "p-civil",
-          phone: "p-phone",
-          passport: "p-passport",
-        };
-        document.getElementById(focusId[identityFailure.field])?.focus();
+        document.getElementById(IDENTITY_INPUT_ID[identityFailure.field])?.focus();
       });
       return;
     }
@@ -451,6 +494,31 @@ export function PrivateInformationTab({
         <p className="text-xs text-muted-foreground">
           {driver.intake_id ? t("readOnly") : t("needsIntake")}
         </p>
+      ) : null}
+
+      {!readonly && missingIdentityFields.length > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+          <p className="text-sm font-semibold">{t("identityIncompleteTitle")}</p>
+          <p className="mt-0.5 text-xs leading-5">{t("identityIncompleteBody")}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {missingIdentityFields.map((field) => (
+              <button
+                key={field}
+                type="button"
+                onClick={() => focusIdentityField(field)}
+                className="cursor-pointer rounded-md border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-900 hover:bg-amber-100"
+              >
+                {t(
+                  field === "civilId"
+                    ? "fields.civilId"
+                    : field === "phone"
+                      ? "fields.phone"
+                      : "fields.passport",
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
       ) : null}
 
       <AccordionCard
