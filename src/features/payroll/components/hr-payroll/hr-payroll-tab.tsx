@@ -4,15 +4,14 @@ import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { AppTableColumnPicker } from "@/components/app/app-table-column-picker";
+import { ColumnOrderMenu } from "@/components/app/column-order-menu";
 import { TableFooterExport } from "@/components/app/table-footer-export";
 import { formatKwd } from "@/lib/format/money";
 import { queryKeys } from "@/lib/query/query-keys";
-import {
-  HR_GROUP_ORDER,
-  visibleHrColumns,
-  type HrColumn,
-} from "../../hr-payroll-columns";
+import { useListColumns } from "@/hooks/use-list-columns";
+import { HR_PAYROLL_COLUMNS_PREF_KEY } from "@/lib/ui-preferences/types";
+import { identityWidth } from "../../payroll-table-identity";
+import { HR_COLUMNS, type HrColumn } from "../../hr-payroll-columns";
 import { downloadHrWorkbook, hrExportCell } from "../../hr-payroll-export";
 import { useRegisterPayrollActions } from "../../payroll-actions-bridge";
 import {
@@ -142,6 +141,7 @@ export function HrPayrollTab(props: {
 }): JSX.Element {
   const { monthKey, monthLabel, monthDays, riders, canManage } = props;
   const t = useTranslations("pages.payroll.hr");
+  const tc = useTranslations("pages.payroll.columnsMenu");
   const locale = useLocale();
   const queryClient = useQueryClient();
   const bundleQuery = useQuery({
@@ -243,7 +243,16 @@ export function HrPayrollTab(props: {
   const [activeOnly, setActiveOnly] = useState(false);
   const [sheetView, setSheetView] = useState<"table" | "cards">("table");
   const [groupBy, setGroupBy] = useState<HrGroupBy>("none");
-  const [shown, setShown] = useState<Set<HrPayrollGroup>>(() => new Set(HR_GROUP_ORDER));
+  /**
+   * Column order and visibility for the sheet, saved per staff member. The four
+   * frozen identity columns are not in the catalogue: their sticky offsets are
+   * applied by position, so they cannot be moved or hidden.
+   */
+  const hrColumnIds = useMemo(
+    () => HR_COLUMNS.filter((column) => identityWidth(column.key) === 0).map((column) => column.key),
+    [],
+  );
+  const columns = useListColumns(HR_PAYROLL_COLUMNS_PREF_KEY, hrColumnIds);
   const [colFilters, setColFilters] = useState<ColumnFilters>({});
   const [edits, setEdits] = useState<Record<string, Partial<HrEditState>>>({});
   const [flash, setFlash] = useState<Set<string>>(() => new Set());
@@ -567,7 +576,16 @@ export function HrPayrollTab(props: {
     [rows, search, statusKey, activeOnly],
   );
   const sheeted = useMemo(() => filterHrSheet(searched, sheetFilters), [searched, sheetFilters]);
-  const visible: readonly HrColumn[] = useMemo(() => visibleHrColumns(shown), [shown]);
+  const visible: readonly HrColumn[] = useMemo(() => {
+    const byKey = new Map(HR_COLUMNS.map((column) => [column.key, column]));
+    const pinned = HR_COLUMNS.filter((column) => identityWidth(column.key) > 0);
+    const chosen: HrColumn[] = [];
+    for (const id of columns.visibleIds) {
+      const column = byKey.get(id);
+      if (column) chosen.push(column);
+    }
+    return [...pinned, ...chosen];
+  }, [columns.visibleIds]);
   const filtered = useMemo(
     () => filterHrRowsByColumns(sheeted, colFilters, t("awaiting")),
     [sheeted, colFilters, t],
@@ -587,16 +605,6 @@ export function HrPayrollTab(props: {
       setFlash(new Set());
       flashTimer.current = null;
     }, 1200);
-  }
-
-  function toggleGroup(group: HrPayrollGroup) {
-    setShown((current) => {
-      if (current.has(group) && current.size <= 1) return current;
-      const next = new Set(current);
-      if (next.has(group)) next.delete(group);
-      else next.add(group);
-      return next;
-    });
   }
 
   function saveCell(driverId: string, key: keyof HrEditState, value: number) {
@@ -1210,18 +1218,19 @@ export function HrPayrollTab(props: {
               >
                 {t("import")}
               </button>
-              <AppTableColumnPicker
-                options={HR_GROUP_ORDER.map((group) => ({
-                  id: group,
-                  label: groupLabels[group],
-                  defaultVisible: true,
-                }))}
-                isVisible={(id) => shown.has(id as HrPayrollGroup)}
-                onToggle={(id) => toggleGroup(id as HrPayrollGroup)}
-                onReset={() => setShown(new Set(HR_GROUP_ORDER))}
-                sourceLabel={t("title")}
-                hiddenCount={HR_GROUP_ORDER.length - shown.size}
-                iconOnly
+              <ColumnOrderMenu
+                columns={columns}
+                labelFor={(id) => headers[id] ?? id}
+                labels={{
+                  columns: t("columns"),
+                  title: tc("title"),
+                  hint: tc("hint"),
+                  pinned: tc("pinnedHr"),
+                  drag: tc("drag"),
+                  show: tc("show"),
+                  hide: tc("hide"),
+                  reset: tc("reset"),
+                }}
               />
             </div>
             <div className="hrpay-source">

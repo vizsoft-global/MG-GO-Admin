@@ -183,6 +183,22 @@ export function useTablePrefs(tableId: string, columns: TableToolbarColumn[]) {
     [locked, persist, preference],
   );
 
+  /**
+   * One-step nudge for the arrow buttons. Refuses at either end of the list and
+   * never swaps past a locked column, so a pinned first column cannot be moved.
+   */
+  const moveColumn = useCallback(
+    (id: string, dir: -1 | 1) => {
+      if (locked.has(id)) return;
+      const index = preference.order.indexOf(id);
+      if (index < 0) return;
+      const targetId = preference.order[index + dir];
+      if (targetId == null || locked.has(targetId)) return;
+      persist({ ...preference, order: reorderIds(preference.order, id, targetId) });
+    },
+    [locked, persist, preference],
+  );
+
   const resetColumns = useCallback(() => {
     persist(system);
   }, [persist, system]);
@@ -199,6 +215,7 @@ export function useTablePrefs(tableId: string, columns: TableToolbarColumn[]) {
     isVisible: (id: string) => visibleSet.has(id),
     toggleColumn,
     reorderColumn,
+    moveColumn,
     resetColumns,
     visibleCount: orderedColumns.filter((column) => visibleSet.has(column.id)).length,
   };
