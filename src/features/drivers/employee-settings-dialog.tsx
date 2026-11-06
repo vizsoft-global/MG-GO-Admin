@@ -189,7 +189,7 @@ function EmployeeSettingsEditor({ tile }: { tile: EmployeeSettingsTile }) {
     case "driverFields":
       return <DriverFieldsSettingsPanel />;
     case "clients":
-      return <PayrollClientsPanel title={label} subtitle={t("embeddedHint")} />;
+      return <PayrollClientsPanel title={label} subtitle={t("embeddedHint")} showActions={false} />;
     default: {
       const never: never = tile.view;
       return never;
