@@ -59,9 +59,9 @@ import {
 import type { CustomFieldDefinition, CustomFieldValues } from "@/lib/custom-fields/types";
 import type { DriverFormCatalogItem } from "@/features/assets/types";
 import { customFieldsToFormEntries } from "@/lib/custom-fields/serialize";
-import { isDriverProjectKey, type DriverProjectKey } from "@/features/fleet/fleet-labels";
 import { DEFAULT_EMPLOYEE_STATUS_KEY } from "@/features/employees/employee-catalogs";
 import { EMPTY_BANK_DETAILS, type DriverBankDetails } from "@/features/employees/bank-details";
+import { normalizePayrollClientKey } from "@/features/payroll/payroll-clients";
 import {
   useBankCodes,
   useEmployeeSections,
@@ -176,7 +176,7 @@ export function DriverFormSheet({
   const [employeeId, setEmployeeId] = useState("");
   const [riderCategory, setRiderCategory] = useState<DriverRiderCategory>("in_house");
   const [sourceCompany, setSourceCompany] = useState("");
-  const [projectKey, setProjectKey] = useState<DriverProjectKey | "">("");
+  const [projectKey, setProjectKey] = useState<string>("");
   const [clientId, setClientId] = useState("");
   const [clientName, setClientName] = useState("");
   const [accommodation, setAccommodation] = useState("");
@@ -231,7 +231,7 @@ export function DriverFormSheet({
       setEmployeeId(activeDriver.employee_id ?? "");
       setRiderCategory(activeDriver.rider_category ?? "in_house");
       setSourceCompany(activeDriver.source_company ?? "");
-      setProjectKey(isDriverProjectKey(activeDriver.project_key) ? activeDriver.project_key : "");
+      setProjectKey(normalizePayrollClientKey(activeDriver.project_key) ?? "");
       setClientId(activeDriver.client_id ?? "");
       setClientName(activeDriver.client_name ?? "");
       setAccommodation(activeDriver.accommodation ?? "");
@@ -389,7 +389,7 @@ export function DriverFormSheet({
       );
       setRiderCategory(parsed.riderCategory === "outsourced" ? "outsourced" : "in_house");
       setSourceCompany(parsed.sourceCompany ?? "");
-      setProjectKey(isDriverProjectKey(parsed.projectKey) ? parsed.projectKey : "");
+      setProjectKey(normalizePayrollClientKey(parsed.projectKey) ?? "");
       setClientId(parsed.clientId ?? "");
       setClientName(parsed.clientName ?? "");
       setAccommodation(parsed.accommodation ?? "");
@@ -469,6 +469,7 @@ export function DriverFormSheet({
       fullName,
       phone,
       civilId,
+      passportNumber,
       employeeId,
       partnerId,
       zoneId,
@@ -674,7 +675,10 @@ export function DriverFormSheet({
                 clearFieldError("civilId");
               }}
               passportNumber={passportNumber}
-              onPassportNumberChange={setPassportNumber}
+              onPassportNumberChange={(next) => {
+                setPassportNumber(next);
+                clearFieldError("passportNumber");
+              }}
               employeeId={employeeId}
               onEmployeeIdChange={(next) => {
                 setEmployeeId(next);
@@ -729,6 +733,7 @@ export function DriverFormSheet({
                 fullName: showFieldError("fullName"),
                 phone: showFieldError("phone"),
                 civilId: showFieldError("civilId"),
+                passportNumber: showFieldError("passportNumber"),
                 employeeId: showFieldError("employeeId"),
               }}
             />

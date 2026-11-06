@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { User } from "lucide-react";
 import { SegmentOption } from "@/components/app/toggle-chip";
 import { Input } from "@/components/ui/input";
-import type { DriverProjectKey } from "@/features/fleet/fleet-labels";
 import { ProjectKeyField } from "@/features/fleet/project-key-field";
 import type { DriverRiderCategory } from "../types";
 import { listedCompanies } from "../source-companies";
@@ -68,8 +67,8 @@ export function DriverFormIdentitySection({
   onRiderCategoryChange: (next: DriverRiderCategory) => void;
   sourceCompany: string;
   onSourceCompanyChange: (next: string) => void;
-  projectKey: DriverProjectKey | "";
-  onProjectKeyChange: (next: DriverProjectKey | "") => void;
+  projectKey: string;
+  onProjectKeyChange: (next: string) => void;
   driverCode: string;
   driverCodeHint: string;
   labels: {
@@ -173,7 +172,7 @@ export function DriverFormIdentitySection({
         </FieldBlock>
 
         <FieldBlock>
-          <FieldLabel htmlFor="driver-phone">{labels.phone}</FieldLabel>
+          <FieldLabel htmlFor="driver-phone" required>{labels.phone}</FieldLabel>
           <DriverPhoneField
             id="driver-phone"
             value={phone}
@@ -185,7 +184,7 @@ export function DriverFormIdentitySection({
         </FieldBlock>
 
         <FieldBlock>
-          <FieldLabel htmlFor="driver-civil-id">{labels.civilId}</FieldLabel>
+          <FieldLabel htmlFor="driver-civil-id" required>{labels.civilId}</FieldLabel>
           <Input
             id="driver-civil-id"
             type="text"
@@ -236,7 +235,7 @@ export function DriverFormIdentitySection({
         </FieldBlock>
 
         <FieldBlock>
-          <FieldLabel htmlFor="driver-passport">{labels.passportNumber}</FieldLabel>
+          <FieldLabel htmlFor="driver-passport" required>{labels.passportNumber}</FieldLabel>
           <Input
             id="driver-passport"
             value={passportNumber}

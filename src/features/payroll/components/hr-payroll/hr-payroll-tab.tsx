@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import { HR_PAYROLL_COLUMNS_PREF_KEY } from "@/lib/ui-preferences/types";
 import { identityWidth } from "../../payroll-table-identity";
 import { HR_COLUMNS, type HrColumn } from "../../hr-payroll-columns";
 import { downloadHrWorkbook, hrExportCell } from "../../hr-payroll-export";
+import { payrollColumnLabel } from "../../payroll-column-labels";
 import { useRegisterPayrollActions } from "../../payroll-actions-bridge";
 import {
   HR_AWAITING,
@@ -138,8 +139,10 @@ export function HrPayrollTab(props: {
   monthDays: number;
   riders: readonly PayrollRiderRow[];
   canManage: boolean;
+  /** Range presets, rendered above the tab strip at the start edge. */
+  rangePills?: ReactNode;
 }): JSX.Element {
-  const { monthKey, monthLabel, monthDays, riders, canManage } = props;
+  const { monthKey, monthLabel, monthDays, riders, canManage, rangePills } = props;
   const t = useTranslations("pages.payroll.hr");
   const tc = useTranslations("pages.payroll.columnsMenu");
   const locale = useLocale();
@@ -447,8 +450,14 @@ export function HrPayrollTab(props: {
     }),
     [t],
   );
-  const headers = useMemo<Record<string, string>>(
-    () => ({
+  const headers = useMemo<Record<string, string>>(() => {
+    /**
+     * The same canonical wording the Payroll tabs use. Every key still carries
+     * the HR translation as its fallback, so a column this map does not own keeps
+     * the HR catalogue's own word; the shared ones (MG ID, Client ID, Employee
+     * Name, Client, Status, Vehicle Type, Total Salary) cannot drift again.
+     */
+    const raw: Record<string, string> = {
       i: t("cols.i"),
       client: t("cols.client"),
       mg: t("cols.mg"),
@@ -502,9 +511,13 @@ export function HrPayrollTab(props: {
       allow: t("cols.allow"),
       ded: t("cols.ded"),
       total: t("cols.total"),
-    }),
-    [t],
-  );
+    };
+    const out: Record<string, string> = {};
+    for (const [key, fallback] of Object.entries(raw)) {
+      out[key] = payrollColumnLabel(key, fallback);
+    }
+    return out;
+  }, [t]);
   const groupLabels = useMemo<Record<HrPayrollGroup, string>>(
     () => ({
       emp: t("groups.emp"),
@@ -823,8 +836,7 @@ export function HrPayrollTab(props: {
     switch (view) {
       case "payroll":
         return (
-          <div className="hrpay-sheet">
-            <HrPayrollGrid
+          <HrPayrollGrid
               columns={visible}
               rows={filtered}
               sourceRows={sheeted}
@@ -886,7 +898,6 @@ export function HrPayrollTab(props: {
                 />
               }
             />
-          </div>
         );
       case "summary":
         return (
@@ -1022,6 +1033,7 @@ export function HrPayrollTab(props: {
           {t("viewConfig")}
         </button>
       </div>
+      {rangePills ? <div className="hrpay-range-bar">{rangePills}</div> : null}
       {view === "payroll" ? (
         <div className="hrpay-stage">
           <div className="hrpay-fbar">

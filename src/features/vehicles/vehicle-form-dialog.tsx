@@ -380,7 +380,7 @@ export function VehicleFormDialog({
             <div className="sm:col-span-2">
               <ProjectKeyField
                 value={projectKey}
-                onChange={setProjectKey}
+                onChange={(next) => setProjectKey(isDriverProjectKey(next) ? next : "")}
                 label={t("fieldProject")}
                 keetaLabel={t("projectKeeta")}
                 americanaLabel={t("projectAmericana")}

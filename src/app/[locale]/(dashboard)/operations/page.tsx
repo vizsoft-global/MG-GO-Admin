@@ -1,16 +1,10 @@
-import { setRequestLocale, getTranslations } from "next-intl/server";
+﻿import { setRequestLocale, getTranslations } from "next-intl/server";
 import {
-  Bike,
-  BriefcaseBusiness,
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
-  FormInput,
-  Globe,
   Handshake,
-  Landmark,
   Layers,
-  ListChecks,
   ListTree,
   MapPin,
   UsersRound,
@@ -23,7 +17,7 @@ import { requireAnyPermission } from "@/lib/auth/require-permission";
 import { OPERATIONS_HUB_PERMISSIONS } from "@/lib/menu/menu-registry";
 
 /**
- * OperationsHub — the home of the operational rule tables, on the same Figma
+ * OperationsHub â€” the home of the operational rule tables, on the same Figma
  * shell as Visit bookings (`AppHubShell`).
  *
  * This is a **settings section, not a guard of its own**: it opens for anyone
@@ -33,8 +27,9 @@ import { OPERATIONS_HUB_PERMISSIONS } from "@/lib/menu/menu-registry";
  * page is gated on the same slug, so a tile can never be an advertisement for a
  * page that answers /unauthorized.
  *
- * The two panels are the design's own split: the ledgers and their rules on the
- * start panel, the catalogs that feed them on the end panel.
+ * The catalog doors that used to sit in a second group are now Employee
+ * Settings, opened from the Employees header, so this hub keeps only the
+ * operational ledgers and their rules.
  */
 type OpsTile = {
   key: string;
@@ -98,71 +93,6 @@ const MANAGE_TILES: OpsTile[] = [
   },
 ];
 
-const CONFIGURE_TILES: OpsTile[] = [
-  {
-    key: "driverFields",
-    href: "/settings/driver-fields",
-    icon: FormInput,
-    tint: HUB_GLYPH_TINTS.navy,
-    permission: "drivers.manage",
-  },
-  {
-    key: "serviceTypes",
-    href: "/settings/service-types",
-    icon: ListChecks,
-    tint: HUB_GLYPH_TINTS.rose,
-    permission: "service.manage",
-  },
-  {
-    key: "attendanceSettings",
-    href: "/settings/attendance",
-    icon: ClipboardCheck,
-    tint: HUB_GLYPH_TINTS.olive,
-    permission: "attendance.manage",
-  },
-  {
-    key: "vehicleTypes",
-    href: "/settings/vehicle-types",
-    icon: Bike,
-    tint: HUB_GLYPH_TINTS.teal,
-    permission: "vehicles.manage",
-  },
-  {
-    key: "employeeStatuses",
-    href: "/settings/employee-statuses",
-    icon: ClipboardList,
-    tint: HUB_GLYPH_TINTS.brown,
-    permission: "drivers.manage",
-  },
-  {
-    key: "employeeSections",
-    href: "/settings/employee-sections",
-    icon: Layers,
-    tint: HUB_GLYPH_TINTS.navy,
-    permission: "drivers.manage",
-  },
-  {
-    key: "nationalityCategories",
-    href: "/settings/nationality-categories",
-    icon: Globe,
-    tint: HUB_GLYPH_TINTS.rust,
-    permission: "drivers.manage",
-  },
-  {
-    key: "bankCodes",
-    href: "/settings/bank-codes",
-    icon: Landmark,
-    tint: HUB_GLYPH_TINTS.rose,
-    permission: "drivers.manage",
-  },
-  {
-    key: "jobPositions",
-    href: "/settings/job-positions",
-    icon: BriefcaseBusiness,
-    tint: HUB_GLYPH_TINTS.teal,
-    permission: "drivers.manage",
-  },
-];
 
 export default async function OperationsHubPage({
   params,
@@ -190,12 +120,6 @@ export default async function OperationsHubPage({
       heading: t("manageHeading"),
       hint: t("manageHint"),
       tiles: MANAGE_TILES.filter(visible).map(toTile),
-    },
-    {
-      id: "configure",
-      heading: t("configureHeading"),
-      hint: t("configureHint"),
-      tiles: CONFIGURE_TILES.filter(visible).map(toTile),
     },
   ].filter((group) => group.tiles.length > 0);
 

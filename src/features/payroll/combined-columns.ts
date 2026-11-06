@@ -9,6 +9,7 @@ import {
 } from "./payroll-formulas";
 import { cellParticular } from "./payroll-particulars";
 import { payrollVehicleKind, resolveRiderStatus } from "./payroll-rider-columns";
+import { payrollStatusDisplayLabel } from "./payroll-column-labels";
 import type { PayrollRiderRow } from "./payroll-types";
 
 /**
@@ -73,7 +74,7 @@ export const COMBINED_COLUMNS: readonly CombinedColumn[] = [
     id: "status",
     labelKey: "status",
     numeric: false,
-    value: (row, ctx) => resolveRiderStatus(row, ctx.today).label,
+    value: (row, ctx) => payrollStatusDisplayLabel(resolveRiderStatus(row, ctx.today).label),
   },
   { id: "wd", labelKey: "workingDays", numeric: true, value: (row) => row.workDays },
   { id: "tot", labelKey: "totalHours", numeric: true, value: (row) => row.totalHours },

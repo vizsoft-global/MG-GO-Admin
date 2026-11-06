@@ -316,6 +316,7 @@ export const queryKeys = {
     adjustmentAudit: (filters: Record<string, unknown> = {}) =>
       ["payroll", "adjustment-audit", filters] as const,
     columnConfig: () => ["payroll", "column-config"] as const,
+    clients: () => ["payroll", "clients"] as const,
     zoneSettings: (monthKey: string) => ["payroll", "zone-settings", monthKey] as const,
     riderStatuses: () => ["payroll", "rider-statuses"] as const,
     hrPayroll: (monthKey: string, locale: string) =>

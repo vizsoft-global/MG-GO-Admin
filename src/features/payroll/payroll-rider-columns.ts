@@ -160,15 +160,78 @@ export function payrollVehicleKind(key: string | null): string {
 }
 
 /**
- * Application hours for one day: the logged check-in → check-out length, or the
- * elapsed length of a shift that is still open. Deliberately independent of the
- * payroll engine's `creditedHours` — this tab answers "how long was the app in
- * use", not "how many hours are payable".
+ * The most a single day may print, mirroring `MAX_DAY_HOURS` on the server.
+ *
+ * The cap lives in both places on purpose: the server figure is already clipped,
+ * but the fallback branches below read a raw clock-in → clock-out span, and a
+ * rider who forgot to clock out would otherwise paint 23 h again the moment the
+ * snapshot is stale or the payload came from an older deploy.
+ */
+const MAX_APP_DAY_HOURS = 12;
+
+function capAppDayHours(hours: number): number {
+  if (!Number.isFinite(hours) || hours <= 0) return 0;
+  return Math.min(hours, MAX_APP_DAY_HOURS);
+}
+
+/**
+ * App-usage hours for one day.
+ *
+ * Prefers the server's `appHours` — the attendance span split at Kuwait midnight
+ * and clipped to the rider's shift — because the raw clock-in → clock-out figure
+ * reports a forgotten clock-out as 19 h or 23 h, and a night shift as one day.
+ *
+ * `appHours` wins even when it is `0`: a rider who only opened the app outside
+ * their rota genuinely used none of their shift, and falling back to the raw span
+ * there would undo the whole point. `elapsedHours` is still honoured for an open
+ * shift today, which the server cannot measure because it has no end.
+ *
+ * Deliberately independent of the payroll engine's `creditedHours` — this tab
+ * answers "how long was the app in use", not "how many hours are payable".
  */
 export function appHoursForDay(row: PayrollRiderRow, dayIndex: number): number {
   const info = row.dayInfo[dayIndex];
   if (!info) return 0;
-  return info.loggedHours || (info.elapsedHours ?? 0);
+  const elapsed = info.elapsedHours ?? 0;
+  const clipped = info.appHours;
+  if (typeof clipped === "number") return capAppDayHours(clipped > 0 ? clipped : elapsed);
+  // No server figure (older deploy, or the local table fallback): the previous
+  // behaviour, so the tab degrades rather than blanking.
+  return capAppDayHours(info.loggedHours > 0 ? info.loggedHours : elapsed);
+}
+
+/**
+ * Shift-in / shift-out clock labels for one app-attendance day cell.
+ *
+ * These come from `driver_sessions` (the rider app's own open/close pair), not
+ * from `attendance_logs`, because this tab answers "when was the app in use?".
+ * A day with no session, or with a session still open, prints only the edge it
+ * has — a guessed shift-out would be a fact the server never recorded.
+ */
+export function appShiftForDay(
+  row: PayrollRiderRow,
+  dayIndex: number,
+): { shiftIn: string | null; shiftOut: string | null } {
+  const info = row.dayInfo[dayIndex];
+  if (!info) return { shiftIn: null, shiftOut: null };
+  return {
+    shiftIn: info.shiftIn ?? null,
+    shiftOut: info.shiftOut ?? null,
+  };
+}
+
+/** Earliest shift-in and latest shift-out a rider recorded across the month. */
+export function appShiftWindowForRider(row: PayrollRiderRow): {
+  shiftIn: string | null;
+  shiftOut: string | null;
+} {
+  let shiftIn: string | null = null;
+  let shiftOut: string | null = null;
+  for (const info of row.dayInfo) {
+    if (!shiftIn && info.shiftIn) shiftIn = info.shiftIn;
+    if (info.shiftOut) shiftOut = info.shiftOut;
+  }
+  return { shiftIn, shiftOut };
 }
 
 export function appAttendanceTotals(row: PayrollRiderRow): {

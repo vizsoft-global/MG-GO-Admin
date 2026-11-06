@@ -22,6 +22,8 @@ import {
   appAttendanceTotals,
   appDayColumnId,
   appHoursForDay,
+  appShiftForDay,
+  appShiftWindowForRider,
   PAYROLL_SERIAL_COLUMN,
   riderColumnValue,
 } from "./payroll-rider-columns";
@@ -60,6 +62,17 @@ import { usePayrollColumnConfig } from "./use-payroll";
 
 function formatHours(value: number): string {
   return value.toFixed(2);
+}
+
+type ShiftLabeler = (key: "appAttendance.noShift" | "appAttendance.stillIn") => string;
+
+function shiftWindowLabel(
+  t: ShiftLabeler,
+  shiftIn: string | null,
+  shiftOut: string | null,
+): string {
+  if (!shiftIn && !shiftOut) return t("appAttendance.noShift");
+  return `${shiftIn ?? "—"} → ${shiftOut ?? t("appAttendance.stillIn")}`;
 }
 
 export function ApplicationAttendanceTab({
@@ -290,6 +303,7 @@ export function ApplicationAttendanceTab({
             <PayrollRiderCards
               rows={visibleRows.map((row) => {
                 const totalsForRow = appAttendanceTotals(row);
+                const window = appShiftWindowForRider(row);
                 return {
                   id: row.driverId,
                   code: row.amId || "—",
@@ -297,6 +311,10 @@ export function ApplicationAttendanceTab({
                   driverId: row.driverId,
                   fields: [
                     { label: t("riderCols.mgId"), value: row.mgId || "—" },
+                    {
+                      label: t("appAttendance.shiftWindow"),
+                      value: shiftWindowLabel(t, window.shiftIn, window.shiftOut),
+                    },
                     { label: t("riderCols.appTotalHours"), value: formatHours(totalsForRow.totalHours) },
                     { label: t("riderCols.appActiveDays"), value: String(totalsForRow.activeDays) },
                     { label: t("riderCols.appAvgHours"), value: formatHours(totalsForRow.avgHours) },
@@ -446,9 +464,18 @@ export function ApplicationAttendanceTab({
                     })}
                     {dates.map((date, i) => {
                       const hours = appHoursForDay(row, i);
+                      const shift = appShiftForDay(row, i);
+                      const shiftTitle =
+                        shift.shiftIn || shift.shiftOut
+                          ? t("appAttendance.shiftTitle", {
+                              in: shift.shiftIn ?? "—",
+                              out: shift.shiftOut ?? t("appAttendance.stillIn"),
+                            })
+                          : undefined;
                       return (
                         <td
                           key={`${row.driverId}-${date}`}
+                          title={shiftTitle}
                           className={cn(
                             "border-s border-border/60 px-1 py-1.5 text-center tabular-nums",
                             hours <= 0 && "text-muted-foreground/40",

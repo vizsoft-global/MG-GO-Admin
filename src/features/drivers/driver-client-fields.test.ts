@@ -93,12 +93,20 @@ describe("resolveTemplateColumns", () => {
     assert.ok(all.some((c) => c.header === "Shift"));
   });
 
-  it("keeps identity and the zone/restaurant pair when the operator ticked nothing", () => {
+  it("keeps the required identity columns and the zone/restaurant pair when the operator ticked nothing", () => {
     const chosen = resolveTemplateColumns([], custom);
     const fields = chosen.map((c) => c.field).sort();
     assert.deepEqual(
       fields,
-      ["employee_id", "full_name", "restaurant_ids", "zone_id"].sort(),
+      [
+        "employee_id",
+        "full_name",
+        "phone",
+        "civil_id",
+        "passport_number",
+        "restaurant_ids",
+        "zone_id",
+      ].sort(),
     );
     assert.ok(chosen.every((c) => c.pinned));
   });
@@ -109,7 +117,7 @@ describe("resolveTemplateColumns", () => {
     assert.ok(fields.includes("client_id"));
     assert.ok(fields.includes("cf:shift_pref"));
     assert.ok(fields.includes("full_name"));
-    assert.ok(!fields.includes("phone"));
+    assert.ok(fields.includes("phone"));
   });
 
   it("describes a select custom field by its allowed option values", () => {

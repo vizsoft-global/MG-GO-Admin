@@ -22,6 +22,7 @@ export type DriverFormField =
   | "fullName"
   | "phone"
   | "civilId"
+  | "passportNumber"
   | "employeeId"
   | "partnerId"
   | "zoneId"
@@ -68,6 +69,8 @@ export type ValidateDriverFormInput = {
   fullName: string;
   phone: string;
   civilId: string;
+  /** Mandatory with phone and civil ID; normalised to A-Z / 0-9. */
+  passportNumber?: string;
   employeeId: string;
   partnerId: string;
   zoneId: string;
@@ -87,19 +90,21 @@ export function validateDriverForm(
     errors.fullName = "missing_fields";
   }
 
-  // Phone and civil ID are optional contact details, not credentials — the app
-  // signs in with employee ID + passcode. Left blank they are simply absent;
-  // typed in they still have to be a real number, since a half-entered one is
-  // worse than none.
+  // Civil ID, mobile and passport are mandatory on every write path: they are
+  // the three facts HR reconciles a rider against. A blank is a missing field,
+  // a half-typed value is an invalid one, and the two are named differently so
+  // the operator knows which they are looking at.
   const phoneDigits = restrictDigits(input.phone.trim(), 8);
-  if (phoneDigits && !isValidKuwaitPhoneDigits(phoneDigits)) {
-    errors.phone = "invalid_phone";
-  }
+  if (!phoneDigits) errors.phone = "missing_fields";
+  else if (!isValidKuwaitPhoneDigits(phoneDigits)) errors.phone = "invalid_phone";
 
   const civilDigits = restrictDigits(input.civilId.trim(), 12);
-  if (civilDigits && !isValidCivilIdDigits(civilDigits)) {
-    errors.civilId = "invalid_civil_id";
-  }
+  if (!civilDigits) errors.civilId = "missing_fields";
+  else if (!isValidCivilIdDigits(civilDigits)) errors.civilId = "invalid_civil_id";
+
+  const passport = (input.passportNumber ?? "").trim().toUpperCase();
+  if (!passport) errors.passportNumber = "missing_fields";
+  else if (!/^[A-Z0-9]{5,20}$/.test(passport)) errors.passportNumber = "invalid_passport";
 
   const employeeId = input.employeeId.trim();
   if (!employeeId) {

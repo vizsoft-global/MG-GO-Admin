@@ -34,6 +34,7 @@ import {
   workingHoursColumnId,
 } from "./payroll-rider-columns";
 import {
+  DEFAULT_PROJECT_CLIENTS,
   dayColumnLabelKey,
   projectConfigOf,
   projectCounts,
@@ -42,6 +43,7 @@ import {
   projectRowTotals,
   ridersForProject,
   unassignedProjectCount,
+  type PayrollProjectClient,
   type PayrollProjectView,
 } from "./payroll-projects";
 import { PayrollProjectCards, PayrollProjectKpis } from "./payroll-project-cards";
@@ -110,6 +112,7 @@ export function PayrollAttendanceOrdersTab({
   canManage = false,
   today,
   view = "americana",
+  views,
   onViewChange,
 }: {
   month: PayrollPeriod;
@@ -119,11 +122,13 @@ export function PayrollAttendanceOrdersTab({
   /** Kuwait date the page calls today; drives the Rider Status column. */
   today: string;
   /**
-   * The selected project card. Owned by the shell so it can hide the status chips
-   * for Five Guys — that project has no day status to filter on — while every
-   * other tab stays exactly as it was.
+   * The selected client card. Owned by the shell so it can hide the status chips
+   * for a client with no day status — Five Guys — while every other tab stays
+   * exactly as it was.
    */
   view?: PayrollProjectView;
+  /** The active client catalog, in card order. */
+  views?: readonly PayrollProjectClient[];
   onViewChange?: (next: PayrollProjectView) => void;
 }) {
   const t = useTranslations("pages.payroll");
@@ -131,7 +136,8 @@ export function PayrollAttendanceOrdersTab({
   const [search, setSearch] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [hoursTarget, setHoursTarget] = useState<HoursEditTarget | null>(null);
-  const config = projectConfigOf(view);
+  const projectViews = views ?? DEFAULT_PROJECT_CLIENTS;
+  const config = projectConfigOf(view, projectViews);
   const audit = usePayrollAdjustmentAudit({ from: month.from, to: month.to });
   const { prefs: listPrefs, update: updateListPrefs } = usePayrollListPrefs("payroll-ao");
   const [filters, setFilters] = useState<ColumnFilters>({});
@@ -187,15 +193,25 @@ export function PayrollAttendanceOrdersTab({
   const editable = canManage;
 
   /** The riders on the selected card, before search and the column funnels. */
-  const projectRiders = useMemo(() => ridersForProject(riders, view), [riders, view]);
-  const counts = useMemo(() => projectCounts(riders), [riders]);
-  const unassigned = useMemo(() => unassignedProjectCount(riders), [riders]);
+  const projectRiders = useMemo(
+    () => ridersForProject(riders, view, projectViews),
+    [riders, view, projectViews],
+  );
+  const counts = useMemo(() => projectCounts(riders, projectViews), [riders, projectViews]);
+  const unassigned = useMemo(
+    () => unassignedProjectCount(riders, projectViews),
+    [riders, projectViews],
+  );
   const rowTotals = useMemo(() => {
     const map = new Map<string, ReturnType<typeof projectRowTotals>>();
-    for (const row of projectRiders) map.set(row.driverId, projectRowTotals(view, row));
+    for (const row of projectRiders)
+      map.set(row.driverId, projectRowTotals(view, row, projectViews));
     return map;
-  }, [projectRiders, view]);
-  const kpis = useMemo(() => projectKpis(view, projectRiders), [projectRiders, view]);
+  }, [projectRiders, view, projectViews]);
+  const kpis = useMemo(
+    () => projectKpis(view, projectRiders, projectViews),
+    [projectRiders, view, projectViews],
+  );
   const projectAuditRows = useMemo(() => {
     const ids = new Set(projectRiders.map((row) => row.driverId));
     return (audit.data ?? []).filter((row) => ids.has(row.driverId));
@@ -550,16 +566,22 @@ export function PayrollAttendanceOrdersTab({
 
   return (
     <div className="space-y-2">
-      <PayrollProjectCards view={view} counts={counts} onSelect={changeView} />
+      <PayrollProjectCards
+        view={view}
+        views={projectViews}
+        counts={counts}
+        onSelect={changeView}
+      />
       {unassigned > 0 ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           {t("projects.unassigned", { count: unassigned })}
         </p>
       ) : null}
-      <PayrollProjectKpis view={view} kpis={kpis} />
+      <PayrollProjectKpis view={view} views={projectViews} kpis={kpis} />
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs leading-5 shadow-sm">
-          <b>{t("ao.bannerTitle")}</b> {t(`ao.banner.${view}`)}
+          <b>{t("ao.bannerTitle")}</b>{" "}
+          {config.label ? t("ao.banner.custom") : t(`ao.banner.${config.labelKey}`)}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {editable ? (
@@ -1023,14 +1045,15 @@ export function PayrollAttendanceOrdersTab({
                     hidden: hiddenSetFor("ao", headingConfig),
                     today,
                     project: view,
+                    clients: projectViews,
                     visibleLeadIds: columns.filter((column) => column.id !== "serial").map((column) => column.id),
-                    fileName: projectExportName(view, month.key),
+                    fileName: projectExportName(view, month.key, projectViews),
                   })
                 }
                 className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-semibold transition-colors hover:bg-muted/50"
               >
                 <Download className="size-3.5" />
-                {t("exportProject", { project: t(`projects.${config.labelKey}`) })}
+                {t("exportProject", { project: config.label ?? t(`projects.${config.labelKey}`) })}
               </button>
             ) : null}
           </div>
@@ -1040,7 +1063,9 @@ export function PayrollAttendanceOrdersTab({
       <PayrollManualChangesPanel
         rows={projectAuditRows}
         title={t("manualChanges.title")}
-        hint={t("manualChanges.hintProject", { project: t(`projects.${config.labelKey}`) })}
+        hint={t("manualChanges.hintProject", {
+          project: config.label ?? t(`projects.${config.labelKey}`),
+        })}
         prefKey="payroll.manualChanges.ao"
         labels={{
           when: t("manualChanges.when"),
@@ -1059,6 +1084,7 @@ export function PayrollAttendanceOrdersTab({
         open={uploadOpen}
         onOpenChange={setUploadOpen}
         view={view}
+        views={projectViews}
         riders={projectRiders}
         monthPrefix={month.key}
         today={today}
