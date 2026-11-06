@@ -388,9 +388,16 @@
   background: #fff;
 }
 
+/*
+ * The frozen headers must outrank the headers that scroll under them.
+ * `.hrpay-table th.hrpay-colhead` sets z-index 3 and is more specific than a
+ * two-class rule, so the sticky twins have to name the element and the table to
+ * win — otherwise both sit at 3, DOM order decides, and the scrolled column
+ * headers paint over the pinned ones, which reads as the frozen header sliding.
+ */
 .hrpay-band.hrpay-sticky,
-.hrpay-colhead.hrpay-sticky,
-.hrpay-filter.hrpay-sticky {
+.hrpay-table th.hrpay-colhead.hrpay-sticky,
+.hrpay-table th.hrpay-filter.hrpay-sticky {
   z-index: 4;
 }
 
