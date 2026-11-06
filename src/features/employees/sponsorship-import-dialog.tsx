@@ -52,6 +52,12 @@ function applyErrorMessage(
       return t("errors.missing_fields");
     case "system_status_locked":
       return t("import.errors.system_status_locked");
+    case "system_row_locked":
+      return t("errors.system_row_locked");
+    case "not_found":
+      return t("errors.not_found");
+    case "delete_failed":
+      return t("errors.delete_failed");
     case "save_failed":
       return t("errors.save_failed");
     case "logo_file_too_large":

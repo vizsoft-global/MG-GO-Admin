@@ -45,6 +45,10 @@ export const queryKeys = {
   },
   employees: {
     catalog: (kind: string) => ["employees", "catalog", kind] as const,
+    /** Employee Settings reads its catalogs client-side, so one key per sheet. */
+    serviceTypes: ["employees", "catalog", "service_types"] as const,
+    vehicleTypes: ["employees", "catalog", "vehicle_types"] as const,
+    payrollClients: ["employees", "catalog", "payroll_clients"] as const,
     dashboard: () => ["employees", "dashboard"] as const,
   },
   driverDevices: {

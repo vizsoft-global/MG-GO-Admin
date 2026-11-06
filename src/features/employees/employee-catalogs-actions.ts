@@ -42,7 +42,10 @@ export type EmployeeCatalogError =
   | "invalid_key"
   | "missing_fields"
   | "system_status_locked"
+  | "system_row_locked"
+  | "not_found"
   | "save_failed"
+  | "delete_failed"
   | "logo_file_too_large"
   | "logo_invalid_type"
   | "logo_upload_failed";
@@ -130,14 +133,7 @@ export async function upsertEmployeeCatalog(input: {
     entityId: `${input.kind}:${key}`,
     context: { kind: input.kind, key, is_active: input.isActive },
   });
-  revalidatePath("/operations");
-  revalidatePath("/settings/employee-statuses");
-  revalidatePath("/settings/employee-sections");
-  revalidatePath("/settings/nationality-categories");
-  revalidatePath("/settings/bank-codes");
-  revalidatePath("/settings/sponsorships");
-  revalidatePath("/payroll");
-  revalidatePath("/payroll-hub");
+  revalidateCatalogPages();
 
   if (input.kind === "sponsorships") {
     const logoError = await writeSponsorshipLogo(key, input, actorId);
@@ -147,6 +143,65 @@ export async function upsertEmployeeCatalog(input: {
 }
 
 export type SponsorshipImportApplyError = EmployeeCatalogError | SponsorshipImportFileError | "nothing_to_apply";
+
+/**
+ * Delete one catalog row.
+ *
+ * A **system** row is refused: `mergeCatalogRows` would put it straight back
+ * from the compiled seeds, so deleting it would look like a failure rather than
+ * a decision. Deactivating is the operation that exists for those.
+ */
+export async function deleteEmployeeCatalog(input: {
+  kind: EmployeeCatalogKind;
+  key: string;
+}): Promise<{ ok: true } | { error: EmployeeCatalogError }> {
+  try {
+    await requireManage(input.kind);
+  } catch {
+    return { error: "not_authorized" };
+  }
+  const db = await staffDb();
+  if (!db) return { error: "not_configured" };
+
+  const key = input.key.trim().toLowerCase();
+  const ref = db.collection(KIND_COLLECTION[input.kind]).doc(key);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    const seeded = seedsForKind(input.kind).some((row) => row.key === key && row.is_system);
+    return { error: seeded ? "system_row_locked" : "not_found" };
+  }
+  if (snap.get("is_system") === true) return { error: "system_row_locked" };
+
+  try {
+    await ref.delete();
+  } catch {
+    return { error: "delete_failed" };
+  }
+  if (input.kind === "sponsorships") await deleteSponsorshipLogoFiles(key);
+
+  void logAdminActivity({
+    action: "delete",
+    entityType: "employee_catalog",
+    entityId: `${input.kind}:${key}`,
+    context: { kind: input.kind, key },
+  });
+  revalidateCatalogPages();
+  return { ok: true };
+}
+
+function revalidateCatalogPages(): void {
+  revalidatePath("/operations");
+  revalidatePath("/drivers");
+  revalidatePath("/settings/employee-statuses");
+  revalidatePath("/settings/employee-sections");
+  revalidatePath("/settings/nationality-categories");
+  revalidatePath("/settings/bank-codes");
+  revalidatePath("/settings/job-positions");
+  revalidatePath("/settings/sponsorships");
+  revalidatePath("/payroll");
+  revalidatePath("/payroll/hr");
+  revalidatePath("/payroll-hub");
+}
 
 export async function importSponsorships(input: {
   headers: string[];
