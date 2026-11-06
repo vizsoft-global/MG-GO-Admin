@@ -2821,7 +2821,9 @@
             "not_willing_to_continue": "غير راغب بالاستمرار",
             "travelled_not_returned": "سافر ولم يعد"
           }
-        }
+        },
+        "identityIncompleteTitle": "الهوية غير مكتملة",
+        "identityIncompleteBody": "الرقم المدني ورقم الجوال وجواز السفر مطلوبة قبل حفظ هذا السجل أو اعتماده. اختر حقلًا لتعبئته."
       },
       "project": {
         "title": "المشروع",
@@ -9819,7 +9821,18 @@
           "client_has_riders": "هذا العميل ما زال لديه راكبون. انقلهم إلى عميل آخر أولًا.",
           "unknown_client": "هذا العميل لم يعد موجودًا.",
           "save_failed": "تعذر حفظ العميل."
-        }
+        },
+        "halfDayHours": "نصف يوم (ساعات)",
+        "reducedHours": "يوم مخفّض (ساعات)",
+        "requiredHoursPerDay": "الساعات المطلوبة / يوم",
+        "defaultOffDays": "أيام الراحة الافتراضية",
+        "goodThreshold": "حد المنطقة الجيد",
+        "averageThreshold": "حد المنطقة المتوسط",
+        "sortOrder": "ترتيب البطاقة",
+        "defaultResult": "قاعدة اليوم الافتراضية",
+        "rulesHeading": "قواعد الرواتب",
+        "usesZone": "يستخدم حدود المناطق",
+        "usesOrders": "يحتسب الطلبات"
       }
     },
     "auditLogs": {
@@ -10041,7 +10054,7 @@
         "downloadTable": "تنزيل هذا الجدول",
         "clear": "مسح الفلاتر",
         "kpiRiders": "السائقون في الرواتب",
-        "kpiActive": "إجمالي السائقين النشطين",
+        "kpiActive": "إجمالي الراكبين العاملين",
         "kpiPayment": "إجمالي الدفع",
         "awaiting": "بانتظار الموافقة",
         "totalRiders": "الإجمالي · {count} سائق",
@@ -10539,7 +10552,7 @@
         "inactive": "غير نشط"
       },
       "dayStatus": {
-        "work": "نشط · 12 ساعة",
+        "work": "يعمل · 12 ساعة",
         "off": "راحة",
         "sick": "مرضي",
         "accident": "حادث",
@@ -10554,7 +10567,7 @@
         "blank": "لا يوجد سجل"
       },
       "legend": {
-        "work": "نشط",
+        "work": "يعمل",
         "off": "راحة",
         "sick": "مرضي",
         "accident": "حادث",
@@ -10765,7 +10778,7 @@
         "totalHoursShort": "إجمالي الساعات",
         "totalOrdersShort": "إجمالي الطلبات",
         "kpiRiders": "الراكبون في الرواتب",
-        "kpiActive": "إجمالي الراكبين النشطين",
+        "kpiActive": "إجمالي الراكبين العاملين",
         "kpiOrders": "إجمالي الطلبات",
         "kpiHours": "إجمالي الساعات",
         "kpiAvgOrders": "متوسط الطلبات لكل يوم عمل",

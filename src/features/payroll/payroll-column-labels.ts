@@ -23,8 +23,21 @@ export const PAYROLL_COLUMN_LABELS: Readonly<Record<string, string>> = {
   mgId: "Driver ID",
   client: "Client ID",
   clientId: "Client ID",
+  /**
+   * `restaurantId` prints the restaurant's client id — the same figure HR spells
+   * `client`. Two ids on one row were reading "Client ID" and something else.
+   */
+  restaurantId: "Client ID",
   name: "Employee Name",
   status: "Status",
+  /**
+   * `partner` is the client a rider is assigned to. HR spelled it "Client" and
+   * Payroll "Client Name" for the same catalog row, so both read "Client" now.
+   */
+  partner: "Client",
+  clientName: "Client",
+  vtype: "Vehicle Type",
+  total: "Total Salary",
 };
 
 /**

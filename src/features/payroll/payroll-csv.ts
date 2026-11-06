@@ -22,7 +22,45 @@ import {
   restaurantDisplayId,
   resolveRiderStatus,
 } from "./payroll-rider-columns";
+import { payrollColumnLabel, payrollStatusDisplayLabel } from "./payroll-column-labels";
 import type { PayrollHubTab, PayrollRequestRow, PayrollRiderRow } from "./payroll-types";
+
+/**
+ * Column ids behind `PAYROLL_VIEW_HEADERS`, in the same order.
+ *
+ * The header array is what a human reads in the file; these ids are what the
+ * canonical word map (`payrollColumnLabel`) is keyed on, so "Name" cannot reach
+ * the CSV while the grid prints "Employee Name".
+ */
+const PAYROLL_VIEW_KEYS = [
+  "amId",
+  "mgId",
+  "name",
+  "restaurant",
+  "zone",
+  "zoneCategory",
+  "zoneOrders",
+  "zoneDpd",
+  "zoneEff",
+  "partner",
+  "vehicleKind",
+  "status",
+  "totalDays",
+  "finalOrders",
+  "reduced3",
+  "half",
+  "off",
+  "sick",
+  "accident",
+  "vehicle",
+  "absence",
+  "absLh",
+  "absLo",
+  "offStructure",
+  "requiredHours",
+  "actualHours",
+  "efficiency",
+] as const;
 
 export const PAYROLL_VIEW_HEADERS = [
   "MG ID",
@@ -160,9 +198,14 @@ function headerFor(
 ): string | null {
   if (options?.hidden?.has(key)) return null;
   const custom = options?.labels?.[key]?.trim();
-  return custom || fallback;
+  /**
+   * The canonical payroll wording wins over both the caller's array and the
+   * sheet's own label, so a downloaded file cannot spell a column differently
+   * from the grid it came from. An id the map does not own keeps the caller's
+   * text — which is how a project-specific day column keeps its own heading.
+   */
+  return payrollColumnLabel(key, custom || fallback);
 }
-
 function visibleIdentity(
   headers: readonly string[],
   keys: readonly string[],
@@ -202,7 +245,7 @@ function summaryCells(row: PayrollRiderRow, today?: string): Array<string | numb
     row.zoneEfficiency ?? "",
     row.partner,
     payrollVehicleKind(row.vehicleKey),
-    resolveRiderStatus(row, today).label,
+    payrollStatusDisplayLabel(resolveRiderStatus(row, today).label),
     row.workDays,
     row.finalOrders,
     row.reducedDays,
@@ -232,7 +275,7 @@ function combinedIdentityCells(row: PayrollRiderRow, today?: string): Array<stri
     row.zoneCategory,
     row.partner,
     payrollVehicleKind(row.vehicleKey),
-    resolveRiderStatus(row, today).label,
+    payrollStatusDisplayLabel(resolveRiderStatus(row, today).label),
     row.finalOrders,
     Number(row.actualHours.toFixed(2)),
   ];
@@ -250,7 +293,7 @@ function appAttendanceLeadCells(row: PayrollRiderRow, today?: string): Array<str
     row.zone,
     row.zoneCategory,
     payrollVehicleKind(row.vehicleKey),
-    resolveRiderStatus(row, today).label,
+    payrollStatusDisplayLabel(resolveRiderStatus(row, today).label),
     Number(totals.totalHours.toFixed(2)),
     totals.activeDays,
     Number(totals.avgHours.toFixed(2)),
@@ -267,7 +310,9 @@ export function exportPayrollViewCsv(
   downloadCsv(
     `MGGO-payroll-${fileKey}`,
     toCsv(
-      [...PAYROLL_VIEW_HEADERS],
+      PAYROLL_VIEW_HEADERS.map((header, index) =>
+        payrollColumnLabel(PAYROLL_VIEW_KEYS[index] ?? "", header),
+      ),
       rows.map((row) => summaryCells(row, options?.today)),
     ),
   );
@@ -333,7 +378,7 @@ function aoLeadCells(row: PayrollRiderRow, today?: string): Array<string | numbe
     row.zone,
     row.zoneCategory,
     payrollVehicleKind(row.vehicleKey),
-    resolveRiderStatus(row, today).label,
+    payrollStatusDisplayLabel(resolveRiderStatus(row, today).label),
     row.finalOrders,
     Number(row.actualHours.toFixed(2)),
   ];
