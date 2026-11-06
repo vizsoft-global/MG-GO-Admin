@@ -160,15 +160,29 @@ export function payrollVehicleKind(key: string | null): string {
 }
 
 /**
- * Application hours for one day: the logged check-in → check-out length, or the
- * elapsed length of a shift that is still open. Deliberately independent of the
- * payroll engine's `creditedHours` — this tab answers "how long was the app in
- * use", not "how many hours are payable".
+ * App-usage hours for one day.
+ *
+ * Prefers the server's `appHours` — the attendance span split at Kuwait midnight
+ * and clipped to the rider's shift — because the raw clock-in → clock-out figure
+ * reports a forgotten clock-out as 19 h or 23 h, and a night shift as one day.
+ *
+ * `appHours` wins even when it is `0`: a rider who only opened the app outside
+ * their rota genuinely used none of their shift, and falling back to the raw span
+ * there would undo the whole point. `elapsedHours` is still honoured for an open
+ * shift today, which the server cannot measure because it has no end.
+ *
+ * Deliberately independent of the payroll engine's `creditedHours` — this tab
+ * answers "how long was the app in use", not "how many hours are payable".
  */
 export function appHoursForDay(row: PayrollRiderRow, dayIndex: number): number {
   const info = row.dayInfo[dayIndex];
   if (!info) return 0;
-  return info.loggedHours || (info.elapsedHours ?? 0);
+  const elapsed = info.elapsedHours ?? 0;
+  const clipped = info.appHours;
+  if (typeof clipped === "number") return clipped > 0 ? clipped : elapsed;
+  // No server figure (older deploy, or the local table fallback): the previous
+  // behaviour, so the tab degrades rather than blanking.
+  return info.loggedHours > 0 ? info.loggedHours : elapsed;
 }
 
 /**

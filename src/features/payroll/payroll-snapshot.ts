@@ -231,6 +231,12 @@ type RawDayRow = {
   si?: string | null;
   /** Kuwait `HH:mm` of the logout / close that closed the day's last log. */
   so?: string | null;
+  /**
+   * App-usage hours for the day: the attendance span split at Kuwait midnight
+   * and clipped to the shift. Display only; absent on a payload from before the
+   * server started sending it.
+   */
+  ah?: number | string | null;
   x: string | null;
   xh: number | string | null;
 };
@@ -393,6 +399,12 @@ type DayFactsInput = {
   date: string;
   /** Hours the rules are judged on: attendance for Americana, uploaded otherwise. */
   loggedHours: number;
+  /**
+   * App-usage hours: the attendance span split at Kuwait midnight and clipped to
+   * the rider's shift. Display only, for the Application Attendance tab.
+   * `undefined` when the server did not send one.
+   */
+  appHours?: number;
   /** The attendance figure, kept for the Application Attendance view. */
   attendanceHours?: number;
   /** Hours Operations loaded for a Keeta / Five Guys day, or null when none. */
@@ -500,6 +512,11 @@ function dayInfoFrom(
       displayOrders: facts.displayOrders ?? facts.orders,
       ordersOverridden: facts.ordersOverridden,
       loggedHours: Math.round((facts.attendanceHours ?? facts.loggedHours) * 100) / 100,
+      // Absent, never `0`: an old deploy and the table fallback send no figure,
+      // and the tab falls back to `loggedHours` for those rather than printing 0.
+      ...(facts.appHours != null
+        ? { appHours: Math.round(facts.appHours * 100) / 100 }
+        : {}),
       workingHours: facts.workingHours ?? null,
       workingHoursOverridden: facts.workingHours != null,
       source: outcome.source,
@@ -634,7 +651,8 @@ export function assemblePayrollSnapshot(input: {
   const zoneNames = new Map<string, string>(
     options.zones.map((z) => [z.id, z.name] as [string, string]),
   );
-  const clientByKey = new Map((input.clients ?? []).map((c) => [c.key, c]));
+  const clients = input.clients ?? [];
+  const clientByKey = new Map(clients.map((c) => [c.key, c]));
   const zoneMetrics = input.zoneMetrics ?? [];
 
   // Requests still drive the Requests tab and the coverage flags.
@@ -711,7 +729,7 @@ export function assemblePayrollSnapshot(input: {
       // Which day shape this rider is priced on. An unset project keeps the
       // Americana behaviour it has always had here; the AO tab is the one place
       // that refuses to guess a card for it.
-      const projectView = viewOfProjectKey(r.projectKey) ?? "americana";
+      const projectView = viewOfProjectKey(r.projectKey, clients) ?? "americana";
       const { zoneId, zoneName } = payrollZoneFor(r, zoneNames);
       const zoneCategory = categoryForZone(zoneMetrics, zoneId);
       const metric = zoneId ? zoneMetrics.find((m) => m.zoneId === zoneId) ?? null : null;
@@ -758,7 +776,7 @@ export function assemblePayrollSnapshot(input: {
           // The rules price what the project pays for. Keeta / Five Guys pay the
           // hours Operations loaded; Americana keeps the attendance clock, which is
           // why that project's figures cannot move from this change.
-          loggedHours: hoursForRules(projectView, logged, uploadedHours),
+          loggedHours: hoursForRules(projectView, logged, uploadedHours, clients),
           attendanceHours: logged,
           workingHours: uploadedHours,
           orders: reconOrders(date),
@@ -1132,7 +1150,7 @@ export function snapshotFromRpc(
     for (const day of row.days ?? []) {
       const logged = num(day.h);
       const uploadedHours = day.wh == null ? null : num(day.wh);
-      const projectView = viewOfProjectKey(row.projectKey) ?? "americana";
+      const projectView = viewOfProjectKey(row.projectKey, clients) ?? "americana";
       const cover =
         day.c === "off" || day.c === "sick" || day.c === "accident" ? day.c : null;
       const adjustmentStatus = parseAdjustmentStatus(day.x);
@@ -1141,7 +1159,7 @@ export function snapshotFromRpc(
         date: String(day.d),
         // Same rule as the local assembly: Keeta / Five Guys are judged on the
         // hours Operations loaded, everything else on the attendance clock.
-        loggedHours: hoursForRules(projectView, logged, uploadedHours),
+        loggedHours: hoursForRules(projectView, logged, uploadedHours, clients),
         attendanceHours: logged,
         workingHours: uploadedHours,
         elapsedHours:
@@ -1156,6 +1174,9 @@ export function snapshotFromRpc(
         hasCheckIn: Boolean(day.k) || logged > 0,
         shiftIn: day.si ?? null,
         shiftOut: day.so ?? null,
+        // `ah` is the server's midnight-split, shift-clipped app-usage figure.
+        // Absent on a payload from before it existed, so the tab falls back.
+        appHours: nullableNum(day.ah) ?? undefined,
         adjustment: adjustmentStatus
           ? {
               driverId: row.driverId,

@@ -71,6 +71,17 @@ export type PayrollDayInfo = {
    */
   elapsedHours?: number;
   /**
+   * App-usage hours for this day: the attendance span split at Kuwait midnight
+   * and clipped to the rider's shift window. The Application Attendance tab
+   * reads this instead of `loggedHours`, which printed a forgotten clock-out as
+   * 19 h or 23 h. Display only — no pay formula reads it, so an `ACT` day is
+   * still priced on `loggedHours`.
+   *
+   * `undefined` means the server did not compute it (an older deploy, or the
+   * local table fallback); the tab then falls back to `loggedHours`.
+   */
+  appHours?: number;
+  /**
    * Mobile-app shift window, Kuwait `HH:mm`: the app login that opened the
    * rider's first attendance log and the logout / close that closed the last
    * one. `null` on either side means the app never reported it (an open shift

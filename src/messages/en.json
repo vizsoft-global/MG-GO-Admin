@@ -10447,7 +10447,7 @@
       },
       "appAttendance": {
         "bannerTitle": "Application attendance",
-        "bannerBody": "Hours the rider app was actually in use — clock-in to clock-out, or time elapsed so far on a shift still open. Nothing here feeds payroll; it is a usage record beside it.",
+        "bannerBody": "Hours the rider app was actually in use — the clock-in to clock-out span, split at midnight and kept only inside the rider's shift. A rider with no shift that day is measured on the clock alone, and nothing here feeds payroll; it is a usage record beside it.",
         "activeRiders": "{count} rider(s) with app activity",
         "daysHint": "Days with any app usage",
         "avgHint": "Across days with usage",
