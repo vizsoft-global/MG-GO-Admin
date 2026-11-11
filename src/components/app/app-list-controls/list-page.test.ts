@@ -28,6 +28,32 @@ describe("buildGroupSections", () => {
     assert.deepEqual(pageRange(1, 200), { from: 81, to: 160 });
   });
 
+  it("counts the server total, not the rows it has fetched", () => {
+    const built = buildGroupSections({
+      groups: [{ key: "all", label: "", rows: rows(500, "d") }],
+      grouped: false,
+      openKeys: new Set(),
+      groupPage: {},
+      flatPage: 11,
+      totalOverride: 977,
+    });
+    assert.deepEqual(built.flatPager, { page: 11, total: 977 });
+    assert.deepEqual(pageRange(11, 977), { from: 881, to: 960 });
+    assert.equal(built.sections[0]?.visibleRows.length, 0);
+  });
+
+  it("uses the fetched rows when they exceed the reported total", () => {
+    const built = buildGroupSections({
+      groups: [{ key: "all", label: "", rows: rows(200, "d") }],
+      grouped: false,
+      openKeys: new Set(),
+      groupPage: {},
+      flatPage: 0,
+      totalOverride: 150,
+    });
+    assert.deepEqual(built.flatPager, { page: 0, total: 200 });
+  });
+
   it("keeps groups closed and scopes select-all to every page of opened groups", () => {
     const built = buildGroupSections({
       groups: [

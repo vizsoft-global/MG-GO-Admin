@@ -35,6 +35,7 @@ import {
   GroupedSections,
   GroupTableHeaderRow,
   groupRows,
+  LIST_PAGE_SIZE,
   scopeSelectionState,
   toggleScopeSelection,
   useGroupedListView,
@@ -381,12 +382,25 @@ function DriversPageContent() {
     );
   }, [shownDrivers, prefs.groupBy, statusesQuery.data, locale, t]);
   const selectionResetKey = `${prefs.groupBy}\u0001${debouncedSearch}\u0001${tabFilter}\u0001${levelFilter}\u0001${JSON.stringify(columnFilters)}`;
-  const listView = useGroupedListView(groupedDrivers, prefs.groupBy !== "none", selectionResetKey);
   const firstPage = pageQuery.data?.pages[0];
   const kpiCounts = firstPage?.kpis ?? EMPTY_KPIS;
   // A hard failure has no roster to count, so the tiles must not keep printing
   // the pre-failure numbers beside an error.
   const filteredTotal = hardFailed ? 0 : firstPage?.filteredTotal ?? 0;
+  /**
+   * The pager's denominator is the server's filtered total, not the rows this
+   * client has fetched — the fetch is capped at `DRIVERS_PAGE_LIMIT`, so a
+   * 977-rider roster used to read "1–80 / 500". The level filter is evaluated in
+   * memory over the loaded rows, so while it narrows the list its own count is
+   * the honest one.
+   */
+  const flatTotal = levelFilter === "all" && !hardFailed && filteredTotal > 0 ? filteredTotal : undefined;
+  const listView = useGroupedListView(
+    groupedDrivers,
+    prefs.groupBy !== "none",
+    selectionResetKey,
+    flatTotal,
+  );
   const tabTotal = hardFailed ? 0 : firstPage?.tabTotal ?? 0;
   const isLoading = pageQuery.isLoading;
 
@@ -469,6 +483,23 @@ function DriversPageContent() {
     if (levelFilter === "all") return;
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }, [levelFilter, fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  /**
+   * A page the toolbar pager has moved to must actually be loaded.
+   *
+   * The pager counts the whole filtered roster while the query holds one server
+   * page per request, so stepping past the fetched rows pulls the next page
+   * instead of painting a short page.
+   */
+  useEffect(() => {
+    if (levelFilter !== "all") return;
+    const pager = listView.flatPager;
+    if (!pager) return;
+    const needed = Math.min((pager.page + 1) * LIST_PAGE_SIZE, pager.total);
+    if (drivers.length >= needed) return;
+    if (!hasNextPage || isFetchingNextPage) return;
+    void fetchNextPage();
+  }, [drivers.length, fetchNextPage, hasNextPage, isFetchingNextPage, levelFilter, listView.flatPager]);
 
   const selectionResetSeen = useRef(selectionResetKey);
   useEffect(() => {
