@@ -31,6 +31,8 @@ const DOCS = {
       'How riders use the MG-GO Android application — signing in, going on duty, recording deliveries, earnings, vehicle and support — and how the office console produces what they see.',
     chips: ['Rider app · Android', 'Admin console · web', 'English / العربية'],
     version: 'Version 1.0 · 4 Nov 2026',
+    readerNote: 'Riders, operations staff and client stakeholders',
+    rebuildNote: 'npm run docs:manual',
     source: 'Written from the rider app and admin console source · No screenshots · English edition',
   },
   admin: {
@@ -42,6 +44,8 @@ const DOCS = {
       'How operations, HR, payroll, fleet and administration staff run the delivery platform — employees and access, the live map, verification, requests, visits, signatures, fleet, pay and settings.',
     chips: ['Admin console · web', 'Rider app · Android', 'English / العربية'],
     version: 'Version 1.0 · 4 Nov 2026',
+    readerNote: 'Administrators, HR, payroll, fleet and operations staff',
+    rebuildNote: 'npm run docs:admin',
     source: 'Written from the admin console source · No screenshots · English edition',
   },
   stack: {
@@ -57,6 +61,8 @@ const DOCS = {
       'Firebase · Firestore',
     ],
     version: 'Version 1.2 · 11 Nov 2026',
+    readerNote: 'Client technical stakeholders, onboarding engineers, procurement',
+    rebuildNote: 'npm run docs:stack',
     source: 'Read from the MG-GO-Admin and MG-GO source trees · No estimates · English edition',
     /**
      * The stack document uses the two extra fence types the renderer below
@@ -474,10 +480,7 @@ const CSS = `
   }
   * { box-sizing: border-box; }
   html, body { margin:0; padding:0; }
-  @page { size: A4 portrait; margin: 18mm 16mm 18mm; }
-  /* Page one is the cover: zero margin means Chrome has no band to draw the
-     running header in, so the title is not repeated above the title. */
-  @page :first { margin: 0; }
+  @page { size: A4 portrait; margin: 18mm 16mm 16mm; }
   /* A dependency map is read, not skimmed, and at 178 mm its labels shrink
      below 5 pt. It gets a landscape page of its own instead: 267 mm of width
      is 1.5× the portrait column, which is the difference between a diagram
@@ -517,16 +520,35 @@ const CSS = `
     border-radius:999px; padding:4px 11px; white-space:nowrap; }
 
   /* ---------- contents ---------- */
-  .toc { break-after:page; page-break-after:always; }
-  .toc h2 { font-size:15pt; margin:0 0 12px; }
-  /* Two columns: this document carries ~50 entries, and a contents list that
-     spills onto a second page is a contents list nobody scans. */
+  /* A contents page that stops two-thirds down looks like a page that failed
+     to render. It gets a masthead, a two-column list, and a fact strip closing
+     the page — the same three-fact rhythm the rest of the document uses. */
+  .toc { break-after:page; page-break-after:always; display:flex; flex-direction:column;
+    min-height:248mm; }
+  .toc-eyebrow { font-size:7.6pt; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 7px; }
+  .toc-title { font-size:23pt; font-weight:700; color:var(--navy); margin:0 0 9px;
+    letter-spacing:-.012em; break-before:auto; page-break-before:auto; }
+  .toc-rule { height:3px; width:54px; background:var(--rust); margin:0 0 16px; }
   .toc ol { list-style:none; margin:0; padding:0; columns:2; column-gap:12mm; }
   .toc li { margin:0; break-inside:avoid; }
-  .toc .lvl2 { margin:9px 0 3px; font-weight:700; font-size:9.6pt; color:var(--navy); }
+  .toc .lvl2 { margin:8px 0 3px; font-weight:700; font-size:9.6pt; color:var(--navy); }
   .toc .lvl3 { margin:0 0 0 12px; font-size:8.8pt; color:#3a3f47; }
   .toc .lvl3 a::before { content:"· "; color:var(--rust); }
   .toc a { color:inherit; text-decoration:none; }
+  .toc-facts { margin-top:auto; padding-top:11px; border-top:1px solid var(--line);
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:10px 14px; }
+  .toc-figures { margin-top:16px; }
+  .toc-sub { font-size:7.4pt; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 6px; font-weight:600; }
+  .toc-figures ol { columns:2; column-gap:12mm; margin:0; padding:0; list-style:none; }
+  .toc-figures li { font-size:8.4pt; line-height:1.35; color:#3a3f47; margin:0 0 3px;
+    break-inside:avoid; padding-left:16px; position:relative; }
+  .toc-figures .fig-no { position:absolute; left:0; top:0; font-size:7.4pt; font-weight:700;
+    color:var(--rust); }
+  .toc-facts div { font-size:8.5pt; line-height:1.4; color:#3a3f47; }
+  .toc-facts b { display:block; font-size:7.1pt; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--muted); font-weight:600; margin-bottom:2px; }
 
   /* ---------- body ---------- */
   h1, h2, h3, h4 { break-after:avoid; page-break-after:avoid; }
@@ -613,17 +635,36 @@ function renderPlates(html) {
     return `<figure class="plate"><img src="${absolute}" alt="${alt}" />${caption}</figure>`;
   });
 
-  let n = 0;
-  return withFigures.replace(/<figcaption>/g, () => {
-    n += 1;
-    return `<figcaption><b>Figure ${n}.</b> `;
+  /**
+   * Figures are numbered in body order and recorded as they are numbered, so the
+   * contents page can carry a figure index that cannot disagree with the
+   * captions — both come from this one pass.
+   */
+  const figures = [];
+  const numbered = withFigures.replace(/<figcaption>(.*?)<\/figcaption>/gs, (match, inner) => {
+    const label = inner
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .split(/\.\s/)[0]
+      .slice(0, 74);
+    figures.push(label);
+    return `<figcaption><b>Figure ${figures.length}.</b> ${inner}</figcaption>`;
   });
+
+  return { html: numbered, figures };
 }
 
 function buildCoverHtml() {
+  /**
+   * The cover job owns its page: zero page margin, because the cover band draws
+   * its own 18 mm gutter. Without this the shared `@page` margin would be added
+   * to a 297 mm cover box and push the last line onto a second page.
+   */
+  const coverCss = `${CSS}\n  @page { margin: 0; }\n  .cover { break-after:auto; page-break-after:auto; }\n`;
   return `<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8" /><title>${DOC.title}</title><style>${CSS}</style></head>
+<head><meta charset="utf-8" /><title>${DOC.title}</title><style>${coverCss}</style></head>
 <body class="cover-only">
   <section class="cover">
     <div class="cover-grid"></div>
@@ -649,18 +690,40 @@ function buildCoverHtml() {
 </html>`;
 }
 
-function buildBodyHtml(body, toc) {
+function buildBodyHtml(body, toc, figures = []) {
   const tocHtml = toc
     .map((item) => `<li class="lvl${item.depth}"><a href="#${item.id}">${item.text}</a></li>`)
     .join('\n');
+
+  /**
+   * A figure index earns its place on a technical document: a reader looking for
+   * the architecture drawing should not have to page through prose to find it,
+   * and the list also closes the white space under a two-column contents list.
+   */
+  const figuresHtml = figures.length
+    ? `<div class="toc-figures">
+    <p class="toc-sub">Figures and plates</p>
+    <ol>${figures
+      .map((label, index) => `<li><span class="fig-no">${index + 1}</span>${label}</li>`)
+      .join('')}</ol>
+  </div>`
+    : '';
 
   return `<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8" /><title>${DOC.title}</title><style>${CSS}</style></head>
 <body>
   <section class="toc">
-    <h2>Contents</h2>
+    <p class="toc-eyebrow">${DOC.title} · ${DOC.subtitle}</p>
+    <h1 class="toc-title">Contents</h1>
+    <div class="toc-rule"></div>
     <ol>${tocHtml}</ol>
+    ${figuresHtml}
+    <div class="toc-facts">
+      <div><b>Version</b>${DOC.version ?? 'Version 1.0'}</div>
+      <div><b>Reader</b>${DOC.readerNote ?? 'Client technical stakeholders, onboarding engineers'}</div>
+      <div><b>Rebuild</b>${DOC.rebuildNote ?? 'npm run docs:manual'}</div>
+    </div>
   </section>
 
   ${body}
@@ -700,7 +763,8 @@ async function main() {
   // the cover carries the title, so drop the duplicated leading H1
   const md = fs.readFileSync(SRC, 'utf8').replace(/^#\s+.*\r?\n/, '');
   const { body, toc } = renderMarkdown(md);
-  const bodyHtml = buildBodyHtml(renderPlates(body), toc);
+  const plates = renderPlates(body);
+  const bodyHtml = buildBodyHtml(plates.html, toc, plates.figures);
 
   const coverPath = path.join(WORK, 'cover.html');
   const htmlPath = path.join(WORK, 'user-manual.html');
