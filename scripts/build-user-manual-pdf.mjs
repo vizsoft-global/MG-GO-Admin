@@ -60,7 +60,7 @@ const DOCS = {
       'Flutter 3.44 · Dart 3.12',
       'Firebase · Firestore',
     ],
-    version: 'Version 1.2 · 11 Nov 2026',
+    version: 'Version 1.3 · 11 Nov 2026',
     readerNote: 'Client technical stakeholders, onboarding engineers, procurement',
     rebuildNote: 'npm run docs:stack',
     source: 'Read from the MG-GO-Admin and MG-GO source trees · No estimates · English edition',

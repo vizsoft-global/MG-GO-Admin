@@ -604,26 +604,36 @@ id — so a future reader can tell a claim from a measurement.
 
 ### 8.1 Source delivery
 
-The complete source of both applications is delivered as one shared folder:
+The complete source of both applications is delivered in one shared Drive folder,
+alongside the other two products in the group:
 
-**Source code:** https://drive.google.com/drive/folders/1WJJcIej_y70pUt8imNAufhQKBzxIYbhq?usp=sharing
+**Source code:** https://drive.google.com/drive/folders/1UfKsyf3IRAMqKgZmQ35EY0dRjbxs99rx
+
+| Folder | Product |
+|---|---|
+| **MG Hub** | This platform — the admin console and the MG-GO rider app |
+| **Bajaj Care** | The Bajaj Care workspace |
+| **Bites** | The Bites product |
+
+Inside **MG Hub**, the two applications this document describes:
 
 | Application | Technology |
 |---|---|
 | Admin console (web) | Next.js 16 · React 19 · TypeScript |
 | Rider app (Android) | Flutter 3.44 · Dart 3.12 |
 
-Both applications are versioned in the same delivery, so the pair in that folder
-belongs together.
+Both applications are versioned in the same delivery, so the admin console and
+the rider app in that folder are the pair that belongs together. The other two
+folders are separate products and are not covered by this document.
 
 ### 8.2 Delivered manuals (in `docs/`)
 
 | Document | Format | Scope |
 |---|---|---|
-| `ADMIN_PANEL_MANUAL` | Markdown + PDF (36 pages) + DOCX | Complete administrator manual, module by module |
+| `ADMIN_PANEL_MANUAL` | Markdown + PDF (34 pages) + DOCX | Complete administrator manual, module by module |
 | `USER_MANUAL` | Markdown + PDF (39 pages) + DOCX | Rider app end to end, plus the console companion view |
 | `EMPLOYEE_BULK_IMPORT` | PDF | Client-facing import procedure and column reference |
-| `TECH_STACK_OVERVIEW` | Markdown + PDF + DOCX | This document |
+| `TECH_STACK_OVERVIEW` | Markdown + PDF (26 pages) | This document |
 
 ### 8.3 Architecture documents
 
@@ -695,13 +705,23 @@ together are complete:
 
 | Field | Value |
 |---|---|
-| Version | **1.2** |
+| Version | **1.3** |
 | Date | 11 November 2026 |
 | Prepared from | the `MG-GO-Admin` and `MG-GO` working copies |
 | Reader | client technical stakeholders, onboarding engineers, procurement |
 | Scope | stack, architecture, hosting and provenance — **not** a user manual |
 | Rebuild | `npm run docs:stack` (markdown → PDF, figures and plates included) |
 | Diagrams | `docs/assets/architecture/*.jpg` — the two module dependency maps |
+
+**What changed from v1.2:**
+
+- **The source-code link is the current shared folder** — *Source Codes MG*,
+  holding the **MG Hub**, **Bajaj Care** and **Bites** products. §8.1 now names
+  which folder is this platform, because the previous link pointed at a folder
+  that no longer matches the delivery.
+- The manual page counts in §8.2 were re-read from the built PDFs
+  (`ADMIN_PANEL_MANUAL` **34**, `USER_MANUAL` **39**), and this document states
+  its own **26**.
 
 **What changed from v1.1:**
 
