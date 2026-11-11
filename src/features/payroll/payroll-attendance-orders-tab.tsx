@@ -77,7 +77,7 @@ import {
   hiddenSetFor,
   resolveColumnLabel,
 } from "./payroll-column-config";
-import { PayrollColumnsMenu, PayrollHeadingLabel, stickyIdentityStyle } from "./payroll-heading";
+import { PayrollHeadingLabel, stickyIdentityStyle } from "./payroll-heading";
 import { ColumnOrderMenu } from "@/components/app/column-order-menu";
 import { useListColumns } from "@/hooks/use-list-columns";
 import { PAYROLL_AO_COLUMNS_PREF_KEY } from "@/lib/ui-preferences/types";
@@ -628,28 +628,20 @@ export function PayrollAttendanceOrdersTab({
         prefs={listPrefs}
         onUpdate={updateListPrefs}
         trailing={
-          <>
-            <ColumnOrderMenu
-              columns={leadColumns}
-              labelFor={labelOf}
-              labels={{
-                columns: t("columnsMenu.columns"),
-                title: t("columnsMenu.title"),
-                hint: t("columnsMenu.hint"),
-                pinned: t("columnsMenu.pinnedAo"),
-                drag: t("columnsMenu.drag"),
-                show: t("columnsMenu.show"),
-                hide: t("columnsMenu.hide"),
-                reset: t("columnsMenu.reset"),
-              }}
-            />
-            <PayrollColumnsMenu
-              view="ao"
-              config={headingConfig}
-              fallbackLabel={fallbackLabel}
-              canManage={canManage}
-            />
-          </>
+          <ColumnOrderMenu
+            columns={leadColumns}
+            labelFor={labelOf}
+            labels={{
+              columns: t("columnsMenu.columns"),
+              title: t("columnsMenu.title"),
+              hint: t("columnsMenu.hint"),
+              pinned: t("columnsMenu.pinnedAo"),
+              drag: t("columnsMenu.drag"),
+              show: t("columnsMenu.show"),
+              hide: t("columnsMenu.hide"),
+              reset: t("columnsMenu.reset"),
+            }}
+          />
         }
       />
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">

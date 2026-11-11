@@ -35,7 +35,6 @@ import {
   resolveColumnLabel,
 } from "./payroll-column-config";
 import {
-  PayrollColumnsMenu,
   PayrollHeadingLabel,
   isMasterDataColumn,
   stickyIdentityStyle,
@@ -249,28 +248,20 @@ export function ApplicationAttendanceTab({
         prefs={listPrefs}
         onUpdate={updateListPrefs}
         trailing={
-          <>
-            <ColumnOrderMenu
-              columns={leadColumns}
-              labelFor={labelOf}
-              labels={{
-                columns: t("columnsMenu.columns"),
-                title: t("columnsMenu.title"),
-                hint: t("columnsMenu.hint"),
-                pinned: t("columnsMenu.pinnedAppAttendance"),
-                drag: t("columnsMenu.drag"),
-                show: t("columnsMenu.show"),
-                hide: t("columnsMenu.hide"),
-                reset: t("columnsMenu.reset"),
-              }}
-            />
-            <PayrollColumnsMenu
-              view="app_attendance"
-              config={headingConfig}
-              fallbackLabel={fallbackLabel}
-              canManage={canManage}
-            />
-          </>
+          <ColumnOrderMenu
+            columns={leadColumns}
+            labelFor={labelOf}
+            labels={{
+              columns: t("columnsMenu.columns"),
+              title: t("columnsMenu.title"),
+              hint: t("columnsMenu.hint"),
+              pinned: t("columnsMenu.pinnedAppAttendance"),
+              drag: t("columnsMenu.drag"),
+              show: t("columnsMenu.show"),
+              hide: t("columnsMenu.hide"),
+              reset: t("columnsMenu.reset"),
+            }}
+          />
         }
       />
 

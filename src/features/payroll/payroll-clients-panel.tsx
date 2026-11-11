@@ -122,12 +122,16 @@ export function PayrollClientsPanel({
   rows: rowsProp,
   title,
   subtitle,
+  showActions = true,
 }: {
   /** Server-rendered on `/settings/payroll-clients`; Employee Settings omits it. */
   rows?: PayrollClientRow[];
   title: string;
   subtitle: string;
+  /** Employee Settings hides the Actions column; the catalog page keeps it. */
+  showActions?: boolean;
 }) {
+  const columnCount = showActions ? 7 : 6;
   const t = useTranslations("pages.settings.payrollClients");
   const router = useRouter();
   const liveClients = usePayrollClients();
@@ -234,13 +238,15 @@ export function PayrollClientsPanel({
               <TableHead className={TABLE_HEAD_CLASS}>{t("colDayShape")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colRiders")}</TableHead>
               <TableHead className={TABLE_HEAD_CLASS}>{t("colStatus")}</TableHead>
-              <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>{t("colActions")}</TableHead>
+              {showActions ? (
+                <TableHead className={`${TABLE_HEAD_CLASS} text-end`}>{t("colActions")}</TableHead>
+              ) : null}
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={columnCount} className="py-8 text-center text-sm text-muted-foreground">
                   {t("empty")}
                 </TableCell>
               </TableRow>
@@ -272,29 +278,31 @@ export function PayrollClientsPanel({
                       </span>
                     ) : null}
                   </TableCell>
-                  <TableCell className="text-end">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                      disabled={row.isSystem || row.riderCount > 0}
-                      title={
-                        row.isSystem
-                          ? t("errors.system_client")
-                          : row.riderCount > 0
-                            ? t("errors.client_has_riders")
-                            : t("delete")
-                      }
-                      aria-label={t("delete")}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setDeleteTarget(row);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
+                  {showActions ? (
+                    <TableCell className="text-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                        disabled={row.isSystem || row.riderCount > 0}
+                        title={
+                          row.isSystem
+                            ? t("errors.system_client")
+                            : row.riderCount > 0
+                              ? t("errors.client_has_riders")
+                              : t("delete")
+                        }
+                        aria-label={t("delete")}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDeleteTarget(row);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))
             )}
@@ -302,7 +310,7 @@ export function PayrollClientsPanel({
         </Table>
       </AppListCard>
       {renderEditor()}
-      {renderDelete()}
+      {showActions ? renderDelete() : null}
     </AppPage>
   );
 
