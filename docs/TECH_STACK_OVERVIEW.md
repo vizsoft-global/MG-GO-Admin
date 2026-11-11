@@ -88,23 +88,43 @@ The lane split is the reason a payroll scan cannot starve a single-document
 save: the three lanes are separate Cloud Run services with their own
 concurrency, memory and instance ceilings.
 
-### 1.3 Module dependency maps
+### 1.3 Application architecture at a glance
 
-The two plates that follow are the **import graph of each repository** — one
-node per source file, one edge per `import`, laid out so that a file sits near
-the files it depends on. They answer a question the layer diagram above cannot:
-*which change reaches which module*. A file with many arrows into it is a hub;
-a cluster with no arrows out of it is a leaf feature that nothing else should
-depend on.
+Two diagrams, one per application. They are deliberately **high level**: each
+box is a layer or a managed service, not a module, and every arrow is a real
+call direction taken from the source. The point is to answer "what talks to
+what" in ten seconds — the module-by-module detail lives in the source tree and
+in `AGENTS.md`.
 
-![MG-GO Admin Console — module dependency map. Every node is a source file under src/, every arrow an import. The dense left cluster is the platform core the console renders from; the right-hand clusters are feature modules, which reach core through the shared app components rather than through each other. Read it when deciding where a new module belongs, or what a change to a shared file will touch.](docs/assets/architecture/admin-module-map.jpg)
+**Admin console.** Staff work in a browser; every privileged action passes
+through Vercel and then a Cloud Function, which is the only layer holding
+credentials to the data.
 
-![MG-GO rider app — module dependency map. Every node is a Dart file under lib/. lib/core is the dense cluster in the middle — router, Firebase, offline database, notifications, location — and lib/features hangs off it. A feature importing another feature is the one arrow shape to avoid; if it appears, the shared code belongs in core.](docs/assets/architecture/user-module-map.jpg)
+```diagram
+admin-arch
+```
 
-Both maps are generated from the working copies rather than drawn by hand, so
-they are a fact about the code at this commit. The images are kept at
-`docs/assets/architecture/` for zooming; the label text is small by nature,
-because the maps carry several hundred nodes.
+**Rider app.** The app is offline-first: it renders and queues locally, then
+reaches the same backend through three different doors — a passcode-derived
+Firebase session, the `driver*` callables, and the edge Worker for live GPS.
+
+```diagram
+app-arch
+```
+
+Three rules hold both diagrams together, and each is a decision rather than a
+habit:
+
+1. **The browser never writes.** Firestore rules are deny-by-default; every
+   mutation goes through a server action or a callable that has already checked
+   a permission slug. `firestore.rules` allows exactly four client reads — a
+   rider's own `drivers`, `rider_signals` and `wrong_actions` rows, and the
+   public `app_settings/1` row.
+2. **The console holds no data.** Vercel rendering is stateless, so there is
+   nothing local to be stale behind a cold instance.
+3. **One name, one lane.** The client and the server resolve a callable's lane
+   from the same file, so a function cannot be deployed somewhere the browser
+   does not look for it.
 
 ## 2. Frontend
 
@@ -202,7 +222,8 @@ The 41 areas, by job:
 
 | Job | Areas |
 |---|---|
-| People | `drivers`, `drivers/groups`, `driver-devices`, `compliance`, `document-expiry`, `worktime`, `driver-shifts` || Operations | `live-tracking`, `live-tracking-v2`, `deliveries`, `dpd-verification`, `order-exceptions`, `zones`, `restaurants`, `partners`, `delivery-rules`, `incentive-rules` |
+| People | `drivers`, `drivers/groups`, `driver-devices`, `compliance`, `document-expiry`, `worktime`, `driver-shifts` |
+| Operations | `live-tracking`, `live-tracking-v2`, `deliveries`, `dpd-verification`, `order-exceptions`, `zones`, `restaurants`, `partners`, `delivery-rules`, `incentive-rules` |
 | Money | `payroll`, `payroll-hub`, `earnings`, `earnings-calculation`, `payouts`, `performance` |
 | EmployeeDesk | `employeedesk` (requests, visits, e-signature, reports, settings) |
 | Fleet | `fleet`, `vehicles`, `fuel`, `assets` |
@@ -604,26 +625,39 @@ id — so a future reader can tell a claim from a measurement.
 
 ### 8.1 Source delivery
 
-The complete source of both applications is delivered as one shared folder:
+Each application has its own shared folder. Open the folder for the code you
+need; each holds the full working tree **and** a downloadable archive of it.
 
-**Source code:** https://drive.google.com/drive/folders/1WJJcIej_y70pUt8imNAufhQKBzxIYbhq?usp=sharing
+| Application | Source | Archive |
+|---|---|---|
+| **Admin console** (web) | [MGgo-Admin](https://drive.google.com/drive/folders/1vYTujDYuwS8zD2Bq3ZeBi_GbDqQmJCPS?usp=sharing) | `ADMIN_source_code.zip` — 15.2 MB |
+| **Rider app** (Android) | [MGgo-User](https://drive.google.com/drive/folders/1mSWyUlSyZparahMA3eaEu33tFulOjjOk?usp=sharing) | `USER_source_code.zip` — 5.8 MB |
 
 | Application | Technology |
 |---|---|
 | Admin console (web) | Next.js 16 · React 19 · TypeScript |
 | Rider app (Android) | Flutter 3.44 · Dart 3.12 |
 
-Both applications are versioned in the same delivery, so the pair in that folder
-belongs together.
+Both applications are delivered in the same release, so the console and the app
+in these two folders are the pair that belongs together. Access is by link
+sharing on the folders, and the archives are byte-identical copies of the tree
+beside them — use either.
 
-### 8.2 Delivered manuals (in `docs/`)
+### 8.2 Delivered manuals
 
-| Document | Format | Scope |
+Four documents, delivered as PDF:
+
+| Document | Scope | Pages |
 |---|---|---|
-| `ADMIN_PANEL_MANUAL` | Markdown + PDF (36 pages) + DOCX | Complete administrator manual, module by module |
-| `USER_MANUAL` | Markdown + PDF (39 pages) + DOCX | Rider app end to end, plus the console companion view |
-| `EMPLOYEE_BULK_IMPORT` | PDF | Client-facing import procedure and column reference |
-| `TECH_STACK_OVERVIEW` | Markdown + PDF + DOCX | This document |
+| **[Admin Panel Manual](https://drive.google.com/file/d/1PKX9ltV5hGkaP6sKbhpRaTH_oinP9s-Y/view?usp=sharing)** | Complete administrator manual — every console module, module by module | 34 |
+| **[User Manual](https://drive.google.com/file/d/1k_m74I05TlikWKJzlJjuThkvjKgr8Dh0/view?usp=sharing)** | Rider app end to end, plus the console companion view | 39 |
+| **[Employee Bulk Import](https://drive.google.com/file/d/1Q4nYBBm3G4wZnjXXaY1wHpySvK0gbiix/view?usp=sharing)** | Client-facing import procedure and column reference | — |
+| **[Technical Stack Overview](https://drive.google.com/file/d/1qfUcGd27E5J8SPXnml6_niqebuaY2ZDW/view?usp=sharing)** | This document | 25 |
+
+The same four files are also built into the repository under `docs/`, together
+with their markdown sources. `npm run docs:admin`, `docs:manual` and
+`docs:stack` regenerate them, so a correction reaches the shared folder on the
+next build rather than being retyped into a copy.
 
 ### 8.3 Architecture documents
 
@@ -695,13 +729,36 @@ together are complete:
 
 | Field | Value |
 |---|---|
-| Version | **1.2** |
+| Version | **1.5** |
 | Date | 11 November 2026 |
 | Prepared from | the `MG-GO-Admin` and `MG-GO` working copies |
 | Reader | client technical stakeholders, onboarding engineers, procurement |
 | Scope | stack, architecture, hosting and provenance — **not** a user manual |
 | Rebuild | `npm run docs:stack` (markdown → PDF, figures and plates included) |
 | Diagrams | `docs/assets/architecture/*.jpg` — the two module dependency maps |
+
+**What changed from v1.3:**
+
+- **§8.1 links each application's own source folder** — [MGgo-Admin](https://drive.google.com/drive/folders/1vYTujDYuwS8zD2Bq3ZeBi_GbDqQmJCPS?usp=sharing)
+  and [MGgo-User](https://drive.google.com/drive/folders/1mSWyUlSyZparahMA3eaEu33tFulOjjOk?usp=sharing)
+  — with the archive name and size beside each, instead of one folder covering
+  three products.
+- **§8.2 links every delivered PDF**, so the manual set can be opened from this
+  document rather than hunted for in a Drive folder.
+
+**What changed from v1.2:**
+
+- **The two detailed module dependency maps are replaced by two high-level
+  architecture diagrams** — one for the admin console, one for the rider app.
+  The dependency maps carried several hundred nodes and were unreadable at A4;
+  they are removed from the document, and the two new figures are drawn from the
+  source at the level of layers and managed services.
+- **The source-code link is the current shared folder** — *Source Codes MG*,
+  holding the **MG Hub**, **Bajaj Care** and **Bites** products. §8.1 now names
+  which folder is this platform.
+- The manual page counts in §8.2 were re-read from the built PDFs
+  (`ADMIN_PANEL_MANUAL` **34**, `USER_MANUAL` **39**); this document states its
+  own **25**.
 
 **What changed from v1.1:**
 
