@@ -55,9 +55,17 @@ export function hrCellError(field: HrNumericCell, value: number): string | null 
 }
 
 /** Parse what the operator typed. A blank cell is `null` (nothing to save). */
+/**
+ * A money cell's text as a number.
+ *
+ * An **empty box is zero**, not "no answer": an operator clearing a deduction is
+ * saying there is none, and the sheet used to refuse the write and leave the old
+ * figure on screen. A value that is neither blank nor a number is still `null`,
+ * so `abc` is refused rather than silently zeroed.
+ */
 export function parseHrAmount(text: string): number | null {
   const trimmed = text.trim();
-  if (trimmed === "") return null;
+  if (trimmed === "") return 0;
   const parsed = Number(trimmed.replace(/,/g, ""));
   return Number.isFinite(parsed) ? parsed : null;
 }

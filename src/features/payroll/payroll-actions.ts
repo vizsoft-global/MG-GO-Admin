@@ -31,6 +31,7 @@ import {
   type RawPayrollRuleSnapshot,
 } from "./payroll-snapshot";
 import { parseRules } from "./payroll-rules-engine";
+import { COUNTRIES } from "@/lib/geo/countries";
 import type { PayrollColumnConfigRow, PayrollHeadingView } from "./payroll-column-config";
 import type { HrBundle, HrCellPatch } from "./hr-payroll-types";
 import type {
@@ -1174,10 +1175,10 @@ export async function saveHrVehicleType(
     p_cells: [{ driverId, vehicleTypeKey }],
   });
   if (error || !data) throw new Error(error?.message || "save_failed");
-  // `skipped` means the rider has no assigned vehicle, so nothing was typed. That
-  // is a refusal the operator must see, not a silent success.
+  // Only a rider document that no longer exists is `skipped` now: a rider with no
+  // vehicle is typed on their own document, so the sheet no longer refuses them.
   if (!Number(data.saved ?? 0) && Number(data.skipped ?? 0) > 0) {
-    throw new Error("invalid_cell:vehicle_type");
+    throw new Error("invalid_cell:driver_not_found");
   }
   return { saved: Number(data.saved ?? 0), skipped: Number(data.skipped ?? 0) };
 }
@@ -1189,6 +1190,21 @@ export type HrIdentityPatch = {
   currency?: string;
   zoneId?: string;
   projectKey?: string;
+  /** ISO alpha-2 country code, or `""` to clear. */
+  nationalityCode?: string;
+  /** A `nationality_categories` key, or `""` to clear. */
+  nationalityCategoryKey?: string;
+  /** A `restaurants` document id, or `""` to unassign. */
+  restaurantId?: string;
+  /** `YYYY-MM-DD`, or `""` to clear. */
+  workStart?: string;
+  jobEnd?: string;
+  jobEndDescription?: string;
+  sponsorKey?: string;
+  sectionKey?: string;
+  positionKey?: string;
+  companyKey?: string;
+  hiringType?: string;
 };
 
 /**
@@ -1215,26 +1231,72 @@ export async function saveHrIdentityCells(
   return { saved: Number(data.saved ?? 0), skipped: Number(data.skipped ?? 0) };
 }
 
-/** The catalogs the HR identity cells pick from. */
+/**
+ * The catalogs the HR identity cells pick from.
+ *
+ * Nationality and Nationality Category are two different facts and stay two
+ * different masters: the country list is the ISO set the employee profile's
+ * "Nationality (country)" picker uses, and the category is the
+ * `nationality_categories` catalog Employee Settings owns. The Restaurant list is
+ * the live `restaurants` directory, so a restaurant added there is selectable on
+ * the sheet without a rebuild.
+ */
 export async function listHrIdentityOptions(): Promise<{
   banks: { key: string; label: string }[];
   zones: { id: string; name: string }[];
   clients: { key: string; label: string }[];
+  nationalities: { code: string; label: string }[];
+  nationalityCategories: { key: string; label: string }[];
+  restaurants: { id: string; name: string }[];
+  sponsorships: { key: string; label: string }[];
+  sections: { key: string; label: string }[];
+  positions: { key: string; label: string }[];
+  companies: { key: string; label: string }[];
 }> {
   await requireHrPayrollRead();
   const db = await staffDb();
-  if (!db) return { banks: [], zones: [], clients: [] };
-  const [banks, zones, clients] = await Promise.all([
-    db.collection(COLLECTIONS.bankCodes).get(),
-    db.collection(COLLECTIONS.zones).get(),
-    db.collection(COLLECTIONS.payrollClients).get(),
-  ]);
+  if (!db) {
+    return {
+      banks: [],
+      zones: [],
+      clients: [],
+      nationalities: COUNTRIES.map((country) => ({ code: country.code, label: country.name })),
+      nationalityCategories: [],
+      restaurants: [],
+      sponsorships: [],
+      sections: [],
+      positions: [],
+      companies: [],
+    };
+  }
+  const [banks, zones, clients, categories, restaurants, sponsorships, sections, positions, companies] =
+    await Promise.all([
+      db.collection(COLLECTIONS.bankCodes).get(),
+      db.collection(COLLECTIONS.zones).get(),
+      db.collection(COLLECTIONS.payrollClients).get(),
+      db.collection(COLLECTIONS.nationalityCategories).get(),
+      db.collection(COLLECTIONS.restaurants).get(),
+      db.collection(COLLECTIONS.sponsorships).get(),
+      db.collection(COLLECTIONS.employeeSections).get(),
+      db.collection(COLLECTIONS.jobPositions).get(),
+      db.collection(COLLECTIONS.sourceCompanies).get(),
+    ]);
   const label = (data: Record<string, unknown>, fallback: string): string => {
     const en = typeof data.label_en === "string" ? data.label_en : "";
     const ar = typeof data.label_ar === "string" ? data.label_ar : "";
     const name = typeof data.name === "string" ? data.name : "";
     return name || en || ar || fallback;
   };
+  const catalogList = (
+    snap: { docs: { id: string; get: (field: string) => unknown; data: () => Record<string, unknown> }[] },
+    readLabel: (data: Record<string, unknown>, fallback: string) => string,
+  ): { key: string; label: string }[] =>
+    snap.docs
+      .map((doc) => ({
+        key: typeof doc.get("key") === "string" ? (doc.get("key") as string) : doc.id,
+        label: readLabel(doc.data() ?? {}, doc.id),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   return {
     banks: banks.docs
       .map((doc) => ({
@@ -1254,6 +1316,23 @@ export async function listHrIdentityOptions(): Promise<{
         label: label(doc.data() ?? {}, doc.id),
       }))
       .sort((a, b) => a.label.localeCompare(b.label)),
+    nationalities: COUNTRIES.map((country) => ({ code: country.code, label: country.name })),
+    nationalityCategories: categories.docs
+      .map((doc) => ({
+        key: typeof doc.get("key") === "string" ? (doc.get("key") as string) : doc.id,
+        label: label(doc.data() ?? {}, doc.id),
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    restaurants: restaurants.docs
+      .map((doc) => ({
+        id: doc.id,
+        name: typeof doc.get("name") === "string" ? (doc.get("name") as string) : doc.id,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    sponsorships: catalogList(sponsorships, label),
+    sections: catalogList(sections, label),
+    positions: catalogList(positions, label),
+    companies: catalogList(companies, label),
   };
 }
 

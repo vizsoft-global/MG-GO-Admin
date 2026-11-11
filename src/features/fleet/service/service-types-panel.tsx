@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { Plus, Upload } from "lucide-react";
@@ -37,23 +37,37 @@ import {
   serviceTypeKey,
   type ServiceCategoryKey,
 } from "./service-types";
-import { upsertServiceType } from "./service-types-actions";
+import { upsertServiceType, listServiceTypeUsage } from "./service-types-actions";
+import { listServiceTypes } from "./service-actions";
 import { isScheduledProgramKey } from "./service-programs";
 import { serviceErrorKey } from "./use-service";
 import type { ServiceTypeRow } from "./types";
 
 export function ServiceTypesPanel({
-  types,
-  usage,
+  types: typesProp,
+  usage: usageProp,
 }: {
-  types: ServiceTypeRow[];
-  usage: Record<string, number>;
+  /** Server-rendered on `/settings/service-types`; the Employee Settings sheet omits both. */
+  types?: ServiceTypeRow[];
+  usage?: Record<string, number>;
 }) {
   const t = useTranslations("pages.settings.serviceTypes");
   const tCat = useTranslations("pages.fleetService.categories");
   const tErrors = useTranslations("pages.fleetService");
   const router = useRouter();
   const queryClient = useQueryClient();
+  const embedded = typesProp === undefined || usageProp === undefined;
+  const live = useQuery({
+    queryKey: queryKeys.employees.serviceTypes,
+    queryFn: async () => {
+      const [rows, counts] = await Promise.all([listServiceTypes(), listServiceTypeUsage()]);
+      return { rows, counts };
+    },
+    enabled: embedded,
+    staleTime: 0,
+  });
+  const types = useMemo(() => typesProp ?? live.data?.rows ?? [], [typesProp, live.data]);
+  const usage = usageProp ?? live.data?.counts ?? {};
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<ServiceTypeRow | null>(null);

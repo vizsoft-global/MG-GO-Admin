@@ -39,7 +39,9 @@ test("money cells refuse a negative amount", () => {
 test("a typed amount is parsed the way the operator reads it", () => {
   assert.equal(parseHrAmount("3"), 3);
   assert.equal(parseHrAmount(" 1,250.5 "), 1250.5);
-  assert.equal(parseHrAmount(""), null);
+  // A cleared box is zero: the cell resets rather than keeping the old figure.
+  assert.equal(parseHrAmount(""), 0);
+  assert.equal(parseHrAmount("   "), 0);
   assert.equal(parseHrAmount("abc"), null);
   assert.equal(parseHrAmount("-5"), -5);
 });

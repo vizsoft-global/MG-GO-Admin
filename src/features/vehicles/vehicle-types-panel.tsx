@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { Plus } from "lucide-react";
@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { upsertVehicleType } from "./vehicles-actions";
+import { listVehicleTypes, listVehicleTypeUsage, upsertVehicleType } from "./vehicles-actions";
 import type { VehicleTypeRow } from "./types";
 import { queryKeys } from "@/lib/query/query-keys";
 
@@ -41,16 +41,29 @@ function keyFromLabel(label: string): string {
 }
 
 export function VehicleTypesPanel({
-  types,
-  usage,
+  types: typesProp,
+  usage: usageProp,
 }: {
-  types: VehicleTypeRow[];
+  /** Server-rendered on `/settings/vehicle-types`; Employee Settings omits both. */
+  types?: VehicleTypeRow[];
   /** Vehicles currently carrying each `vehicle_type_key`. */
-  usage: Record<string, number>;
+  usage?: Record<string, number>;
 }) {
   const t = useTranslations("pages.settings.vehicleTypes");
   const router = useRouter();
   const queryClient = useQueryClient();
+  const embedded = typesProp === undefined || usageProp === undefined;
+  const live = useQuery({
+    queryKey: queryKeys.employees.vehicleTypes,
+    queryFn: async () => {
+      const [rows, counts] = await Promise.all([listVehicleTypes(), listVehicleTypeUsage()]);
+      return { rows, counts };
+    },
+    enabled: embedded,
+    staleTime: 0,
+  });
+  const types = useMemo(() => typesProp ?? live.data?.rows ?? [], [typesProp, live.data]);
+  const usage = usageProp ?? live.data?.counts ?? {};
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<VehicleTypeRow | null>(null);
   const [key, setKey] = useState("");

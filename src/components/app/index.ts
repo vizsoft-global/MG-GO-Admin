@@ -10,6 +10,11 @@ export {
   TableCell,
 } from "./app-data-table";
 export { AppTableColumnPicker } from "./app-table-column-picker";
+export {
+  ColumnOrderMenu,
+  type ColumnOrderController,
+  type ColumnOrderMenuLabels,
+} from "./column-order-menu";
 export { VisibleTableCell } from "./visible-table-cell";
 export { SortableTableHeadLabel } from "./sortable-table-head-label";
 export { AppEmptyState } from "./app-empty-state";

@@ -177,7 +177,14 @@ async function resolveRestaurant(name: string): Promise<{ id: string; name: stri
   return { id: hit.id, name: typeof label === "string" ? label.trim() : name.trim() };
 }
 
-async function replaceRestaurantEdges(
+/**
+ * Point a rider at one restaurant, or at none.
+ *
+ * Exported because the HR sheet's Restaurant cell needs the same write: an
+ * assignment is an edge (`driver_restaurants`) plus the denormalised copy on the
+ * rider and the intake, and two implementations of that would drift.
+ */
+export async function replaceRestaurantEdges(
   driverId: string,
   intakeId: string | null,
   restaurant: { id: string; name: string } | null,
