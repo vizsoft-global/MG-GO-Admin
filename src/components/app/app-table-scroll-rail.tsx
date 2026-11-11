@@ -31,9 +31,7 @@ export function AppTableScrollRail({ className }: { className?: string }) {
 
   useEffect(() => {
     const rail = railRef.current;
-    const body = rail?.parentElement?.querySelector<HTMLElement>(
-      '[data-slot="table-container"]',
-    );
+    const body = findScroller(rail);
     if (!rail || !body) return;
 
     const measure = () => {
@@ -59,9 +57,7 @@ export function AppTableScrollRail({ className }: { className?: string }) {
   useEffect(() => {
     if (contentWidth === 0) return;
     const rail = railRef.current;
-    const body = rail?.parentElement?.querySelector<HTMLElement>(
-      '[data-slot="table-container"]',
-    );
+    const body = findScroller(rail);
     if (!rail || !body) return;
 
     // Setting `scrollLeft` to the value it already holds fires no `scroll`, so
@@ -99,7 +95,7 @@ export function AppTableScrollRail({ className }: { className?: string }) {
       aria-label={t("tableScroll")}
       tabIndex={0}
       className={cn(
-        "block h-2.5 overflow-x-auto overflow-y-hidden overscroll-x-contain bg-card",
+        "block h-2.5 shrink-0 overflow-x-auto overflow-y-hidden overscroll-x-contain bg-card",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         // Firefox.
         "[scrollbar-width:thin] [scrollbar-color:var(--color-border)_transparent]",
@@ -118,5 +114,19 @@ export function AppTableScrollRail({ className }: { className?: string }) {
       {/* The scrolled content: a zero-height spacer exactly as wide as the table. */}
       <div style={{ width: contentWidth }} className="h-px" />
     </div>
+  );
+}
+
+/**
+ * The element that owns the horizontal scroll. `AppDataTable` marks it
+ * `data-table-scroll`; the fallback covers the shells whose table container does
+ * its own `overflow-x-auto`, so those keep working unchanged.
+ */
+function findScroller(rail: HTMLElement | null): HTMLElement | null {
+  const parent = rail?.parentElement;
+  if (!parent) return null;
+  return (
+    parent.querySelector<HTMLElement>("[data-table-scroll]") ??
+    parent.querySelector<HTMLElement>('[data-slot="table-container"]')
   );
 }

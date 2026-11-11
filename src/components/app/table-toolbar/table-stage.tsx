@@ -1,34 +1,25 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-/** Pins the toolbar and reports its height so the header can stick just under it. */
+/**
+ * Fixed top band of a list card. The toolbar lives above the table's scroll
+ * viewport on purpose: panning the columns sideways must not drag the filters,
+ * search, pager or actions with it, and a toolbar sharing the scroller left a
+ * bare strip beside it once the table was scrolled.
+ */
 export function TableStage({
   toolbar,
   children,
 }: {
   toolbar: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
-  const barRef = useRef<HTMLDivElement>(null);
-  const [offset, setOffset] = useState(0);
-
-  useEffect(() => {
-    const node = barRef.current;
-    if (!node) return;
-    const measure = () => setOffset(node.offsetHeight);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [toolbar]);
-
   return (
-    <div style={{ ["--table-toolbar-offset" as string]: `${offset}px` }}>
+    <div className="shrink-0">
       <div
-        ref={barRef}
         data-table-toolbar=""
-        className="sticky top-0 z-30 border-b border-[var(--border-default)] bg-card"
+        className="overflow-x-auto border-b border-[var(--border-default)] bg-card"
       >
         {toolbar}
       </div>

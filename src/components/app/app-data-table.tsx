@@ -12,6 +12,24 @@ import { TableStage } from "./table-toolbar/table-stage";
 import { AppTableScrollRail } from "./app-table-scroll-rail";
 import { TABLE_HEAD_CLASS } from "./constants";
 
+/**
+ * Height of the sticky table viewport.
+ *
+ * One viewport tall, less only the shell's 12px bottom gutter
+ * (`LAYOUT.commandPageInset`), so a docked table reaches the bottom of the
+ * screen instead of stopping at a fixed pixel ceiling and leaving dead space
+ * under the last row. The floor keeps short viewports (landscape tablet, a
+ * phone with the keyboard open) from collapsing the table into a few rows.
+ *
+ * The card that hosts the table drops its own 16px bottom padding
+ * (`[data-slot="card"]:has([data-table-scroll])` in `globals.css`), which is
+ * what makes the geometry exact: the page can scroll no further than the point
+ * where this viewport's top edge reaches the top of `<main>`, so the header row
+ * is never clipped and no dead band appears under the last row.
+ */
+const VIEWPORT_FILL =
+  "sticky top-0 z-20 h-[calc(100dvh-0.75rem)] min-h-[320px] overflow-auto";
+
 export function AppDataTable({
   columns,
   children,
@@ -30,17 +48,15 @@ export function AppDataTable({
   headerRowClassName?: string;
   /** Keep the header row visible inside this table's own scroller. */
   stickyHeader?: boolean;
-  /** Shared toolbar. Sits in the same card and sticks with the header. */
+  /** Shared toolbar. Sits above the table and never scrolls with it. */
   toolbar?: ReactNode;
 }) {
   const sticky = stickyHeader || Boolean(toolbar);
-  const table = (
+  const surface = (
     <>
-      <AppTableScrollRail />
       <Table>
         <TableHeader
-          className={sticky ? "sticky z-20 bg-card shadow-sm" : undefined}
-          style={toolbar ? { top: "var(--table-toolbar-offset, 0px)" } : undefined}
+          className={sticky ? "sticky top-0 z-20 bg-card shadow-sm" : undefined}
         >
           <TableRow
             className={cn(
@@ -65,16 +81,46 @@ export function AppDataTable({
       {footer}
     </>
   );
+
+  if (!toolbar) {
+    return (
+      <div
+        data-table-scroll=""
+        className={cn(
+          sticky
+            ? `${VIEWPORT_FILL} [&_[data-slot=table-container]]:overflow-visible`
+            : "overflow-x-auto",
+          className,
+        )}
+      >
+        <AppTableScrollRail />
+        {surface}
+      </div>
+    );
+  }
+
+  /**
+   * The toolbar is a sibling of the scroll viewport, not a child of it: panning
+   * the columns sideways must never drag the filters, search, pager or actions
+   * out of view, and a toolbar inside the scroller also left a bare strip to its
+   * right once the table was scrolled.
+   *
+   * The viewport is also the page's scroll target. Page chrome (header, KPI
+   * cards, toolbar, rail) keeps its normal flow and scrolls away; once it has,
+   * this container pins to the top of `<main>` at viewport height and owns both
+   * axes from there, so the header row and the rows below it stay on screen
+   * instead of being cut off by a fixed 640px ceiling.
+   */
   return (
-    <div
-      className={cn(
-        sticky
-          ? "max-h-[min(640px,62dvh)] overflow-auto [&_[data-slot=table-container]]:overflow-visible"
-          : "overflow-x-auto",
-        className,
-      )}
-    >
-      {toolbar ? <TableStage toolbar={toolbar}>{table}</TableStage> : table}
+    <div className={cn("flex flex-col", className)}>
+      <TableStage toolbar={toolbar} />
+      <AppTableScrollRail />
+      <div
+        data-table-scroll=""
+        className={cn(VIEWPORT_FILL, "[&_[data-slot=table-container]]:overflow-visible")}
+      >
+        {surface}
+      </div>
     </div>
   );
 }
