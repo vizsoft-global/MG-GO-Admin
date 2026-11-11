@@ -18,6 +18,8 @@ import {
   GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
+  scopeSelectionState,
+  toggleScopeSelection,
   useGroupedListView,
 } from "@/components/app/app-list-controls";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
@@ -31,6 +33,7 @@ import { useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -90,6 +93,7 @@ function isIncentiveColumnId(id: string): id is IncentiveColumnId {
 export function IncentiveRulesPageShell() {
   const t = useTranslations("pages.dpd");
   const tPage = useTranslations("pages.incentiveRules");
+  const tCommon = useTranslations("common");
   const { can } = useAuth();
   const canManage = can("earnings.manage");
   const router = useRouter();
@@ -161,6 +165,9 @@ export function IncentiveRulesPageShell() {
   );
   const listResetKey = `${prefs.groupBy}\u0001${prefs.appliedQuery}\u0001${statusFilter}\u0001${periodFilter}`;
   const listView = useGroupedListView(grouped, prefs.groupBy !== "none", listResetKey);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const scopeIds = useMemo(() => listView.scopeRows.map((row) => row.id), [listView.scopeRows]);
+  const headerSelection = scopeSelectionState(selectedIds, scopeIds);
 
   const statusItems = selectOptions([
     { value: "all", label: tPage("statusAll") },
@@ -290,7 +297,16 @@ export function IncentiveRulesPageShell() {
         description={tPage("subtitle")}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <ClearAllModuleButton entity="incentive_rules" />
+              <ClearAllModuleButton
+                entity="incentive_rules"
+                selectedIds={selectedIds}
+                onSuccess={() => {
+                  setSelectedIds(new Set());
+                  void queryClient.invalidateQueries({
+                    queryKey: queryKeys.dpd.incentiveRules(),
+                  });
+                }}
+              />
             {canManage ? (
               <Button
                 type="button"
@@ -405,6 +421,16 @@ export function IncentiveRulesPageShell() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-10")}>
+                  <Checkbox
+                    checked={headerSelection === "all"}
+                    indeterminate={headerSelection === "some"}
+                    onCheckedChange={() =>
+                      setSelectedIds((prev) => toggleScopeSelection(prev, scopeIds))
+                    }
+                    aria-label={tCommon("selectAll")}
+                  />
+                </TableHead>
                 {shown.map((column) => (
                   <TableHead
                     key={column.id}
@@ -421,7 +447,7 @@ export function IncentiveRulesPageShell() {
                   ? [
                       <GroupTableHeaderRow
                         key={`g-${section.key}`}
-                        colSpan={shown.length}
+                        colSpan={shown.length + 1}
                         label={section.label}
                         total={section.total}
                         open={section.open}
@@ -438,6 +464,20 @@ export function IncentiveRulesPageShell() {
                   className="cursor-pointer hover:bg-muted/40"
                   onClick={() => router.push(`/incentive-rules/${row.id}`)}
                 >
+                  <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedIds.has(row.id)}
+                      onCheckedChange={(checked) =>
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          if (checked) next.add(row.id);
+                          else next.delete(row.id);
+                          return next;
+                        })
+                      }
+                      aria-label={row.name}
+                    />
+                  </TableCell>
                   {shown.map((column) =>
                     isIncentiveColumnId(column.id) ? ruleCell(column.id, row) : null,
                   )}

@@ -22,6 +22,7 @@ import {
   failureCode,
 } from "./order-comparison-errors";
 import { deliveryDayBounds } from "./order-comparison-range";
+import { addKuwaitDays } from "@/lib/date/kuwait-dates";
 
 const MAX_SPAN = 93;
 const PAGE = 1000;
@@ -161,8 +162,11 @@ async function loadSnapshotFallback(
   }
 
   // `delivered_at` is a Timestamp: the old fallback sent an ISO string, which is
-  // why the fallback matched nothing. Day bounds are real Dates now.
-  const bounds = deliveryDayBounds(from, to);
+  // why the fallback matched nothing. Day bounds are real Dates now, and the
+  // window reaches one Kuwait day past `to` because a shift that started on `to`
+  // can finish after midnight — those orders belong to `to`'s shift, resolved
+  // below through `shift_date`.
+  const bounds = deliveryDayBounds(from, addKuwaitDays(to, 1));
   const deliveryDocs = await pageRange(
     db,
     COLLECTIONS.deliveries,
@@ -179,6 +183,7 @@ async function loadSnapshotFallback(
     .map((row) => ({
       driver_id: String(row.driver_id ?? ""),
       delivered_at: isoOf(row.delivered_at) ?? "",
+      shift_date: typeof row.shift_date === "string" ? row.shift_date.slice(0, 10) : null,
     }))
     .filter((row) => row.driver_id && row.delivered_at);
 
@@ -198,12 +203,15 @@ async function loadSnapshotFallback(
   for (const row of deliveries) {
     const emp = empByDriver.get(row.driver_id)?.trim();
     if (!emp) continue;
-    const work_date = new Intl.DateTimeFormat("en-CA", {
+    const calendarDay = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Kuwait",
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
     }).format(new Date(row.delivered_at));
+    // The booked shift wins, exactly as the callable resolves it.
+    const work_date =
+      row.shift_date && /^\d{4}-\d{2}-\d{2}$/.test(row.shift_date) ? row.shift_date : calendarDay;
     if (work_date < from || work_date > to) continue;
     const key = `${emp.toLowerCase()}|${work_date}`;
     const acc = mggoSum.get(key);

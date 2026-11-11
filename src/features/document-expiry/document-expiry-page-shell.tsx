@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -16,6 +16,8 @@ import {
   GroupedSections,
   fieldSearchMatch,
   groupRows,
+  scopeSelectionState,
+  toggleScopeSelection,
 } from "@/components/app/app-list-controls";
 import {
   TableNameCell,
@@ -32,9 +34,10 @@ import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/contexts/auth-context";
 import { Link, useRouter } from "@/i18n/navigation";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import { ClearAllModuleButton, useCanClearAll } from "@/features/settings/clear-all-module-button";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import {
@@ -74,6 +77,8 @@ export function DocumentExpiryPageShell() {
   const [bucket, setBucket] = useState<DocumentExpiryBucket>("expired");
   const [activeRow, setActiveRow] = useState<DocumentExpiryRow | null>(null);
   const [sheetMode, setSheetMode] = useState<"date" | "replace" | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const canClearAll = useCanClearAll("documents");
 
   const rows = useMemo(() => {
     const all = data?.rows ?? [];
@@ -106,6 +111,11 @@ export function DocumentExpiryPageShell() {
 
   const summary = data?.summary ?? { expired: 0, week: 0, month: 0, quarter: 0 };
 
+  const scopeIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const headerSelection = canClearAll ? scopeSelectionState(selectedIds, scopeIds) : "none";
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
   const openView = async (row: DocumentExpiryRow) => {
     if (!row.objectKey) {
       toast.error(t("viewUnavailable"));
@@ -124,6 +134,11 @@ export function DocumentExpiryPageShell() {
     await refetch();
   };
 
+  const handleClearedDocuments = useCallback(() => {
+    clearSelection();
+    void invalidate();
+  }, [clearSelection, invalidate]);
+
   return (
     <AppPage>
       <AppPageHeader
@@ -131,7 +146,11 @@ export function DocumentExpiryPageShell() {
         description={t("subtitle")}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <ClearAllModuleButton entity="documents" />
+            <ClearAllModuleButton
+              entity="documents"
+              selectedIds={selectedIds}
+              onSuccess={handleClearedDocuments}
+            />
             <Button
               type="button"
               variant="outline"
@@ -222,6 +241,24 @@ export function DocumentExpiryPageShell() {
         ) : (
           <AppDataTable
             columns={[
+              ...(canClearAll
+                ? [
+                    {
+                      id: "select",
+                      label: (
+                        <Checkbox
+                          checked={headerSelection === "all"}
+                          indeterminate={headerSelection === "some"}
+                          onCheckedChange={() =>
+                            setSelectedIds((prev) => toggleScopeSelection(prev, scopeIds))
+                          }
+                          aria-label={t("columns.driver")}
+                        />
+                      ),
+                      className: "w-10",
+                    },
+                  ]
+                : []),
               { id: "driver", label: t("columns.driver") },
               { id: "document", label: t("columns.document") },
               { id: "expires", label: t("columns.expires") },
@@ -233,7 +270,7 @@ export function DocumentExpiryPageShell() {
               ...(prefs.groupBy !== "none"
                 ? [
                     <AppDataTableRow key={`g-${group.key}`} className="bg-muted/40 hover:bg-muted/40">
-                      <TableCell colSpan={5} className="text-xs font-semibold">
+                      <TableCell colSpan={canClearAll ? 6 : 5} className="text-xs font-semibold">
                         {group.label} · {group.rows.length}
                       </TableCell>
                     </AppDataTableRow>,
@@ -249,6 +286,22 @@ export function DocumentExpiryPageShell() {
                   }
                 }}
               >
+                {canClearAll ? (
+                  <TableCell className="w-10" onClick={(event) => event.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedIds.has(row.id)}
+                      onCheckedChange={(checked) =>
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          if (checked) next.add(row.id);
+                          else next.delete(row.id);
+                          return next;
+                        })
+                      }
+                      aria-label={row.driverName}
+                    />
+                  </TableCell>
+                ) : null}
                 <TableCell>
                   <div className="min-w-0">
                     <TableNameCell name={row.driverName} />

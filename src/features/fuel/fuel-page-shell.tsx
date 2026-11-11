@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useTranslations } from "next-intl";
+import { useQueryClient } from "@tanstack/react-query";
 import { Calendar, CalendarDays, CalendarRange, ChevronLeft, ChevronRight, ExternalLink, Loader2, Pencil, SlidersHorizontal } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
   fieldSearchMatch,
+  scopeSelectionState,
+  toggleScopeSelection,
 } from "@/components/app/app-list-controls";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   TableNameCell,
   TableToolbar,
@@ -31,7 +35,11 @@ import { useAuth } from "@/contexts/auth-context";
 import { Link, useRouter } from "@/i18n/navigation";
 import { formatKuwaitDayLabel, kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 import { FleetRequestDialog } from "./fleet-request-dialog";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import {
+  ClearAllModuleButton,
+  useCanClearAll,
+} from "@/features/settings/clear-all-module-button";
+import { queryKeys } from "@/lib/query/query-keys";
 import { FLEET_REQUEST_CHIP_CLASS } from "./fleet-request-utils";
 import type { FleetRequestListRow } from "./fleet-request-types";
 import { FuelFillDialog } from "./fuel-fill-dialog";
@@ -41,12 +49,20 @@ import { applyWithdrawnOverride, formatKwd, buildFuelWeekRows, withFuelRequestRo
 import { useFleetRequests } from "./use-fleet-requests";
 import { useFuelFills, useFuelWithdrawnOverrides } from "./use-fuel";
 
+export type FuelSelectionState = {
+  selectedIds: Set<string>;
+  setSelectedIds: Dispatch<SetStateAction<Set<string>>>;
+};
+
 export function FuelPageShell({
   initialAnchor,
   embedded = false,
+  selection,
 }: {
   initialAnchor: string;
   embedded?: boolean;
+  /** Controlled selection, so the hub header can clear exactly the ticked rows. */
+  selection?: FuelSelectionState;
 }) {
   const t = useTranslations("pages.fuel");
   const toolbarColumns = useMemo<TableToolbarColumn[]>(
@@ -77,6 +93,11 @@ export function FuelPageShell({
   const [selectedRequest, setSelectedRequest] = useState<FleetRequestListRow | null>(null);
   const [editRow, setEditRow] = useState<FuelLogRow | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [ownSelectedIds, setOwnSelectedIds] = useState<Set<string>>(() => new Set());
+  const selectedIds = selection?.selectedIds ?? ownSelectedIds;
+  const setSelectedIds = selection?.setSelectedIds ?? setOwnSelectedIds;
+  const queryClient = useQueryClient();
+  const canClearFuel = useCanClearAll("fuel");
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -154,6 +175,34 @@ export function FuelPageShell({
     [baseRows, prefs.appliedQuery],
   );
   const selected = rows.find((row) => row.key === selectedKey) ?? null;
+  /* A fuel row is a driver/vehicle week, so the unit the purge can delete is
+     each fill inside the ticked rows. Request-only rows carry no fills and are
+     therefore not selectable. */
+  const selectableFillIds = useMemo(
+    () => rows.flatMap((row) => row.fills.map((fill) => fill.id)),
+    [rows],
+  );
+  const headerSelection = canClearFuel
+    ? scopeSelectionState(selectedIds, selectableFillIds)
+    : "none";
+  const toggleRowSelection = useCallback(
+    (ids: string[]) => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        const allTicked = ids.every((id) => next.has(id));
+        for (const id of ids) {
+          if (allTicked) next.delete(id);
+          else next.add(id);
+        }
+        return next;
+      });
+    },
+    [setSelectedIds],
+  );
+  const handleClearedFuel = useCallback(() => {
+    setSelectedIds(new Set());
+    void queryClient.invalidateQueries({ queryKey: queryKeys.fuel.all() });
+  }, [queryClient, setSelectedIds]);
 
   const applyCustom = () => {
     const next = resolveFuelRange({
@@ -306,6 +355,26 @@ export function FuelPageShell({
         ) : (
           <AppDataTable
             columns={[
+              ...(canClearFuel
+                ? [
+                    {
+                      id: "select",
+                      label: (
+                        <Checkbox
+                          checked={headerSelection === "all"}
+                          indeterminate={headerSelection === "some"}
+                          onCheckedChange={() =>
+                            setSelectedIds((prev) =>
+                              toggleScopeSelection(prev, selectableFillIds),
+                            )
+                          }
+                          aria-label={t("colEmployee")}
+                        />
+                      ),
+                      className: "w-10",
+                    },
+                  ]
+                : []),
               { id: "employee", label: t("colEmployee") },
               { id: "plate", label: t("colPlate") },
               { id: "chip", label: t("colChip") },
@@ -323,6 +392,14 @@ export function FuelPageShell({
               <FuelRow
                 key={row.key}
                 row={row}
+                selection={
+                  canClearFuel && row.fills.length > 0
+                    ? {
+                        checked: row.fills.every((fill) => selectedIds.has(fill.id)),
+                        onToggle: () => toggleRowSelection(row.fills.map((fill) => fill.id)),
+                      }
+                    : undefined
+                }
                 onOpenFill={() => {
                   if (row.fills.length > 0) setSelectedKey(row.key);
                 }}
@@ -369,7 +446,13 @@ export function FuelPageShell({
         breadcrumbs={withHub({ label: t("title") })}
         title={t("title")}
         description={t("subtitle")}
-        actions={<ClearAllModuleButton entity="fuel" />}
+        actions={
+          <ClearAllModuleButton
+            entity="fuel"
+            selectedIds={selectedIds}
+            onSuccess={handleClearedFuel}
+          />
+        }
       />
       {body}
     </AppPage>
@@ -378,11 +461,13 @@ export function FuelPageShell({
 
 function FuelRow({
   row,
+  selection,
   onOpenFill,
   onOpenRequest,
   onEditWithdrawn,
 }: {
   row: FuelLogRow;
+  selection?: { checked: boolean; onToggle: () => void };
   onOpenFill: () => void;
   onOpenRequest: (id: string) => void;
   onEditWithdrawn?: () => void;
@@ -394,6 +479,15 @@ function FuelRow({
       className={row.critical ? "cursor-pointer bg-destructive/10 hover:bg-destructive/15" : "cursor-pointer"}
       onClick={() => router.push(`/fuel/drivers/${row.driverId}`)}
     >
+      {selection ? (
+        <TableCell className="w-10" onClick={(event) => event.stopPropagation()}>
+          <Checkbox
+            checked={selection.checked}
+            onCheckedChange={() => selection.onToggle()}
+            aria-label={row.driverName ?? undefined}
+          />
+        </TableCell>
+      ) : null}
       <TableCell className="whitespace-nowrap">
         <TableNameCell name={row.driverName} />
         {row.employeeId ? <p className="text-xs text-muted-foreground">{row.employeeId}</p> : null}

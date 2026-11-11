@@ -1109,6 +1109,7 @@
   border: 1px solid #e4e4ea;
   border-radius: 12px;
   background: #fff;
+  padding-bottom: 12px;
 }
 
 .hrpay-hist-tools {
@@ -1129,19 +1130,48 @@
 
 .hrpay-hist-card .hrpay-scroll {
   max-height: 520px;
+  /* The base rule is width:100%, which cannot also honour the 12px side inset:
+     the box then measures 12px wider than the card and overflows its right edge. */
+  width: auto;
+  margin: 0 12px;
   overflow: auto;
   border-top: 1px solid #e4e4ea;
+  padding: 8px 0 12px;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #c2c2cf #f4f4f7;
+}
+
+.hrpay-hist-card .hrpay-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.hrpay-hist-card .hrpay-scroll::-webkit-scrollbar-track {
+  background: #f4f4f7;
+}
+
+.hrpay-hist-card .hrpay-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid #f4f4f7;
+  border-radius: 8px;
+  background: #c2c2cf;
+}
+
+.hrpay-hist-card .hrpay-scroll::-webkit-scrollbar-thumb:hover {
+  background: #a3a3b3;
 }
 
 .hrpay-hist-card .hrpay-table {
-  width: 100%;
-  white-space: normal;
+  width: max-content;
+  min-width: 100%;
+  white-space: nowrap;
 }
 
 .hrpay-hist-card .hrpay-table th,
 .hrpay-hist-card .hrpay-table td {
   padding: 8px 10px;
   text-align: start;
+  white-space: nowrap;
 }
 
 .hrpay-hist-card .hrpay-table th {

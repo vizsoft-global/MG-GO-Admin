@@ -65,9 +65,33 @@ test("the row scan no longer pulls whole documents", () => {
 
 test("the two heavy scans start together", () => {
   // ~86k AM rows plus ~176k deliveries took the call close to 120s back to back.
+  // The delivery half may go through the chunked loader and may reach one Kuwait
+  // day past `to` for an overnight shift, but it must still start from `from` and
+  // it must still be bounded by the delivery cap.
   assert.match(
     source,
-    /Promise\.all\(\[[\s\S]*orderReconRows[\s\S]*loadDeliveriesByDay\(from, to, RECON_DELIVERY_SCAN_CAP\)/,
+    /Promise\.all\(\[[\s\S]*orderReconRows[\s\S]*loadDeliveriesByDay(?:Chunked)?\(\s*from,\s*[^,]+,\s*RECON_DELIVERY_SCAN_CAP\s*\)/,
     "the AM row scan and the delivery scan are still sequential",
   );
+});
+
+test("the delivery scan reaches past midnight for an overnight shift", () => {
+  // A 13:00 → 01:00 shift started on `to` finishes on `to + 1`; its orders are
+  // still `to`'s, so the query window has to include that clock day while
+  // `resolveReconDay` decides the bucket.
+  assert.match(
+    source,
+    /function reconScanUpperDay\(toDay: string\): string \{\s*return addDays\(toDay, 1\);/,
+    "the delivery scan no longer reaches the day after `to`",
+  );
+  for (const fn of ["adminOrderComparisonSnapshot", "adminOrderReconCompare"]) {
+    const start = source.indexOf(`export const ${fn} = onCall`);
+    assert.ok(start > 0, `${fn} is missing`);
+    const body = source.slice(start, start + 6000);
+    assert.match(
+      body,
+      /reconScanUpperDay\(to\)|loadDeliveriesByDayChunked\(from, to, RECON_DELIVERY_SCAN_CAP\)/,
+      `${fn} does not scan into the shift's after-midnight tail`,
+    );
+  }
 });

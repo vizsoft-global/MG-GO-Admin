@@ -23,8 +23,11 @@ import {
   GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
+  scopeSelectionState,
+  toggleScopeSelection,
   useGroupedListView,
 } from "@/components/app/app-list-controls";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   TableGridCards,
   TableNameCell,
@@ -71,7 +74,10 @@ import {
 import { cloneNotificationCampaign, exportNotificationCampaignsCsv } from "./notifications-actions";
 import { NotificationsTabBar } from "./notifications-tab-bar";
 import type { NotificationDashboardScope, NotificationListFilters } from "./types";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import {
+  ClearAllModuleButton,
+  useCanClearAll,
+} from "@/features/settings/clear-all-module-button";
 import { useInfiniteNotificationCampaigns, useNotificationCreators, useNotificationDashboard } from "./use-notifications";
 import { kuwaitTodayString } from "./campaign-date-range";
 import { SearchSelect } from "@/components/ui/search-select";
@@ -115,10 +121,12 @@ function formatDateTime(iso: string | null): string {
 
 export function NotificationsPageShell() {
   const t = useTranslations("pages.notifications");
+  const tc = useTranslations("common");
   const locale = useLocale();
   const auth = useAuth();
   const canManage = auth.can("notifications.manage");
   const canExport = auth.can("notifications.export");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -242,7 +250,30 @@ export function NotificationsPageShell() {
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
   const totalCount = campaignPages?.pages[0]?.totalCount ?? campaigns.length;
 
-  const tableColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
+  const canClear = useCanClearAll("notifications");
+  const scopeIds = useMemo(() => filteredCampaigns.map((row) => row.id), [filteredCampaigns]);
+  const headerSelection = scopeSelectionState(selectedIds, scopeIds);
+  const tableColumns = useMemo(() => {
+    const head = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));
+    if (!canClear) return head;
+    return [
+      {
+        id: "select",
+        className: "w-10",
+        label: (
+          <Checkbox
+            checked={headerSelection === "all"}
+            indeterminate={headerSelection === "some"}
+            onCheckedChange={() => {
+              setSelectedIds((prev) => toggleScopeSelection(prev, scopeIds));
+            }}
+            aria-label={tc("selectAll")}
+          />
+        ),
+      },
+      ...head,
+    ];
+  }, [canClear, headerSelection, scopeIds, tablePrefs, tc]);
   const runExport = () => {
     startExport(async () => {
       const result = await exportNotificationCampaignsCsv({
@@ -298,7 +329,15 @@ export function NotificationsPageShell() {
         description={t("subtitle")}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <ClearAllModuleButton entity="notifications" />
+            <ClearAllModuleButton
+              entity="notifications"
+              selectedIds={selectedIds}
+              onSuccess={() => {
+                setSelectedIds(new Set());
+                void refetch();
+                void refetchKpis();
+              }}
+            />
           </div>
         }
       />
@@ -515,6 +554,25 @@ export function NotificationsPageShell() {
                     key={row.id}
                     onClick={() => router.push(`/${locale}/notifications/${row.id}`)}
                   >
+                    {canClear ? (
+                      <TableCell
+                        className="w-10"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={selectedIds.has(row.id)}
+                          onCheckedChange={() => {
+                            setSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(row.id)) next.delete(row.id);
+                              else next.add(row.id);
+                              return next;
+                            });
+                          }}
+                          aria-label={row.title}
+                        />
+                      </TableCell>
+                    ) : null}
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Link

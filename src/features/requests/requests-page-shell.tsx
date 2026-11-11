@@ -40,7 +40,7 @@ import {
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import { ClearAllModuleButton, useCanClearAll } from "@/features/settings/clear-all-module-button";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import {
   Breadcrumb,
@@ -311,11 +311,13 @@ export function RequestsPageShell({
   const { can } = useAuth();
   const isLoanQueue = type === "loan";
   const canDecide = can("requests.approve") || can("requests.manage");
+  const canClear = useCanClearAll("requests");
   const canCreate = can("requests.create");
   const bulkDecide = useBulkDecideRequests();
   const requestColumns = useMemo<TableToolbarColumn[]>(() => {
     const cols: TableToolbarColumn[] = [];
-    if (canDecide) cols.push({ id: "select", label: t("bulk.selectAll"), locked: true });
+    if (canDecide || canClear)
+      cols.push({ id: "select", label: t("bulk.selectAll"), locked: true });
     cols.push(
       { id: "code", label: t("colCode"), locked: true },
       { id: "driver", label: t("colDriver"), locked: true },
@@ -336,7 +338,7 @@ export function RequestsPageShell({
       { id: "actions", label: t("colActions"), locked: true },
     );
     return cols;
-  }, [canDecide, isLoanQueue, t]);
+  }, [canClear, canDecide, isLoanQueue, t]);
   const tablePrefs = useTablePrefs("requests.list", requestColumns);
   useEffect(() => {
     setSearch(tablePrefs.appliedQuery);
@@ -444,8 +446,10 @@ export function RequestsPageShell({
       ),
     [tablePrefs.groupBy, visibleRows],
   );
-  const selectableRows = visibleRows.filter((row) => canBulkSelectRequest(row.status));
-  const showSelectColumn = canDecide;
+  const selectableRows = visibleRows.filter(
+    (row) => canClear || canBulkSelectRequest(row.status),
+  );
+  const showSelectColumn = canDecide || canClear;
   const selectedRows = visibleRows.filter((row) => selected.has(row.id));
   const approvableRows = selectedRows.filter(canBulkApprove);
   const shownRequestColumns = tablePrefs.orderedColumns.filter((column) =>
@@ -624,7 +628,15 @@ export function RequestsPageShell({
               <Settings className="me-1.5 h-3.5 w-3.5" />
               {t("settingsLink")}
             </Button>
-            <ClearAllModuleButton entity="requests" compact />
+            <ClearAllModuleButton
+              entity="requests"
+              compact
+              selectedIds={selected}
+              onSuccess={() => {
+                setSelected(new Set());
+                void refetch();
+              }}
+            />
           </div>
         </div>
 
@@ -906,13 +918,14 @@ export function RequestsPageShell({
                   const statusLabel = t(`status.${statusKey}` as "status.pending");
                   const framed = frameStatus(row.status);
                   const cells: Record<string, ReactNode> = {
-                    select: canBulkSelectRequest(row.status) ? (
-                      <Checkbox
-                        aria-label={row.request_code}
-                        checked={selected.has(row.id)}
-                        onCheckedChange={() => toggleRow(row.id)}
-                      />
-                    ) : null,
+                    select:
+                      canClear || canBulkSelectRequest(row.status) ? (
+                        <Checkbox
+                          aria-label={row.request_code}
+                          checked={selected.has(row.id)}
+                          onCheckedChange={() => toggleRow(row.id)}
+                        />
+                      ) : null,
                     code: (
                       <div className="flex items-center gap-1.5">
                         {row.needs_attention ? (

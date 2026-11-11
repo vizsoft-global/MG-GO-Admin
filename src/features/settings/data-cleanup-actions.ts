@@ -924,6 +924,67 @@ export async function pageFilteredPurge(
  * (a delivery verified between the preview and the run) must not be deleted on
  * a stale id, and the blockers are re-checked by the RPC each round.
  */
+export type PurgeSelectedResult = {
+  deleted: number;
+  remaining: number;
+  blockers: string[];
+};
+
+/**
+ * Clear all on a list page: delete the ticked rows.
+ *
+ * The ids are already filtered by the callable against the rows this entity
+ * owns, so a stale or foreign id can never widen the delete. `remaining` is
+ * what is left of the selection, never the collection.
+ *
+ * The storage and Auth sweep happens per round, because the per-id purgers
+ * answer with the objects a deleted row owned and the users it removed — a
+ * rider's documents and account — and those keys are only known after that
+ * round has run. Skipping it here would leave a per-row clear's files behind
+ * while the module-wide clear removed them.
+ */
+export async function runSelectedPurge(
+  entity: PurgeAllEntity,
+  ids: string[],
+): Promise<PurgeSelectedResult> {
+  const { data, error } = await callAdminFunction<{
+    deleted?: number;
+    remaining?: number;
+    blockers?: string[] | null;
+    storage_keys?: string[] | null;
+    manifest?: Array<{ auth_user_id?: string | null }> | null;
+  }>("adminPurgeSelected", {
+    p_entity: entity,
+    p_ids: ids,
+  });
+  if (error) throw new Error(error.message);
+
+  const payload = data ?? {};
+  const storageKeys = (payload.storage_keys ?? []).filter(
+    (entry): entry is string => typeof entry === "string" && entry.length > 0,
+  );
+  const authUserIds = (payload.manifest ?? [])
+    .map((entry) => entry?.auth_user_id)
+    .filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+
+  if (storageKeys.length > 0) await cleanupStorageEntries(storageKeys);
+  if (authUserIds.length > 0) await deleteAuthUsers(authUserIds);
+
+  void logAdminMutation({
+    action: "delete",
+    entityType: `data_cleanup_selected_${entity}`,
+    routeName: "runSelectedPurge",
+    context: { ids, entity },
+    after: { deleted: payload.deleted ?? 0 },
+  });
+
+  return {
+    deleted: payload.deleted ?? 0,
+    remaining: payload.remaining ?? 0,
+    blockers: payload.blockers ?? [],
+  };
+}
+
 export async function runFilteredPurge(
   entity: string,
   filters: Record<string, unknown>,

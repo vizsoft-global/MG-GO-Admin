@@ -18,7 +18,10 @@ import {
   X,
 } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import {
+  ClearAllModuleButton,
+  useCanClearAll,
+} from "@/features/settings/clear-all-module-button";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
 import {
@@ -27,6 +30,8 @@ import {
   GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
+  scopeSelectionState,
+  toggleScopeSelection,
   useGroupedListView,
 } from "@/components/app/app-list-controls";
 import {
@@ -38,6 +43,7 @@ import {
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -241,9 +247,23 @@ function AssetsPageContent() {
     `${prefs.groupBy}\u0001${prefs.appliedQuery}\u0001${statusFilter}\u0001${categoryFilter}`,
   );
 
+  const canClearAll = useCanClearAll("assets");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const scopeIds = useMemo(
+    () => listView.scopeRows.map((row) => row.id),
+    [listView.scopeRows],
+  );
+  const headerSelection = scopeSelectionState(selectedIds, scopeIds);
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
   const invalidateAssets = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.assets.all() });
   }, [queryClient]);
+
+  const handleClearedAssets = useCallback(() => {
+    clearSelection();
+    invalidateAssets();
+  }, [clearSelection, invalidateAssets]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -304,7 +324,13 @@ function AssetsPageContent() {
         }
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {tab !== "request" ? <ClearAllModuleButton entity="assets" /> : null}
+            {tab === "catalog" ? (
+              <ClearAllModuleButton
+                entity="assets"
+                selectedIds={selectedIds}
+                onSuccess={handleClearedAssets}
+              />
+            ) : null}
             {tab === "catalog" ? (
               <>
                 <Button
@@ -539,6 +565,18 @@ function AssetsPageContent() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {canClearAll ? (
+                        <TableHead className={cn(TABLE_HEAD_CLASS, "w-10")}>
+                          <Checkbox
+                            checked={headerSelection === "all"}
+                            indeterminate={headerSelection === "some"}
+                            onCheckedChange={() =>
+                              setSelectedIds((prev) => toggleScopeSelection(prev, scopeIds))
+                            }
+                            aria-label={t("colAsset")}
+                          />
+                        </TableHead>
+                      ) : null}
                       <TableHead className={TABLE_HEAD_CLASS}>{t("colAsset")}</TableHead>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("colCategory")}</TableHead>
                       <TableHead className={TABLE_HEAD_CLASS}>{t("colInStock")}</TableHead>
@@ -556,7 +594,7 @@ function AssetsPageContent() {
                         ? [
                             <GroupTableHeaderRow
                               key={`g-${section.key}`}
-                              colSpan={9}
+                              colSpan={canClearAll ? 10 : 9}
                               label={section.label}
                               total={section.total}
                               open={section.open}
@@ -573,6 +611,25 @@ function AssetsPageContent() {
                           className="cursor-pointer"
                           onClick={() => handleViewDetail(row)}
                         >
+                          {canClearAll ? (
+                            <TableCell
+                              className="w-10"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <Checkbox
+                                checked={selectedIds.has(row.id)}
+                                onCheckedChange={(checked) =>
+                                  setSelectedIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (checked) next.add(row.id);
+                                    else next.delete(row.id);
+                                    return next;
+                                  })
+                                }
+                                aria-label={row.name}
+                              />
+                            </TableCell>
+                          ) : null}
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/40 p-1">

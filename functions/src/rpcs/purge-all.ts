@@ -809,19 +809,14 @@ async function releaseFilteredReferences(entity: string, ids: readonly string[])
  * still has deliveries. The SQL scoped its filtered blockers to the matched set
  * and this is the same three checks.
  */
-async function filteredBlockersFor(
+async function blockersForIds(
   entity: string,
-  filters: Record<string, unknown>,
+  ids: readonly string[],
 ): Promise<string[]> {
   const db = getFirestore();
   const blockers: string[] = [];
 
   if (entity !== "restaurants" && entity !== "zones" && entity !== "vehicles") return blockers;
-
-  const matched = (await purgeRowsOf(entity))
-    .filter((row) => purgeRowMatches(entity, row, filters))
-    .sort((left, right) => left.purgeId.localeCompare(right.purgeId));
-  const ids = matched.map((row) => row.purgeId);
   if (ids.length === 0) return blockers;
 
   const existsWhereIn = async (collection: string, field: string): Promise<boolean> => {
@@ -866,6 +861,128 @@ async function filteredBlockersFor(
     blockers.push("blocked_by_fuel");
   }
   return blockers;
+}
+
+/**
+ * The same scoped blockers, reached through the filter engine.
+ *
+ * A filtered clear names columns, not ids, so the matched set has to be read
+ * before it can be scoped. `admin_purge_selected` already holds its ids and
+ * calls `blockersForIds` directly.
+ */
+async function filteredBlockersFor(
+  entity: string,
+  filters: Record<string, unknown>,
+): Promise<string[]> {
+  if (entity !== "restaurants" && entity !== "zones" && entity !== "vehicles") return [];
+
+  const ids = (await purgeRowsOf(entity))
+    .filter((row) => purgeRowMatches(entity, row, filters))
+    .map((row) => row.purgeId);
+  return blockersForIds(entity, ids);
+}
+
+/**
+ * `admin_purge_selected` — the Clear all button's delete path.
+ *
+ * Clear all on a list page means "clear the rows I ticked", never "empty this
+ * module", so the ids come from the caller's selection and the run is bounded
+ * by that set. Nothing here can widen it: the ids are intersected with the rows
+ * this entity actually owns, each round drops the ids that are already gone,
+ * and the loop stops when the selection is empty — `remaining` counts the
+ * selection, not the collection.
+ *
+ * The per-id purgers are the same ones Clear filtered reuses, so storage
+ * sweeps, the Auth-user manifest and the FK release order keep one
+ * implementation. An entity with no per-id purger falls back to the filtered
+ * branch's reference release rather than raising: clearing selected vehicles is
+ * the same delete Clear filtered performs, and a second copy of that release
+ * order is exactly how the two paths would drift.
+ *
+ * The door is the entity's `*.bulk_delete` tick, not super admin — clearing the
+ * rows you ticked is the module clear the tick was created for, while Clear
+ * filtered keeps its stricter gate.
+ */
+export const adminPurgeSelected = onCall(
+  { region: "me-central1", maxInstances: 20, cors: true },
+  async (request) => {
+    const data = (request.data ?? {}) as Record<string, unknown>;
+    const entity = entityOf(data);
+
+    await requirePurgeSlug(request, entity);
+
+    if (!FILTERED_PURGE_ENTITIES.has(entity)) {
+      throw new HttpsError("failed-precondition", "unknown_entity");
+    }
+
+    const rawIds = Array.isArray(data.p_ids) ? data.p_ids : [];
+    const requested = [
+      ...new Set(rawIds.filter((id): id is string => typeof id === "string" && id.length > 0)),
+    ];
+    if (requested.length === 0) {
+      throw new HttpsError("invalid-argument", "nothing_selected");
+    }
+
+    const ids = await ownedSelectedIds(entity, requested);
+    if (ids.length === 0) {
+      return { deleted: 0, remaining: 0, blockers: [], storage_keys: [], manifest: [] };
+    }
+
+    const blockers = await blockersForIds(entity, ids);
+    if (blockers.length > 0) {
+      return { deleted: 0, remaining: ids.length, blockers, storage_keys: [], manifest: [] };
+    }
+
+    const limit = purgeLimit(data);
+    const batch = ids.slice(0, limit);
+    const remaining = ids.length - batch.length;
+    const purger = FILTERED_ENTITY_PURGERS[entity];
+
+    if (!purger) {
+      await releaseFilteredReferences(entity, batch);
+      return { deleted: batch.length, remaining, blockers: [], storage_keys: [], manifest: [] };
+    }
+
+    const result = (await purger.run(purgerRequest(request, batch))) as PurgerResult;
+
+    return {
+      deleted: result.deleted ?? batch.length,
+      remaining,
+      blockers: [],
+      storage_keys: result.storage_keys
+        ?? result.storage_prefixes
+        ?? [],
+      manifest: result.manifest ?? [],
+    };
+  },
+);
+
+/**
+ * The subset of the caller's ids this entity actually owns.
+ *
+ * Read per id rather than by scanning the entity, because the scan is capped
+ * (`purgeRowsOf` stops long before a 400k-delivery fleet) and a ticked row past
+ * that cap would be dropped as "not ours" while still sitting on screen. The
+ * primary collection is the same one `purgeRowsOf` builds its ids from, so the
+ * two cannot disagree about which documents these ids name.
+ */
+async function ownedSelectedIds(
+  entity: string,
+  ids: readonly string[],
+): Promise<string[]> {
+  const db = getFirestore();
+  const collection = db.collection(purgeTarget(entity).primary);
+  const owned: string[] = [];
+
+  for (let index = 0; index < ids.length; index += IN_CHUNK) {
+    const slice = ids.slice(index, index + IN_CHUNK);
+    const snaps = await db.getAll(...slice.map((id) => collection.doc(id)));
+    for (const snap of snaps) {
+      if (snap.exists) owned.push(snap.id);
+    }
+  }
+
+  return owned;
 }
 
 /**

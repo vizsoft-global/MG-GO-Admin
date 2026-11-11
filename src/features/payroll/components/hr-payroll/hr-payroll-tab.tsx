@@ -30,6 +30,7 @@ import { HR_STATUS_LEGEND_ORDER, HR_STATUS_ORDER, hrStatusPaint, type HrStatusKe
 import { columnFilterActive, type ColumnFilters } from "../../payroll-column-filter";
 import type { HrRateEvent, HrRateLine } from "../../hr-rate";
 import { listHrRateCatalog, saveHrRateLines } from "../../hr-rate-actions";
+import { DEFAULT_JOB_POSITIONS } from "@/features/employees/employee-catalogs";
 import { listEmployeeCatalog } from "@/features/employees/employee-catalogs-actions";
 import { masterFilterValues } from "../../hr-inline-cells";
 import { HIRING_TYPES, JOB_END_DESCRIPTIONS } from "@/features/drivers/driver-private-fields";
@@ -157,7 +158,7 @@ export function HrPayrollTab(props: {
    * labels them, so the sheet and the profile cannot print different words for
    * the same stored key.
    */
-  const tEnum = useTranslations("pages.drivers.detail.options");
+  const tEnum = useTranslations("pages.driverDetail.profile.options");
   /** The Columns menu the shared toolbar renders for this sheet. */
   const tc = useTranslations("pages.payroll.columnsMenu");
   const locale = useLocale();
@@ -227,10 +228,21 @@ export function HrPayrollTab(props: {
         value: section.key,
         label: section.label,
       })),
-      positions: (identityOptionsQuery.data?.positions ?? []).map((position) => ({
-        value: position.key,
-        label: position.label,
-      })),
+      /**
+       * The compiled six stand in while the catalog read is in flight and when
+       * the collection holds none — the same fallback `listHrIdentityOptions`
+       * applies, so an unseeded catalog can never leave this picker empty.
+       */
+      positions:
+        (identityOptionsQuery.data?.positions?.length ?? 0) > 0
+          ? (identityOptionsQuery.data?.positions ?? []).map((position) => ({
+              value: position.key,
+              label: position.label,
+            }))
+          : DEFAULT_JOB_POSITIONS.map((position) => ({
+              value: position.key,
+              label: position.label_en || position.label_ar || position.key,
+            })),
       companies: (identityOptionsQuery.data?.companies ?? []).map((company) => ({
         value: company.key,
         label: company.label,
