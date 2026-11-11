@@ -905,12 +905,14 @@ function DriversPageContent() {
           }}
         />
         <ClearFilteredModuleButton entity="drivers" compact />
-        {prefs.view !== "grid" ? (
-          <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} inline />
-        ) : null}
       </div>
     </div>
   );
+
+  const driverToolbarTrailing =
+    prefs.view !== "grid" ? (
+      <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} inline />
+    ) : null;
 
   const listToolbar = (
     <TableToolbar
@@ -919,7 +921,9 @@ function DriversPageContent() {
       columns={toolbarColumns}
       rowKind="dynamic"
       entityList
+      searchFirst
       leading={driverToolbarLeading}
+      trailing={driverToolbarTrailing}
       filteredCount={filteredTotal}
       totalCount={tabTotal}
       onExport={filteredTotal > 0 ? () => setExportOpen(true) : undefined}

@@ -28,6 +28,8 @@ export type HrRateEvent = {
   at: string;
   by: string;
   item: string;
+  /** Job-position catalog key the line priced; absent on a wildcard line. */
+  position?: string;
   field: "Rate" | "Rate added" | "Rate removed";
   from: string;
   to: string;
@@ -160,8 +162,10 @@ export function duplicateRateLine(
   return null;
 }
 
-export function expandHrRateLines(lines: readonly HrRateLine[]): Map<string, { item: string; rate: number }> {
-  const map = new Map<string, { item: string; rate: number }>();
+export function expandHrRateLines(
+  lines: readonly HrRateLine[],
+): Map<string, { item: string; rate: number; position: string }> {
+  const map = new Map<string, { item: string; rate: number; position: string }>();
   for (const line of lines) {
     const project = line.project.trim();
     if (!project || !Number.isFinite(line.rate)) continue;
@@ -174,6 +178,7 @@ export function expandHrRateLines(lines: readonly HrRateLine[]): Map<string, { i
           .filter((part): part is string => Boolean(part && part.trim()))
           .join(" · "),
         rate: line.rate,
+        position: (line.position ?? "").trim(),
       });
     }
   }

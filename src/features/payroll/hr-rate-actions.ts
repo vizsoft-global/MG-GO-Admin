@@ -40,11 +40,19 @@ function parseLine(value: unknown): HrRateLine | null {
 function parseEvent(id: string, value: DocumentData): HrRateEvent | null {
   const field = value.field;
   if (field !== "Rate" && field !== "Rate added" && field !== "Rate removed") return null;
+  const item = typeof value.item === "string" ? value.item : "";
+  // Rows written before the position column stored it only as the fourth
+  // segment of `item` ("Bike · Americana · Jahra · rider"); read it back from
+  // there so the older history keeps showing its position.
+  const stored = typeof value.position === "string" ? value.position.trim() : "";
+  const legacy = !stored && item.split(" · ").length === 4 ? item.split(" · ")[3].trim() : "";
+  const position = stored || legacy;
   return {
     id,
     at: typeof value.at === "string" ? value.at : "",
     by: typeof value.by === "string" ? value.by : "",
-    item: typeof value.item === "string" ? value.item : "",
+    item,
+    ...(position ? { position } : {}),
     field,
     from: typeof value.from === "string" ? value.from : "—",
     to: typeof value.to === "string" ? value.to : "—",
@@ -103,8 +111,9 @@ export async function saveHrRateLines(lines: readonly HrRateLine[]): Promise<{ e
   const events: DocumentData[] = [];
   for (const [key, next] of after) {
     const prior = before.get(key);
+    const position = next.position ? { position: next.position } : {};
     if (!prior) {
-      events.push({ at, by: actor, item: next.item, field: "Rate added", from: "—", to: next.rate.toFixed(3) });
+      events.push({ at, by: actor, item: next.item, ...position, field: "Rate added", from: "—", to: next.rate.toFixed(3) });
       continue;
     }
     if (prior.rate !== next.rate) {
@@ -112,6 +121,7 @@ export async function saveHrRateLines(lines: readonly HrRateLine[]): Promise<{ e
         at,
         by: actor,
         item: next.item,
+        ...position,
         field: "Rate",
         from: prior.rate.toFixed(3),
         to: next.rate.toFixed(3),
@@ -120,7 +130,15 @@ export async function saveHrRateLines(lines: readonly HrRateLine[]): Promise<{ e
   }
   for (const [key, prior] of before) {
     if (!after.has(key)) {
-      events.push({ at, by: actor, item: prior.item, field: "Rate removed", from: prior.rate.toFixed(3), to: "—" });
+      events.push({
+        at,
+        by: actor,
+        item: prior.item,
+        ...(prior.position ? { position: prior.position } : {}),
+        field: "Rate removed",
+        from: prior.rate.toFixed(3),
+        to: "—",
+      });
     }
   }
   const batch = db.batch();

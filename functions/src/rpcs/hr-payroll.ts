@@ -66,6 +66,25 @@ type IdentityPatch = {
 /** The hiring types the employee profile accepts. */
 const HIRING_TYPES = new Set(["overseas", "old_local", "new_local", "outsourcing_partner"]);
 
+/**
+ * The compiled job positions.
+ *
+ * `job_positions` is a catalog the panel may never have seeded, and the sheet's
+ * Position picker offers these six whether or not it was — Employee Settings
+ * builds the same list from the same compiled rows. So the writer accepts their
+ * keys and the snapshot prints their labels, which is what keeps a position the
+ * operator picked from a save the catalogue would have refused, and a stored key
+ * from printing as `rider` on the sheet.
+ */
+const COMPILED_JOB_POSITIONS: Record<string, string> = {
+  rider: "Rider",
+  light_driver: "Light driver",
+  heavy_driver: "Heavy driver",
+  maintenance: "Maintenance",
+  workshop: "Workshop",
+  head_office: "Head office",
+};
+
 /** `YYYY-MM-DD`, or `null` when the value is not a date. */
 function dayOf(value: string): string | null {
   const trimmed = value.trim();
@@ -271,7 +290,10 @@ export const adminHrPayrollSnapshot = onCall(async (request) => {
       sponsorKey: text(row.sponsorship_key),
       company: companies.get(companyKey) || companyKey,
       companyKey,
-      position: jobPositions.get(text(row.job_position)) || text(row.job_position),
+      position:
+        jobPositions.get(text(row.job_position)) ||
+        COMPILED_JOB_POSITIONS[text(row.job_position)] ||
+        text(row.job_position),
       positionKey: text(row.job_position),
       hiringType: text(row.hiring_type),
       /** The raw `YYYY-MM-DD` dates, so the inline pickers bind to a real date. */
@@ -474,7 +496,12 @@ export const adminSaveHrPayrollCells = onCall(async (request) => {
     if (identity.sectionKey !== undefined && identity.sectionKey !== "" && !sectionKeys.has(identity.sectionKey)) {
       throw new HttpsError("invalid-argument", "invalid_cell:section");
     }
-    if (identity.positionKey !== undefined && identity.positionKey !== "" && !positionKeys.has(identity.positionKey)) {
+    if (
+      identity.positionKey !== undefined &&
+      identity.positionKey !== "" &&
+      !positionKeys.has(identity.positionKey) &&
+      !(identity.positionKey in COMPILED_JOB_POSITIONS)
+    ) {
       throw new HttpsError("invalid-argument", "invalid_cell:position");
     }
     if (identity.companyKey !== undefined && identity.companyKey !== "" && !companyKeys.has(identity.companyKey)) {

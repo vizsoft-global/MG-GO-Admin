@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 import { TableStage } from "./table-toolbar/table-stage";
 import { AppTableScrollRail } from "./app-table-scroll-rail";
+import { AppTableBackToTop } from "./app-table-back-to-top";
 import { TABLE_HEAD_CLASS } from "./constants";
 
 /**
@@ -48,27 +49,19 @@ export function AppDataTable({
   headerRowClassName?: string;
   /** Keep the header row visible inside this table's own scroller. */
   stickyHeader?: boolean;
-  /** Shared toolbar. Sits above the table and never scrolls with it. */
+  /** Shared toolbar. Sits above the table and pins with its header on scroll. */
   toolbar?: ReactNode;
 }) {
   const sticky = stickyHeader || Boolean(toolbar);
   const surface = (
     <>
       <Table>
-        <TableHeader
-          className={sticky ? "sticky top-0 z-20 bg-card shadow-sm" : undefined}
-        >
-          <TableRow
-            className={cn(
-              toolbar ? "bg-card hover:bg-card" : "bg-muted/30 hover:bg-muted/30",
-              stickyHeader && "bg-card hover:bg-card",
-              headerRowClassName,
-            )}
-          >
+        <TableHeader className="sticky top-0 z-20 bg-card shadow-sm">
+          <TableRow className={cn("bg-card hover:bg-card", headerRowClassName)}>
             {columns.map((col) => (
               <TableHead
                 key={col.id}
-                className={cn(TABLE_HEAD_CLASS, stickyHeader && "bg-card", col.className)}
+                className={cn(TABLE_HEAD_CLASS, "bg-card", col.className)}
               >
                 {col.label}
               </TableHead>
@@ -105,22 +98,32 @@ export function AppDataTable({
    * out of view, and a toolbar inside the scroller also left a bare strip to its
    * right once the table was scrolled.
    *
-   * The viewport is also the page's scroll target. Page chrome (header, KPI
-   * cards, toolbar, rail) keeps its normal flow and scrolls away; once it has,
-   * this container pins to the top of `<main>` at viewport height and owns both
-   * axes from there, so the header row and the rows below it stay on screen
-   * instead of being cut off by a fixed 640px ceiling.
+   * The toolbar, the column rail and the viewport are wrapped in one sticky
+   * frame, so when the page scrolls up the toolbar pins together with the table
+   * header instead of scrolling away and leaving the header row alone at the top
+   * of the screen. The frame is viewport height and a flex column, so the
+   * toolbar keeps its natural height (it can wrap to two rows) and the viewport
+   * takes whatever is left — no toolbar height is measured or hard-coded.
+   *
+   * Page chrome (header, KPI cards) keeps its normal flow and scrolls away; once
+   * it has, this frame pins to the top of `<main>` at viewport height and the
+   * viewport owns both axes from there, so the toolbar, the header row and the
+   * rows below it stay on screen instead of being cut off by a fixed 640px
+   * ceiling.
    */
   return (
     <div className={cn("flex flex-col", className)}>
-      <TableStage toolbar={toolbar} />
-      <AppTableScrollRail />
-      <div
-        data-table-scroll=""
-        className={cn(VIEWPORT_FILL, "[&_[data-slot=table-container]]:overflow-visible")}
-      >
-        {surface}
+      <div className="sticky top-0 z-20 flex h-[calc(100dvh-0.75rem)] min-h-[320px] flex-col">
+        <TableStage toolbar={toolbar} />
+        <AppTableScrollRail />
+        <div
+          data-table-scroll=""
+          className="min-h-0 flex-1 overflow-auto [&_[data-slot=table-container]]:overflow-visible"
+        >
+          {surface}
+        </div>
       </div>
+      <AppTableBackToTop />
     </div>
   );
 }
