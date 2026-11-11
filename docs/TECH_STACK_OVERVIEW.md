@@ -625,36 +625,39 @@ id — so a future reader can tell a claim from a measurement.
 
 ### 8.1 Source delivery
 
-The complete source of both applications is delivered in one shared Drive folder,
-alongside the other two products in the group:
+Each application has its own shared folder. Open the folder for the code you
+need; each holds the full working tree **and** a downloadable archive of it.
 
-**Source code:** https://drive.google.com/drive/folders/1UfKsyf3IRAMqKgZmQ35EY0dRjbxs99rx
-
-| Folder | Product |
-|---|---|
-| **MG Hub** | This platform — the admin console and the MG-GO rider app |
-| **Bajaj Care** | The Bajaj Care workspace |
-| **Bites** | The Bites product |
-
-Inside **MG Hub**, the two applications this document describes:
+| Application | Source | Archive |
+|---|---|---|
+| **Admin console** (web) | [MGgo-Admin](https://drive.google.com/drive/folders/1vYTujDYuwS8zD2Bq3ZeBi_GbDqQmJCPS?usp=sharing) | `ADMIN_source_code.zip` — 15.2 MB |
+| **Rider app** (Android) | [MGgo-User](https://drive.google.com/drive/folders/1mSWyUlSyZparahMA3eaEu33tFulOjjOk?usp=sharing) | `USER_source_code.zip` — 5.8 MB |
 
 | Application | Technology |
 |---|---|
 | Admin console (web) | Next.js 16 · React 19 · TypeScript |
 | Rider app (Android) | Flutter 3.44 · Dart 3.12 |
 
-Both applications are versioned in the same delivery, so the admin console and
-the rider app in that folder are the pair that belongs together. The other two
-folders are separate products and are not covered by this document.
+Both applications are delivered in the same release, so the console and the app
+in these two folders are the pair that belongs together. Access is by link
+sharing on the folders, and the archives are byte-identical copies of the tree
+beside them — use either.
 
-### 8.2 Delivered manuals (in `docs/`)
+### 8.2 Delivered manuals
 
-| Document | Format | Scope |
+Four documents, delivered as PDF:
+
+| Document | Scope | Pages |
 |---|---|---|
-| `ADMIN_PANEL_MANUAL` | Markdown + PDF (34 pages) + DOCX | Complete administrator manual, module by module |
-| `USER_MANUAL` | Markdown + PDF (39 pages) + DOCX | Rider app end to end, plus the console companion view |
-| `EMPLOYEE_BULK_IMPORT` | PDF | Client-facing import procedure and column reference |
-| `TECH_STACK_OVERVIEW` | Markdown + PDF (25 pages) | This document |
+| **[Admin Panel Manual](https://drive.google.com/file/d/1PKX9ltV5hGkaP6sKbhpRaTH_oinP9s-Y/view?usp=sharing)** | Complete administrator manual — every console module, module by module | 34 |
+| **[User Manual](https://drive.google.com/file/d/1k_m74I05TlikWKJzlJjuThkvjKgr8Dh0/view?usp=sharing)** | Rider app end to end, plus the console companion view | 39 |
+| **[Employee Bulk Import](https://drive.google.com/file/d/1Q4nYBBm3G4wZnjXXaY1wHpySvK0gbiix/view?usp=sharing)** | Client-facing import procedure and column reference | — |
+| **[Technical Stack Overview](https://drive.google.com/file/d/1qfUcGd27E5J8SPXnml6_niqebuaY2ZDW/view?usp=sharing)** | This document | 25 |
+
+The same four files are also built into the repository under `docs/`, together
+with their markdown sources. `npm run docs:admin`, `docs:manual` and
+`docs:stack` regenerate them, so a correction reaches the shared folder on the
+next build rather than being retyped into a copy.
 
 ### 8.3 Architecture documents
 
@@ -726,13 +729,22 @@ together are complete:
 
 | Field | Value |
 |---|---|
-| Version | **1.4** |
+| Version | **1.5** |
 | Date | 11 November 2026 |
 | Prepared from | the `MG-GO-Admin` and `MG-GO` working copies |
 | Reader | client technical stakeholders, onboarding engineers, procurement |
 | Scope | stack, architecture, hosting and provenance — **not** a user manual |
 | Rebuild | `npm run docs:stack` (markdown → PDF, figures and plates included) |
 | Diagrams | `docs/assets/architecture/*.jpg` — the two module dependency maps |
+
+**What changed from v1.3:**
+
+- **§8.1 links each application's own source folder** — [MGgo-Admin](https://drive.google.com/drive/folders/1vYTujDYuwS8zD2Bq3ZeBi_GbDqQmJCPS?usp=sharing)
+  and [MGgo-User](https://drive.google.com/drive/folders/1mSWyUlSyZparahMA3eaEu33tFulOjjOk?usp=sharing)
+  — with the archive name and size beside each, instead of one folder covering
+  three products.
+- **§8.2 links every delivered PDF**, so the manual set can be opened from this
+  document rather than hunted for in a Drive folder.
 
 **What changed from v1.2:**
 
