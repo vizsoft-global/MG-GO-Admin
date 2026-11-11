@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import {
+  LIST_PAGE_SIZE,
   buildGroupSections,
   type BuiltSection,
   type GroupSectionInput,
@@ -11,6 +12,7 @@ export function useGroupedListView<T>(
   groups: readonly GroupSectionInput<T>[],
   grouped: boolean,
   resetKey = "",
+  flatTotal?: number,
 ) {
   const groupKeySig = `${grouped ? "g" : "f"}\u0001${resetKey}\u0001${groups.map((group) => group.key).join("\u0001")}`;
   const [sig, setSig] = useState(groupKeySig);
@@ -33,8 +35,9 @@ export function useGroupedListView<T>(
         openKeys,
         groupPage,
         flatPage,
+        totalOverride: flatTotal,
       }),
-    [flatPage, groupPage, grouped, groups, openKeys],
+    [flatPage, flatTotal, groupPage, grouped, groups, openKeys],
   );
 
   const toggle = useCallback((key: string) => {
@@ -50,9 +53,22 @@ export function useGroupedListView<T>(
     setGroupPage((prev) => ({ ...prev, [key]: (prev[key] ?? 0) + dir }));
   }, []);
 
-  const stepFlat = useCallback((dir: number) => {
-    setFlatPage((prev) => prev + dir);
-  }, []);
+  /**
+   * The pager may now count more rows than are loaded, so its last page is
+   * derived from the reported total rather than from `sections`. Stepping is
+   * clamped to it, or overshooting the end and stepping back would look stuck:
+   * the stored page would still be past the last one when it came back.
+   */
+  const lastFlatPage = built.flatPager
+    ? Math.max(0, Math.ceil(built.flatPager.total / LIST_PAGE_SIZE) - 1)
+    : 0;
+
+  const stepFlat = useCallback(
+    (dir: number) => {
+      setFlatPage((prev) => Math.min(Math.max(0, prev + dir), lastFlatPage));
+    },
+    [lastFlatPage],
+  );
 
   return {
     sections: built.sections as BuiltSection<T>[],

@@ -52,6 +52,15 @@ export function buildGroupSections<T>(input: {
   groupPage: Readonly<Record<string, number>>;
   flatPage: number;
   pageSize?: number;
+  /**
+   * The true row count for the flat pager.
+   *
+   * The ungrouped pager used to be measured from the rows already loaded, so a
+   * server-paged list reported its fetch limit (`… / 500`) as the roster total.
+   * When the caller knows the real count it passes it here; the pager then pages
+   * against that number while still slicing the rows it holds.
+   */
+  totalOverride?: number;
 }): {
   sections: BuiltSection<T>[];
   scopeRows: T[];
@@ -60,7 +69,10 @@ export function buildGroupSections<T>(input: {
   const pageSize = input.pageSize ?? LIST_PAGE_SIZE;
   if (!input.grouped) {
     const rows = input.groups.flatMap((group) => [...group.rows]);
-    const page = clampPage(input.flatPage, rows.length, pageSize);
+    const override = input.totalOverride ?? 0;
+    const total = override > rows.length ? override : rows.length;
+    const page = clampPage(input.flatPage, total, pageSize);
+    const start = page * pageSize;
     return {
       sections: [
         {
@@ -71,11 +83,11 @@ export function buildGroupSections<T>(input: {
           page,
           showHeader: false,
           showPager: false,
-          visibleRows: pageSlice(rows, page, pageSize),
+          visibleRows: rows.slice(start, start + pageSize),
         },
       ],
       scopeRows: rows,
-      flatPager: rows.length > pageSize ? { page, total: rows.length } : null,
+      flatPager: total > pageSize ? { page, total } : null,
     };
   }
 

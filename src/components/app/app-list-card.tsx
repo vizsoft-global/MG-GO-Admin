@@ -23,7 +23,10 @@ export function AppListCard({
   return (
     <Card
       className={cn(
-        "overflow-hidden rounded-xl border-border bg-card shadow-sm",
+        // `clip` (not `hidden`) so the rounded frame still crops its children
+        // without turning the card into a scroll container — an `overflow-hidden`
+        // ancestor silently disables `position: sticky` for the table viewport.
+        "overflow-clip rounded-xl border-border bg-card shadow-sm",
         className,
       )}
     >

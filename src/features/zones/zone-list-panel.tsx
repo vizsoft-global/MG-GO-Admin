@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Pill, StatusDot } from "@/components/ui/metric-tile";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { fieldSearchMatch } from "@/components/app/app-list-controls";
 import {
   TableGridCards,
@@ -58,6 +59,7 @@ export function ZoneListPanel({
   onAssignDrivers,
   canAssignDrivers = false,
   onAdd,
+  selection,
 }: {
   zones: ZoneRow[];
   chips: Array<{ id: "all" | GeofenceKind; label: string }>;
@@ -70,6 +72,13 @@ export function ZoneListPanel({
   onAssignDrivers?: (zone: ZoneRow) => void;
   canAssignDrivers?: boolean;
   onAdd?: () => void;
+  selection?: {
+    ids: ReadonlySet<string>;
+    header: "all" | "some" | "none";
+    onToggleRow: (id: string) => void;
+    onToggleAll: () => void;
+    selectAllLabel: string;
+  };
 }) {
   const t = useTranslations("pages.zones");
   const locale = useLocale();
@@ -178,6 +187,16 @@ export function ZoneListPanel({
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-white dark:bg-slate-900">
             <TableRow className="border-slate-200 dark:border-slate-700">
+              {selection ? (
+                <TableHead className="w-8">
+                  <Checkbox
+                    checked={selection.header === "all"}
+                    indeterminate={selection.header === "some"}
+                    onCheckedChange={selection.onToggleAll}
+                    aria-label={selection.selectAllLabel}
+                  />
+                </TableHead>
+              ) : null}
               <TableHead>{t("geofence.colName")}</TableHead>
               <TableHead>{t("geofence.colType")}</TableHead>
               <TableHead>{t("geofence.colArea")}</TableHead>
@@ -190,14 +209,14 @@ export function ZoneListPanel({
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-16 text-center">
+                <TableCell colSpan={selection ? 7 : 6} className="py-16 text-center">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin text-slate-400" />
                 </TableCell>
               </TableRow>
             ) : visibleZones.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={selection ? 7 : 6}
                   className="py-16 text-center text-sm text-slate-500 dark:text-slate-300"
                 >
                   {t("emptyTitle")}
@@ -222,6 +241,18 @@ export function ZoneListPanel({
                       onDoubleClick={() => onEdit(zone)}
                       title={t("geofence.doubleClickToEdit")}
                     >
+                      {selection ? (
+                        <TableCell
+                          className="w-8"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={selection.ids.has(zone.id)}
+                            onCheckedChange={() => selection.onToggleRow(zone.id)}
+                            aria-label={zone.name}
+                          />
+                        </TableCell>
+                      ) : null}
                       <TableCell>
                         <div className="inline-flex items-start gap-2">
                           <StatusDot tone={typeTone} className="mt-1" />
@@ -275,7 +306,7 @@ export function ZoneListPanel({
                 })}
                 {hasMore ? (
                   <TableRow ref={loadMoreRef} className="hover:bg-transparent">
-                    <TableCell colSpan={6} className="py-4 text-center">
+                    <TableCell colSpan={selection ? 7 : 6} className="py-4 text-center">
                       <Loader2 className="mx-auto h-4 w-4 animate-spin text-slate-400" />
                     </TableCell>
                   </TableRow>

@@ -38,6 +38,9 @@ export function TableToolbar({
   chips,
   onRemoveChip,
   onClearChips,
+  leading,
+  trailing,
+  searchFirst,
 }: {
   prefs: ReturnType<typeof useTablePrefs>;
   entity: string;
@@ -53,6 +56,16 @@ export function TableToolbar({
   chips?: TableFilterChip[];
   onRemoveChip?: (id: string) => void;
   onClearChips?: () => void;
+  /**
+   * Extra page-level controls (filters, refresh, pager…) folded into the same
+   * single toolbar row, before the search box. Keeps every list page on one
+   * horizontally scrollable row instead of stacking a second toolbar.
+   */
+  leading?: ReactNode;
+  /** Extra page-level controls appended at the very end of the toolbar row. */
+  trailing?: ReactNode;
+  /** Render the search box before `leading` instead of after it. */
+  searchFirst?: boolean;
 }) {
   const t = useTranslations("common.tableToolbar");
   const controls = resolveToolbarControls({
@@ -70,31 +83,35 @@ export function TableToolbar({
   const groups = columns.filter((column) => column.categorical);
   const selectedView: TableViewMode = prefs.view;
 
+  const searchSlot = controls.search ? (
+    <div className="relative min-w-[12rem] flex-1 shrink-0">
+      <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
+      <Input
+        value={prefs.query}
+        onChange={(event) => prefs.setQuery(event.target.value)}
+        placeholder={t("searchEntity", { entity })}
+        aria-label={t("searchEntity", { entity })}
+        className={cn(controlClass, "ps-8 pe-8")}
+      />
+      {prefs.query ? (
+        <button
+          type="button"
+          onClick={() => prefs.setQuery("")}
+          className="absolute end-1.5 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-[var(--text-muted)]"
+          aria-label={t("clearSearch")}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
+    </div>
+  ) : null;
+
   return (
-    <div>
-      <div className="flex flex-wrap items-center gap-2 p-4 max-[1023px]:[&>div:first-child]:basis-full">
-        {controls.search ? (
-          <div className="relative min-w-[12rem] flex-1">
-            <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
-            <Input
-              value={prefs.query}
-              onChange={(event) => prefs.setQuery(event.target.value)}
-              placeholder={t("searchEntity", { entity })}
-              aria-label={t("searchEntity", { entity })}
-              className={cn(controlClass, "ps-8 pe-8")}
-            />
-            {prefs.query ? (
-              <button
-                type="button"
-                onClick={() => prefs.setQuery("")}
-                className="absolute end-1.5 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-[var(--text-muted)]"
-                aria-label={t("clearSearch")}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            ) : null}
-          </div>
-        ) : null}
+    <div className="min-w-0">
+      <div className="app-table-toolbar-row flex flex-nowrap items-center gap-2 overflow-x-auto p-4">
+        {searchFirst ? searchSlot : null}
+        {leading ? <div className="flex shrink-0 items-center gap-2">{leading}</div> : null}
+        {searchFirst ? null : searchSlot}
 
         {controls.groupBy ? (
           <Select
@@ -171,6 +188,7 @@ export function TableToolbar({
             </Button>
           ) : null}
         </div>
+        {trailing ? <div className="flex shrink-0 items-center gap-2">{trailing}</div> : null}
       </div>
       {chips && onRemoveChip && onClearChips ? (
         <FilterChips chips={chips} onRemove={onRemoveChip} onClearAll={onClearChips} />

@@ -16,7 +16,10 @@ import {
   GroupedSections,
   fieldSearchMatch,
   groupRows,
+  scopeSelectionState,
+  toggleScopeSelection,
 } from "@/components/app/app-list-controls";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   TableNameCell,
   TableToolbar,
@@ -36,7 +39,10 @@ import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { useAuth } from "@/contexts/auth-context";
 import { WrongActionFormDialog } from "./wrong-action-form-dialog";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import {
+  ClearAllModuleButton,
+  useCanClearAll,
+} from "@/features/settings/clear-all-module-button";
 import { useWrongActionDriverOptions, useWrongActionsList } from "./use-wrong-actions";
 import type { WrongActionRow, WrongActionSeverity } from "./types";
 import {
@@ -90,8 +96,10 @@ export function WrongActionsPageShell({
   const prefs = useTablePrefs("wrong-actions", toolbarColumns);
   const { can } = useAuth();
   const canManage = can("wrong_actions.manage");
+  const canClear = useCanClearAll("wrong_actions");
+  const canSelect = canManage || canClear;
   const router = useRouter();
-  const { data: rows = [], isLoading } = useWrongActionsList();
+  const { data: rows = [], isLoading, refetch } = useWrongActionsList();
   const { data: drivers = [], isLoading: driversLoading } = useWrongActionDriverOptions(
     addOpen && canManage,
   );
@@ -128,6 +136,9 @@ export function WrongActionsPageShell({
       ),
     [activeTab, now, prefs.appliedQuery, rows],
   );
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const scopeIds = useMemo(() => visible.map((row) => row.id), [visible]);
+  const headerSelection = scopeSelectionState(selectedIds, scopeIds);
   const grouped = useMemo(
     () =>
       groupRows(
@@ -171,7 +182,14 @@ export function WrongActionsPageShell({
         description={t("subtitle")}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <ClearAllModuleButton entity="wrong_actions" />
+            <ClearAllModuleButton
+              entity="wrong_actions"
+              selectedIds={selectedIds}
+              onSuccess={() => {
+                setSelectedIds(new Set());
+                void refetch();
+              }}
+            />
           </div>
         }
         tabs={
@@ -245,6 +263,24 @@ export function WrongActionsPageShell({
         ) : (
           <AppDataTable
             columns={[
+              ...(canSelect
+                ? [
+                    {
+                      id: "select",
+                      className: "w-10",
+                      label: (
+                        <Checkbox
+                          checked={headerSelection === "all"}
+                          indeterminate={headerSelection === "some"}
+                          onCheckedChange={() => {
+                            setSelectedIds((prev) => toggleScopeSelection(prev, scopeIds));
+                          }}
+                          aria-label={t("selectAll")}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
               { id: "driver", label: t("colDriver") },
               { id: "type", label: t("colType") },
               { id: "severity", label: t("colSeverity") },
@@ -262,7 +298,7 @@ export function WrongActionsPageShell({
                 ? [
                     <AppDataTableRow key={`g-${group.key}`} className="hover:bg-transparent">
                       <TableCell
-                        colSpan={5}
+                        colSpan={canSelect ? 6 : 5}
                         className="bg-muted/40 py-2 text-xs font-semibold text-foreground"
                       >
                         {group.label}
@@ -277,6 +313,16 @@ export function WrongActionsPageShell({
                 <WrongActionListRow
                   key={row.id}
                   row={row}
+                  selectable={canSelect}
+                  selected={selectedIds.has(row.id)}
+                  onToggle={() =>
+                    setSelectedIds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(row.id)) next.delete(row.id);
+                      else next.add(row.id);
+                      return next;
+                    })
+                  }
                   onOpen={() => router.push(`/wrong-actions/${row.id}`)}
                 />
               )),
@@ -298,10 +344,27 @@ export function WrongActionsPageShell({
   );
 }
 
-function WrongActionListRow({ row, onOpen }: { row: WrongActionRow; onOpen: () => void }) {
+function WrongActionListRow({
+  row,
+  selectable,
+  selected,
+  onToggle,
+  onOpen,
+}: {
+  row: WrongActionRow;
+  selectable: boolean;
+  selected: boolean;
+  onToggle: () => void;
+  onOpen: () => void;
+}) {
   const t = useTranslations("pages.wrongActions");
   return (
     <AppDataTableRow className="cursor-pointer" onClick={onOpen}>
+      {selectable ? (
+        <TableCell className="w-10" onClick={(event) => event.stopPropagation()}>
+          <Checkbox checked={selected} onCheckedChange={onToggle} aria-label={row.driver_name ?? undefined} />
+        </TableCell>
+      ) : null}
       <TableCell>
         <div className="flex items-center gap-2">
           <TableNameCell name={row.driver_name} />

@@ -13,7 +13,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/auth-context";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import {
+  ClearAllModuleButton,
+  useCanClearAll,
+} from "@/features/settings/clear-all-module-button";
+import {
+  scopeSelectionState,
+  toggleScopeSelection,
+} from "@/components/app/app-list-controls";
 import { LAYOUT } from "@/components/app/layout-spacing";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -54,10 +61,12 @@ function ZonesPageContent() {
   const canManage = can("zones.manage");
   const canAssignDrivers = can("drivers.manage");
 
-  const { data: zones = [], isLoading } = useZonesList();
+  const { data: zones = [], isLoading, refetch } = useZonesList();
   const [kindFilter, setKindFilter] = useState<"all" | GeofenceKind>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [assignZone, setAssignZone] = useState<ZoneRow | null>(null);
+  const canClear = useCanClearAll("zones");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Live refresh: re-fetch the zone list whenever zones, their geofence
   // settings, or driver-to-zone assignments change. Covers the driver-count
@@ -90,6 +99,23 @@ function ZonesPageContent() {
       zones.filter((z) => zoneMatchesKindFilter(z, kindFilter)),
     [kindFilter, zones],
   );
+
+  const scopeIds = useMemo(
+    () => filteredZones.map((zone) => zone.id),
+    [filteredZones],
+  );
+  const headerSelection = scopeSelectionState(selectedIds, scopeIds);
+  const handleToggleRow = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const handleToggleAll = () => {
+    setSelectedIds((prev) => toggleScopeSelection(prev, scopeIds));
+  };
 
   const kindChips: Array<{ id: "all" | GeofenceKind; label: string }> = [
     { id: "all", label: t("geofence.filterAll") },
@@ -131,7 +157,15 @@ function ZonesPageContent() {
                       <DropdownMenuItem disabled>{t("geofence.bulkDelete")}</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <ClearAllModuleButton entity="zones" compact />
+                  <ClearAllModuleButton
+                    entity="zones"
+                    compact
+                    selectedIds={canClear ? Array.from(selectedIds) : undefined}
+                    onSuccess={() => {
+                      setSelectedIds(new Set());
+                      void refetch();
+                    }}
+                  />
             </div>
           </div>
 
@@ -148,6 +182,17 @@ function ZonesPageContent() {
               canAssignDrivers={canAssignDrivers}
               onAssignDrivers={setAssignZone}
               onAdd={canManage ? handleAdd : undefined}
+              selection={
+                canClear
+                  ? {
+                      ids: selectedIds,
+                      header: headerSelection,
+                      onToggleRow: handleToggleRow,
+                      onToggleAll: handleToggleAll,
+                      selectAllLabel: t("geofence.selectAll"),
+                    }
+                  : undefined
+              }
             />
           </div>
         </aside>

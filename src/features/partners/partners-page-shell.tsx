@@ -10,8 +10,11 @@ import {
   GroupedSections,
   fieldSearchMatch,
   groupRows,
+  scopeSelectionState,
+  toggleScopeSelection,
   useGroupedListView,
 } from "@/components/app/app-list-controls";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -26,7 +29,10 @@ import {
   type TableToolbarColumn,
 } from "@/components/app/table-toolbar";
 import { AppEmptyState } from "@/components/app/app-empty-state";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import {
+  ClearAllModuleButton,
+  useCanClearAll,
+} from "@/features/settings/clear-all-module-button";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CardContent } from "@/components/ui/card";
@@ -106,6 +112,7 @@ function formatCreatedAt(iso: string, locale: string) {
 function PartnersPageContent() {
   const locale = useLocale();
   const t = useTranslations("pages.partners");
+  const tc = useTranslations("common");
   const { can } = useAuth();
   const canManage = can("partners.manage");
   const queryClient = useQueryClient();
@@ -127,6 +134,7 @@ function PartnersPageContent() {
   const [logoFilter, setLogoFilter] = useState<LogoFilter>("all");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingPartner, setEditingPartner] = useState<PartnerRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const hasActiveFilters = driversFilter !== "all" || logoFilter !== "all";
@@ -158,6 +166,10 @@ function PartnersPageContent() {
     false,
     `${tablePrefs.appliedQuery}\u0001${driversFilter}\u0001${logoFilter}`,
   );
+
+  const canClear = useCanClearAll("partners");
+  const scopeIds = useMemo(() => visible.map((partner) => partner.id), [visible]);
+  const headerSelection = scopeSelectionState(selectedIds, scopeIds);
 
   const invalidatePartners = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.partners.all() });
@@ -213,13 +225,33 @@ function PartnersPageContent() {
     !isLoading && partners.length > 0 && visible.length === 0;
   const showEmptyAll = !isLoading && partners.length === 0;
 
-  const tableColumns = tablePrefs.orderedColumns
-    .filter((column) => tablePrefs.isVisible(column.id))
-    .map((column) => ({
-      id: column.id,
-      label: column.label,
-      className: column.id === "logo" ? "w-14" : column.id === "actions" ? "w-12 text-end" : undefined,
-    }));
+  const tableColumns = useMemo(() => {
+    const head = tablePrefs.orderedColumns
+      .filter((column) => tablePrefs.isVisible(column.id))
+      .map((column) => ({
+        id: column.id,
+        label: column.label,
+        className: column.id === "logo" ? "w-14" : column.id === "actions" ? "w-12 text-end" : undefined,
+      }));
+    if (!canClear) return head;
+    return [
+      {
+        id: "select",
+        className: "w-10",
+        label: (
+          <Checkbox
+            checked={headerSelection === "all"}
+            indeterminate={headerSelection === "some"}
+            onCheckedChange={() => {
+              setSelectedIds((prev) => toggleScopeSelection(prev, scopeIds));
+            }}
+            aria-label={tc("selectAll")}
+          />
+        ),
+      },
+      ...head,
+    ];
+  }, [canClear, headerSelection, scopeIds, tablePrefs, tc]);
 
   const filterChips = [
     ...(driversFilter !== "all"
@@ -317,7 +349,15 @@ function PartnersPageContent() {
         description={t("subtitle")}
         actions={
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <ClearAllModuleButton entity="partners" />
+              <ClearAllModuleButton
+                entity="partners"
+                selectedIds={selectedIds}
+                onSuccess={() => {
+                  setSelectedIds(new Set());
+                  invalidatePartners();
+                  void refetch();
+                }}
+              />
               <Button
                 type="button"
                 variant="outline"
@@ -425,6 +465,25 @@ function PartnersPageContent() {
                         }
                       }}
                     >
+                      {canClear ? (
+                        <TableCell
+                          className="w-10"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={selectedIds.has(partner.id)}
+                            onCheckedChange={() => {
+                              setSelectedIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(partner.id)) next.delete(partner.id);
+                                else next.add(partner.id);
+                                return next;
+                              });
+                            }}
+                            aria-label={partner.name}
+                          />
+                        </TableCell>
+                      ) : null}
                       {tableColumns.map((column) => {
                         switch (column.id) {
                           case "logo":

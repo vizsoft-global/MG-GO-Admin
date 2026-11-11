@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useQueryClient } from "@tanstack/react-query";
 import { Fuel, ReceiptText, Undo2 } from "lucide-react";
 import { AppPage, AppPageHeader } from "@/components/app";
 import { useFleetBreadcrumbs } from "@/features/fleet/use-fleet-breadcrumbs";
@@ -10,8 +11,9 @@ import { TabBar } from "@/components/dashboard/tab-bar";
 import { useAuth } from "@/contexts/auth-context";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { useRouter } from "@/i18n/navigation";
+import { queryKeys } from "@/lib/query/query-keys";
 import { FleetRequestPageShell } from "./fleet-request-page-shell";
-import { FuelPageShell } from "./fuel-page-shell";
+import { FuelPageShell, type FuelSelectionState } from "./fuel-page-shell";
 
 const FUEL_TABS = ["log", "request", "refund"] as const;
 type FuelHubTab = (typeof FUEL_TABS)[number];
@@ -26,6 +28,19 @@ export function FuelHubShell({ initialAnchor }: { initialAnchor: string }) {
   const { can } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const selection = useMemo<FuelSelectionState>(
+    () => ({ selectedIds, setSelectedIds }),
+    [selectedIds],
+  );
+
+  const handleCleared = useCallback(() => {
+    setSelectedIds(new Set());
+    void queryClient.invalidateQueries({ queryKey: queryKeys.fuel.all() });
+  }, [queryClient]);
+
   const allowed = useMemo(() => {
     const tabs: FuelHubTab[] = [];
     if (can("fuel.view")) tabs.push("log");
@@ -42,7 +57,15 @@ export function FuelHubShell({ initialAnchor }: { initialAnchor: string }) {
         breadcrumbs={withHub({ label: t("title") })}
         title={t("title")}
         description={t("subtitle")}
-        actions={tab === "log" ? <ClearAllModuleButton entity="fuel" /> : undefined}
+        actions={
+          tab === "log" ? (
+            <ClearAllModuleButton
+              entity="fuel"
+              selectedIds={selectedIds}
+              onSuccess={handleCleared}
+            />
+          ) : undefined
+        }
       />
       {allowed.length > 0 ? (
         <TabBar
@@ -55,7 +78,9 @@ export function FuelHubShell({ initialAnchor }: { initialAnchor: string }) {
           onSelect={(id) => router.replace(`/fuel?tab=${id}`)}
         />
       ) : null}
-      {tab === "log" ? <FuelPageShell initialAnchor={initialAnchor} embedded /> : null}
+      {tab === "log" ? (
+        <FuelPageShell initialAnchor={initialAnchor} embedded selection={selection} />
+      ) : null}
       {tab === "request" ? <FleetRequestPageShell type="fuel" embedded /> : null}
       {tab === "refund" ? <FleetRequestPageShell type="fuel_refund" embedded /> : null}
     </AppPage>

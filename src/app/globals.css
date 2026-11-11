@@ -483,3 +483,40 @@ svg.lucide {
 .font-display {
   font-family: var(--font-display);
 }
+
+/* One-row list toolbars (TableToolbar): every control stays on a single line and
+   the row scrolls horizontally instead of wrapping. Thin scrollbar so the
+   overflow is discoverable without stealing vertical space. */
+.app-table-toolbar-row {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--text-muted) 45%, transparent) transparent;
+}
+
+.app-table-toolbar-row::-webkit-scrollbar {
+  height: 6px;
+}
+
+.app-table-toolbar-row::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-table-toolbar-row::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background-color: color-mix(in oklab, var(--text-muted) 35%, transparent);
+}
+
+.app-table-toolbar-row::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--text-muted) 60%, transparent);
+}
+
+/* A list card that hosts a data table ends at the table's own bottom edge.
+   The shared `Card` carries 16px of vertical padding; under a table viewport
+   that already fills the screen it reads as a dead band below the last row and
+   it adds 16px to the page's scrollable height, which is exactly what pushes the
+   final scroll past the docked table top and clips the header row. Scoped with
+   `:has()` so every other card keeps its padding. Unlayered on purpose: it has
+   to outrank the utilities layer no matter which padding utility the caller
+   passed. */
+[data-slot="card"]:has([data-table-scroll]) {
+  padding-bottom: 0;
+}

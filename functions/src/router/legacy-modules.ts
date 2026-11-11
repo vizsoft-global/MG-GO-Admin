@@ -40,6 +40,7 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   "./rpcs/purge-all": [
     "adminPurgeRunAll",
     "adminPurgeFilteredRun",
+    "adminPurgeSelected",
     "adminPreviewPurge",
     "adminPurgeDeliveries",
     "adminPurgeDrivers",

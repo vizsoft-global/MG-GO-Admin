@@ -4,8 +4,9 @@
  * Ports of `admin_order_comparison_snapshot`, `admin_order_recon_compare`,
  * `reconcile_delivery_verification`, `delivery_matches_rules` and
  * `report_delivery_orders`. Deliveries are ranged on `delivered_at` between
- * Kuwait day bounds and bucketed by `kuwaitDayString(delivered_at)` in memory;
- * recon rows and driver shifts use their stored `YYYY-MM-DD` string fields.
+ * Kuwait day bounds and bucketed by `resolveReconDay` — the rider's booked
+ * shift day when the row carries one, the Kuwait calendar day otherwise. Recon
+ * rows and driver shifts use their stored `YYYY-MM-DD` string fields.
  */
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue, Timestamp } from "../core/fs";
@@ -106,6 +107,36 @@ function isRealDay(day: string): boolean {
   return kuwaitDayString(kuwaitDayStart(day)) === day;
 }
 
+/**
+ * The day a delivery belongs to on a reconciliation report.
+ *
+ * Reconciliation follows the **booked shift**, not the calendar: a rider on
+ * 13:00 → 01:00 has every order in that window counted under the day the shift
+ * started, including the ones completed after midnight. `deliveries.shift_date`
+ * already records exactly that (resolved from `driver_daily_shifts` at pickup
+ * and again on every status rollup), so it wins whenever it is a real
+ * `YYYY-MM-DD`. A row without one — a legacy delivery, or a rider who booked no
+ * shift — falls back to the Kuwait calendar day of `delivered_at`, which is
+ * what every report used before.
+ */
+function resolveReconDay(deliveredAtMs: number, shiftDateRaw: unknown): string {
+  const shift = dayOf(shiftDateRaw);
+  return shift !== null && isRealDay(shift) ? shift : kuwaitDayString(deliveredAtMs);
+}
+
+/**
+ * The last Kuwait day the delivery scan has to reach for a `[fromDay, toDay]`
+ * range.
+ *
+ * A shift that starts on `toDay` can run past midnight into `toDay + 1`, and
+ * those orders still belong to `toDay`. The query is bounded on `delivered_at`,
+ * so the window has to include the next Kuwait day; `resolveReconDay` is what
+ * decides the bucket afterwards, so the extra day cannot leak into `toDay + 1`.
+ */
+function reconScanUpperDay(toDay: string): string {
+  return addDays(toDay, 1);
+}
+
 function addDays(day: string, n: number): string {
   return kuwaitDayString(kuwaitDayStart(day).getTime() + n * DAY_MS);
 }
@@ -142,7 +173,10 @@ function parseRange(data: Dict, invalidCode: string): { from: string; to: string
 
 /**
  * Every delivery whose `delivered_at` falls on a Kuwait day in `[fromDay, toDay]`.
- * Ranges on the timestamp because `delivered_day` is never populated.
+ *
+ * Ranges on the timestamp because `delivered_day` is never populated. `shift_date`
+ * comes along so the caller can bucket by the booked shift rather than the clock:
+ * an order completed at 00:40 belongs to the shift that started the day before.
  */
 async function loadDeliveriesByDay(
   fromDay: string,
@@ -158,6 +192,7 @@ async function loadDeliveriesByDay(
       FIELDS.deliveries.restaurantId,
       FIELDS.deliveries.status,
       FIELDS.deliveries.deliveredAt,
+      FIELDS.deliveries.shiftDate,
     )
     .limit(cap + 1)
     .get();
@@ -251,7 +286,7 @@ export const adminOrderComparisonSnapshot = onCall(async (request) => {
       .select(...RECON_ROW_FIELDS)
       .limit(RECON_ROW_SCAN_CAP + 1)
       .get(),
-    loadDeliveriesByDayChunked(from, to, RECON_DELIVERY_SCAN_CAP),
+    loadDeliveriesByDayChunked(from, reconScanUpperDay(to), RECON_DELIVERY_SCAN_CAP),
   ]);
 
   // A cap is a "too many rows" answer, not a span answer: the page must suggest
@@ -330,7 +365,7 @@ export const adminOrderComparisonSnapshot = onCall(async (request) => {
     if (!LOGGED_STATUSES.has(String(d.status))) continue;
     const deliveredAt = millisOf(d.delivered_at);
     if (deliveredAt === null) continue;
-    const workDate = kuwaitDayString(deliveredAt);
+    const workDate = resolveReconDay(deliveredAt, d.shift_date);
     if (workDate < from || workDate > to) continue;
     const driverId = str(d.driver_id);
     const driver = driverId ? deliveryDrivers.get(driverId) : undefined;
@@ -416,14 +451,14 @@ export const adminOrderReconCompare = onCall(async (request) => {
     };
   });
 
-  const deliveries = await loadDeliveriesByDay(from, to, RECON_DELIVERY_SCAN_CAP);
+  const deliveries = await loadDeliveriesByDay(from, reconScanUpperDay(to), RECON_DELIVERY_SCAN_CAP);
   type AppRow = { driver_id: string | null; restaurant_id: string | null; work_date: string; app_orders: number };
   const app = new Map<string, AppRow>();
   for (const { data: d } of deliveries) {
     if (!LOGGED_STATUSES.has(String(d.status))) continue;
     const deliveredAt = millisOf(d.delivered_at);
     if (deliveredAt === null) continue;
-    const workDate = kuwaitDayString(deliveredAt);
+    const workDate = resolveReconDay(deliveredAt, d.shift_date);
     if (workDate < from || workDate > to) continue;
     const driverId = str(d.driver_id);
     const restaurantId = str(d.restaurant_id);
@@ -519,7 +554,11 @@ export const reconcileDeliveryVerification = onCall(async (request) => {
           .collection(COLLECTIONS.deliveries)
           .where(FIELDS.deliveries.driverId, "==", driverId)
           .where(FIELDS.deliveries.deliveredAt, ">=", kuwaitDayStart(serviceDate))
-          .where(FIELDS.deliveries.deliveredAt, "<", kuwaitDayEnd(serviceDate))
+          // Reach into the next Kuwait day: a shift that started on
+          // `serviceDate` can finish after midnight, and those orders belong to
+          // this shift. `resolveReconDay` below is what keeps `serviceDate + 1`'s
+          // own orders out.
+          .where(FIELDS.deliveries.deliveredAt, "<", kuwaitDayEnd(addDays(serviceDate, 1)))
           .limit(RECONCILE_WRITE_CAP + 1),
       );
       if (deliveriesSnap.size > RECONCILE_WRITE_CAP) {
@@ -529,7 +568,7 @@ export const reconcileDeliveryVerification = onCall(async (request) => {
         .map((doc) => ({ id: doc.id, raw: (doc.data() ?? {}) as Dict }))
         .filter(({ raw }) => {
           const at = millisOf(raw.delivered_at);
-          if (at === null || kuwaitDayString(at) !== serviceDate) return false;
+          if (at === null || resolveReconDay(at, raw.shift_date) !== serviceDate) return false;
           if (raw.status === "rejected") return false;
           const deliveryRestaurant = str(raw.restaurant_id);
           return (
@@ -538,14 +577,13 @@ export const reconcileDeliveryVerification = onCall(async (request) => {
           );
         })
         .map(({ id, raw }) => {
-          const shift = str(raw.shift_date);
-          const day = shift && /^\d{4}-\d{2}-\d{2}$/.test(shift) ? shift : serviceDate;
+          const at = millisOf(raw.delivered_at) ?? 0;
           return {
             id,
-            at: millisOf(raw.delivered_at) ?? 0,
+            at,
             driverId,
             zoneId: str(raw.zone_id),
-            day,
+            day: resolveReconDay(at, raw.shift_date),
             stamp: stampStoredRow("deliveries", raw),
           };
         })

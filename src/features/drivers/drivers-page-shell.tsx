@@ -35,6 +35,7 @@ import {
   GroupedSections,
   GroupTableHeaderRow,
   groupRows,
+  LIST_PAGE_SIZE,
   scopeSelectionState,
   toggleScopeSelection,
   useGroupedListView,
@@ -381,12 +382,25 @@ function DriversPageContent() {
     );
   }, [shownDrivers, prefs.groupBy, statusesQuery.data, locale, t]);
   const selectionResetKey = `${prefs.groupBy}\u0001${debouncedSearch}\u0001${tabFilter}\u0001${levelFilter}\u0001${JSON.stringify(columnFilters)}`;
-  const listView = useGroupedListView(groupedDrivers, prefs.groupBy !== "none", selectionResetKey);
   const firstPage = pageQuery.data?.pages[0];
   const kpiCounts = firstPage?.kpis ?? EMPTY_KPIS;
   // A hard failure has no roster to count, so the tiles must not keep printing
   // the pre-failure numbers beside an error.
   const filteredTotal = hardFailed ? 0 : firstPage?.filteredTotal ?? 0;
+  /**
+   * The pager's denominator is the server's filtered total, not the rows this
+   * client has fetched — the fetch is capped at `DRIVERS_PAGE_LIMIT`, so a
+   * 977-rider roster used to read "1–80 / 500". The level filter is evaluated in
+   * memory over the loaded rows, so while it narrows the list its own count is
+   * the honest one.
+   */
+  const flatTotal = levelFilter === "all" && !hardFailed && filteredTotal > 0 ? filteredTotal : undefined;
+  const listView = useGroupedListView(
+    groupedDrivers,
+    prefs.groupBy !== "none",
+    selectionResetKey,
+    flatTotal,
+  );
   const tabTotal = hardFailed ? 0 : firstPage?.tabTotal ?? 0;
   const isLoading = pageQuery.isLoading;
 
@@ -469,6 +483,23 @@ function DriversPageContent() {
     if (levelFilter === "all") return;
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
   }, [levelFilter, fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  /**
+   * A page the toolbar pager has moved to must actually be loaded.
+   *
+   * The pager counts the whole filtered roster while the query holds one server
+   * page per request, so stepping past the fetched rows pulls the next page
+   * instead of painting a short page.
+   */
+  useEffect(() => {
+    if (levelFilter !== "all") return;
+    const pager = listView.flatPager;
+    if (!pager) return;
+    const needed = Math.min((pager.page + 1) * LIST_PAGE_SIZE, pager.total);
+    if (drivers.length >= needed) return;
+    if (!hasNextPage || isFetchingNextPage) return;
+    void fetchNextPage();
+  }, [drivers.length, fetchNextPage, hasNextPage, isFetchingNextPage, levelFilter, listView.flatPager]);
 
   const selectionResetSeen = useRef(selectionResetKey);
   useEffect(() => {
@@ -733,6 +764,156 @@ function DriversPageContent() {
     ],
     [t],
   );
+  const driverToolbarLeading = (
+    <div className="flex shrink-0 flex-nowrap items-center gap-2">
+      <Select
+        items={tabSelectItems}
+        value={tabFilter}
+        onValueChange={(value) => {
+          if (!value) return;
+          const next = value as DriversTab;
+          setTabFilter(next);
+          router.replace(driversListHref(next), { scroll: false });
+        }}
+      >
+        <SelectTrigger className="h-9 w-[108px] shrink-0 cursor-pointer rounded-lg text-xs">
+          <SelectValue placeholder={t("filterView")} />
+        </SelectTrigger>
+        <SelectContent>
+          {tabSelectItems.map((item) => (
+            <SelectItem key={item.value} value={item.value} className="cursor-pointer">
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        items={[
+          { value: "all", label: t("levelFilterAll") },
+          { value: "D", label: t("levelFilterD") },
+          { value: "standard", label: t("levelFilterStandard") },
+          { value: "override", label: t("levelFilterOverride") },
+        ]}
+        value={levelFilter}
+        onValueChange={(value) => {
+          if (!value) return;
+          setLevelFilter(value as DriverLevelFilter);
+        }}
+      >
+        <SelectTrigger className="h-9 w-[120px] shrink-0 cursor-pointer rounded-lg text-xs" aria-label={t("levelFilterAll")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {(
+            [
+              ["all", t("levelFilterAll")],
+              ["D", t("levelFilterD")],
+              ["standard", t("levelFilterStandard")],
+              ["override", t("levelFilterOverride")],
+            ] as const
+          ).map(([value, label]) => (
+            <SelectItem key={value} value={value} className="cursor-pointer">
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        type="button"
+        variant="outline"
+        className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2 text-xs"
+        onClick={clearAllFilters}
+        disabled={!hasAnyFilter || isLoading}
+        aria-label={t("clearFilters")}
+        title={t("clearFilters")}
+      >
+        <FilterX className="h-3.5 w-3.5" aria-hidden />
+        <span className="hidden sm:inline">{t("clearFilters")}</span>
+        {hasAnyFilter ? (
+          <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground tabular-nums">
+            {filterBadgeCount}
+          </span>
+        ) : null}
+      </Button>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                aria-label={t("refresh")}
+              >
+                <RefreshCw
+                  className={cn("h-4 w-4", isRefreshing && "animate-spin")}
+                />
+              </Button>
+            }
+          />
+          <TooltipContent>{t("refresh")}</TooltipContent>
+        </Tooltip>
+        {canArchive && tabFilter !== "archived" ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 cursor-pointer rounded-lg text-destructive hover:bg-destructive/10"
+                  onClick={() => setArchiveOpen(true)}
+                  disabled={filteredTotal === 0 && selectedIds.size === 0}
+                  aria-label={t("bulkArchive")}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>{t("bulkArchive")}</TooltipContent>
+          </Tooltip>
+        ) : null}
+        {canCreate ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
+                  onClick={() => setBulkOpen(true)}
+                  aria-label={t("bulkImport")}
+                >
+                  <Upload className="h-4 w-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>{t("bulkImport")}</TooltipContent>
+          </Tooltip>
+        ) : null}
+        <ClearAllModuleButton
+          entity="drivers"
+          compact
+          selectedIds={selectedIds}
+          onSuccess={() => {
+            setSelectedIds(new Set());
+            void pageQuery.refetch();
+          }}
+        />
+        <ClearFilteredModuleButton entity="drivers" compact />
+      </div>
+    </div>
+  );
+
+  const driverToolbarTrailing =
+    prefs.view !== "grid" ? (
+      <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} inline />
+    ) : null;
+
   const listToolbar = (
     <TableToolbar
       prefs={prefs}
@@ -740,6 +921,9 @@ function DriversPageContent() {
       columns={toolbarColumns}
       rowKind="dynamic"
       entityList
+      searchFirst
+      leading={driverToolbarLeading}
+      trailing={driverToolbarTrailing}
       filteredCount={filteredTotal}
       totalCount={tabTotal}
       onExport={filteredTotal > 0 ? () => setExportOpen(true) : undefined}
@@ -775,145 +959,6 @@ function DriversPageContent() {
       />
 
       <AppListCard
-        toolbar={
-          <div className="flex flex-wrap items-center gap-2">
-                <Select
-                  items={tabSelectItems}
-                  value={tabFilter}
-                  onValueChange={(value) => {
-                    if (!value) return;
-                    const next = value as DriversTab;
-                    setTabFilter(next);
-                    router.replace(driversListHref(next), { scroll: false });
-                  }}
-                >
-                  <SelectTrigger className="h-9 w-[108px] shrink-0 cursor-pointer rounded-lg text-xs">
-                    <SelectValue placeholder={t("filterView")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tabSelectItems.map((item) => (
-                      <SelectItem key={item.value} value={item.value} className="cursor-pointer">
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select
-                  items={[
-                    { value: "all", label: t("levelFilterAll") },
-                    { value: "D", label: t("levelFilterD") },
-                    { value: "standard", label: t("levelFilterStandard") },
-                    { value: "override", label: t("levelFilterOverride") },
-                  ]}
-                  value={levelFilter}
-                  onValueChange={(value) => {
-                    if (!value) return;
-                    setLevelFilter(value as DriverLevelFilter);
-                  }}
-                >
-                  <SelectTrigger className="h-9 w-[120px] shrink-0 cursor-pointer rounded-lg text-xs" aria-label={t("levelFilterAll")}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(
-                      [
-                        ["all", t("levelFilterAll")],
-                        ["D", t("levelFilterD")],
-                        ["standard", t("levelFilterStandard")],
-                        ["override", t("levelFilterOverride")],
-                      ] as const
-                    ).map(([value, label]) => (
-                      <SelectItem key={value} value={value} className="cursor-pointer">
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2 text-xs"
-                  onClick={clearAllFilters}
-                  disabled={!hasAnyFilter || isLoading}
-                  aria-label={t("clearFilters")}
-                  title={t("clearFilters")}
-                >
-                  <FilterX className="h-3.5 w-3.5" aria-hidden />
-                  <span className="hidden sm:inline">{t("clearFilters")}</span>
-                  {hasAnyFilter ? (
-                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground tabular-nums">
-                      {filterBadgeCount}
-                    </span>
-                  ) : null}
-                </Button>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
-                      onClick={handleRefresh}
-                      disabled={isRefreshing}
-                      aria-label={t("refresh")}
-                    >
-                      <RefreshCw
-                        className={cn("h-4 w-4", isRefreshing && "animate-spin")}
-                      />
-                    </Button>
-                  }
-                />
-                <TooltipContent>{t("refresh")}</TooltipContent>
-              </Tooltip>
-              {canArchive && tabFilter !== "archived" ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg text-destructive hover:bg-destructive/10"
-                        onClick={() => setArchiveOpen(true)}
-                        disabled={filteredTotal === 0 && selectedIds.size === 0}
-                        aria-label={t("bulkArchive")}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>{t("bulkArchive")}</TooltipContent>
-                </Tooltip>
-              ) : null}
-              {canCreate ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
-                        onClick={() => setBulkOpen(true)}
-                        aria-label={t("bulkImport")}
-                      >
-                        <Upload className="h-4 w-4" />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>{t("bulkImport")}</TooltipContent>
-                </Tooltip>
-              ) : null}
-              <ClearAllModuleButton entity="drivers" compact />
-              <ClearFilteredModuleButton entity="drivers" compact />
-              {prefs.view !== "grid" ? (
-                <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} inline />
-              ) : null}
-            </div>
-          </div>
-        }
       >
         {refreshFailed && !showError ? (
           <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">

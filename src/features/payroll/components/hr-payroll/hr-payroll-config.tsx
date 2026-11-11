@@ -107,11 +107,12 @@ export function HrPayrollConfig(props: {
       { id: "when", label: labels.when },
       { id: "by", label: labels.by, categorical: true },
       { id: "item", label: labels.item, locked: true },
+      { id: "position", label: labels.position, categorical: true },
       { id: "change", label: labels.change, categorical: true },
       { id: "before", label: labels.before },
       { id: "after", label: labels.after },
     ],
-    [labels.after, labels.before, labels.by, labels.change, labels.item, labels.when],
+    [labels.after, labels.before, labels.by, labels.change, labels.item, labels.position, labels.when],
   );
   const historyPrefs = useTablePrefs("payroll.hrRateHistory", historyColumns);
   const projectItems = useMemo(
@@ -127,12 +128,25 @@ export function HrPayrollConfig(props: {
       })),
     [props.positions],
   );
+  const positionLabel = useMemo(() => {
+    const byKey = new Map(props.positions.map((position) => [position.key, position.label]));
+    return (key: string): string => byKey.get(key) ?? key;
+  }, [props.positions]);
   const history = useMemo(
     () =>
       props.history.filter((event) =>
-        rowMatches(historyPrefs.appliedQuery, [event.item, event.field, event.by, event.from, event.to, event.at]),
+        rowMatches(historyPrefs.appliedQuery, [
+          event.item,
+          event.position,
+          event.position ? positionLabel(event.position) : "",
+          event.field,
+          event.by,
+          event.from,
+          event.to,
+          event.at,
+        ]),
       ),
-    [historyPrefs.appliedQuery, props.history],
+    [historyPrefs.appliedQuery, positionLabel, props.history],
   );
 
   function patch(id: string, next: Partial<HrRateLine>) {
@@ -324,7 +338,14 @@ export function HrPayrollConfig(props: {
             filteredCount={history.length}
             totalCount={props.history.length}
           />
-          <RateHistoryRows columns={historyColumns} prefs={historyPrefs} rows={history} labels={labels} empty={labels.empty} />
+          <RateHistoryRows
+            columns={historyColumns}
+            prefs={historyPrefs}
+            rows={history}
+            labels={labels}
+            positionLabel={positionLabel}
+            empty={labels.empty}
+          />
         </div>
       </section>
     </div>
@@ -336,12 +357,14 @@ function RateHistoryRows({
   prefs,
   rows,
   labels,
+  positionLabel,
   empty,
 }: {
   columns: TableToolbarColumn[];
   prefs: ReturnType<typeof useTablePrefs>;
   rows: readonly HrRateEvent[];
   labels: HrPayrollConfigLabels;
+  positionLabel: (key: string) => string;
   empty: string;
 }) {
   const ids = visibleColumnIds(prefs);
@@ -380,6 +403,7 @@ function RateHistoryRows({
                         {id === "when" ? event.at : null}
                         {id === "by" ? <TableNameCell name={event.by} /> : null}
                         {id === "item" ? (event.item ? event.item : <EmptyCell />) : null}
+                        {id === "position" ? (event.position ? positionLabel(event.position) : <EmptyCell />) : null}
                         {id === "change" ? fieldLabel(event.field, labels) : null}
                         {id === "before" ? (event.from ? event.from : <EmptyCell />) : null}
                         {id === "after" ? (event.to ? event.to : <EmptyCell />) : null}
