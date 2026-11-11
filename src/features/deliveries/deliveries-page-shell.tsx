@@ -36,7 +36,7 @@ import {
 import { TableCell } from "@/components/app/app-data-table";
 import { AppPage } from "@/components/app/app-page";
 import { AppEmptyState } from "@/components/app/app-empty-state";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import { ClearAllModuleButton, useCanClearAll } from "@/features/settings/clear-all-module-button";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { useAuth } from "@/contexts/auth-context";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -211,6 +211,7 @@ function DeliveriesPageContent() {
   const queryClient = useQueryClient();
   const { can } = useAuth();
   const canManage = can("deliveries.manage");
+  const canClear = useCanClearAll("deliveries");
   const bulkUpdate = useBulkUpdateDeliveries();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -332,13 +333,15 @@ function DeliveriesPageContent() {
     });
   };
 
+  const selectableVisible = canClear ? visible : verifiableVisible;
+
   const toggleAllVisible = (checked: boolean) => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (checked) {
-        for (const row of verifiableVisible) next.add(row.id);
+        for (const row of selectableVisible) next.add(row.id);
       } else {
-        for (const row of verifiableVisible) next.delete(row.id);
+        for (const row of selectableVisible) next.delete(row.id);
       }
       return next;
     });
@@ -650,8 +653,8 @@ function DeliveriesPageContent() {
             <DeliverySelectBox
               label={t("bulk.selectAll")}
               checked={
-                verifiableVisible.length > 0 &&
-                verifiableVisible.every((row) => selected.has(row.id))
+                selectableVisible.length > 0 &&
+                selectableVisible.every((row) => selected.has(row.id))
               }
               onCheckedChange={(checked) => toggleAllVisible(checked)}
             />
@@ -832,7 +835,16 @@ function DeliveriesPageContent() {
                     <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
                     <span className="hidden sm:inline">{t("ordersReport.button")}</span>
                   </Button>
-                  <ClearAllModuleButton entity="deliveries" compact />
+                  <ClearAllModuleButton
+                    entity="deliveries"
+                    compact
+                    selectedIds={selected}
+                    onSuccess={() => {
+                      setSelected(new Set());
+                      void refetch();
+                      void refetchKpis();
+                    }}
+                  />
             </div>
             {(hasActiveFilters || debouncedSearch) && !searchIncomplete && (
               <p className="text-sm tabular-nums text-muted-foreground">
@@ -1024,7 +1036,9 @@ function DeliveriesPageContent() {
                             id: delivery.short_id,
                           })}
                           checked={selected.has(delivery.id)}
-                          disabled={!isBulkVerifiableDeliveryStatus(delivery.status)}
+                          disabled={
+                            !canClear && !isBulkVerifiableDeliveryStatus(delivery.status)
+                          }
                           onCheckedChange={() => toggleRow(delivery.id)}
                         />
                       </VisibleTableCell>

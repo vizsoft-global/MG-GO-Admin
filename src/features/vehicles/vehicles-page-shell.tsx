@@ -77,7 +77,7 @@ import { formatReplacementSince, isVehicleTypeOfUse } from "@/features/fleet/fle
 import { useTypeLabel } from "./vehicle-use-types";
 import { VehicleBulkImportDialog } from "./import/vehicle-bulk-import-dialog";
 import { downloadVehicleListXlsx } from "./import/vehicle-import-sheet";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import { ClearAllModuleButton, useCanClearAll } from "@/features/settings/clear-all-module-button";
 import { VehicleBulkBar } from "./vehicle-bulk-bar";
 import { VehicleFormDialog } from "./vehicle-form-dialog";
 import { VehiclesColumnHeader } from "./vehicles-column-header";
@@ -176,6 +176,8 @@ export function VehiclesPageShell({
   const { can } = useAuth();
   const canCreate = can("vehicles.create");
   const canManage = can("vehicles.manage");
+  const canClearVehicles = useCanClearAll("vehicles");
+  const canSelect = canManage || canClearVehicles;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -410,7 +412,7 @@ export function VehiclesPageShell({
   const tableColumns = useMemo(
     () =>
       [
-        ...(canManage
+        ...(canSelect
           ? [
               {
                 id: "select",
@@ -446,7 +448,7 @@ export function VehiclesPageShell({
         ),
       })),
       ],
-    [headerSelection, canManage, columnFilters, headerLabels, isVisible, optionLabel, scoped, sort, t, scopeIds],
+    [headerSelection, canSelect, columnFilters, headerLabels, isVisible, optionLabel, scoped, sort, t, scopeIds],
   );
 
   const isRefreshing = isFetching && !isLoading;
@@ -457,7 +459,16 @@ export function VehiclesPageShell({
         breadcrumbs={withHub({ label: t("title") })}
         title={t("title")}
         description={t("subtitle")}
-        actions={<ClearAllModuleButton entity="vehicles" />}
+        actions={
+          <ClearAllModuleButton
+            entity="vehicles"
+            selectedIds={selectedIds}
+            onSuccess={() => {
+              setSelectedIds(new Set());
+              void refetch();
+            }}
+          />
+        }
       />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
         {kpis.map((kpi) => (
@@ -673,7 +684,7 @@ export function VehiclesPageShell({
                   key={row.id}
                   row={row}
                   isVisible={isVisible}
-                  showSelect={canManage}
+                  showSelect={canSelect}
                   selected={selectedIds.has(row.id)}
                   onToggle={() =>
                     setSelectedIds((prev) => {

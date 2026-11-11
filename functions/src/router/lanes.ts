@@ -134,6 +134,8 @@ export const HEAVY_FUNCTIONS = [
   "adminPurgeFilteredPage",
   "adminPurgeRunAll",
   "adminPurgeFilteredRun",
+  /** Clear all on a list page: deletes the ticked rows, one batch per round. */
+  "adminPurgeSelected",
   "adminPreviewPurge",
   "adminPurgeDeliveries",
   "adminPurgeDrivers",

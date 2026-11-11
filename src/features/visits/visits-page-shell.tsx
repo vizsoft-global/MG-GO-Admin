@@ -37,7 +37,7 @@ import {
   useTablePrefs,
   type TableToolbarColumn,
 } from "@/components/app/table-toolbar";
-import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
+import { ClearAllModuleButton, useCanClearAll } from "@/features/settings/clear-all-module-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DATE_RANGE_ALL,
@@ -169,6 +169,8 @@ export function VisitsPageShell() {
   const router = useRouter();
   const { can } = useAuth();
   const canOperate = can("visits.operate");
+  const canClear = useCanClearAll("visits");
+  const canSelect = canOperate || canClear;
   const queryClient = useQueryClient();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [tab, setTab] = useState<DataTab>("all");
@@ -181,7 +183,7 @@ export function VisitsPageShell() {
   const [search, setSearch] = useState("");
   const visitColumns = useMemo<TableToolbarColumn[]>(() => {
     const cols: TableToolbarColumn[] = [];
-    if (canOperate) cols.push({ id: "select", label: t("bulk.selectAll"), locked: true });
+    if (canSelect) cols.push({ id: "select", label: t("bulk.selectAll"), locked: true });
     cols.push(
       { id: "code", label: t("allVisits.colVisId"), locked: true },
       { id: "driver", label: t("colDriver"), locked: true },
@@ -193,7 +195,7 @@ export function VisitsPageShell() {
       { id: "actions", label: t("colActions"), locked: true },
     );
     return cols;
-  }, [canOperate, t]);
+  }, [canSelect, t]);
   const tablePrefs = useTablePrefs("visits.list", visitColumns);
   useEffect(() => {
     setSearch(tablePrefs.appliedQuery);
@@ -427,8 +429,11 @@ export function VisitsPageShell() {
   };
 
   const selectableRows = useMemo(
-    () => visibleRows.filter((r) => BULK_OPEN_STATUSES.has(r.status)),
-    [visibleRows],
+    () =>
+      canClear
+        ? visibleRows
+        : visibleRows.filter((r) => BULK_OPEN_STATUSES.has(r.status)),
+    [visibleRows, canClear],
   );
   const selectedRows = useMemo(
     () => visibleRows.filter((r) => selected.has(r.id)),
@@ -563,7 +568,14 @@ export function VisitsPageShell() {
         description={t("subtitle")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <ClearAllModuleButton entity="visits" />
+            <ClearAllModuleButton
+              entity="visits"
+              selectedIds={selected}
+              onSuccess={() => {
+                setSelected(new Set());
+                void refetch();
+              }}
+            />
             <Button variant="outline" size="sm" className="h-9" render={<Link href="/visit-bookings/calendar" />}>
               <CalendarDays className="me-1.5 h-3.5 w-3.5" />
               {t("nav.calendar")}
@@ -779,7 +791,7 @@ export function VisitsPageShell() {
             }
             columns={shownVisitColumns.flatMap((column) => {
               const full = [
-              ...(canOperate
+              ...(canSelect
                 ? [
                     {
                       id: "select",
@@ -925,13 +937,14 @@ export function VisitsPageShell() {
                     const statusLabel = t(`status.${row.status}` as "status.confirmed");
                     const framed = visitFrameStatus(row.status);
                     const cells: Record<string, ReactNode> = {
-                      select: BULK_OPEN_STATUSES.has(row.status) ? (
-                        <Checkbox
-                          aria-label={row.booking_code}
-                          checked={selected.has(row.id)}
-                          onCheckedChange={() => toggleRow(row.id)}
-                        />
-                      ) : null,
+                      select:
+                        canClear || BULK_OPEN_STATUSES.has(row.status) ? (
+                          <Checkbox
+                            aria-label={row.booking_code}
+                            checked={selected.has(row.id)}
+                            onCheckedChange={() => toggleRow(row.id)}
+                          />
+                        ) : null,
                       code: (
                         <Link href={`/visit-bookings/${row.id}`} className="font-medium text-primary hover:underline">
                           {row.booking_code}

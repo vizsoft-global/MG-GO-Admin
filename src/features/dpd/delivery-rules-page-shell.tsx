@@ -18,6 +18,8 @@ import {
   GroupTableHeaderRow,
   fieldSearchMatch,
   groupRows,
+  scopeSelectionState,
+  toggleScopeSelection,
   useGroupedListView,
 } from "@/components/app/app-list-controls";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
@@ -30,6 +32,7 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import { ClearAllModuleButton } from "@/features/settings/clear-all-module-button";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -76,6 +79,7 @@ function isDeliveryRuleColumnId(id: string): id is DeliveryRuleColumnId {
 export function DeliveryRulesPageShell() {
   const t = useTranslations("pages.dpd");
   const tPage = useTranslations("pages.deliveryRules");
+  const tCommon = useTranslations("common");
   const { can } = useAuth();
   const canManage = can("earnings.manage");
   const queryClient = useQueryClient();
@@ -135,6 +139,10 @@ export function DeliveryRulesPageShell() {
     prefs.groupBy !== "none",
     `${prefs.groupBy}\u0001${prefs.appliedQuery}`,
   );
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const scopeIds = useMemo(() => listView.scopeRows.map((row) => row.id), [listView.scopeRows]);
+  const headerSelection = scopeSelectionState(selectedIds, scopeIds);
 
   const handleDelete = () => {
     if (!deleteTarget) return;
@@ -207,7 +215,16 @@ export function DeliveryRulesPageShell() {
         description={tPage("subtitle")}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <ClearAllModuleButton entity="delivery_rules" />
+            <ClearAllModuleButton
+              entity="delivery_rules"
+              selectedIds={selectedIds}
+              onSuccess={() => {
+                setSelectedIds(new Set());
+                void queryClient.invalidateQueries({
+                  queryKey: queryKeys.dpd.deliveryRules(),
+                });
+              }}
+            />
             {canManage ? (
               <Button
                 type="button"
@@ -283,6 +300,16 @@ export function DeliveryRulesPageShell() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className={cn(TABLE_HEAD_CLASS, "w-10")}>
+                  <Checkbox
+                    checked={headerSelection === "all"}
+                    indeterminate={headerSelection === "some"}
+                    onCheckedChange={() =>
+                      setSelectedIds((prev) => toggleScopeSelection(prev, scopeIds))
+                    }
+                    aria-label={tCommon("selectAll")}
+                  />
+                </TableHead>
                 {visibleColumns.map((column) => (
                   <TableHead
                     key={column.id}
@@ -299,7 +326,7 @@ export function DeliveryRulesPageShell() {
                   ? [
                       <GroupTableHeaderRow
                         key={`g-${section.key}`}
-                        colSpan={visibleColumns.length}
+                        colSpan={visibleColumns.length + 1}
                         label={section.label}
                         total={section.total}
                         open={section.open}
@@ -312,6 +339,20 @@ export function DeliveryRulesPageShell() {
                   : []),
                 ...section.visibleRows.map((row) => (
                 <TableRow key={row.id} className="hover:bg-muted/40">
+                  <TableCell className="w-10" onClick={(event) => event.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedIds.has(row.id)}
+                      onCheckedChange={(checked) =>
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          if (checked) next.add(row.id);
+                          else next.delete(row.id);
+                          return next;
+                        })
+                      }
+                      aria-label={row.name}
+                    />
+                  </TableCell>
                   {visibleColumns.map((column) => {
                     if (!isDeliveryRuleColumnId(column.id)) return null;
                     return (

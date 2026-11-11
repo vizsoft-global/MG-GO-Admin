@@ -895,7 +895,15 @@ function DriversPageContent() {
             <TooltipContent>{t("bulkImport")}</TooltipContent>
           </Tooltip>
         ) : null}
-        <ClearAllModuleButton entity="drivers" compact />
+        <ClearAllModuleButton
+          entity="drivers"
+          compact
+          selectedIds={selectedIds}
+          onSuccess={() => {
+            setSelectedIds(new Set());
+            void pageQuery.refetch();
+          }}
+        />
         <ClearFilteredModuleButton entity="drivers" compact />
         {prefs.view !== "grid" ? (
           <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} inline />
