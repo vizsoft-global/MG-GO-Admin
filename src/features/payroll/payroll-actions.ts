@@ -32,6 +32,12 @@ import {
 } from "./payroll-snapshot";
 import { parseRules } from "./payroll-rules-engine";
 import { COUNTRIES } from "@/lib/geo/countries";
+import {
+  mergeCatalogRows,
+  parseCatalogRow,
+  seedsForKind,
+  type EmployeeCatalogRow,
+} from "@/features/employees/employee-catalogs";
 import type { PayrollColumnConfigRow, PayrollHeadingView } from "./payroll-column-config";
 import type { HrBundle, HrCellPatch } from "./hr-payroll-types";
 import type {
@@ -1232,6 +1238,27 @@ export async function saveHrIdentityCells(
 }
 
 /**
+ * Job positions the HR sheet offers.
+ *
+ * `job_positions` is a catalog the panel may never have seeded — Employee
+ * Settings renders it from the compiled six through `mergeCatalogRows` — so a
+ * raw collection read handed the sheet an empty dropdown with no way to pick a
+ * position. The same merge runs here, which is what keeps the sheet and the
+ * employee profile showing one list.
+ */
+function mergedJobPositions(
+  stored: readonly EmployeeCatalogRow[],
+): { key: string; label: string }[] {
+  return mergeCatalogRows(stored, seedsForKind("job_positions")).map((row) => ({
+    key: row.key,
+    label: row.label_en || row.label_ar || row.key,
+  }));
+}
+
+/** The compiled six, for the branch where there is no database handle. */
+const COMPILED_JOB_POSITIONS = mergedJobPositions([]);
+
+/**
  * The catalogs the HR identity cells pick from.
  *
  * Nationality and Nationality Category are two different facts and stay two
@@ -1265,7 +1292,7 @@ export async function listHrIdentityOptions(): Promise<{
       restaurants: [],
       sponsorships: [],
       sections: [],
-      positions: [],
+      positions: COMPILED_JOB_POSITIONS,
       companies: [],
     };
   }
@@ -1331,7 +1358,16 @@ export async function listHrIdentityOptions(): Promise<{
       .sort((a, b) => a.name.localeCompare(b.name)),
     sponsorships: catalogList(sponsorships, label),
     sections: catalogList(sections, label),
-    positions: catalogList(positions, label),
+      positions: mergedJobPositions(
+        positions.docs
+          .map((doc) =>
+            parseCatalogRow({
+              ...doc.data(),
+              key: typeof doc.get("key") === "string" ? doc.get("key") : doc.id,
+            }),
+          )
+          .filter((row): row is EmployeeCatalogRow => row !== null),
+      ),
     companies: catalogList(companies, label),
   };
 }
