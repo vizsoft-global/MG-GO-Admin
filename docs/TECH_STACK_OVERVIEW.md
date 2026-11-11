@@ -88,23 +88,43 @@ The lane split is the reason a payroll scan cannot starve a single-document
 save: the three lanes are separate Cloud Run services with their own
 concurrency, memory and instance ceilings.
 
-### 1.3 Module dependency maps
+### 1.3 Application architecture at a glance
 
-The two plates that follow are the **import graph of each repository** — one
-node per source file, one edge per `import`, laid out so that a file sits near
-the files it depends on. They answer a question the layer diagram above cannot:
-*which change reaches which module*. A file with many arrows into it is a hub;
-a cluster with no arrows out of it is a leaf feature that nothing else should
-depend on.
+Two diagrams, one per application. They are deliberately **high level**: each
+box is a layer or a managed service, not a module, and every arrow is a real
+call direction taken from the source. The point is to answer "what talks to
+what" in ten seconds — the module-by-module detail lives in the source tree and
+in `AGENTS.md`.
 
-![MG-GO Admin Console — module dependency map. Every node is a source file under src/, every arrow an import. The dense left cluster is the platform core the console renders from; the right-hand clusters are feature modules, which reach core through the shared app components rather than through each other. Read it when deciding where a new module belongs, or what a change to a shared file will touch.](docs/assets/architecture/admin-module-map.jpg)
+**Admin console.** Staff work in a browser; every privileged action passes
+through Vercel and then a Cloud Function, which is the only layer holding
+credentials to the data.
 
-![MG-GO rider app — module dependency map. Every node is a Dart file under lib/. lib/core is the dense cluster in the middle — router, Firebase, offline database, notifications, location — and lib/features hangs off it. A feature importing another feature is the one arrow shape to avoid; if it appears, the shared code belongs in core.](docs/assets/architecture/user-module-map.jpg)
+```diagram
+admin-arch
+```
 
-Both maps are generated from the working copies rather than drawn by hand, so
-they are a fact about the code at this commit. The images are kept at
-`docs/assets/architecture/` for zooming; the label text is small by nature,
-because the maps carry several hundred nodes.
+**Rider app.** The app is offline-first: it renders and queues locally, then
+reaches the same backend through three different doors — a passcode-derived
+Firebase session, the `driver*` callables, and the edge Worker for live GPS.
+
+```diagram
+app-arch
+```
+
+Three rules hold both diagrams together, and each is a decision rather than a
+habit:
+
+1. **The browser never writes.** Firestore rules are deny-by-default; every
+   mutation goes through a server action or a callable that has already checked
+   a permission slug. `firestore.rules` allows exactly four client reads — a
+   rider's own `drivers`, `rider_signals` and `wrong_actions` rows, and the
+   public `app_settings/1` row.
+2. **The console holds no data.** Vercel rendering is stateless, so there is
+   nothing local to be stale behind a cold instance.
+3. **One name, one lane.** The client and the server resolve a callable's lane
+   from the same file, so a function cannot be deployed somewhere the browser
+   does not look for it.
 
 ## 2. Frontend
 
@@ -202,7 +222,8 @@ The 41 areas, by job:
 
 | Job | Areas |
 |---|---|
-| People | `drivers`, `drivers/groups`, `driver-devices`, `compliance`, `document-expiry`, `worktime`, `driver-shifts` || Operations | `live-tracking`, `live-tracking-v2`, `deliveries`, `dpd-verification`, `order-exceptions`, `zones`, `restaurants`, `partners`, `delivery-rules`, `incentive-rules` |
+| People | `drivers`, `drivers/groups`, `driver-devices`, `compliance`, `document-expiry`, `worktime`, `driver-shifts` |
+| Operations | `live-tracking`, `live-tracking-v2`, `deliveries`, `dpd-verification`, `order-exceptions`, `zones`, `restaurants`, `partners`, `delivery-rules`, `incentive-rules` |
 | Money | `payroll`, `payroll-hub`, `earnings`, `earnings-calculation`, `payouts`, `performance` |
 | EmployeeDesk | `employeedesk` (requests, visits, e-signature, reports, settings) |
 | Fleet | `fleet`, `vehicles`, `fuel`, `assets` |
@@ -633,7 +654,7 @@ folders are separate products and are not covered by this document.
 | `ADMIN_PANEL_MANUAL` | Markdown + PDF (34 pages) + DOCX | Complete administrator manual, module by module |
 | `USER_MANUAL` | Markdown + PDF (39 pages) + DOCX | Rider app end to end, plus the console companion view |
 | `EMPLOYEE_BULK_IMPORT` | PDF | Client-facing import procedure and column reference |
-| `TECH_STACK_OVERVIEW` | Markdown + PDF (26 pages) | This document |
+| `TECH_STACK_OVERVIEW` | Markdown + PDF (25 pages) | This document |
 
 ### 8.3 Architecture documents
 
@@ -705,7 +726,7 @@ together are complete:
 
 | Field | Value |
 |---|---|
-| Version | **1.3** |
+| Version | **1.4** |
 | Date | 11 November 2026 |
 | Prepared from | the `MG-GO-Admin` and `MG-GO` working copies |
 | Reader | client technical stakeholders, onboarding engineers, procurement |
@@ -715,13 +736,17 @@ together are complete:
 
 **What changed from v1.2:**
 
+- **The two detailed module dependency maps are replaced by two high-level
+  architecture diagrams** — one for the admin console, one for the rider app.
+  The dependency maps carried several hundred nodes and were unreadable at A4;
+  they are removed from the document, and the two new figures are drawn from the
+  source at the level of layers and managed services.
 - **The source-code link is the current shared folder** — *Source Codes MG*,
   holding the **MG Hub**, **Bajaj Care** and **Bites** products. §8.1 now names
-  which folder is this platform, because the previous link pointed at a folder
-  that no longer matches the delivery.
+  which folder is this platform.
 - The manual page counts in §8.2 were re-read from the built PDFs
-  (`ADMIN_PANEL_MANUAL` **34**, `USER_MANUAL` **39**), and this document states
-  its own **26**.
+  (`ADMIN_PANEL_MANUAL` **34**, `USER_MANUAL` **39**); this document states its
+  own **25**.
 
 **What changed from v1.1:**
 
