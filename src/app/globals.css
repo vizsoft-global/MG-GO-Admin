@@ -141,6 +141,88 @@ html[data-font="plus-jakarta-sans"] {
   --font-sans: "Plus Jakarta Sans", "Gotham", "GE SS TWO", system-ui, sans-serif;
 }
 
+/**
+ * Performance dashboard — client theme surfaces.
+ *
+ * The shell puts the resolved palette on this scope as `--ops-*` custom
+ * properties (see `opsThemeStyleVars`). Everything below paints from those, so
+ * switching the Client slicer repaints KPI cards, chart cards, chart titles,
+ * table headers and the slicer chips without a prop on any of them.
+ *
+ * The reference dashboard tints the *page* as well as the cards, which is why
+ * `--ops-bg` lands on the wrapper and not just the header.
+ *
+ * Deliberate, scoped divergence from `.cursor/rules/ui-system.mdc` §5, which
+ * makes selected chips emerald: the client's reference dashboard draws this
+ * screen's selection in the palette ink, and §10 lets a supplied reference win.
+ * Only `/performance` is affected — every other screen keeps the emerald stack.
+ */
+.ops-surface {
+  background: var(--ops-bg, transparent);
+}
+
+/* Desktop: the reference is one tinted dashboard, not a page of white cards. */
+.ops-surface .data-ops-kpi {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0;
+  border-color: var(--ops-line, var(--border));
+  background: var(--card);
+  text-align: center;
+}
+
+/* The icon chip is a row-layout affordance; the reference card has none. */
+.ops-surface .data-ops-kpi > span:first-child {
+  display: none;
+}
+
+.ops-surface .data-ops-kpi > div {
+  width: 100%;
+  text-align: center;
+}
+
+.ops-surface .data-ops-kpi [data-kpi-value] {
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.ops-surface [data-kpi-value] {
+  color: var(--ops-ink, inherit);
+}
+
+.ops-surface .ops-card {
+  border-color: var(--ops-line, var(--border));
+}
+
+/* Descendant, not child: `.ops-card` wraps its title in a header row. */
+.ops-surface .ops-card h3 {
+  color: var(--ops-title, inherit);
+}
+
+.ops-surface .ops-card [data-ops-csv] {
+  color: var(--ops-ink, var(--primary));
+}
+
+.ops-surface table thead th {
+  color: var(--ops-title, inherit);
+  box-shadow: inset 0 2px 0 var(--ops-ink, transparent);
+}
+
+/* ToggleChip / SegmentOption both publish selection as aria-pressed / aria-checked. */
+.ops-surface [aria-pressed="true"],
+.ops-surface [aria-checked="true"] {
+  border-color: var(--ops-ink, var(--primary));
+  background: var(--ops-ink, var(--primary));
+  color: #fff;
+  --tw-ring-color: color-mix(in srgb, var(--ops-ink, #000) 40%, transparent);
+}
+
+.ops-surface [aria-pressed="false"],
+.ops-surface [aria-checked="false"] {
+  color: var(--ops-ink, inherit);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

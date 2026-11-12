@@ -8,6 +8,8 @@ import { writeWithEpoch } from "@/lib/auth/auth-epochs";
 import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
+import { getPresignedGetUrl } from "@/lib/storage/r2-client";
+import { isAllowedStorageKey } from "@/lib/storage/r2-keys";
 import {
   addDays,
   kuwaitToday,
@@ -1731,6 +1733,7 @@ function parseOpsKpis(raw: unknown): OpsKpis {
     active_prev: asInt(o.active_prev),
     working_days: asInt(o.working_days),
     working_hours: numOrNull(o.working_hours) ?? 0,
+    working_hours_excluded: numOrNull(o.working_hours_excluded) ?? 0,
     utr: numOrNull(o.utr),
     avg_delivery_min: numOrNull(o.avg_delivery_min),
     stores_above: asInt(o.stores_above),
@@ -1929,7 +1932,34 @@ export async function fetchPerformanceOpsSnapshot(
     p_order_status: assertOpsOrderStatus(slicers.orderStatus ?? "verified"),
   });
   if (error) throw new Error(rpcErrorCode(error));
-  return parseOpsSnapshot(data);
+  return signedPartnerLogos(parseOpsSnapshot(data));
+}
+
+/**
+ * Turn a stored partner logo key into something an `<img>` can load.
+ *
+ * `partners.logo_url` holds an R2 object key (`partners/{id}/logo.png`), not a
+ * URL. Passing that key through to `<img src>` produces a broken image with no
+ * error, which is why a configured client logo silently disappeared from the
+ * Performance header. Keys are signed here; an absolute URL is left alone.
+ */
+async function signedPartnerLogos(snapshot: OpsSnapshot): Promise<OpsSnapshot> {
+  const partners = snapshot.options?.partners;
+  if (!partners?.length) return snapshot;
+  const signed = await Promise.all(
+    partners.map(async (partner) => {
+      const raw = partner.logo_url?.trim();
+      if (!raw) return partner;
+      if (/^https?:\/\//i.test(raw)) return partner;
+      if (!isAllowedStorageKey(raw)) return { ...partner, logo_url: null };
+      try {
+        return { ...partner, logo_url: await getPresignedGetUrl(raw) };
+      } catch {
+        return { ...partner, logo_url: null };
+      }
+    }),
+  );
+  return { ...snapshot, options: { ...snapshot.options, partners: signed } };
 }
 
 /**
