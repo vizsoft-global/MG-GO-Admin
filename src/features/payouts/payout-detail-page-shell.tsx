@@ -5,6 +5,7 @@ import { Link } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { AppPage } from "@/components/app/app-page";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import {
   TableGridCards,
@@ -95,7 +96,8 @@ export function PayoutDetailPageShell({ runId }: { runId: string }) {
     <AppPage>
       <div className="flex items-center justify-between">
         <div>
-          <Link href="/payouts" className="text-sm text-muted-foreground hover:underline">
+          <AppBackButton className="mb-1 -ml-2" />
+          <Link href="/payouts" className="block text-sm text-muted-foreground hover:underline">
             {t("backToList")}
           </Link>
           <h1 className="mt-1 text-lg font-semibold">

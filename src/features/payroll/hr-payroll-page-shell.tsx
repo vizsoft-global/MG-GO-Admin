@@ -13,6 +13,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
@@ -118,6 +119,8 @@ export function HrPayrollPageShell() {
     <PayrollActionsBridgeProvider>
     <AppPage className="flex h-[calc(100dvh-1.5rem)] min-h-0 flex-col gap-2 space-y-0 overflow-hidden">
       <div className="flex min-h-0 items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1">
+        <AppBackButton />
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
@@ -129,6 +132,7 @@ export function HrPayrollPageShell() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
+        </div>
         {/* One shared action bar, exactly as Payroll hub. */}
         <div className="flex flex-col items-end gap-2">
           <HrPayrollActionsBar

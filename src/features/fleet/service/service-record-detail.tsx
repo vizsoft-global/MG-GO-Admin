@@ -169,10 +169,10 @@ export function ServiceRecordDetail({
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-muted-foreground">
-                  <th className="pb-1 text-start font-medium">{t("form.partName")}</th>
-                  <th className="pb-1 text-end font-medium">{t("form.partQty")}</th>
-                  <th className="pb-1 text-end font-medium">{t("form.partUnit")}</th>
-                  <th className="pb-1 text-end font-medium">{t("form.partTotal")}</th>
+                  <th className="pb-1 text-start font-bold">{t("form.partName")}</th>
+                  <th className="pb-1 text-end font-bold">{t("form.partQty")}</th>
+                  <th className="pb-1 text-end font-bold">{t("form.partUnit")}</th>
+                  <th className="pb-1 text-end font-bold">{t("form.partTotal")}</th>
                 </tr>
               </thead>
               <tbody>

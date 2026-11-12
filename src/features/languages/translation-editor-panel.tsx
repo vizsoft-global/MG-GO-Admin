@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { Link } from "@/i18n/navigation";
+import { useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, Save, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 
 export function TranslationEditorPanel({ localeCode }: { localeCode: string }) {
   const t = useTranslations("pages.settings.translationEditor");
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [edits, setEdits] = useState<Record<string, string> | null>(null);
@@ -80,6 +81,14 @@ export function TranslationEditorPanel({ localeCode }: { localeCode: string }) {
     }
   };
 
+  const goBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/settings/languages");
+  };
+
   if (localeCode === "en") {
     return (
       <p className="text-sm text-muted-foreground">{t("englishReadOnly")}</p>
@@ -92,13 +101,11 @@ export function TranslationEditorPanel({ localeCode }: { localeCode: string }) {
         variant="ghost"
         size="sm"
         className="gap-1.5"
-        render={
-          <Link href="/settings/languages">
-            <ArrowLeft className="h-4 w-4" />
-            {t("back")}
-          </Link>
-        }
-      />
+        onClick={goBack}
+      >
+        <ArrowLeft className="h-4 w-4" />
+        {t("back")}
+      </Button>
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[200px] flex-1">

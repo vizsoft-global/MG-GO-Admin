@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -608,6 +609,7 @@ export function MenuEditorPanel({ roles }: { roles: AdminRoleRow[] }) {
 
   return (
     <div className="space-y-3">
+      <AppBackButton fallbackHref="/settings" />
       {roles.length > 0 && (
         <Tabs value={role} onValueChange={setRole}>
           <TabsList className="h-8">

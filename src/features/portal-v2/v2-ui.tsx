@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { ChevronRight, Info } from "lucide-react";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -50,6 +51,7 @@ export function V2PageHeader({
           {icon}
         </span>
         <div className="min-w-0">
+          <AppBackButton fallbackHref="/dashboard" className="mb-1 -ml-2" />
           <nav aria-label={title} className="flex flex-wrap items-center gap-1.5 text-xs text-[var(--text-muted)]">
             {breadcrumbs.map((item, index) => (
               <span key={`${item}-${index}`} className="inline-flex items-center gap-1.5">

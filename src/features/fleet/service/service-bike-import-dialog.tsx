@@ -158,12 +158,12 @@ export function ServiceBikeImportDialog({
                 <table className="w-full text-xs">
                   <thead className="bg-muted/60 text-muted-foreground">
                     <tr>
-                      <th className="px-2 py-1 text-start">{t("import.colRow")}</th>
-                      <th className="px-2 py-1 text-start">{t("maintenance.cols.plate")}</th>
-                      <th className="px-2 py-1 text-start">{t("cols.date")}</th>
-                      <th className="px-2 py-1 text-start">{t("cols.type")}</th>
-                      <th className="px-2 py-1 text-start">{t("cols.odometer")}</th>
-                      <th className="px-2 py-1 text-start">{t("import.colNote")}</th>
+                      <th className="px-2 py-1 text-start font-bold">{t("import.colRow")}</th>
+                      <th className="px-2 py-1 text-start font-bold">{t("maintenance.cols.plate")}</th>
+                      <th className="px-2 py-1 text-start font-bold">{t("cols.date")}</th>
+                      <th className="px-2 py-1 text-start font-bold">{t("cols.type")}</th>
+                      <th className="px-2 py-1 text-start font-bold">{t("cols.odometer")}</th>
+                      <th className="px-2 py-1 text-start font-bold">{t("import.colNote")}</th>
                     </tr>
                   </thead>
                   <tbody>

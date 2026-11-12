@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AppFormSection } from "@/components/app";
+import { AppBackButton } from "@/components/app/app-back-button";
 import {
   getStorageOverview,
   testStorageConnection,
@@ -143,6 +144,7 @@ export function StorageSettingsPanel() {
 
   return (
     <div className="space-y-6 pb-10">
+      <AppBackButton fallbackHref="/settings" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -401,12 +403,12 @@ export function StorageSettingsPanel() {
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b text-muted-foreground">
-                  <th className="pb-2 pr-3 font-medium">{t("recent.objectKey")}</th>
-                  <th className="pb-2 pr-3 font-medium">{t("recent.size")}</th>
-                  <th className="pb-2 pr-3 font-medium">{t("recent.type")}</th>
-                  <th className="pb-2 pr-3 font-medium">{t("recent.source")}</th>
-                  <th className="pb-2 pr-3 font-medium">{t("recent.uploader")}</th>
-                  <th className="pb-2 font-medium">{t("recent.at")}</th>
+                  <th className="pb-2 pr-3 font-bold">{t("recent.objectKey")}</th>
+                  <th className="pb-2 pr-3 font-bold">{t("recent.size")}</th>
+                  <th className="pb-2 pr-3 font-bold">{t("recent.type")}</th>
+                  <th className="pb-2 pr-3 font-bold">{t("recent.source")}</th>
+                  <th className="pb-2 pr-3 font-bold">{t("recent.uploader")}</th>
+                  <th className="pb-2 font-bold">{t("recent.at")}</th>
                 </tr>
               </thead>
               <tbody>

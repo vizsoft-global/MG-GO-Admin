@@ -152,6 +152,10 @@ html[data-font="plus-jakarta-sans"] {
   html {
     @apply font-sans;
   }
+  /* One header weight for every table in the panel. */
+  th {
+    font-weight: 700;
+  }
   h1, h2, h3 {
     font-family: var(--font-display);
   }
@@ -370,9 +374,15 @@ small {
 
 label,
 td,
-th,
 p {
   font-weight: 400;
+}
+
+/* Table headers are bold on every page (data tables and hand-rolled `thead`s). */
+thead th,
+th,
+[data-slot="table-head"] {
+  font-weight: 700;
 }
 
 [data-slot="button"][data-variant="default"] {

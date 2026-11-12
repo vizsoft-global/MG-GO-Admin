@@ -36,6 +36,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { AppFormSection } from "@/components/app";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Link } from "@/i18n/navigation";
 import {
@@ -347,6 +348,7 @@ export function DriverAppSettingsPanel({
 
   return (
     <div className="space-y-4">
+      <AppBackButton fallbackHref="/settings" />
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         {/* Left column — branding & launch assets */}
         <AppFormSection title={t("brandingTitle")} description={t("brandingSubtitle")}>
@@ -945,11 +947,11 @@ export function DriverAppSettingsPanel({
                       <table className="w-full text-xs tabular-nums">
                         <thead>
                           <tr className="border-b border-border bg-muted/30 text-xs font-semibold text-muted-foreground">
-                            <th className="px-2 py-1 text-start">{t("buildsColBuild")}</th>
-                            <th className="px-2 py-1 text-end">{t("buildsColInstalls")}</th>
-                            <th className="px-2 py-1 text-end">{t("buildsColRecent")}</th>
-                            <th className="px-2 py-1 text-end">{t("buildsColLastSeen")}</th>
-                            <th className="px-2 py-1 text-end">{t("buildsColSentry")}</th>
+                            <th className="px-2 py-1 text-start font-bold">{t("buildsColBuild")}</th>
+                            <th className="px-2 py-1 text-end font-bold">{t("buildsColInstalls")}</th>
+                            <th className="px-2 py-1 text-end font-bold">{t("buildsColRecent")}</th>
+                            <th className="px-2 py-1 text-end font-bold">{t("buildsColLastSeen")}</th>
+                            <th className="px-2 py-1 text-end font-bold">{t("buildsColSentry")}</th>
                           </tr>
                         </thead>
                         <tbody>

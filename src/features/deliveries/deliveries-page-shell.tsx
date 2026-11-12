@@ -36,6 +36,7 @@ import {
 } from "@/components/app";
 import { TableCell } from "@/components/app/app-data-table";
 import { AppPage } from "@/components/app/app-page";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { ClearAllModuleButton, useCanClearAll } from "@/features/settings/clear-all-module-button";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -703,6 +704,7 @@ function DeliveriesPageContent() {
 
   return (
     <AppPage>
+      <AppBackButton className="self-start" />
       <div className="flex flex-col gap-2">
         <KpiGrid items={kpis} />
         {kpiError ? (

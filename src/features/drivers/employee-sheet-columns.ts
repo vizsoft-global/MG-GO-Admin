@@ -20,7 +20,7 @@ export const EMPLOYEE_IDENTITY_HEADERS = {
   section: "Employee Category",
   partner: "Project",
   employee_status: "Employee Status",
-  driver_code: "Driver ID",
+  driver_code: "Client ID",
   project_key: "Project key",
   client_name: "Platform",
   account_status: "Status",

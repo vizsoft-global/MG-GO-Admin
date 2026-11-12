@@ -894,8 +894,15 @@ function DriverDetailContent({ id }: { id: string }) {
           variant="ghost"
           size="icon-sm"
           className="cursor-pointer shrink-0"
-          nativeButton={false}
-          render={<Link href={backTarget.href} />}
+          aria-label={t(backTarget.labelKey)}
+          title={t(backTarget.labelKey)}
+          onClick={() => {
+            if (typeof window !== "undefined" && window.history.length > 1) {
+              router.back();
+              return;
+            }
+            router.push(backTarget.href);
+          }}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>

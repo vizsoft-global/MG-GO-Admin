@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { setMaintenanceMode } from "@/features/settings/access-requests-actions";
 import { Button } from "@/components/ui/button";
 import { AppFormSection } from "@/components/app";
+import { AppBackButton } from "@/components/app/app-back-button";
 
 export function MaintenancePanel({ maintenanceMode }: { maintenanceMode: boolean }) {
   const t = useTranslations("pages.settings.maintenance");
@@ -14,7 +15,9 @@ export function MaintenancePanel({ maintenanceMode }: { maintenanceMode: boolean
   const [isPending, startTransition] = useTransition();
 
   return (
-    <AppFormSection title={t("title")} description={t("subtitle")}>
+    <>
+      <AppBackButton fallbackHref="/settings" className="mb-2" />
+      <AppFormSection title={t("title")} description={t("subtitle")}>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p className="text-sm text-muted-foreground">
           {maintenanceMode ? t("enabled") : t("disabled")}
@@ -38,6 +41,7 @@ export function MaintenancePanel({ maintenanceMode }: { maintenanceMode: boolean
           {maintenanceMode ? t("disable") : t("enable")}
         </Button>
       </div>
-    </AppFormSection>
+      </AppFormSection>
+    </>
   );
 }

@@ -6,6 +6,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import {
   Select,
@@ -293,6 +294,7 @@ export function ClientDashboardV2({
         />
         <div className="flex flex-wrap items-end justify-between gap-3 px-5 pb-4 pt-5">
           <div className="min-w-0">
+            <AppBackButton fallbackHref="/client-portal-v2" className="-ml-2 mb-0.5" />
             <h1 className="font-display text-[28px] font-bold leading-9 text-[var(--text-primary)]">{greeting}</h1>
             <p className="text-sm text-[var(--text-secondary)]">{t("dashboardSubtitle", { date: dateLabel })}</p>
           </div>

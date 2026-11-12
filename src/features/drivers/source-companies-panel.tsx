@@ -7,6 +7,7 @@ import { Building2, Eye, Lock, Pencil, Plus, Trash2, Upload } from "lucide-react
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppFormSection } from "@/components/app";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import { SegmentOption, ToggleChip } from "@/components/app/toggle-chip";
@@ -193,6 +194,8 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
   };
 
   return (
+    <>
+    <AppBackButton fallbackHref="/settings" className="mb-2" />
     <AppFormSection
       title={t("title")}
       description={t("subtitle")}
@@ -759,5 +762,6 @@ export function SourceCompaniesPanel({ companies }: { companies: SourceCompanyWi
         </DialogContent>
       </Dialog>
     </AppFormSection>
+    </>
   );
 }

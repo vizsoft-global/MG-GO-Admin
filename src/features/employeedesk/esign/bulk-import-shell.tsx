@@ -7,7 +7,6 @@ import {
   ArrowRight,
   Building2,
   Check,
-  ChevronLeft,
   CloudUpload,
   FileSpreadsheet,
   Loader2,
@@ -17,6 +16,7 @@ import {
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 import { AppEmptyState } from "@/components/app/app-empty-state";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { groupRows } from "@/components/app/app-list-controls";
 import {
   EmptyCell,
@@ -803,13 +803,7 @@ export function BulkImportShell({
   return (
     <AppPage className={`${LAYOUT.stackGap} flex flex-col`}>
       <div className="flex flex-col gap-2">
-        <Link
-          href="/employeedesk"
-          className="inline-flex h-8 items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="size-3.5 rtl:rotate-180" />
-          {t("backToOutgoing")}
-        </Link>
+        <AppBackButton fallbackHref="/employeedesk" className="-ms-2 h-8 text-xs" />
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-orange-200 bg-orange-50 text-orange-700">

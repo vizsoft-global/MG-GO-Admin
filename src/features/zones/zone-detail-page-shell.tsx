@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { ArrowLeft, Loader2, Pencil, Users } from "lucide-react";
+import { Loader2, Pencil, Users } from "lucide-react";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { AppPage } from "@/components/app/app-page";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
@@ -84,13 +85,7 @@ export function ZoneDetailPageShell({ id }: { id: string }) {
   if (!zone) {
     return (
       <AppPage>
-        <Link
-          href="/zones"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t("backToList")}
-        </Link>
+        <AppBackButton fallbackHref="/zones" className="-ms-2" />
         <AppEmptyState
           title={t("detailNotFoundTitle")}
           description={t("detailNotFoundDescription")}
@@ -105,13 +100,10 @@ export function ZoneDetailPageShell({ id }: { id: string }) {
   return (
     <AppPage className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <Link
-          href="/zones"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {t("backToList")}
-        </Link>
+        <AppBackButton
+          fallbackHref="/zones"
+          className="-ms-2 h-9 text-sm"
+        />
         {canManage ? (
           <Link
             href={`/zones/${zone.id}/edit`}

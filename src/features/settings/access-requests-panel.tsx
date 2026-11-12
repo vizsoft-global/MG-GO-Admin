@@ -8,6 +8,7 @@ import { approveUser, rejectUser } from "@/features/settings/access-requests-act
 import type { AdminRoleRow } from "@/lib/auth/get-role-permissions";
 import { Button } from "@/components/ui/button";
 import { AppFormSection } from "@/components/app";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { EmptyCell, TableNameCell, useTablePrefs, type TableToolbarColumn } from "@/components/app/table-toolbar";
 import { groupBanner, groupRows, ListToolbar, rowMatches, visibleColumnIds } from "@/features/roster/table-kit";
 import {
@@ -52,9 +53,12 @@ export function AccessRequestsPanel({
 
   if (pendingUsers.length === 0) {
     return (
-      <AppFormSection title={t("title")} description={t("subtitle")}>
-        <p className="text-sm text-muted-foreground">{t("empty")}</p>
-      </AppFormSection>
+      <>
+        <AppBackButton fallbackHref="/settings" className="mb-2" />
+        <AppFormSection title={t("title")} description={t("subtitle")}>
+          <p className="text-sm text-muted-foreground">{t("empty")}</p>
+        </AppFormSection>
+      </>
     );
   }
 
@@ -72,7 +76,9 @@ export function AccessRequestsPanel({
   const ids = visibleColumnIds(prefs);
 
   return (
-    <AppFormSection title={t("title")} description={t("subtitle")}>
+    <>
+      <AppBackButton fallbackHref="/settings" className="mb-2" />
+      <AppFormSection title={t("title")} description={t("subtitle")}>
         <ListToolbar
           prefs={prefs}
           entity={t("title")}
@@ -191,6 +197,7 @@ export function AccessRequestsPanel({
             ))}
           </TableBody>
         </Table>
-    </AppFormSection>
+      </AppFormSection>
+    </>
   );
 }

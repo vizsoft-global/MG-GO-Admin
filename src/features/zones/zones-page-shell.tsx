@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { ChevronDown, Loader2, Plus } from "lucide-react";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { AppPage } from "@/components/app/app-page";
 import { Button } from "@/components/ui/button";
 import {
@@ -146,7 +147,8 @@ function ZonesPageContent() {
 
           <div className="shrink-0 space-y-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <div className="flex flex-wrap items-center gap-2">
-                  {canManage ? (
+              <AppBackButton className="me-1" />
+              {canManage ? (
                     <Button
                       type="button"
                       className="h-9 cursor-pointer rounded-lg"

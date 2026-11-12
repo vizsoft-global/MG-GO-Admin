@@ -252,11 +252,11 @@ export function BulkImportDialog({
                 <table className="w-full text-left text-xs">
                   <thead className="sticky top-0 bg-muted/80">
                     <tr>
-                      <th className="px-2 py-1.5">{t("colStatus")}</th>
-                      <th className="px-2 py-1.5">{t("colDriver")}</th>
-                      <th className="px-2 py-1.5">{t("colRestaurant")}</th>
-                      <th className="px-2 py-1.5">{t("colDate")}</th>
-                      <th className="px-2 py-1.5">{t("colCount")}</th>
+                      <th className="px-2 py-1.5 font-bold">{t("colStatus")}</th>
+                      <th className="px-2 py-1.5 font-bold">{t("colDriver")}</th>
+                      <th className="px-2 py-1.5 font-bold">{t("colRestaurant")}</th>
+                      <th className="px-2 py-1.5 font-bold">{t("colDate")}</th>
+                      <th className="px-2 py-1.5 font-bold">{t("colCount")}</th>
                     </tr>
                   </thead>
                   <tbody>

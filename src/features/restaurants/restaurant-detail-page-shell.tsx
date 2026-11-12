@@ -107,6 +107,14 @@ export function RestaurantDetailPageShell({ id }: { id: string }) {
   const router = useRouter();
   const t = useTranslations("pages.restaurants");
   const tDeliveries = useTranslations("pages.deliveries");
+
+  function goBackToList() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/restaurants");
+  }
   const { permissions, isSuperAdmin } = useAuth();
   const canManage = canManageRestaurants(new Set(permissions), isSuperAdmin);
   const canViewDeliveries = hasPermissionInSet(
@@ -246,13 +254,15 @@ export function RestaurantDetailPageShell({ id }: { id: string }) {
   if (detailQuery.isError || !restaurant) {
     return (
       <AppPage>
-        <Link
-          href="/restaurants"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        <button
+          type="button"
+          onClick={goBackToList}
+          aria-label={t("backToList")}
+          className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           {t("backToList")}
-        </Link>
+        </button>
         <AppEmptyState
           title={t("detailNotFoundTitle")}
           description={t("detailNotFoundDescription")}
@@ -291,13 +301,15 @@ export function RestaurantDetailPageShell({ id }: { id: string }) {
     <AppPage className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-3">
-          <Link
-            href="/restaurants"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          <button
+            type="button"
+            onClick={goBackToList}
+            aria-label={t("backToList")}
+            className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
             {t("backToList")}
-          </Link>
+          </button>
           <div className="flex items-start gap-3">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted/40">
               {restaurant.logo_display_url ? (

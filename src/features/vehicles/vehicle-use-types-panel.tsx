@@ -7,6 +7,7 @@ import { Car, Lock, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppFormSection } from "@/components/app";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { AppDataTable, AppDataTableRow, TableCell } from "@/components/app/app-data-table";
 import { groupHeaderProps, groupRows, GroupTableHeaderRow, useGroupedListView } from "@/components/app/app-list-controls";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -121,6 +122,8 @@ export function VehicleUseTypesPanel({ types }: { types: VehicleUseTypeWithUsage
   const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
 
   return (
+    <>
+    <AppBackButton fallbackHref="/settings" className="mb-2" />
     <AppFormSection
       title={t("title")}
       description={t("subtitle")}
@@ -273,6 +276,7 @@ export function VehicleUseTypesPanel({ types }: { types: VehicleUseTypeWithUsage
         </DialogContent>
       </Dialog>
     </AppFormSection>
+    </>
   );
 }
 

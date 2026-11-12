@@ -42,6 +42,7 @@ import {
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { ClearAllModuleButton, useCanClearAll } from "@/features/settings/clear-all-module-button";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import {
@@ -504,6 +505,8 @@ export function RequestsPageShell({
     <AppPage className="space-y-3">
       {/* Figma leads with the breadcrumb only — the page title band is replaced by the
           queue tabs, so the KPI strip and the table both stay above the fold. */}
+      <div className="flex min-w-0 items-center gap-1">
+      <AppBackButton />
       <Breadcrumb>
         <BreadcrumbList>
           {fromEmployeeDesk ? (
@@ -539,6 +542,7 @@ export function RequestsPageShell({
           )}
         </BreadcrumbList>
       </Breadcrumb>
+      </div>
 
       <KpiGrid
         compact

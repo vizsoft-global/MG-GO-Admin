@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppEmptyState, AppPage } from "@/components/app";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { downloadWorkbookXlsx } from "@/features/drivers/import/export-xlsx";
 import { BookingPopover, type BookingPopoverStatus } from "@/features/visits/calendar/booking-popover";
@@ -808,6 +809,7 @@ export function VisitsCalendarShell({
 
   return (
     <AppPage className="space-y-3">
+      <AppBackButton fallbackHref="/employeedesk/visits" className="self-start" />
       {fromEsignHub ? (
         <Link href="/requests/esign" className="text-xs text-primary hover:underline">
           {t("calendar.backToEsign")}

@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { AppPage } from "@/components/app/app-page";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -91,6 +92,7 @@ export function RestaurantFormPage({ restaurantId }: { restaurantId?: string }) 
 
   return (
     <AppPage className="!space-y-0">
+      <AppBackButton fallbackHref="/restaurants" className="self-start" />
       <div className={cn("flex flex-col", RESTAURANT_FORM_HEIGHT)}>
         <RestaurantFormBody
           restaurant={restaurant}

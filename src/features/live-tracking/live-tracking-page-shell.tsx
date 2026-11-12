@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Minimize2, Radio } from "lucide-react";
 import { AppPage } from "@/components/app/app-page";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { LAYOUT } from "@/components/app/layout-spacing";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -111,5 +112,12 @@ export function LiveTrackingPageShell({
     );
   }
 
-  return <AppPage>{content}</AppPage>;
+  return (
+    <AppPage>
+      <div className="flex min-w-0 items-center gap-1">
+        <AppBackButton />
+      </div>
+      {content}
+    </AppPage>
+  );
 }

@@ -64,8 +64,8 @@ const META: Record<EsignEmployeeRowKey, Omit<EsignEmployeeRow, "key">> = {
     sample: "10042",
   },
   driver_code: {
-    label_en: "Driver ID",
-    label_ar: "رقم السائق",
+    label_en: "Client ID",
+    label_ar: "رقم العميل",
     sample: "10042",
   },
   civil_id: {

@@ -348,11 +348,11 @@ export function ServiceReportsTab({ canExport }: { canExport: boolean }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-muted-foreground">
-                <th className="pb-1 text-start font-medium">{t("form.partName")}</th>
-                <th className="pb-1 text-end font-medium">{t("reports.partQty")}</th>
-                <th className="pb-1 text-end font-medium">{t("reports.partAvg")}</th>
-                <th className="pb-1 text-end font-medium">{t("reports.partTotal")}</th>
-                <th className="pb-1 text-end font-medium">{t("reports.records")}</th>
+                <th className="pb-1 text-start font-bold">{t("form.partName")}</th>
+                <th className="pb-1 text-end font-bold">{t("reports.partQty")}</th>
+                <th className="pb-1 text-end font-bold">{t("reports.partAvg")}</th>
+                <th className="pb-1 text-end font-bold">{t("reports.partTotal")}</th>
+                <th className="pb-1 text-end font-bold">{t("reports.records")}</th>
               </tr>
             </thead>
             <tbody>

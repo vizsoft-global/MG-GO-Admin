@@ -4,6 +4,7 @@ import { Link } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { ACCESS_BTN_PRIMARY, ACCESS_KPI_DOT } from "./access-ui";
 
 export type AccessTab = "staff" | "roles";
@@ -17,6 +18,7 @@ export function AccessPageHeader({ inviteHref }: { inviteHref: string }) {
         <Lock className="size-[22px] text-white" strokeWidth={2} />
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <AppBackButton fallbackHref="/settings" />
         <nav className="flex items-center gap-1.5 text-xs text-[#8c8798]" aria-label="Breadcrumb">
           <span>{t("breadcrumbApps")}</span>
           <span aria-hidden>›</span>

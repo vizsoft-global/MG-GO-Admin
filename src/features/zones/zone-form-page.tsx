@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { AppPage } from "@/components/app/app-page";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query/query-keys";
@@ -88,6 +89,7 @@ export function ZoneFormPage({ zoneId }: { zoneId?: string }) {
 
   return (
     <AppPage className="!space-y-0">
+      <AppBackButton fallbackHref="/zones" className="self-start" />
       <div className={cn("flex flex-col", ZONE_FORM_HEIGHT)}>
         <ZoneFormBody
           zone={zone}

@@ -344,7 +344,10 @@ export function PayrollColumnHeader({
     (search.trim() ? visibleValues : uniqueValues).every((value) => picked.includes(value));
 
   return (
-    <th className={cn("whitespace-nowrap px-2 py-2 text-start align-bottom", className)} style={style}>
+    <th
+      className={cn("whitespace-nowrap px-2 py-2 text-start align-bottom font-bold", className)}
+      style={style}
+    >
       <span className="inline-flex items-center gap-1">
         {heading ?? <span>{label}</span>}
         {sortPair ? (
