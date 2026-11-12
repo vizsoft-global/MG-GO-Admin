@@ -243,6 +243,10 @@ export function VisitsBranchesShell() {
                   <Copy className="me-1.5 h-3.5 w-3.5" />
                   {t("branches.copySlots")}
                 </Button>
+                <Button type="button" size="sm" className="h-9" onClick={openCreate}>
+                  <Plus className="me-1.5 h-3.5 w-3.5" />
+                  {t("branches.add")}
+                </Button>
               </>
             ) : null}
             <Button
@@ -271,8 +275,6 @@ export function VisitsBranchesShell() {
           entityList
           filteredCount={filteredRows.length}
           totalCount={rows.length}
-          onAdd={canManage ? openCreate : undefined}
-          addLabel={t("branches.add")}
         />
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">

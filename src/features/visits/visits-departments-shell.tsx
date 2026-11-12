@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Building2, Loader2, Pencil, RefreshCw } from "lucide-react";
+import { Building2, Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
@@ -252,6 +252,12 @@ export function VisitsDepartmentsShell() {
               />
               {t("refresh")}
             </Button>
+            {canManage ? (
+              <Button type="button" size="sm" className="h-9" onClick={openCreate}>
+                <Plus className="me-1.5 h-3.5 w-3.5" />
+                {t("departments.add")}
+              </Button>
+            ) : null}
           </div>
         }
       />
@@ -265,8 +271,6 @@ export function VisitsDepartmentsShell() {
           entityList
           filteredCount={filteredRows.length}
           totalCount={rows.length}
-          onAdd={canManage ? openCreate : undefined}
-          addLabel={t("departments.add")}
         />
         {isLoading ? (
           <div className="flex h-48 items-center justify-center">

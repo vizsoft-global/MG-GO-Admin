@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Building2, ExternalLink, Pencil } from "lucide-react";
+import { Building2, ExternalLink, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppFormSection } from "@/components/app";
@@ -122,7 +122,23 @@ export function VehicleCompaniesPanel({ companies }: { companies: VehicleCompany
   const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
 
   return (
-    <AppFormSection title={t("title")} description={t("subtitle")}>
+    <AppFormSection
+      title={t("title")}
+      description={t("subtitle")}
+      action={
+        canManage ? (
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 cursor-pointer rounded-lg"
+            onClick={openNew}
+          >
+            <Plus className="me-1.5 h-3.5 w-3.5" />
+            {t("add")}
+          </Button>
+        ) : null
+      }
+    >
       <div className="mb-3 grid gap-2 sm:grid-cols-3">
         {[
           { label: t("kpiTotal"), value: companies.length },
@@ -144,8 +160,6 @@ export function VehicleCompaniesPanel({ companies }: { companies: VehicleCompany
             rowKind="dynamic"
             filteredCount={filtered.length}
             totalCount={companies.length}
-            onAdd={canManage ? openNew : undefined}
-            addLabel={t("add")}
           />
         }
         columns={shown.map((column) => ({

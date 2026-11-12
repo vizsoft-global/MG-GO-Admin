@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter, Link } from "@/i18n/navigation";
-import { Eye, Loader2, Pencil, Plus, RefreshCw, Users } from "lucide-react";
+import { Download, Eye, Loader2, Pencil, Plus, RefreshCw, Users } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
   FlatListPager,
@@ -367,9 +367,6 @@ function RestaurantsPageContent() {
       entityList
       filteredCount={visible.length}
       totalCount={restaurants.length}
-      onExport={() => exportRestaurantsCsv(visible, t)}
-      onAdd={canManage ? handleAdd : undefined}
-      addLabel={t("addRestaurant")}
       chips={filterChips}
       onRemoveChip={(id) => {
         if (id === "status") setStatusFilter("all");
@@ -396,6 +393,27 @@ function RestaurantsPageContent() {
         description={t("subtitle")}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 cursor-pointer rounded-lg"
+              onClick={() => exportRestaurantsCsv(visible, t)}
+            >
+              <Download className="me-2 h-3.5 w-3.5" />
+              {t("export")}
+            </Button>
+            {canManage ? (
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={handleAdd}
+              >
+                <Plus className="me-2 h-3.5 w-3.5" />
+                {t("addRestaurant")}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"

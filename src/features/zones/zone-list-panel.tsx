@@ -58,7 +58,6 @@ export function ZoneListPanel({
   onEdit,
   onAssignDrivers,
   canAssignDrivers = false,
-  onAdd,
   selection,
 }: {
   zones: ZoneRow[];
@@ -71,7 +70,6 @@ export function ZoneListPanel({
   onEdit: (zone: ZoneRow) => void;
   onAssignDrivers?: (zone: ZoneRow) => void;
   canAssignDrivers?: boolean;
-  onAdd?: () => void;
   selection?: {
     ids: ReadonlySet<string>;
     header: "all" | "some" | "none";
@@ -163,8 +161,6 @@ export function ZoneListPanel({
           entityList
           filteredCount={matched.length}
           totalCount={zones.length}
-          onAdd={onAdd}
-          addLabel={t("geofence.createButton")}
         />
         {prefs.view === "grid" ? (
           <TableGridCards

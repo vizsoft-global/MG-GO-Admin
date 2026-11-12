@@ -9,9 +9,11 @@ import {
   CalendarClock,
   CircleAlert,
   Copy,
+  Download,
   FileEdit,
   List,
   Loader2,
+  Plus,
   RefreshCw,
   Send,
   ShieldOff,
@@ -296,9 +298,6 @@ export function NotificationsPageShell() {
       entityList
       filteredCount={filteredCampaigns.length}
       totalCount={totalCount}
-      onExport={canExport ? runExport : undefined}
-      onAdd={canManage ? () => router.push(`/${locale}/notifications/new`) : undefined}
-      addLabel={t("createNotification")}
     />
   );
 
@@ -329,6 +328,29 @@ export function NotificationsPageShell() {
         description={t("subtitle")}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {canExport ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={runExport}
+              >
+                <Download className="me-2 h-3.5 w-3.5" />
+                {tc("tableToolbar.export")}
+              </Button>
+            ) : null}
+            {canManage ? (
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => router.push(`/${locale}/notifications/new`)}
+              >
+                <Plus className="me-2 h-3.5 w-3.5" />
+                {t("createNotification")}
+              </Button>
+            ) : null}
             <ClearAllModuleButton
               entity="notifications"
               selectedIds={selectedIds}

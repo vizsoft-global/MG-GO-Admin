@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown, Loader2, Plus } from "lucide-react";
 import { AppPage } from "@/components/app/app-page";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -145,6 +146,16 @@ function ZonesPageContent() {
 
           <div className="shrink-0 space-y-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <div className="flex flex-wrap items-center gap-2">
+                  {canManage ? (
+                    <Button
+                      type="button"
+                      className="h-9 cursor-pointer rounded-lg"
+                      onClick={handleAdd}
+                    >
+                      <Plus className="me-1.5 h-3.5 w-3.5" />
+                      {t("geofence.createButton")}
+                    </Button>
+                  ) : null}
                   <DropdownMenu>
                     <DropdownMenuTrigger className="inline-flex h-9 flex-1 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">
                       {t("geofence.bulkActions")}
@@ -181,7 +192,6 @@ function ZonesPageContent() {
               onEdit={handleEdit}
               canAssignDrivers={canAssignDrivers}
               onAssignDrivers={setAssignZone}
-              onAdd={canManage ? handleAdd : undefined}
               selection={
                 canClear
                   ? {

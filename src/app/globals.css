@@ -126,19 +126,19 @@ html[data-font="gotham"] {
 }
 
 html[data-font="roboto"] {
-  --font-sans: "Roboto", "Gotham", "GE SS TWO", system-ui, sans-serif;
+  --font-sans: "Gotham", "Roboto", "GE SS TWO", system-ui, sans-serif;
 }
 
 html[data-font="open-sans"] {
-  --font-sans: "Open Sans", "Gotham", "GE SS TWO", system-ui, sans-serif;
+  --font-sans: "Gotham", "Open Sans", "GE SS TWO", system-ui, sans-serif;
 }
 
 html[data-font="dm-sans"] {
-  --font-sans: "DM Sans", "Gotham", "GE SS TWO", system-ui, sans-serif;
+  --font-sans: "Gotham", "DM Sans", "GE SS TWO", system-ui, sans-serif;
 }
 
 html[data-font="plus-jakarta-sans"] {
-  --font-sans: "Plus Jakarta Sans", "Gotham", "GE SS TWO", system-ui, sans-serif;
+  --font-sans: "Gotham", "Plus Jakarta Sans", "GE SS TWO", system-ui, sans-serif;
 }
 
 @layer base {
@@ -479,7 +479,7 @@ svg.lucide {
   fill: none;
 }
 
-/* The display face from the Figma frames (Montserrat, falling back to the brand Gotham stack). */
+/* The display face is the brand stack (Gotham, then GE SS TWO for Arabic). */
 .font-display {
   font-family: var(--font-display);
 }

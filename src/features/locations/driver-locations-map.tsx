@@ -499,7 +499,7 @@ export function DriverLocationsMap({
                     map: null,
                     icon: {
                       url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
-                        `<svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg"><circle cx="21" cy="21" r="20" fill="#2563EB"/><circle cx="21" cy="21" r="15" fill="#1D4ED8"/><text x="21" y="26" text-anchor="middle" fill="white" font-size="12" font-family="Inter,Arial,sans-serif" font-weight="700">${count}</text></svg>`,
+                        `<svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg"><circle cx="21" cy="21" r="20" fill="#2563EB"/><circle cx="21" cy="21" r="15" fill="#1D4ED8"/><text x="21" y="26" text-anchor="middle" fill="white" font-size="12" font-family="Gotham,Arial,sans-serif" font-weight="700">${count}</text></svg>`,
                       )}`,
                       scaledSize: { width: 42, height: 42 },
                       anchor: { x: 21, y: 21 },

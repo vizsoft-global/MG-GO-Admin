@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
-import { Lock } from "lucide-react";
+import { Lock, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { groupRows } from "@/components/app/app-list-controls";
@@ -140,6 +140,17 @@ export function TypesSettingsPanel() {
           { label: t("hub"), href: "/requests/settings" },
           { label: t("title") },
         ]}
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 cursor-pointer rounded-lg"
+            onClick={() => setAddOpen(true)}
+          >
+            <Plus className="me-1.5 h-3.5 w-3.5" />
+            {t("addRequestType")}
+          </Button>
+        }
       />
 
       <AppListCard className="p-0">
@@ -151,8 +162,6 @@ export function TypesSettingsPanel() {
           entityList
           filteredCount={filteredRows.length}
           totalCount={rows.length}
-          onAdd={() => setAddOpen(true)}
-          addLabel={t("addRequestType")}
         />
         {tablePrefs.view === "grid" && !loading ? (
           <TableGridCards

@@ -7,6 +7,7 @@ import {
   CalendarClock,
   Layers,
   Loader2,
+  Plus,
   Scale,
   ShieldAlert,
   Users,
@@ -20,6 +21,7 @@ import {
   toggleScopeSelection,
 } from "@/components/app/app-list-controls";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
 import {
   TableNameCell,
   TableToolbar,
@@ -190,6 +192,16 @@ export function WrongActionsPageShell({
                 void refetch();
               }}
             />
+            {canManage ? (
+              <Button
+                type="button"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => replaceQuery({ add: true })}
+              >
+                <Plus className="h-4 w-4" />
+                {t("addIncident")}
+              </Button>
+            ) : null}
           </div>
         }
         tabs={
@@ -217,8 +229,6 @@ export function WrongActionsPageShell({
             entityList
             filteredCount={visible.length}
             totalCount={rows.length}
-            onAdd={canManage ? () => replaceQuery({ add: true }) : undefined}
-            addLabel={t("addIncident")}
           />
         }
       >

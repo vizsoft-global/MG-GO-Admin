@@ -10,8 +10,10 @@ import {
   CalendarDays,
   Check,
   Clock,
+  Download,
   Eye,
   Loader2,
+  Plus,
   RefreshCw,
   Settings,
   Timer,
@@ -623,6 +625,29 @@ export function RequestsPageShell({
               variant="outline"
               size="sm"
               className="h-8"
+              onClick={() =>
+                exportRowsToCsv(visibleRows, `requests-${datePreset}-${Date.now()}.csv`)
+              }
+            >
+              <Download className="me-1.5 h-3.5 w-3.5" />
+              {t("export")}
+            </Button>
+            {canCreate ? (
+              <Button
+                type="button"
+                size="sm"
+                className="h-8"
+                onClick={() => setCreateOpen(true)}
+              >
+                <Plus className="me-1.5 h-3.5 w-3.5" />
+                {t("create.button")}
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8"
               render={<Link href="/requests/settings" />}
             >
               <Settings className="me-1.5 h-3.5 w-3.5" />
@@ -800,9 +825,6 @@ export function RequestsPageShell({
             entityList
             filteredCount={visibleRows.length}
             totalCount={filteredTotal}
-            onExport={() => exportRowsToCsv(visibleRows, `requests-${datePreset}-${Date.now()}.csv`)}
-            onAdd={canCreate ? () => setCreateOpen(true) : undefined}
-            addLabel={t("create.button")}
           />
         ) : null}
 
@@ -867,9 +889,6 @@ export function RequestsPageShell({
                 entityList
                 filteredCount={visibleRows.length}
                 totalCount={filteredTotal}
-                onExport={() => exportRowsToCsv(visibleRows, `requests-${datePreset}-${Date.now()}.csv`)}
-                onAdd={canCreate ? () => setCreateOpen(true) : undefined}
-                addLabel={t("create.button")}
               />
             }
             columns={shownRequestColumns.map((column) => ({

@@ -357,6 +357,16 @@ function AssetsPageContent() {
                   <Download className="me-2 h-3.5 w-3.5" />
                   {t("export")}
                 </Button>
+                {canCreate ? (
+                  <Button
+                    type="button"
+                    className="h-9 cursor-pointer rounded-lg"
+                    onClick={handleAdd}
+                  >
+                    <Plus className="me-2 h-4 w-4" />
+                    {t("addAsset")}
+                  </Button>
+                ) : null}
               </>
             ) : null}
           </div>
@@ -418,8 +428,6 @@ function AssetsPageContent() {
               entityList
               filteredCount={visible.length}
               totalCount={items.length}
-              onAdd={canCreate && tab === "catalog" ? handleAdd : undefined}
-              addLabel={t("addAsset")}
             />
             <div className="px-4 pb-3">
               <DropdownMenu>

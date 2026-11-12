@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Ban, CheckCircle2, ClipboardList, Clock, Loader2 } from "lucide-react";
+import { Ban, CheckCircle2, ClipboardList, Clock, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { GroupedSections, groupRows } from "@/components/app/app-list-controls";
@@ -379,7 +379,23 @@ export function OrderExceptionsPageShell() {
 
   return (
     <AppPage className="space-y-3">
-      <AppPageHeader title={t("title")} description={t("subtitle")} />
+      <AppPageHeader
+        title={t("title")}
+        description={t("subtitle")}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 cursor-pointer rounded-lg"
+            onClick={handleExport}
+            disabled={exportRows.isPending}
+          >
+            <Download className="me-2 h-3.5 w-3.5" />
+            {t("export")}
+          </Button>
+        }
+      />
       <KpiGrid
         items={[
           { label: t("kpiPending"), value: counts?.pending ?? "—", icon: Clock, accent: "warning" },
@@ -478,7 +494,6 @@ export function OrderExceptionsPageShell() {
             entityList
             filteredCount={total}
             totalCount={total}
-            onExport={handleExport}
           />
         </div>
         {list.isLoading ? (

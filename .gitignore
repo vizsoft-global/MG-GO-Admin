@@ -54,9 +54,6 @@ next-env.d.ts
 # Graphify generated knowledge graph (regenerated locally)
 graphify-out/
 
-# Local language preference (Kannada responses) — keep private
-.cursor/rules/KA.mdc
-
 .vercel
 
 .qa/

@@ -1032,17 +1032,12 @@ export function HrPayrollTab(props: {
               }}
               footer={
                 <TableFooterExport
-                  summary={t("footerSummary", {
-                    shown: filtered.length,
-                    total: rows.length,
-                    month: monthLabel,
-                  })}
-                  exportLabel={t("footerExport")}
-                  onExport={() => {
-                    void exportPayroll();
-                  }}
-                  canExport={filtered.length > 0}
-                />
+          summary={t("footerSummary", {
+            shown: filtered.length,
+            total: rows.length,
+            month: monthLabel,
+          })}
+        />
               }
             />
         );
@@ -1083,9 +1078,6 @@ export function HrPayrollTab(props: {
               exportExcel: t("summary.exportExcel"),
             }}
             onByChange={setSummaryBy}
-            onExport={(by, lines) => {
-              void exportSummary(by, lines);
-            }}
           />
         );
       case "config":

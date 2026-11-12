@@ -393,9 +393,20 @@ export function RolesSettingsPanel() {
       </div>
 
       <div className="space-y-2">
-        <div>
-          <h3 className="text-sm font-semibold">{t("staffAccessTitle")}</h3>
-          <p className="text-xs text-muted-foreground">{t("staffAccessSubtitle")}</p>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold">{t("staffAccessTitle")}</h3>
+            <p className="text-xs text-muted-foreground">{t("staffAccessSubtitle")}</p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 cursor-pointer rounded-lg"
+            onClick={() => setDrawerTarget("assign")}
+          >
+            <Plus className="me-1.5 h-3.5 w-3.5" />
+            {t("assignStaff")}
+          </Button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap items-center gap-1">
@@ -455,8 +466,6 @@ export function RolesSettingsPanel() {
           entityList
           filteredCount={filteredRows.length}
           totalCount={staffRows.length}
-          onAdd={() => setDrawerTarget("assign")}
-          addLabel={t("assignStaff")}
         />
         {loading ? (
           <div className="flex items-center justify-center py-8 text-muted-foreground">

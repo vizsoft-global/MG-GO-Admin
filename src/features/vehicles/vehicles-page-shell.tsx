@@ -525,26 +525,6 @@ export function VehiclesPageShell({
             />
             <TooltipContent>{t("refresh")}</TooltipContent>
           </Tooltip>
-          {canManage ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
-                    onClick={() => setImportOpen(true)}
-                    aria-label={t("bulkImport")}
-                  >
-                    <Upload className="h-4 w-4" />
-                    <span className="ms-1.5 hidden md:inline">{t("bulkImport")}</span>
-                  </Button>
-                }
-              />
-              <TooltipContent>{t("bulkImport")}</TooltipContent>
-            </Tooltip>
-          ) : null}
         </>
       }
       trailing={
@@ -554,11 +534,6 @@ export function VehiclesPageShell({
       }
       filteredCount={visible.length}
       totalCount={vehicles.length}
-      onExport={
-        !isLoading && visible.length > 0 ? () => downloadVehicleListXlsx(visible) : undefined
-      }
-      onAdd={canCreate ? () => replaceQuery({ add: true }) : undefined}
-      addLabel={t("addVehicle")}
     />
   );
 
@@ -569,14 +544,48 @@ export function VehiclesPageShell({
         title={t("title")}
         description={t("subtitle")}
         actions={
-          <ClearAllModuleButton
-            entity="vehicles"
-            selectedIds={selectedIds}
-            onSuccess={() => {
-              setSelectedIds(new Set());
-              void refetch();
-            }}
-          />
+          <div className="flex items-center gap-2">
+            <ClearAllModuleButton
+              entity="vehicles"
+              selectedIds={selectedIds}
+              onSuccess={() => {
+                setSelectedIds(new Set());
+                void refetch();
+              }}
+            />
+            {!isLoading && visible.length > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => downloadVehicleListXlsx(visible)}
+              >
+                <Upload className="h-4 w-4" />
+                {t("export")}
+              </Button>
+            ) : null}
+            {canManage ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload className="h-4 w-4" />
+                {t("bulkImport")}
+              </Button>
+            ) : null}
+            {canCreate ? (
+              <Button
+                type="button"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => replaceQuery({ add: true })}
+              >
+                <Plus className="h-4 w-4" />
+                {t("addVehicle")}
+              </Button>
+            ) : null}
+          </div>
         }
       />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">

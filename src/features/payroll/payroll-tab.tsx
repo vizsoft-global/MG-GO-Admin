@@ -19,7 +19,6 @@ import { PAYROLL_SUMMARY_COLUMNS, PAYROLL_SUMMARY_LOCKED_COLUMNS, riderColumnVal
 import { PayrollRiderCards, type PayrollCardRow } from "./payroll-rider-cards";
 import { PayrollListToolbar, usePayrollListPrefs } from "./payroll-list-toolbar";
 import { PayrollSummaryTable } from "./payroll-grid";
-import { exportPayrollViewCsv } from "./payroll-csv";
 import type { PayrollRiderRow } from "./payroll-types";
 
 const SUMMARY_HIDDEN_BY_DEFAULT = new Set(["restaurantId", "nationality", "zoneOrders", "zoneDpd", "zoneEff"]);
@@ -28,14 +27,13 @@ export function PayrollTab({
   month,
   kpis,
   riders,
-  canExport,
   canManage = false,
   today,
 }: {
   month: PayrollPeriod;
   kpis: PayrollKpis;
   riders: readonly PayrollRiderRow[];
-  canExport: boolean;
+  canExport?: boolean;
   canManage?: boolean;
   /** Kuwait date the page calls today; drives the Rider Status column. */
   today: string;
@@ -229,12 +227,6 @@ export function PayrollTab({
               visibleColumnIds={visibleColumnIds}
               today={today}
               canManage={canManage}
-              exportLabel={canExport ? t("downloadTable") : undefined}
-              onExport={
-                canExport
-                  ? (visible) => exportPayrollViewCsv(month.key, month.dates, visible, { today })
-                  : undefined
-              }
             />
           )}
         </GroupedSections>

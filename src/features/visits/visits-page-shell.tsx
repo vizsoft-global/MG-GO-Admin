@@ -10,6 +10,7 @@ import {
   Check,
   CheckCheck,
   Clock,
+  Download,
   ExternalLink,
   FileText,
   Loader2,
@@ -584,6 +585,16 @@ export function VisitsPageShell() {
               type="button"
               variant="outline"
               size="sm"
+              className="h-9 cursor-pointer"
+              onClick={exportCsv}
+            >
+              <Download className="me-1.5 h-3.5 w-3.5" />
+              {t("allVisits.export")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               className="h-9"
               disabled={isFetching}
               onClick={() => void refetch()}
@@ -733,7 +744,6 @@ export function VisitsPageShell() {
             entityList
             filteredCount={visibleRows.length}
             totalCount={rows.length}
-            onExport={exportCsv}
           />
         ) : null}
 
@@ -786,7 +796,6 @@ export function VisitsPageShell() {
                 entityList
                 filteredCount={visibleRows.length}
                 totalCount={rows.length}
-                onExport={exportCsv}
               />
             }
             columns={shownVisitColumns.flatMap((column) => {

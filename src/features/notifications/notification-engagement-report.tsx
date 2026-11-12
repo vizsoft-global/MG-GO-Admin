@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { Download } from "lucide-react";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { Button } from "@/components/ui/button";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
@@ -65,6 +66,7 @@ export function NotificationEngagementReport({
   campaignBody?: string;
 }) {
   const t = useTranslations("pages.notifications");
+  const tToolbar = useTranslations("common.tableToolbar");
   const [tab, setTab] = useState<EngagementTab>("all");
   const [pending, startTransition] = useTransition();
 
@@ -157,7 +159,20 @@ export function NotificationEngagementReport({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold text-muted-foreground">{t("engagementReportTitle")}</p>
-        {pending ? <span className="text-xs text-muted-foreground">{t("exportRecipients")}</span> : null}
+        <div className="ms-auto flex items-center gap-2">
+          {pending ? <span className="text-xs text-muted-foreground">{t("exportRecipients")}</span> : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 cursor-pointer rounded-lg"
+            disabled={pending}
+            onClick={handleExport}
+          >
+            <Download className="me-1.5 h-3.5 w-3.5" />
+            {tToolbar("export")}
+          </Button>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         {[
@@ -232,7 +247,6 @@ export function NotificationEngagementReport({
           rowKind="dynamic"
           filteredCount={visibleItems.length}
           totalCount={filtered.length}
-          onExport={handleExport}
         />
         <Table>
           <TableHeader>

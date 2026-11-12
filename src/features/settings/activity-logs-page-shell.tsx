@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2 } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
@@ -178,7 +178,17 @@ export function ActivityLogsPageShell() {
         title={t("title")}
         description={t("subtitle")}
         actions={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 cursor-pointer rounded-lg"
+              onClick={handleExport}
+              disabled={isPending || rows.length === 0}
+            >
+              <Download className="h-4 w-4" />
+              {t("export")}
+            </Button>
             <Button
               type="button"
               className="cursor-pointer rounded-lg"
@@ -278,7 +288,6 @@ export function ActivityLogsPageShell() {
             prefs={prefs}
             rows={rows}
             emptyLabel={t("empty")}
-            onExport={handleExport}
             onOpen={openRow}
           />
         </div>
@@ -343,14 +352,12 @@ function ActivityLogTable({
   prefs,
   rows,
   emptyLabel,
-  onExport,
   onOpen,
 }: {
   columns: TableToolbarColumn[];
   prefs: ReturnType<typeof useTablePrefs>;
   rows: AdminActivityLogRow[];
   emptyLabel: string;
-  onExport: () => void;
   onOpen: (row: AdminActivityLogRow) => void;
 }) {
   const matched = useMemo(
@@ -408,7 +415,6 @@ function ActivityLogTable({
           rowKind="dynamic"
           filteredCount={matched.length}
           totalCount={rows.length}
-          onExport={onExport}
         />
       }
       columns={heads}

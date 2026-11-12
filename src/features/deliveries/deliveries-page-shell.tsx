@@ -17,6 +17,7 @@ import {
   TriangleAlert,
   Package,
   RefreshCw,
+  Download,
   X,
   XCircle,
 } from "lucide-react";
@@ -835,6 +836,19 @@ function DeliveriesPageContent() {
                     <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
                     <span className="hidden sm:inline">{t("ordersReport.button")}</span>
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 cursor-pointer rounded-lg px-2.5"
+                    onClick={() => void handleExport()}
+                    disabled={isExporting || totalForFilter === 0}
+                    title={t("export")}
+                    aria-label={t("export")}
+                  >
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{t("export")}</span>
+                  </Button>
                   <ClearAllModuleButton
                     entity="deliveries"
                     compact
@@ -943,7 +957,6 @@ function DeliveriesPageContent() {
               entityList
               filteredCount={visible.length}
               totalCount={totalForFilter || deliveries.length}
-              onExport={!isExporting && totalForFilter > 0 ? () => void handleExport() : undefined}
             />
             <GroupedSections groups={groupedDeliveries}>
               {(rows) => (
@@ -989,7 +1002,6 @@ function DeliveriesPageContent() {
                   entityList
                   filteredCount={visible.length}
                   totalCount={totalForFilter || deliveries.length}
-                  onExport={!isExporting && totalForFilter > 0 ? () => void handleExport() : undefined}
                 />
               }
               columns={tableColumns}

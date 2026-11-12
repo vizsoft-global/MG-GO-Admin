@@ -5105,6 +5105,7 @@
     "driverShifts": {
       "title": "ورديات السائقين",
       "subtitle": "خطط الورديات المُرسلة (للقراءة فقط)",
+      "export": "تصدير",
       "searchPlaceholder": "بحث بالاسم أو الرمز…",
       "fromDate": "من",
       "toDate": "إلى",
@@ -7298,6 +7299,7 @@
         "busiestSlotsSub": "الحجوزات حسب الموعد",
         "busiestSlotsCaption": "أكثر المواعيد حجزًا في النطاق المحدد",
         "busiestSlotsEmpty": "لا توجد حجوزات مواعيد في النطاق",
+        "export": "تصدير",
         "colAvgWait": "متوسط الانتظار",
         "pageTitle": "التقارير والتحليلات",
         "filterBranchAll": "كل الفروع",

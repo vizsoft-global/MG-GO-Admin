@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2 } from "lucide-react";
+import { Loader2, Download } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { Button } from "@/components/ui/button";
 import {
   EmptyCell,
   TableNameCell,
@@ -28,6 +29,7 @@ import { useIncentiveDailyDrivers, useIncentiveDailyReport } from "./use-earning
 
 export function IncentiveDailyPanel() {
   const t = useTranslations("pages.earnings");
+  const tToolbar = useTranslations("common.tableToolbar");
   const [fromDate, setFromDate] = useState(defaultStartDate);
   const [toDate, setToDate] = useState(defaultEndDate);
   const [driverId, setDriverId] = useState("");
@@ -97,8 +99,23 @@ export function IncentiveDailyPanel() {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium">{t("incentiveDailyTitle")}</p>
-      <p className="text-xs text-muted-foreground">{t("incentiveDailyHint")}</p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">{t("incentiveDailyTitle")}</p>
+          <p className="text-xs text-muted-foreground">{t("incentiveDailyHint")}</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-9 cursor-pointer rounded-lg"
+          disabled={exporting || !query.data}
+          onClick={() => void handleExport()}
+        >
+          <Download className="me-1.5 h-3.5 w-3.5" />
+          {tToolbar("export")}
+        </Button>
+      </div>
       <div className="flex flex-wrap items-end gap-2">
         <div className="space-y-1">
           <label htmlFor="incentive-daily-from" className="text-xs text-muted-foreground">
@@ -164,7 +181,6 @@ export function IncentiveDailyPanel() {
               return !needle || `${row.driver_name} ${row.employee_id} ${row.restaurant_name} ${row.zone_name}`.toLowerCase().includes(needle);
             }).length}
             totalCount={(query.data?.rows ?? []).length}
-            onExport={() => void handleExport()}
           />
           <Table>
             <TableHeader>

@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { Filter, Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
+import { Download, Filter, Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import {
   FlatListPager,
@@ -271,9 +271,6 @@ function PartnersPageContent() {
       entityList
       filteredCount={visible.length}
       totalCount={partners.length}
-      onExport={() => exportPartnersCsv(visible)}
-      onAdd={canManage ? handleAdd : undefined}
-      addLabel={t("addPartner")}
       chips={filterChips}
       onRemoveChip={(id) => {
         if (id === "drivers") setDriversFilter("all");
@@ -358,6 +355,27 @@ function PartnersPageContent() {
                   void refetch();
                 }}
               />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => exportPartnersCsv(visible)}
+                disabled={visible.length === 0}
+              >
+                <Download className="h-4 w-4" />
+                {tc("tableToolbar.export")}
+              </Button>
+              {canManage ? (
+                <Button
+                  type="button"
+                  className="h-9 cursor-pointer rounded-lg"
+                  onClick={handleAdd}
+                >
+                  <Plus className="h-4 w-4" />
+                  {t("addPartner")}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"

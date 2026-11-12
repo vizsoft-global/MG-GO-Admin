@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Settings2 } from "lucide-react";
+import { Download, Loader2, Settings2 } from "lucide-react";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
 import { LAYOUT } from "@/components/app/layout-spacing";
 import { TabBar } from "@/components/dashboard/tab-bar";
@@ -318,6 +318,15 @@ export function PerformancePageShell() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-white/30 px-2.5 text-sm text-white transition-colors hover:bg-white/10 disabled:pointer-events-none disabled:opacity-50"
+                onClick={exportTab}
+                disabled={!data}
+              >
+                <Download className="size-3.5" />
+                {t("ops.exportTab")}
+              </button>
+              <button
+                type="button"
                 className="text-xs text-white/90 hover:underline"
                 onClick={() => void onRefresh()}
                 disabled={refreshing}
@@ -396,8 +405,6 @@ export function PerformancePageShell() {
             setSlicers(EMPTY_OPS_SLICERS);
             setFilterResetKey((k) => k + 1);
           }}
-          onExport={data ? exportTab : undefined}
-          exportLabel={t("ops.exportTab")}
         />
 
         <div className="flex flex-wrap items-center gap-2">

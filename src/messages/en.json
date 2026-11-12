@@ -5105,6 +5105,7 @@
     "driverShifts": {
       "title": "Driver shifts",
       "subtitle": "Submitted shift plans (read-only)",
+      "export": "Export",
       "searchPlaceholder": "Search driver name or code…",
       "fromDate": "From",
       "toDate": "To",
@@ -7298,6 +7299,7 @@
         "busiestSlotsSub": "Bookings by slot",
         "busiestSlotsCaption": "Highest-volume slots in the selected range",
         "busiestSlotsEmpty": "No slot bookings in range",
+        "export": "Export",
         "colAvgWait": "Avg. wait",
         "pageTitle": "Reports & analytics",
         "filterBranchAll": "All branches",

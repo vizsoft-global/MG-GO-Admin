@@ -9,6 +9,7 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
+  Download,
   Edit3,
   ExternalLink,
   History,
@@ -636,7 +637,23 @@ function AttendancePageContent() {
 
   return (
     <AppPage>
-      <AppPageHeader title={t("title")} description={t("subtitle")} />
+      <AppPageHeader
+        title={t("title")}
+        description={t("subtitle")}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={() => void handleExport()}
+            disabled={isExporting}
+          >
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            {t("export")}
+          </Button>
+        }
+      />
       <TabBar
         items={tabItems}
         activeId={tab}
@@ -718,11 +735,9 @@ function AttendancePageContent() {
                   entityList
                   filteredCount={tab === "problems" ? (exceptionsData?.rows.length ?? 0) : dailyRows.length}
                   totalCount={totalCount}
-                  onExport={!isExporting ? () => void handleExport() : undefined}
                 />
                 <TrackingTableToolbar
                   hideSearch
-                  onExport={() => void handleExport()}
                   search={debouncedSearch}
                   onSearchChange={prefs.setQuery}
                   searchPlaceholder={t("searchPlaceholder")}
