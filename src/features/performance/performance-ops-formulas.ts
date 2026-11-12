@@ -109,13 +109,47 @@ export const OPS_VIEW_BY: Record<
   outsource: ["orders", "dpd", "dpd_eff", "tgt_eff", "utr"],
 };
 
+/**
+ * Metric colours, resolved on the client ramp at paint time.
+ *
+ * `var(--ops-cN, <fallback>)` is deliberate: the shell defines `--ops-c1..7` for
+ * the selected client, and an SVG presentation attribute accepts a CSS variable,
+ * so every chart in every tab recolours when the Client slicer changes without a
+ * palette threaded through five tab components. The fallback hex is the neutral
+ * slate, so a chart rendered outside the themed surface still has a colour.
+ */
 export const OPS_METRIC_COLOR: Record<OpsChartMetric, string> = {
-  orders: "#2563eb",
-  dpd: "#059669",
-  dpd_eff: "#7c3aed",
-  tgt_eff: "#d97706",
-  utr: "#0f766e",
+  orders: "var(--ops-c3, #2563eb)",
+  dpd: "var(--ops-c1, #059669)",
+  dpd_eff: "var(--ops-c4, #7c3aed)",
+  tgt_eff: "var(--ops-c6, #d97706)",
+  utr: "var(--ops-c2, #0f766e)",
 };
+
+/**
+ * The metric's colour on the *client ramp*.
+ *
+ * A themed page that paints its headline series in one fixed hex is only half
+ * themed, and the client asked for "colour scales" as part of the Power BI
+ * match. Each metric keeps a position on the seven-step ramp so a chart stays
+ * recognisably "the orders line" while its hue follows the selected client.
+ * `OPS_METRIC_COLOR` stays as the fallback for a caller with no palette in hand.
+ */
+const OPS_METRIC_RAMP_STEP: Record<OpsChartMetric, number> = {
+  orders: 2,
+  dpd: 0,
+  dpd_eff: 3,
+  tgt_eff: 5,
+  utr: 1,
+};
+
+export function opsMetricColor(
+  metric: OpsChartMetric,
+  ramp: readonly string[] | null | undefined,
+): string {
+  if (!ramp || ramp.length < 7) return OPS_METRIC_COLOR[metric];
+  return ramp[OPS_METRIC_RAMP_STEP[metric]] ?? OPS_METRIC_COLOR[metric];
+}
 
 const MONTH_ABBR = [
   "Jan",
@@ -771,25 +805,58 @@ export function isChartableDimKey(key: string | null | undefined): boolean {
   return true;
 }
 
-export const OPS_CATEGORY_PALETTE = [
-  "#2563eb",
-  "#059669",
-  "#7c3aed",
-  "#d97706",
-  "#dc2626",
-  "#0891b2",
-  "#4f46e5",
-  "#ca8a04",
-  "#db2777",
-  "#0f766e",
+/**
+ * Category palette for bar charts — the client ramp, not a rainbow.
+ *
+ * The reference dashboard ranks bars and darkens toward the top; a hash-assigned
+ * hue said nothing about the value and read as a different product next to the
+ * themed KPI figures. Steps are CSS variables so the whole ramp follows the
+ * selected client.
+ */
+const RAMP_FALLBACK = [
+  "#2f3b4f",
+  "#3f4f68",
+  "#556781",
+  "#70839c",
+  "#93a3b8",
+  "#b8c3d1",
+  "#d8dee7",
 ] as const;
+
+export const OPS_CATEGORY_PALETTE = [
+  "var(--ops-c1, #2f3b4f)",
+  "var(--ops-c2, #3f4f68)",
+  "var(--ops-c3, #556781)",
+  "var(--ops-c4, #70839c)",
+  "var(--ops-c5, #93a3b8)",
+  "var(--ops-c6, #b8c3d1)",
+  "var(--ops-c7, #d8dee7)",
+] as const;
+
+/**
+ * The ramp step for item `index` of `count`, darkest first.
+ *
+ * Deliberately index-based rather than hash-based: a bar's darkness has to mean
+ * its rank, or the scale is decoration.
+ */
+export function opsRampStepColor(index: number, count: number): string {
+  const safeCount = Number.isFinite(count) && count > 0 ? count : 1;
+  const step =
+    safeCount <= 1
+      ? 1
+      : Math.min(
+          RAMP_FALLBACK.length - 1,
+          Math.max(0, Math.round((index / (safeCount - 1)) * (RAMP_FALLBACK.length - 1))),
+        );
+  return `var(--ops-c${step + 1}, ${RAMP_FALLBACK[step]})`;
+}
 
 export function opsBarColorForKey(key: string): string {
   let hash = 0;
   for (let i = 0; i < key.length; i += 1) {
     hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
   }
-  return OPS_CATEGORY_PALETTE[hash % OPS_CATEGORY_PALETTE.length];
+  return OPS_CATEGORY_PALETTE[hash % OPS_CATEGORY_PALETTE.length]!;
 }
 
 export function toggleOpsMultiSelect(

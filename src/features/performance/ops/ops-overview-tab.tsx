@@ -85,6 +85,15 @@ export function OpsOverviewTab({
       value: formatInt(k.active),
       caption: <OpsKpiDelta {...formatDelta(k.active, k.active_prev)} />,
     },
+    /**
+     * The reference dashboard's eighth card. "Restaurants Count" is the number of
+     * stores the scoped riders actually delivered for, which is what an operator
+     * reads it as — not the size of the restaurant catalogue.
+     */
+    {
+      label: t("kpi.restaurants"),
+      value: formatInt(data.stores.length),
+    },
   ];
 
   const trend = data.trend.map((p) => ({

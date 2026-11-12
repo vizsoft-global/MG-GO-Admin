@@ -1297,30 +1297,48 @@ async function buildRoll(args: OpsArgs): Promise<{
   }
   const allHours = onShiftHoursByDriver({ logs, shifts, now: new Date() });
   const hoursByDriver = new Map<string, number>();
-  const hoursByDay = new Map<string, number>();
   for (const [driverId, hours] of allHours.hoursByDriver) {
     const driver = driverById.get(driverId);
     if (!driver || !matches(driver)) continue;
     if (hours <= 0) continue;
     hoursByDriver.set(driverId, hours);
   }
-  for (const [key, hours] of allHours.hoursByDriverDay) {
-    const sep = key.indexOf("\t");
-    const driverId = key.slice(0, sep);
-    const day = key.slice(sep + 1);
-    const driver = driverById.get(driverId);
-    if (!driver || !matches(driver)) continue;
-    if (hours <= 0) continue;
-    hoursByDay.set(day, (hoursByDay.get(day) ?? 0) + hours);
-  }
-  let workingHours = 0;
-  for (const hours of hoursByDriver.values()) workingHours += hours;
   for (const row of riders) row.working_hours = hoursByDriver.get(row.driver_id) ?? 0;
 
   const scoped = riders.filter((row) => {
     const driver = driverById.get(row.driver_id) ?? {};
     return matches(driver);
   });
+
+  /**
+   * The hours the UTR denominator counts.
+   *
+   * `riders` is built from counted delivery rows, so `scoped` is exactly the
+   * riders the numerator counts orders for. The denominator used to be summed
+   * over **every** matched driver with a shift — including the hundreds who
+   * logged on-shift hours and completed nothing that the order-status filter
+   * counts — which is how 98 verified orders sat over 135,654 hours and Overall
+   * UTR printed 0.00. Both sides of a ratio have to describe the same
+   * population or the ratio is not a rate, it is an artefact.
+   *
+   * A rider's on-shift hours are still counted in full when they *do* appear in
+   * the numerator, so a rider with one order and a 12-hour shift contributes
+   * both, which is the honest reading of "orders per shift hour".
+   */
+  let workingHours = 0;
+  for (const row of scoped) workingHours += hoursByDriver.get(row.driver_id) ?? 0;
+
+  /** Per-day hours, restricted to the same population as the KPI denominator. */
+  const hoursByDay = new Map<string, number>();
+  const scopedDriverIds = new Set(scoped.map((row) => row.driver_id));
+  for (const [key, hours] of allHours.hoursByDriverDay) {
+    const sep = key.indexOf("\t");
+    const driverId = key.slice(0, sep);
+    const day = key.slice(sep + 1);
+    if (!scopedDriverIds.has(driverId)) continue;
+    if (hours <= 0) continue;
+    hoursByDay.set(day, (hoursByDay.get(day) ?? 0) + hours);
+  }
 
   const storeAgg = new Map<string, Dict>();
   const zoneAgg = new Map<string, Dict>();
@@ -1650,9 +1668,24 @@ export const adminPerformanceOpsSnapshot = measureOnCall("adminPerformanceOpsSna
     bucketAgg.set(key, entry);
   }
   for (const [day, hours] of roll.hoursByDay) {
-    const entry = bucketAgg.get(bucketKey(day, args.bucket));
-    if (!entry || hours <= 0) continue;
+    if (hours <= 0) continue;
+    const key = bucketKey(day, args.bucket);
+    /*
+     * A bucket with on-shift hours but no counted orders still belongs in the
+     * trend. It used to be dropped (`if (!entry) continue`), so a day the fleet
+     * worked without a single verified delivery vanished from the chart while its
+     * hours stayed in the KPI denominator — which is why trend UTR never matched
+     * KPI UTR for the same window.
+     */
+    const entry = bucketAgg.get(key) ?? {
+      orders: 0,
+      days: new Set<string>(),
+      minutes: 0,
+      timed: 0,
+      hours: 0,
+    };
     entry.hours += hours;
+    bucketAgg.set(key, entry);
   }
 
   const trend = Array.from(bucketAgg.entries())

@@ -141,6 +141,48 @@ html[data-font="plus-jakarta-sans"] {
   --font-sans: "Plus Jakarta Sans", "Gotham", "GE SS TWO", system-ui, sans-serif;
 }
 
+/**
+ * Performance dashboard — client theme surfaces.
+ *
+ * The shell puts the resolved palette on this scope as `--ops-*` custom
+ * properties (see `opsThemeStyleVars`). Everything below paints from those, so
+ * switching the Client slicer repaints KPI figures, chart cards, chart titles,
+ * table headers and the tab buttons without a prop on any of them.
+ *
+ * The reference dashboard tints the *page* as well as the cards, which is why
+ * `--ops-bg` lands on the wrapper and not just the header.
+ */
+.ops-surface {
+  background: var(--ops-bg, transparent);
+}
+
+.ops-surface [data-kpi-value] {
+  color: var(--ops-ink, inherit);
+}
+
+.ops-surface .ops-card {
+  border-color: var(--ops-line, var(--border));
+}
+
+.ops-surface .ops-card > h3 {
+  color: var(--ops-title, inherit);
+}
+
+.ops-surface table thead th {
+  color: var(--ops-title, inherit);
+  box-shadow: inset 0 2px 0 var(--ops-ink, transparent);
+}
+
+.ops-surface [data-slicer-chip="on"] {
+  background: var(--ops-ink, var(--primary));
+  border-color: var(--ops-ink, var(--primary));
+  color: #fff;
+}
+
+.ops-surface [data-slicer-chip="off"] {
+  color: var(--ops-ink, inherit);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

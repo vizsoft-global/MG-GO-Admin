@@ -11304,7 +11304,8 @@
           "workingHours": "Total Working Hours",
           "utr": "Overall UTR",
           "avgDelivery": "Avg Delivery Time",
-          "ridersInView": "Riders in view"
+          "ridersInView": "Riders in view",
+          "restaurants": "Restaurants Count"
         },
         "chart": {
           "trend": "Trend",

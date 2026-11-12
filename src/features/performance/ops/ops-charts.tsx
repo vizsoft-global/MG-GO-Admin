@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { opsBarColorForKey } from "../performance-ops-formulas";
+import { opsRampStepColor } from "../performance-ops-formulas";
 import { AppEmptyState } from "@/components/app";
 import {
   formatInt,
@@ -59,7 +59,7 @@ export function OpsChartCard({
   return (
     <div
       className={cn(
-        "flex h-full min-h-[220px] flex-col rounded-xl border border-border bg-card p-4 shadow-sm",
+        "ops-card flex h-full min-h-[220px] flex-col rounded-xl border border-border bg-card p-4 shadow-sm",
         className,
       )}
     >
@@ -249,7 +249,7 @@ export function OpsBarChart({
               ? data.map((row, index) => (
                   <Cell
                     key={`${s.key}-${index}`}
-                    fill={opsBarColorForKey(String(row[xKey] ?? index))}
+                    fill={opsRampStepColor(index, data.length)}
                   />
                 ))
               : null}

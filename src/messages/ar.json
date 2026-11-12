@@ -11304,7 +11304,8 @@
           "workingHours": "إجمالي ساعات العمل",
           "utr": "UTR الإجمالي",
           "avgDelivery": "متوسط وقت التوصيل",
-          "ridersInView": "السائقون في العرض"
+          "ridersInView": "السائقون في العرض",
+          "restaurants": "عدد المطاعم"
         },
         "chart": {
           "trend": "الاتجاه",
