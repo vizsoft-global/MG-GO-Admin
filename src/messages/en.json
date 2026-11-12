@@ -11305,7 +11305,8 @@
           "utr": "Overall UTR",
           "avgDelivery": "Avg Delivery Time",
           "ridersInView": "Riders in view",
-          "restaurants": "Restaurants Count"
+          "restaurants": "Restaurants Count",
+          "hoursExcluded": "Hours outside UTR"
         },
         "chart": {
           "trend": "Trend",

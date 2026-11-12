@@ -11305,7 +11305,8 @@
           "utr": "UTR الإجمالي",
           "avgDelivery": "متوسط وقت التوصيل",
           "ridersInView": "السائقون في العرض",
-          "restaurants": "عدد المطاعم"
+          "restaurants": "عدد المطاعم",
+          "hoursExcluded": "ساعات خارج UTR"
         },
         "chart": {
           "trend": "الاتجاه",

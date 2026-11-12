@@ -69,6 +69,7 @@ export function OpsChartCard({
           <button
             type="button"
             onClick={onExport}
+            data-ops-csv
             className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs text-primary hover:bg-primary/10"
           >
             <Download className="size-3" />
@@ -265,6 +266,130 @@ export function OpsBarChart({
         ))}
       </BarChart>
     </ResponsiveContainer>
+  );
+}
+
+/**
+ * A ranked horizontal bar list — the reference dashboard's primary chart shape.
+ *
+ * Name on the start edge, bar, value on the end edge, darkest bar at the top.
+ * Deliberately CSS rather than recharts: the reference draws exactly this, and a
+ * div bar is cheaper and prints the value beside the bar rather than inside a
+ * tooltip. `opsRampStepColor` is what makes the darkness mean rank.
+ */
+export function OpsRankedBars({
+  rows,
+  format,
+  className,
+}: {
+  rows: ReadonlyArray<{ key: string; label: string; value: number }>;
+  format: (value: number) => string;
+  className?: string;
+}) {
+  const max = Math.max(...rows.map((row) => row.value), 0.0001);
+  return (
+    <div className={cn("flex flex-col gap-1.5", className)}>
+      {rows.map((row, index) => (
+        <div key={`${row.key}-${index}`} className="flex items-center gap-2">
+          <span
+            className="w-[35%] shrink-0 truncate text-end text-[11px] text-muted-foreground"
+            title={row.label}
+          >
+            {row.label}
+          </span>
+          <span className="flex min-w-0 flex-1 items-center gap-1.5">
+            <i
+              className="block h-3 rounded-[2px]"
+              style={{
+                width: `${Math.max(1.5, (row.value / max) * 88)}%`,
+                background: opsRampStepColor(index, rows.length),
+              }}
+            />
+            <u className="shrink-0 text-[11px] font-semibold not-italic tabular-nums">
+              {format(row.value)}
+            </u>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A donut — the reference dashboard's chart for a small share-of-total split.
+ *
+ * Hand-drawn SVG with `stroke-dasharray` on one circle per slice, which keeps the
+ * arc geometry exact at any size and needs no chart library. Percentages are
+ * printed inside the ring for the slices wide enough to hold a label.
+ */
+export function OpsDonut({
+  rows,
+  format,
+  className,
+}: {
+  rows: ReadonlyArray<{ key: string; label: string; value: number }>;
+  format: (value: number) => string;
+  className?: string;
+}) {
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const safeTotal = total > 0 ? total : 1;
+  const radius = 60;
+  const circumference = 2 * Math.PI * radius;
+  /**
+   * Accumulated start offset per slice, computed up front.
+   *
+   * A running `offset` mutated inside the `.map` is flagged by the React
+   * compiler as a post-render assignment; deriving the array first keeps the
+   * render pure and the arc geometry identical.
+   */
+  const slices = rows.map((row, index) => {
+    const dash = (row.value / safeTotal) * circumference;
+    const start = rows
+      .slice(0, index)
+      .reduce((sum, previous) => sum + (previous.value / safeTotal) * circumference, 0);
+    return { row, dash, start };
+  });
+
+  return (
+    <div className={cn("flex flex-col items-center gap-2", className)}>
+      <div className="flex flex-wrap items-center justify-center gap-3 text-[10.5px] text-muted-foreground">
+        {rows.map((row, index) => (
+          <span key={`legend-${row.key}`} className="inline-flex items-center gap-1">
+            <i
+              className="inline-block size-2 rounded-full"
+              style={{ background: opsRampStepColor(index, rows.length) }}
+            />
+            {row.label} · {format(row.value)}
+          </span>
+        ))}
+      </div>
+      <svg viewBox="0 0 160 160" className="size-[150px]" role="img" aria-label="distribution">
+        <circle cx="80" cy="80" r={radius} fill="none" stroke="var(--border)" strokeWidth="18" />
+        {slices.map((slice, index) => (
+          <circle
+            key={slice.row.key}
+            cx="80"
+            cy="80"
+            r={radius}
+            fill="none"
+            stroke={opsRampStepColor(index, rows.length)}
+            strokeWidth="18"
+            strokeDasharray={`${slice.dash} ${circumference - slice.dash}`}
+            strokeDashoffset={-slice.start}
+            // Start at 12 o'clock, not 3.
+            transform="rotate(-90 80 80)"
+          />
+        ))}
+        <text
+          x="80"
+          y="84"
+          textAnchor="middle"
+          className="fill-foreground text-[13px] font-semibold tabular-nums"
+        >
+          {format(total)}
+        </text>
+      </svg>
+    </div>
   );
 }
 

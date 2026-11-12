@@ -1733,6 +1733,7 @@ function parseOpsKpis(raw: unknown): OpsKpis {
     active_prev: asInt(o.active_prev),
     working_days: asInt(o.working_days),
     working_hours: numOrNull(o.working_hours) ?? 0,
+    working_hours_excluded: numOrNull(o.working_hours_excluded) ?? 0,
     utr: numOrNull(o.utr),
     avg_delivery_min: numOrNull(o.avg_delivery_min),
     stores_above: asInt(o.stores_above),

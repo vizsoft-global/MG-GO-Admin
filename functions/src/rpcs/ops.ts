@@ -833,6 +833,8 @@ async function buildRoll(args: OpsArgs): Promise<{
   nationalities: string[];
   targetDpd: number;
   workingHours: number;
+  /** Hours from matched riders with no counted delivery — outside the UTR denominator. */
+  workingHoursExcluded: number;
   hoursByDay: Map<string, number>;
 }> {
   const db = getFirestore();
@@ -1328,6 +1330,18 @@ async function buildRoll(args: OpsArgs): Promise<{
   let workingHours = 0;
   for (const row of scoped) workingHours += hoursByDriver.get(row.driver_id) ?? 0;
 
+  /**
+   * On-shift hours the ratio does not count.
+   *
+   * Reported rather than discarded: the client's own complaint was a number that
+   * did not match the fleet, and quietly dropping the difference is how the
+   * previous version hid the mismatch. It also says, once, how much work was
+   * logged without a single counted delivery — a fact operations should see.
+   */
+  let matchedHours = 0;
+  for (const hours of hoursByDriver.values()) matchedHours += hours;
+  const excludedHours = Math.max(0, Math.round((matchedHours - workingHours) * 100) / 100);
+
   /** Per-day hours, restricted to the same population as the KPI denominator. */
   const hoursByDay = new Map<string, number>();
   const scopedDriverIds = new Set(scoped.map((row) => row.driver_id));
@@ -1483,6 +1497,7 @@ async function buildRoll(args: OpsArgs): Promise<{
     ).sort(),
     targetDpd,
     workingHours,
+    workingHoursExcluded: excludedHours,
     hoursByDay,
   };
 }
@@ -1790,6 +1805,12 @@ export const adminPerformanceOpsSnapshot = measureOnCall("adminPerformanceOpsSna
       active_prev: null,
       working_days: curDays,
       working_hours: roll.workingHours,
+      /**
+       * Hours logged by matched riders with no counted delivery. Deliberately
+       * outside the UTR denominator (see `workingHours`) and surfaced so the
+       * difference from a fleet-wide total is visible instead of silent.
+       */
+      working_hours_excluded: roll.workingHoursExcluded,
       utr: positiveRatio(curOrders, roll.workingHours),
       avg_delivery_min: positiveRatio(
         roll.riders.reduce((sum, row) => sum + row.delivery_minutes, 0),

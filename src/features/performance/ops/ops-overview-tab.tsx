@@ -12,6 +12,7 @@ import {
   formatMinutesCard,
   formatPct,
   formatUtr,
+  formatOpsMetricValue,
   partnerLabel,
   vehicleLabel,
 } from "../performance-ops-format";
@@ -25,13 +26,33 @@ import {
   type OpsGranularity,
 } from "../performance-ops-formulas";
 import type { OpsDimRow, OpsSnapshot } from "../performance-ops-types";
-import { OpsBarChart, OpsChartCard, OpsKpiDelta, OpsLineChart, opsChartTitle } from "./ops-charts";
+import { OpsChartCard, OpsDonut, OpsKpiDelta, OpsLineChart, OpsRankedBars, opsChartTitle } from "./ops-charts";
 import { cn } from "@/lib/utils";
 
-function dimRows(rows: OpsDimRow[], labelOf: (row: OpsDimRow) => string, metric: OpsChartMetric) {
+/**
+ * Dimension rows as a ranked list, highest first.
+ *
+ * The reference dashboard ranks every breakdown and darkens toward the top; a
+ * bar chart in the source order said nothing about rank. Rows whose metric is
+ * null (a zero denominator) are dropped rather than drawn as a zero-length bar,
+ * which would read as "measured, and it was nothing".
+ */
+function rankedRows(
+  rows: OpsDimRow[],
+  labelOf: (row: OpsDimRow) => string,
+  metric: OpsChartMetric,
+): Array<{ key: string; label: string; value: number }> {
   return rows
     .filter((r) => isChartableDimKey(r.key))
-    .map((r) => ({ key: labelOf(r), value: dimMetricValue(r, metric) }));
+    .map((r, index) => ({
+      key: `${labelOf(r)}-${index}`,
+      label: labelOf(r),
+      value: dimMetricValue(r, metric),
+    }))
+    .filter((row): row is { key: string; label: string; value: number } =>
+      typeof row.value === "number" && Number.isFinite(row.value),
+    )
+    .sort((left, right) => right.value - left.value);
 }
 
 export function OpsOverviewTab({
@@ -74,6 +95,12 @@ export function OpsOverviewTab({
     },
     { label: t("kpi.utr"), value: formatUtr(k.utr), accent: "primary" as const },
     { label: t("kpi.workingHours"), value: formatDpd(k.working_hours) },
+    /**
+     * The hours the ratio excludes. Shown, not hidden: this is the difference
+     * between the KPI and a fleet-wide total, and it is exactly the number the
+     * client asked us to account for.
+     */
+    { label: t("kpi.hoursExcluded"), value: formatDpd(k.working_hours_excluded) },
     { label: t("kpi.avgDelivery"), value: formatMinutesCard(k.avg_delivery_min) },
     {
       label: t("kpi.riders"),
@@ -140,12 +167,9 @@ export function OpsOverviewTab({
           empty={data.by_vehicle.length === 0}
           emptyTitle={t("emptyVehicle")}
         >
-          <OpsBarChart
-            data={dimRows(data.by_vehicle, (r) => vehicleLabel(r.key), metric)}
-            xKey="key"
-            series={series}
-            metric={metric}
-            colorByCategory
+          <OpsDonut
+            rows={rankedRows(data.by_vehicle, (r) => vehicleLabel(r.key), metric)}
+            format={(value) => formatOpsMetricValue(metric, value)}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -162,13 +186,9 @@ export function OpsOverviewTab({
           empty={data.by_zone.length === 0}
           emptyTitle={t("emptyChart")}
         >
-          <OpsBarChart
-            data={dimRows(data.by_zone, (r) => r.label || r.key, metric)}
-            xKey="key"
-            series={series}
-            layout="horizontal"
-            metric={metric}
-            colorByCategory
+          <OpsRankedBars
+            rows={rankedRows(data.by_zone, (r) => r.label || r.key, metric)}
+            format={(value) => formatOpsMetricValue(metric, value)}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -188,16 +208,13 @@ export function OpsOverviewTab({
           empty={data.by_partner.length === 0}
           emptyTitle={t("emptyChart")}
         >
-          <OpsBarChart
-            data={dimRows(
+          <OpsRankedBars
+            rows={rankedRows(
               data.by_partner,
               (r) => r.label || (partnerLabel(r.key) === "—" ? r.key : partnerLabel(r.key)),
               metric,
             )}
-            xKey="key"
-            series={series}
-            metric={metric}
-            colorByCategory
+            format={(value) => formatOpsMetricValue(metric, value)}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -214,13 +231,9 @@ export function OpsOverviewTab({
           empty={data.by_nationality.length === 0}
           emptyTitle={t("emptyChart")}
         >
-          <OpsBarChart
-            data={dimRows(data.by_nationality, (r) => countryLabel(r.key), metric)}
-            xKey="key"
-            series={series}
-            layout="horizontal"
-            metric={metric}
-            colorByCategory
+          <OpsRankedBars
+            rows={rankedRows(data.by_nationality, (r) => countryLabel(r.key), metric)}
+            format={(value) => formatOpsMetricValue(metric, value)}
           />
         </OpsChartCard>
         <OpsChartCard
@@ -237,12 +250,9 @@ export function OpsOverviewTab({
           empty={data.by_company.length === 0}
           emptyTitle={t("emptyChart")}
         >
-          <OpsBarChart
-            data={dimRows(data.by_company, (r) => companyLabel(r.key), metric)}
-            xKey="key"
-            series={series}
-            metric={metric}
-            colorByCategory
+          <OpsRankedBars
+            rows={rankedRows(data.by_company, (r) => companyLabel(r.key), metric)}
+            format={(value) => formatOpsMetricValue(metric, value)}
           />
         </OpsChartCard>
       </div>
