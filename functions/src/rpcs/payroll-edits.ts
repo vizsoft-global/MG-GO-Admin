@@ -33,9 +33,10 @@ export function applyPayrollManualOrders(
   if (manual != null && Number.isFinite(manual)) {
     return { orders: manual, displayOrders: manual, overridden: true };
   }
+  const effective = recon ?? verified;
   return {
-    orders: recon ?? 0,
-    displayOrders: recon ?? verified,
+    orders: effective,
+    displayOrders: effective,
     overridden: false,
   };
 }

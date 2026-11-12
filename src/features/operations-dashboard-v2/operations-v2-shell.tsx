@@ -1,7 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronRight, Download, Info, RefreshCw, Search, Users } from "lucide-react";
+import {
+  BarChart2,
+  ChevronRight,
+  Download,
+  Eye,
+  EyeOff,
+  Info,
+  PieChart,
+  Plus,
+  RefreshCw,
+  Search,
+  Sliders,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -27,20 +41,28 @@ import { formatPct, roundPercent } from "@/lib/format/percent";
 import { selectOptions } from "@/lib/select-items";
 import {
   fetchOperationsDashboard,
+  fetchOperationsHubConfig,
+  saveOperationsHubConfig,
   importLeavePlans,
   upsertLeavePlan,
 } from "@/features/operations-dashboard/operations-dashboard-actions";
 import {
   DASHBOARD_PERIODS,
+  DEFAULT_OPS_HUB_CONFIG,
   filterRoster,
   leaveExportRows,
   periodBounds,
+  type CustomChartDef,
+  type CustomColumnDef,
   type DashboardPeriod,
   type EmployeeStatusKey,
   type JobEndCardKey,
   type LeaveMonthBar,
   type OutlookKey,
   type OperationsDashboard,
+  type OperationsHubConfig,
+  type RiderOnLeaveRow,
+  type RosterRow,
   type RosterStatus,
 } from "@/features/operations-dashboard/shape";
 import {
@@ -57,13 +79,25 @@ import {
   type MonthBarItem,
   type V2Tone,
 } from "@/features/portal-v2/v2-ui";
-import { jobEndMatrix, monthLabel, upcomingLeaveRows } from "./helpers";
+import { jobEndMatrix, monthLabel, upcomingLeaveRows, type UpcomingLeaveRow } from "./helpers";
 import { v2DayMonth, v2WeekdayDate } from "@/features/portal-v2/v2-format";
 
 type Translator = ReturnType<typeof useTranslations<"pages.operationsDashboardV2">>;
-type BaseTranslator = ReturnType<typeof useTranslations<"pages.operationsDashboard">>;
 /** One KPI card's list: every rider, one roster status, or the Accident employee status. */
 type RosterView = "all" | RosterStatus | "accident";
+
+type OperationsV2Column<T> = TableColumnVisibilityOption & {
+  headClassName?: string;
+  cellClassName?: string;
+  render: (row: T) => React.ReactNode;
+};
+
+function columnsInOrder<T>(columns: OperationsV2Column<T>[], visibleIds: string[]): OperationsV2Column<T>[] {
+  const byId = new Map(columns.map((column) => [column.id, column]));
+  return visibleIds
+    .map((id) => byId.get(id))
+    .filter((column): column is OperationsV2Column<T> => Boolean(column));
+}
 
 const HEAD_BTN = "h-9 cursor-pointer";
 const SELECT = "h-9 min-h-9 border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-primary)]";
@@ -201,7 +235,7 @@ export function OperationsV2Shell() {
   const t = useTranslations("pages.operationsDashboardV2");
   const tBase = useTranslations("pages.operationsDashboard");
   const locale = useLocale();
-  const { accessKind } = useAuth();
+  const { accessKind, isSuperAdmin } = useAuth();
   const readOnly = accessKind === "partner";
 
   const [dashboard, setDashboard] = useState<OperationsDashboard | null>(null);
@@ -211,6 +245,10 @@ export function OperationsV2Shell() {
   const [period, setPeriod] = useState<DashboardPeriod>("today");
   const [zoneId, setZoneId] = useState("");
   const [vehicle, setVehicle] = useState("");
+  const [nationalityCategory, setNationalityCategory] = useState("");
+  const [nationalityCountry, setNationalityCountry] = useState("");
+  const [hubConfig, setHubConfig] = useState<OperationsHubConfig>(DEFAULT_OPS_HUB_CONFIG);
+  const [configModalOpen, setConfigModalOpen] = useState(false);
   const [leaveType, setLeaveType] = useState("");
   const [planProject, setPlanProject] = useState("");
   const [outlookKey, setOutlookKey] = useState<OutlookKey | null>(null);
@@ -229,6 +267,12 @@ export function OperationsV2Shell() {
   const today = kuwaitTodayYmd();
   const bounds = useMemo(() => periodBounds(period, today, today, today), [period, today]);
 
+  useEffect(() => {
+    void fetchOperationsHubConfig().then((res) => {
+      if (res.config) setHubConfig(res.config);
+    });
+  }, []);
+
   const load = useCallback(
     () =>
       fetchOperationsDashboard({
@@ -237,8 +281,10 @@ export function OperationsV2Shell() {
         to: bounds.to,
         zoneId: zoneId || undefined,
         vehicle: vehicle || undefined,
+        nationalityCategory: nationalityCategory || undefined,
+        nationalityCountry: nationalityCountry || undefined,
       }),
-    [projectKey, bounds.from, bounds.to, zoneId, vehicle],
+    [projectKey, bounds.from, bounds.to, zoneId, vehicle, nationalityCategory, nationalityCountry],
   );
 
   const apply = useCallback((result: Awaited<ReturnType<typeof fetchOperationsDashboard>>) => {
@@ -297,6 +343,91 @@ export function OperationsV2Shell() {
           status: rosterView === "accident" ? t("kpiAccident") : statusLabel(rosterView, t),
         })
     : "";
+
+  const rosterColumns = useMemo<OperationsV2Column<RosterRow>[]>(() => {
+    const columns: OperationsV2Column<RosterRow>[] = [
+      {
+        id: "employeeId",
+        label: t("colEmployeeId"),
+        locked: true,
+        cellClassName: "tabular-nums",
+        render: (row) => row.employeeId || "—",
+      },
+      {
+        id: "name",
+        label: t("colName"),
+        cellClassName: "font-medium",
+        render: (row) => row.name || "—",
+      },
+      {
+        id: "project",
+        label: t("colProject"),
+        render: (row) => projectName(row.project, t),
+      },
+      {
+        id: "zone",
+        label: t("colZone"),
+        render: (row) => row.zone || "—",
+      },
+      {
+        id: "status",
+        label: t("colStatus"),
+        render: (row) => (
+          <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusVariant(row.status)}`}>
+            {statusLabel(row.status, t)}
+          </span>
+        ),
+      },
+      {
+        id: "joined",
+        label: t("colJoined"),
+        cellClassName: "tabular-nums",
+        render: (row) => (row.joined ? formatKuwaitDateLabel(row.joined) : "—"),
+      },
+      {
+        id: "nationalityCategory",
+        label: "Nationality Category",
+        render: (row) => (
+          <span className="inline-flex rounded px-1.5 py-0.5 text-[11px] font-medium bg-[var(--surface-subtle)] text-[var(--text-primary)]">
+            {row.nationalityCategory || "—"}
+          </span>
+        ),
+      },
+      {
+        id: "nationalityCountry",
+        label: "Nationality Country",
+        render: (row) => (
+          <span className="inline-flex rounded px-1.5 py-0.5 text-[11px] font-medium bg-[var(--surface-subtle)] text-[var(--text-primary)]">
+            {row.nationalityCountry || "—"}
+          </span>
+        ),
+      },
+    ];
+    if (!readOnly) {
+      columns.push({
+        id: "phone",
+        label: t("colPhone"),
+        render: (row) => <span dir="ltr">{row.phone || "—"}</span>,
+      });
+    }
+
+    const existingIds = new Set(columns.map((c) => c.id));
+    for (const customCol of hubConfig.customColumns) {
+      if (!existingIds.has(customCol.id) && customCol.visible) {
+        columns.push({
+          id: customCol.id,
+          label: customCol.label,
+          render: (row) => {
+            const val = (row as Record<string, unknown>)[customCol.field];
+            return typeof val === "string" || typeof val === "number" ? String(val) : "—";
+          },
+        });
+      }
+    }
+    return columns;
+  }, [t, readOnly, hubConfig.customColumns]);
+  const rosterColumnVisibility = useTableColumnVisibility("dpd:operations-v2:roster-columns", rosterColumns);
+  const rosterVisibleColumns = columnsInOrder(rosterColumns, rosterColumnVisibility.orderedVisibleColumnIds);
 
   const openRoster = useCallback(
     (view: RosterView) => {
@@ -435,6 +566,111 @@ export function OperationsV2Shell() {
   const away = data?.ridersOnLeave ?? [];
   const awayRows = allAwayOpen ? away : away.slice(0, 6);
 
+  const upcomingColumns = useMemo<OperationsV2Column<UpcomingLeaveRow>[]>(
+    () => [
+      {
+        id: "employeeId",
+        label: t("colEmployeeId"),
+        locked: true,
+        cellClassName: "tabular-nums",
+        render: (row) => row.employeeId,
+      },
+      {
+        id: "name",
+        label: t("colName"),
+        cellClassName: "font-medium",
+        render: (row) => row.name,
+      },
+      {
+        id: "project",
+        label: t("colProject"),
+        render: (row) =>
+          row.project === "unassigned"
+            ? t("projectUnassigned")
+            : row.project === "keeta"
+              ? t("projectKeeta")
+              : row.project === "americana"
+                ? t("projectAmericana")
+                : row.project,
+      },
+      {
+        id: "leaveType",
+        label: t("colLeaveType"),
+        render: (row) => leaveTypeLabel(row.leaveType, t),
+      },
+      {
+        id: "start",
+        label: t("colStart"),
+        cellClassName: "tabular-nums",
+        render: (row) => formatKuwaitDateLabel(row.start),
+      },
+      {
+        id: "end",
+        label: t("colEnd"),
+        cellClassName: "tabular-nums",
+        render: (row) => formatKuwaitDateLabel(row.end),
+      },
+      {
+        id: "days",
+        label: t("colDays"),
+        headClassName: `${TH} text-center`,
+        cellClassName: "text-center tabular-nums",
+        render: (row) => row.days,
+      },
+      {
+        id: "status",
+        label: t("colStatus"),
+        render: (row) => (
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${statusVariant(row.status)}`}>
+            {planStatusLabel(row.status, t)}
+          </span>
+        ),
+      },
+    ],
+    [t],
+  );
+  const upcomingColumnVisibility = useTableColumnVisibility("dpd:operations-v2:upcoming-leave-columns", upcomingColumns);
+  const upcomingVisibleColumns = columnsInOrder(upcomingColumns, upcomingColumnVisibility.orderedVisibleColumnIds);
+
+  const awayColumns = useMemo<OperationsV2Column<RiderOnLeaveRow>[]>(
+    () => [
+      {
+        id: "rider",
+        label: t("colRider"),
+        locked: true,
+        cellClassName: "font-medium",
+        render: (row) => row.name,
+      },
+      {
+        id: "project",
+        label: t("colProject"),
+        render: (row) => projectName(row.project, t),
+      },
+      {
+        id: "since",
+        label: t("colSince"),
+        cellClassName: "tabular-nums",
+        render: (row) => formatKuwaitDateLabel(row.start),
+      },
+      {
+        id: "backOn",
+        label: t("colBackOn"),
+        render: (row) => {
+          const back = backState(row.end, today, t("today"), tBase("outlookOverdue"));
+          return (
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${back.className}`}>
+              <span className={`size-1.5 rounded-full ${back.dot}`} aria-hidden />
+              {back.label}
+            </span>
+          );
+        },
+      },
+    ],
+    [t, tBase, today],
+  );
+  const awayColumnVisibility = useTableColumnVisibility("dpd:operations-v2:away-riders-columns", awayColumns);
+  const awayVisibleColumns = columnsInOrder(awayColumns, awayColumnVisibility.orderedVisibleColumnIds);
+
   const outlookRows: { key: OutlookKey; count: number; tone: V2Tone }[] = [
     { key: "returningThisWeek", count: data?.outlook.returningThisWeek.length ?? 0, tone: "working" },
     { key: "startingThisWeek", count: data?.outlook.startingThisWeek.length ?? 0, tone: "working" },
@@ -489,6 +725,8 @@ export function OperationsV2Shell() {
         t("colName"),
         t("colProject"),
         t("colZone"),
+        "Nationality Category",
+        "Nationality Country",
         t("colStatus"),
         t("colJoined"),
         ...(readOnly ? [] : [t("colPhone")]),
@@ -498,6 +736,8 @@ export function OperationsV2Shell() {
         row.name,
         projectName(row.project, t),
         row.zone,
+        row.nationalityCategory || "—",
+        row.nationalityCountry || "—",
         statusLabel(row.status, t),
         row.joined,
         ...(readOnly ? [] : [row.phone]),
@@ -525,6 +765,39 @@ export function OperationsV2Shell() {
     );
   }
 
+  const natCategoryItems = useMemo(() => {
+    const fromApi = (data?.byNationalityCategory ?? []).map((c) => ({
+      value: c.key,
+      label: `${c.key} (${c.count})`,
+    }));
+    return selectOptions([
+      { value: "all", label: "All Categories" },
+      ...fromApi,
+    ]);
+  }, [data?.byNationalityCategory]);
+
+  const natCountryItems = useMemo(() => {
+    const fromApi = (data?.byNationalityCountry ?? []).map((c) => ({
+      value: c.key,
+      label: `${c.key} (${c.count})`,
+    }));
+    return selectOptions([
+      { value: "all", label: "All Countries" },
+      ...fromApi,
+    ]);
+  }, [data?.byNationalityCountry]);
+
+  const handleSaveHubConfig = async (newConfig: OperationsHubConfig) => {
+    const res = await saveOperationsHubConfig(newConfig);
+    if (!res.ok) {
+      toast.error(res.error || "Failed to save configuration");
+      return;
+    }
+    setHubConfig(newConfig);
+    toast.success("Operations Hub configuration saved and synchronized centrally.");
+    reload();
+  };
+
   return (
     <V2Surface>
       <V2PageHeader
@@ -538,6 +811,16 @@ export function OperationsV2Shell() {
               <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} aria-hidden />
               {t("refresh")}
             </Button>
+            {isSuperAdmin ? (
+              <Button
+                variant="portal-secondary"
+                className={HEAD_BTN}
+                onClick={() => setConfigModalOpen(true)}
+              >
+                <Sliders className="size-4" aria-hidden />
+                Customize Hub
+              </Button>
+            ) : null}
             <Button
               variant="portal-secondary"
               className={HEAD_BTN}
@@ -556,7 +839,7 @@ export function OperationsV2Shell() {
       />
 
       <V2Card className="mt-5 p-4 xl:p-5">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,2.1fr)_repeat(4,minmax(0,1fr))]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.8fr)_repeat(6,minmax(0,1fr))]">
           <div className="min-w-0">
             <p className="mb-2 text-[12px] font-medium text-[var(--text-secondary)]">{t("projectLabel")}</p>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -602,6 +885,44 @@ export function OperationsV2Shell() {
               </SelectTrigger>
               <SelectContent>
                 {zoneItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+
+          <FilterField label="Nationality Category">
+            <Select
+              items={natCategoryItems}
+              value={nationalityCategory || "all"}
+              onValueChange={(value) => setNationalityCategory(!value || value === "all" ? "" : value)}
+            >
+              <SelectTrigger className={SELECT} aria-label="Nationality Category">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {natCategoryItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+
+          <FilterField label="Nationality Country">
+            <Select
+              items={natCountryItems}
+              value={nationalityCountry || "all"}
+              onValueChange={(value) => setNationalityCountry(!value || value === "all" ? "" : value)}
+            >
+              <SelectTrigger className={SELECT} aria-label="Nationality Country">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {natCountryItems.map((item) => (
                   <SelectItem key={item.value} value={item.value}>
                     {item.label}
                   </SelectItem>
@@ -806,6 +1127,15 @@ export function OperationsV2Shell() {
             <p className="ms-auto text-xs tabular-nums text-[var(--text-secondary)]">
               {rosterRows.length} / {rosterStatusRows.length}
             </p>
+            <AppTableColumnPicker
+              options={rosterColumnVisibility.pickerOptions}
+              isVisible={rosterColumnVisibility.isVisible}
+              onToggle={rosterColumnVisibility.toggle}
+              onReset={rosterColumnVisibility.reset}
+              onMove={rosterColumnVisibility.move}
+              onReorder={rosterColumnVisibility.reorder}
+              hiddenCount={rosterColumnVisibility.hiddenToggleableCount}
+            />
           </div>
 
           {rosterRows.length === 0 ? (
@@ -815,31 +1145,21 @@ export function OperationsV2Shell() {
               <Table className={TABLE}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className={TH}>{t("colEmployeeId")}</TableHead>
-                    <TableHead className={TH}>{t("colName")}</TableHead>
-                    <TableHead className={TH}>{t("colProject")}</TableHead>
-                    <TableHead className={TH}>{t("colZone")}</TableHead>
-                    <TableHead className={TH}>{t("colStatus")}</TableHead>
-                    <TableHead className={TH}>{t("colJoined")}</TableHead>
-                    {readOnly ? null : <TableHead className={TH}>{t("colPhone")}</TableHead>}
+                    {rosterVisibleColumns.map((column) => (
+                      <TableHead key={column.id} className={column.headClassName ?? TH}>
+                        {column.label}
+                      </TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rosterRows.map((row, index) => (
                     <TableRow key={`${row.employeeId}-${index}`}>
-                      <TableCell className="tabular-nums">{row.employeeId || "—"}</TableCell>
-                      <TableCell className="font-medium">{row.name || "—"}</TableCell>
-                      <TableCell>{projectName(row.project, t)}</TableCell>
-                      <TableCell>{row.zone || "—"}</TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${statusVariant(row.status)}`}
-                        >
-                          {statusLabel(row.status, t)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="tabular-nums">{row.joined ? formatKuwaitDateLabel(row.joined) : "—"}</TableCell>
-                      {readOnly ? null : <TableCell dir="ltr">{row.phone || "—"}</TableCell>}
+                      {rosterVisibleColumns.map((column) => (
+                        <TableCell key={column.id} className={column.cellClassName}>
+                          {column.render(row)}
+                        </TableCell>
+                      ))}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1033,6 +1353,166 @@ export function OperationsV2Shell() {
         </V2TableShell>
       </V2Card>
 
+      {/* 5.1, 5.2, 5.3: Operations Hub Nationality Classification & Custom Charts */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        {/* Nationality Category Classification */}
+        <V2Card className="p-4 xl:p-5">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="font-display text-[17px] font-bold text-[var(--text-primary)]">
+                Nationality Category Classification
+              </h2>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Riders grouped by regional / demographic category (Asian, Arab, etc.)
+              </p>
+            </div>
+            <span className="rounded-full bg-[var(--surface-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--text-secondary)]">
+              {(data?.byNationalityCategory ?? []).reduce((s, c) => s + c.count, 0)} Total
+            </span>
+          </div>
+          {(data?.byNationalityCategory ?? []).length === 0 ? (
+            <V2Empty>{t("noData")}</V2Empty>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {(data?.byNationalityCategory ?? []).map((cat) => {
+                const total = (data?.byNationalityCategory ?? []).reduce((s, c) => s + c.count, 0);
+                const pct = total > 0 ? (cat.count / total) * 100 : 0;
+                return (
+                  <div key={cat.key} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs font-medium">
+                      <span className="text-[var(--text-primary)]">{cat.key || "Not Classified"}</span>
+                      <span className="tabular-nums text-[var(--text-secondary)]">
+                        {cat.count} ({pct.toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-subtle)]">
+                      <div
+                        className="h-full rounded-full bg-[var(--selected-navy)]"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </V2Card>
+
+        {/* Nationality Country Classification */}
+        <V2Card className="p-4 xl:p-5">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="font-display text-[17px] font-bold text-[var(--text-primary)]">
+                Nationality Country Classification
+              </h2>
+              <p className="text-xs text-[var(--text-secondary)]">
+                Riders classified by specific citizenship / country of origin
+              </p>
+            </div>
+            <span className="rounded-full bg-[var(--surface-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--text-secondary)]">
+              {(data?.byNationalityCountry ?? []).length} Countries
+            </span>
+          </div>
+          {(data?.byNationalityCountry ?? []).length === 0 ? (
+            <V2Empty>{t("noData")}</V2Empty>
+          ) : (
+            <div className="mt-4 max-h-[260px] space-y-3 overflow-y-auto pr-1">
+              {(data?.byNationalityCountry ?? []).slice(0, 10).map((c) => {
+                const total = (data?.byNationalityCountry ?? []).reduce((s, row) => s + row.count, 0);
+                const pct = total > 0 ? (c.count / total) * 100 : 0;
+                return (
+                  <div key={c.key} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs font-medium">
+                      <span className="text-[var(--text-primary)]">{c.key || "Unspecified"}</span>
+                      <span className="tabular-nums text-[var(--text-secondary)]">
+                        {c.count} ({pct.toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-subtle)]">
+                      <div
+                        className="h-full rounded-full bg-emerald-600"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </V2Card>
+      </div>
+
+      {/* Dynamic Custom Charts configured centrally by Super Admin */}
+      {hubConfig.customCharts.length > 0 ? (
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {hubConfig.customCharts.map((chart) => {
+            let chartRows: { key: string; count: number }[] = [];
+            if (chart.dimension === "nationalityCategory") {
+              chartRows = data?.byNationalityCategory ?? [];
+            } else if (chart.dimension === "nationalityCountry") {
+              chartRows = (data?.byNationalityCountry ?? []).slice(0, 8);
+            } else if (chart.dimension === "status") {
+              chartRows = (data?.statusBar ?? []).map((s) => ({ key: statusLabel(s.key, t), count: s.count }));
+            } else if (chart.dimension === "project") {
+              chartRows = (data?.byProject ?? []).map((p) => ({ key: projectName(p.key, t), count: p.assigned }));
+            } else if (chart.dimension === "zone") {
+              const zoneMap = new Map<string, number>();
+              for (const r of rosterSource) {
+                const z = r.zone || "Unassigned";
+                zoneMap.set(z, (zoneMap.get(z) ?? 0) + 1);
+              }
+              chartRows = Array.from(zoneMap.entries()).map(([k, v]) => ({ key: k, count: v }));
+            }
+            const chartTotal = chartRows.reduce((s, r) => s + r.count, 0);
+
+            return (
+              <V2Card key={chart.id} className="p-4 xl:p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {chart.type === "bar" ? (
+                      <BarChart2 className="size-4 text-[var(--text-secondary)]" />
+                    ) : (
+                      <PieChart className="size-4 text-[var(--text-secondary)]" />
+                    )}
+                    <h3 className="font-display text-[15px] font-bold text-[var(--text-primary)]">
+                      {chart.title}
+                    </h3>
+                  </div>
+                  <span className="text-xs font-medium text-[var(--text-secondary)]">
+                    {chartTotal} Total
+                  </span>
+                </div>
+                {chartRows.length === 0 ? (
+                  <V2Empty>{t("noData")}</V2Empty>
+                ) : (
+                  <div className="mt-4 space-y-2.5">
+                    {chartRows.map((r) => {
+                      const pct = chartTotal > 0 ? (r.count / chartTotal) * 100 : 0;
+                      return (
+                        <div key={r.key} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs font-medium">
+                            <span className="truncate text-[var(--text-primary)]">{r.key}</span>
+                            <span className="tabular-nums text-[var(--text-secondary)]">
+                              {r.count} ({pct.toFixed(1)}%)
+                            </span>
+                          </div>
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-subtle)]">
+                            <div
+                              className="h-full rounded-full bg-indigo-500"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </V2Card>
+            );
+          })}
+        </div>
+      ) : null}
+
       <div ref={leavePlannerRef} className="mt-4">
         <V2Card className="p-4 xl:p-5">
           <V2CardHeader
@@ -1145,6 +1625,15 @@ export function OperationsV2Shell() {
                     onClick={() => setPlanProject(key)}
                   />
                 ))}
+                <AppTableColumnPicker
+                  options={upcomingColumnVisibility.pickerOptions}
+                  isVisible={upcomingColumnVisibility.isVisible}
+                  onToggle={upcomingColumnVisibility.toggle}
+                  onReset={upcomingColumnVisibility.reset}
+                  onMove={upcomingColumnVisibility.move}
+                  onReorder={upcomingColumnVisibility.reorder}
+                  hiddenCount={upcomingColumnVisibility.hiddenToggleableCount}
+                />
               </div>
             </div>
 
@@ -1152,46 +1641,28 @@ export function OperationsV2Shell() {
               <Table className={TABLE}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className={TH}>{t("colEmployeeId")}</TableHead>
-                    <TableHead className={TH}>{t("colName")}</TableHead>
-                    <TableHead className={TH}>{t("colProject")}</TableHead>
-                    <TableHead className={TH}>{t("colLeaveType")}</TableHead>
-                    <TableHead className={TH}>{t("colStart")}</TableHead>
-                    <TableHead className={TH}>{t("colEnd")}</TableHead>
-                    <TableHead className={`${TH} text-center`}>{t("colDays")}</TableHead>
-                    <TableHead className={TH}>{t("colStatus")}</TableHead>
+                    {upcomingVisibleColumns.map((column) => (
+                      <TableHead key={column.id} className={column.headClassName ?? TH}>
+                        {column.label}
+                      </TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {upcomingRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-[var(--text-secondary)]">
+                      <TableCell colSpan={upcomingVisibleColumns.length} className="text-center text-[var(--text-secondary)]">
                         {t("emptyUpcoming")}
                       </TableCell>
                     </TableRow>
                   ) : (
                     upcomingRows.map((row) => (
                       <TableRow key={row.id}>
-                        <TableCell className="tabular-nums">{row.employeeId}</TableCell>
-                        <TableCell className="font-medium">{row.name}</TableCell>
-                        <TableCell>
-                          {row.project === "unassigned"
-                            ? t("projectUnassigned")
-                            : row.project === "keeta"
-                              ? t("projectKeeta")
-                              : row.project === "americana"
-                                ? t("projectAmericana")
-                                : row.project}
-                        </TableCell>
-                        <TableCell>{leaveTypeLabel(row.leaveType, t)}</TableCell>
-                        <TableCell className="tabular-nums">{formatKuwaitDateLabel(row.start)}</TableCell>
-                        <TableCell className="tabular-nums">{formatKuwaitDateLabel(row.end)}</TableCell>
-                        <TableCell className="text-center tabular-nums">{row.days}</TableCell>
-                        <TableCell>
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${statusVariant(row.status)}`}>
-                            {planStatusLabel(row.status, t)}
-                          </span>
-                        </TableCell>
+                        {upcomingVisibleColumns.map((column) => (
+                          <TableCell key={column.id} className={column.cellClassName}>
+                            {column.render(row)}
+                          </TableCell>
+                        ))}
                       </TableRow>
                     ))
                   )}
@@ -1298,47 +1769,52 @@ export function OperationsV2Shell() {
           <V2CardHeader
             title={t("onLeaveTitle", { count: away.length })}
             actions={
-              away.length > 6 ? (
-                <Button variant="portal-secondary" className={HEAD_BTN} onClick={() => setAllAwayOpen((open) => !open)}>
-                  {t("viewAll")}
-                </Button>
-              ) : undefined
+              <>
+                {away.length > 6 ? (
+                  <Button variant="portal-secondary" className={HEAD_BTN} onClick={() => setAllAwayOpen((open) => !open)}>
+                    {t("viewAll")}
+                  </Button>
+                ) : null}
+                <AppTableColumnPicker
+                  options={awayColumnVisibility.pickerOptions}
+                  isVisible={awayColumnVisibility.isVisible}
+                  onToggle={awayColumnVisibility.toggle}
+                  onReset={awayColumnVisibility.reset}
+                  onMove={awayColumnVisibility.move}
+                  onReorder={awayColumnVisibility.reorder}
+                  hiddenCount={awayColumnVisibility.hiddenToggleableCount}
+                />
+              </>
             }
           />
           <V2TableShell className="mt-3">
             <Table className={TABLE}>
               <TableHeader>
                 <TableRow>
-                  <TableHead className={TH}>{t("colRider")}</TableHead>
-                  <TableHead className={TH}>{t("colProject")}</TableHead>
-                  <TableHead className={TH}>{t("colSince")}</TableHead>
-                  <TableHead className={TH}>{t("colBackOn")}</TableHead>
+                  {awayVisibleColumns.map((column) => (
+                    <TableHead key={column.id} className={column.headClassName ?? TH}>
+                      {column.label}
+                    </TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {awayRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-[var(--text-secondary)]">
+                    <TableCell colSpan={awayVisibleColumns.length} className="text-center text-[var(--text-secondary)]">
                       {t("noData")}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  awayRows.map((row, index) => {
-                    const back = backState(row.end, today, t("today"), tBase("outlookOverdue"));
-                    return (
-                      <TableRow key={`${row.employeeId}-${index}`}>
-                        <TableCell className="font-medium">{row.name}</TableCell>
-                        <TableCell>{projectName(row.project, t)}</TableCell>
-                        <TableCell className="tabular-nums">{formatKuwaitDateLabel(row.start)}</TableCell>
-                        <TableCell>
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${back.className}`}>
-                            <span className={`size-1.5 rounded-full ${back.dot}`} aria-hidden />
-                            {back.label}
-                          </span>
+                  awayRows.map((row, index) => (
+                    <TableRow key={`${row.employeeId}-${index}`}>
+                      {awayVisibleColumns.map((column) => (
+                        <TableCell key={column.id} className={column.cellClassName}>
+                          {column.render(row)}
                         </TableCell>
-                      </TableRow>
-                    );
-                  })
+                      ))}
+                    </TableRow>
+                  ))
                 )}
               </TableBody>
             </Table>
@@ -1413,6 +1889,12 @@ export function OperationsV2Shell() {
 
       <AddLeaveDialog open={addOpen} onOpenChange={setAddOpen} onSaved={reload} />
       <ImportLeaveDialog open={importOpen} onOpenChange={setImportOpen} onImported={reload} />
+      <OperationsHubConfigModal
+        open={configModalOpen}
+        onOpenChange={setConfigModalOpen}
+        config={hubConfig}
+        onSave={handleSaveHubConfig}
+      />
     </V2Surface>
   );
 }
@@ -1680,6 +2162,350 @@ function ImportLeaveDialog({
             </Button>
             <Button variant="portal" className="h-9 cursor-pointer" disabled={saving || !csv} onClick={() => void run()}>
               {saving ? t("importing") : t("importCsv")}
+            </Button>
+          </AppModalFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function OperationsHubConfigModal({
+  open,
+  onOpenChange,
+  config,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  config: OperationsHubConfig;
+  onSave: (newConfig: OperationsHubConfig) => Promise<void>;
+}) {
+  const [activeTab, setActiveTab] = useState<"columns" | "charts">("columns");
+  const [columns, setColumns] = useState<CustomColumnDef[]>(config.customColumns);
+  const [charts, setCharts] = useState<CustomChartDef[]>(config.customCharts);
+  const [saving, setSaving] = useState(false);
+
+  const [newColLabel, setNewColLabel] = useState("");
+  const [newColField, setNewColField] = useState("");
+
+  const [newChartTitle, setNewChartTitle] = useState("");
+  const [newChartType, setNewChartType] = useState<"bar" | "donut" | "pie">("donut");
+  const [newChartDim, setNewChartDim] = useState<
+    "nationalityCategory" | "nationalityCountry" | "status" | "project" | "zone"
+  >("nationalityCategory");
+
+  useEffect(() => {
+    setColumns(config.customColumns);
+    setCharts(config.customCharts);
+  }, [config, open]);
+
+  const toggleCol = (id: string) => {
+    setColumns((prev) =>
+      prev.map((col) => (col.id === id ? { ...col, visible: !col.visible } : col))
+    );
+  };
+
+  const removeCol = (id: string) => {
+    setColumns((prev) => prev.filter((col) => col.id !== id));
+  };
+
+  const addColumn = () => {
+    if (!newColLabel.trim() || !newColField.trim()) return;
+    const id = newColField.trim().replace(/[^a-zA-Z0-9_]/g, "_");
+    setColumns((prev) => [
+      ...prev,
+      { id, label: newColLabel.trim(), field: newColField.trim(), visible: true },
+    ]);
+    setNewColLabel("");
+    setNewColField("");
+  };
+
+  const removeChart = (id: string) => {
+    setCharts((prev) => prev.filter((ch) => ch.id !== id));
+  };
+
+  const addChart = () => {
+    if (!newChartTitle.trim()) return;
+    const id = `chart_${Date.now()}`;
+    setCharts((prev) => [
+      ...prev,
+      { id, title: newChartTitle.trim(), type: newChartType, dimension: newChartDim },
+    ]);
+    setNewChartTitle("");
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave({
+      customColumns: columns,
+      customCharts: charts,
+    });
+    setSaving(false);
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent closeOutside showCloseButton className="w-[min(680px,96vw)] max-w-none">
+        <div className="space-y-4 px-5 pt-4">
+          <div className="flex border-b border-[var(--border-default)]">
+            <button
+              type="button"
+              onClick={() => setActiveTab("columns")}
+              className={`pb-2.5 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+                activeTab === "columns"
+                  ? "border-[var(--selected-navy)] text-[var(--text-primary)]"
+                  : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              Table Columns ({columns.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("charts")}
+              className={`pb-2.5 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+                activeTab === "charts"
+                  ? "border-[var(--selected-navy)] text-[var(--text-primary)]"
+                  : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              Custom Charts ({charts.length})
+            </button>
+          </div>
+
+          {activeTab === "columns" ? (
+            <div className="space-y-4">
+              <div className="max-h-[280px] overflow-y-auto space-y-2 pr-1">
+                {columns.map((col) => (
+                  <div
+                    key={col.id}
+                    className="flex items-center justify-between gap-3 p-2 rounded-lg border border-[var(--border-default)] bg-[var(--surface-subtle)]"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                        {col.label}
+                      </p>
+                      <p className="text-[11px] text-[var(--text-secondary)] truncate">
+                        Field: <code className="font-mono text-[10px]">{col.field}</code>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        type="button"
+                        variant="portal-neutral"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => toggleCol(col.id)}
+                        title={col.visible ? "Hide Column" : "Show Column"}
+                      >
+                        {col.visible ? (
+                          <span className="flex items-center gap-1 text-emerald-600">
+                            <Eye className="size-3.5" /> Visible
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[var(--text-secondary)]">
+                            <EyeOff className="size-3.5" /> Hidden
+                          </span>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="portal-neutral"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-red-500 hover:text-red-600"
+                        onClick={() => removeCol(col.id)}
+                        title="Remove Column"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-lg border border-[var(--border-default)] p-3 space-y-3 bg-[var(--surface-card)]">
+                <p className="text-xs font-semibold text-[var(--text-primary)]">Add New Column</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-[var(--text-secondary)] block mb-1">
+                      Column Label
+                    </label>
+                    <Input
+                      placeholder="e.g. Nationality Country"
+                      value={newColLabel}
+                      onChange={(e) => setNewColLabel(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[var(--text-secondary)] block mb-1">
+                      Data Field Name
+                    </label>
+                    <Input
+                      placeholder="e.g. nationalityCountry"
+                      value={newColField}
+                      onChange={(e) => setNewColField(e.target.value)}
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="portal"
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={!newColLabel.trim() || !newColField.trim()}
+                    onClick={addColumn}
+                  >
+                    <Plus className="size-3.5 mr-1" /> Add Column
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="max-h-[280px] overflow-y-auto space-y-2 pr-1">
+                {charts.length === 0 ? (
+                  <p className="text-xs text-center py-4 text-[var(--text-secondary)]">
+                    No custom charts added yet. Add one below.
+                  </p>
+                ) : (
+                  charts.map((ch) => (
+                    <div
+                      key={ch.id}
+                      className="flex items-center justify-between gap-3 p-2 rounded-lg border border-[var(--border-default)] bg-[var(--surface-subtle)]"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
+                          {ch.title}
+                        </p>
+                        <p className="text-[11px] text-[var(--text-secondary)]">
+                          Type: <span className="capitalize">{ch.type}</span> &bull; Dimension:{" "}
+                          <span className="capitalize">{ch.dimension}</span>
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="portal-neutral"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-red-500 hover:text-red-600"
+                        onClick={() => removeChart(ch.id)}
+                        title="Remove Chart"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="rounded-lg border border-[var(--border-default)] p-3 space-y-3 bg-[var(--surface-card)]">
+                <p className="text-xs font-semibold text-[var(--text-primary)]">Add New Chart</p>
+                <div>
+                  <label className="text-[11px] text-[var(--text-secondary)] block mb-1">
+                    Chart Title
+                  </label>
+                  <Input
+                    placeholder="e.g. Riders by Nationality Country"
+                    value={newChartTitle}
+                    onChange={(e) => setNewChartTitle(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-[var(--text-secondary)] block mb-1">
+                      Chart Type
+                    </label>
+                    <Select
+                      items={[
+                        { value: "donut", label: "Donut / Progress Bars" },
+                        { value: "bar", label: "Horizontal Bar Chart" },
+                        { value: "pie", label: "Pie Chart" },
+                      ]}
+                      value={newChartType}
+                      onValueChange={(val) => setNewChartType(val as "bar" | "donut" | "pie")}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="donut">Donut / Progress Bars</SelectItem>
+                        <SelectItem value="bar">Horizontal Bar Chart</SelectItem>
+                        <SelectItem value="pie">Pie Chart</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[var(--text-secondary)] block mb-1">
+                      Dimension
+                    </label>
+                    <Select
+                      items={[
+                        { value: "nationalityCategory", label: "Nationality Category" },
+                        { value: "nationalityCountry", label: "Nationality Country" },
+                        { value: "status", label: "Status" },
+                        { value: "project", label: "Project" },
+                        { value: "zone", label: "Zone" },
+                      ]}
+                      value={newChartDim}
+                      onValueChange={(val) =>
+                        setNewChartDim(
+                          val as "nationalityCategory" | "nationalityCountry" | "status" | "project" | "zone"
+                        )
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nationalityCategory">Nationality Category</SelectItem>
+                        <SelectItem value="nationalityCountry">Nationality Country</SelectItem>
+                        <SelectItem value="status">Status</SelectItem>
+                        <SelectItem value="project">Project</SelectItem>
+                        <SelectItem value="zone">Zone</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="portal"
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={!newChartTitle.trim()}
+                    onClick={addChart}
+                  >
+                    <Plus className="size-3.5 mr-1" /> Add Chart
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 pb-4">
+          <AppModalFooter
+            title="Operations Hub Configuration"
+            subtitle="Central control (Super Admin) — synchronized automatically across all pages."
+          >
+            <Button
+              variant="portal-neutral"
+              className="h-9 cursor-pointer"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="portal"
+              className="h-9 cursor-pointer"
+              disabled={saving}
+              onClick={() => void handleSave()}
+            >
+              {saving ? "Saving..." : "Save Central Configuration"}
             </Button>
           </AppModalFooter>
         </div>

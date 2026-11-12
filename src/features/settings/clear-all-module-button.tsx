@@ -171,6 +171,7 @@ function PurgeSelectedDialog({
   onFinished,
 }: PurgeSelectedDialogProps) {
   const t = useTranslations("pages.settings.dataCleanup");
+  const tCommon = useTranslations("common");
   const module = purgeAllModuleFor(entity);
   const [pending, setPending] = useState(false);
 
@@ -254,7 +255,7 @@ function PurgeSelectedDialog({
               disabled={pending}
               onClick={() => onOpenChange(false)}
             >
-              {t("common.cancel")}
+              {tCommon("cancel")}
             </Button>
             <Button
               type="button"

@@ -24,7 +24,7 @@ describe("applyPayrollManualOrders", () => {
       overridden: false,
     });
     assert.deepEqual(applyPayrollManualOrders(null, null, 4), {
-      orders: 0,
+      orders: 4,
       displayOrders: 4,
       overridden: false,
     });

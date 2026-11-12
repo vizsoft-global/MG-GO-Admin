@@ -104,6 +104,8 @@ export type RosterRow = {
   phone: string;
   /** `drivers.employee_status_key`; the Accident card filters on it. */
   employeeStatus?: string;
+  nationalityCountry?: string;
+  nationalityCategory?: string;
 };
 
 export const DASHBOARD_PERIODS = ["today", "yesterday", "thisWeek", "last7", "thisMonth", "lastMonth", "custom"] as const;
@@ -150,6 +152,8 @@ export type OperationsDashboard = {
   jobEndCards: Record<JobEndCardKey, number>;
   ridersOnLeave: RiderOnLeaveRow[];
   roster: RosterRow[];
+  byNationalityCategory: CountRow[];
+  byNationalityCountry: CountRow[];
   from: string;
   to: string;
   turnover: ContractTurnover;
@@ -157,6 +161,45 @@ export type OperationsDashboard = {
   exportLeaveYear: PlainRow[];
   exportLeaveMonth: PlainRow[];
   exportJobEnd: PlainRow[];
+};
+
+export type CustomColumnDef = {
+  id: string;
+  label: string;
+  field: string;
+  visible: boolean;
+};
+
+export type CustomChartDef = {
+  id: string;
+  title: string;
+  type: "bar" | "donut" | "pie";
+  dimension: "nationalityCategory" | "nationalityCountry" | "status" | "project" | "zone";
+};
+
+export type OperationsHubConfig = {
+  customColumns: CustomColumnDef[];
+  customCharts: CustomChartDef[];
+  updatedAt?: string;
+  updatedBy?: string;
+};
+
+export const DEFAULT_OPS_HUB_CONFIG: OperationsHubConfig = {
+  customColumns: [
+    { id: "employeeId", label: "Employee ID", field: "employeeId", visible: true },
+    { id: "name", label: "Rider Name", field: "name", visible: true },
+    { id: "project", label: "Project", field: "project", visible: true },
+    { id: "zone", label: "Zone", field: "zone", visible: true },
+    { id: "status", label: "Status", field: "status", visible: true },
+    { id: "nationalityCategory", label: "Nationality Category", field: "nationalityCategory", visible: true },
+    { id: "nationalityCountry", label: "Nationality Country", field: "nationalityCountry", visible: true },
+    { id: "phone", label: "Phone", field: "phone", visible: true },
+    { id: "joined", label: "Joined Date", field: "joined", visible: true },
+  ],
+  customCharts: [
+    { id: "chart_nat_cat", title: "Nationality Category Breakdown", type: "donut", dimension: "nationalityCategory" },
+    { id: "chart_nat_country", title: "Riders by Nationality Country", type: "bar", dimension: "nationalityCountry" },
+  ],
 };
 
 export type LeaveImportRow = {
@@ -276,6 +319,8 @@ export function emptyOperationsDashboard(): OperationsDashboard {
     jobEndCards: { next30: 0, eoy: 0, next6m: 0, noRenewal: 0 },
     ridersOnLeave: [],
     roster: [],
+    byNationalityCategory: [],
+    byNationalityCountry: [],
     from: "",
     to: "",
     turnover: emptyTurnover(),
@@ -420,6 +465,8 @@ function readRoster(raw: unknown): RosterRow[] {
       joined: text(pick(row, ["joined", "work_start_date", "workStart"])),
       phone: text(pick(row, ["phone"])),
       employeeStatus: text(pick(row, ["employeeStatus", "employee_status"])),
+      nationalityCountry: text(pick(row, ["nationalityCountry", "nationality_country", "nationality"])),
+      nationalityCategory: text(pick(row, ["nationalityCategory", "nationality_category"])),
     });
   }
   return rows;
@@ -739,6 +786,8 @@ export function normalizeOperationsDashboard(raw: unknown): OperationsDashboard 
     jobEndCards: readJobCards(pick(row, ["jobEndCards", "job_end_cards"]) ?? jobEnd?.cards),
     ridersOnLeave: readRidersOnLeave(pick(row, ["ridersOnLeave", "riders_on_leave"])),
     roster: readRoster(pick(row, ["roster", "riders"])),
+    byNationalityCategory: readStatusBar(pick(row, ["byNationalityCategory", "by_nationality_category"])),
+    byNationalityCountry: readStatusBar(pick(row, ["byNationalityCountry", "by_nationality_country"])),
     from: text(pick(row, ["from"])) || text(pick(row, ["today", "day"])),
     to: text(pick(row, ["to"])) || text(pick(row, ["today", "day"])),
     turnover: readTurnover(pick(row, ["turnover"])),

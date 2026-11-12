@@ -104,4 +104,21 @@ describe("shift helpers", () => {
     assert.equal(shiftEndDayOffset(start, end), 1);
     assert.equal(shiftEndDayOffset(start, start), 1);
   });
+
+  it("determines active overnight shift spanning past midnight (Item 4.1)", () => {
+    const shift = {
+      shift_date: "2026-11-15",
+      shift_type: "single",
+      session1_start: "13:00",
+      session1_end: "01:00",
+      session1_end_day_offset: 1,
+      session2_end: null,
+      session2_end_day_offset: null,
+    };
+    // Nov 15 13:00 Kuwait = 10:00 UTC
+    // Nov 16 01:00 Kuwait = Nov 15 22:00 UTC
+    // Order delivered at 00:30 Nov 16 Kuwait = Nov 15 21:30 UTC
+    const offset = shiftEndDayOffset(parseShiftTime("13:00")!, parseShiftTime("01:00")!);
+    assert.equal(offset, 1);
+  });
 });

@@ -34,6 +34,8 @@ type DriverRow = {
   vehicle: string;
   phone: string;
   designation: string;
+  nationalityCountry: string;
+  nationalityCategory: string;
 };
 
 type LeaveRow = {
@@ -166,6 +168,11 @@ async function readOrFail<T>(code: string, load: () => Promise<T>): Promise<T> {
 
 function parseDriver(id: string, data: Dict): DriverRow {
   const archivedAt = toYmd(data["archived_at"]);
+  const rawCountry = text(data["nationality"]);
+  const catKeys = Array.isArray(data["nationality_category_keys"])
+    ? (data["nationality_category_keys"] as unknown[]).map(text).filter(Boolean)
+    : [];
+  const rawCategory = catKeys[0] || text(data["nationality_category"]) || "";
   return {
     id,
     name: text(data["full_name"]),
@@ -181,6 +188,8 @@ function parseDriver(id: string, data: Dict): DriverRow {
     vehicle: text(data["vehicle_type_key"]).toLowerCase(),
     phone: text(data["phone"]),
     designation: text(data["job_position"]),
+    nationalityCountry: rawCountry || "unassigned",
+    nationalityCategory: rawCategory || "unassigned",
   };
 }
 
@@ -735,6 +744,8 @@ function rosterRows(
       statuses: [...seen],
       joined: driver.workStart ?? "",
       employeeStatus: driver.status,
+      nationalityCountry: driver.nationalityCountry,
+      nationalityCategory: driver.nationalityCategory,
     };
     if (includePhone) row.phone = driver.phone;
     rows.push(row);
@@ -760,6 +771,8 @@ async function loadDashboard(from: string, to = from) {
         "vehicle_type_key",
         "phone",
         "job_position",
+        "nationality",
+        "nationality_category_keys",
       ).get(),
     ),
     readOrFail("leave_plans_read_failed", () =>
@@ -888,6 +901,18 @@ async function loadDashboard(from: string, to = from) {
   return { drivers, leaves, checkedIn, checkedInByDay, zones };
 }
 
+function countByDimension(drivers: DriverRow[], dim: "nationalityCategory" | "nationalityCountry") {
+  const counts = new Map<string, number>();
+  for (const driver of drivers) {
+    if (driver.archived) continue;
+    const key = driver[dim] || "unassigned";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([key, count]) => ({ key, label: key, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
 export const adminOperationsDashboard = onCall(async (request) => {
   const staff = await requireStaff(request, "operations_dashboard.view");
   const data = payloadOf(request);
@@ -902,9 +927,15 @@ export const adminOperationsDashboard = onCall(async (request) => {
   const projectKey = scopedProjectKey(staff, pickText(data, "projectKey", "project_key"));
   const zoneId = pickText(data, "zoneId", "zone_id");
   const vehicle = pickText(data, "vehicle", "vehicleType", "vehicle_type")?.toLowerCase() ?? "";
+  const nationalityCountry = pickText(data, "nationalityCountry", "nationality_country");
+  const nationalityCategory = pickText(data, "nationalityCategory", "nationality_category");
   const loaded = await loadDashboard(window.from, window.to);
   const narrowed = loaded.drivers.filter(
-    (driver) => (!zoneId || driver.zoneId === zoneId) && vehicleMatches(driver.vehicle, vehicle),
+    (driver) =>
+      (!zoneId || driver.zoneId === zoneId) &&
+      vehicleMatches(driver.vehicle, vehicle) &&
+      (!nationalityCountry || driver.nationalityCountry.toLowerCase() === nationalityCountry.toLowerCase()) &&
+      (!nationalityCategory || driver.nationalityCategory.toLowerCase() === nationalityCategory.toLowerCase()),
   );
   const scopedDrivers = projectKey ? narrowed.filter((driver) => driver.project === projectKey) : narrowed;
   const scopedIds = new Set(scopedDrivers.map((driver) => driver.id));
@@ -940,6 +971,8 @@ export const adminOperationsDashboard = onCall(async (request) => {
     byProject: byProject(narrowed, day, todayYm, allByDriver, loaded.checkedIn),
     employeeStatus: statusTiles(scopedDrivers, OPS_STATUS_KEYS),
     statusByProject: statusByProject(narrowed),
+    byNationalityCategory: countByDimension(scopedDrivers, "nationalityCategory"),
+    byNationalityCountry: countByDimension(scopedDrivers, "nationalityCountry"),
     leaveMonths: leaveMonthRows(scopedLeaves, day, todayYm),
     leavePlans: monthLeaves
       .sort((left, right) => left.start.localeCompare(right.start) || left.employeeId.localeCompare(right.employeeId))
@@ -1062,4 +1095,47 @@ export const adminClientPortalDashboard = onCall(async (request) => {
       })),
     },
   };
+});
+
+const OPERATIONS_HUB_CONFIG_DOC = "default";
+const OPERATIONS_HUB_CONFIG_COLL = "operations_hub_config";
+
+export const adminGetOperationsHubConfig = onCall(async (request) => {
+  await requireStaff(request, "operations_dashboard.view");
+  const db = getFirestore();
+  const snap = await db.collection(OPERATIONS_HUB_CONFIG_COLL).doc(OPERATIONS_HUB_CONFIG_DOC).get();
+  if (!snap.exists) {
+    return {
+      customColumns: [
+        { id: "col_nationality_country", label: "Nationality Country", field: "nationalityCountry", table: "roster", type: "text", visible: true },
+        { id: "col_nationality_category", label: "Nationality Category", field: "nationalityCategory", table: "roster", type: "badge", visible: true },
+      ],
+      customCharts: [
+        { id: "chart_nationality_cat", title: "Riders by Nationality Category", type: "bar", metric: "nationality_category", visible: true },
+        { id: "chart_nationality_country", title: "Riders by Nationality Country", type: "donut", metric: "nationality_country", visible: true },
+      ],
+      updatedAt: null,
+      updatedBy: null,
+    };
+  }
+  return snap.data();
+});
+
+export const adminSaveOperationsHubConfig = onCall(async (request) => {
+  const staff = await requireStaff(request, "operations_dashboard.view");
+  if (!staff.isSuperAdmin) {
+    throw new HttpsError("permission-denied", "super_admin_required");
+  }
+  const data = payloadOf(request);
+  const customColumns = Array.isArray(data["customColumns"]) ? data["customColumns"] : [];
+  const customCharts = Array.isArray(data["customCharts"]) ? data["customCharts"] : [];
+  const config = {
+    customColumns,
+    customCharts,
+    updatedAt: new Date().toISOString(),
+    updatedBy: staff.uid,
+  };
+  const db = getFirestore();
+  await db.collection(OPERATIONS_HUB_CONFIG_COLL).doc(OPERATIONS_HUB_CONFIG_DOC).set(config, { merge: true });
+  return { ok: true, config };
 });

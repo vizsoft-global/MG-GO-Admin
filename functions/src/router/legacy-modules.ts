@@ -147,7 +147,9 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   ],
   "./rpcs/operations-dashboard": [
     "adminOperationsDashboard",
-    "adminClientPortalDashboard"
+    "adminClientPortalDashboard",
+    "adminGetOperationsHubConfig",
+    "adminSaveOperationsHubConfig"
   ],
   "./rpcs/rules": [
     "adminInsertDeliveryRuleWithScope",
