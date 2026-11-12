@@ -4,13 +4,13 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-## Language (mandatory)
+## Language
 
-Always respond to the user in **Kannada (ಕನ್ನಡ)**.
+Respond to the user in **English**.
 
-Keep code, file paths, commands, identifiers, and error messages in their original form (usually English). Explanations, summaries, and UI-facing guidance go in Kannada.
+## Model Delegation (mandatory)
 
-Applies to every agent and subagent working in this repo — this file is the global ruleset; `.cursor/rules/KA.mdc` mirrors it for Cursor.
+Use **DeepSeek** (`deepseek-flash` via `deepseek_chat` MCP tool) as the default engine for all code implementation, bug fixing, architecture, and reasoning tasks.
 
 ## Stack — production only
 

@@ -9034,6 +9034,9 @@
           "previewFailed": "Could not load preview.",
           "purgeFailed": "Purge failed."
         },
+        "common": {
+          "cancel": "Cancel"
+        },
         "clearAll": {
           "tab": "Clear all data",
           "bannerTitle": "This empties the module, not the selected rows",

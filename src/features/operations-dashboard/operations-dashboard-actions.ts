@@ -6,8 +6,10 @@ import {
   emptyOperationsDashboard,
   normalizeOperationsDashboard,
   parseLeaveCsv,
+  DEFAULT_OPS_HUB_CONFIG,
   type LeaveImportRow,
   type OperationsDashboard,
+  type OperationsHubConfig,
 } from "./shape";
 
 function canView(permissions: ReadonlySet<string>, isSuperAdmin: boolean): boolean {
@@ -28,6 +30,8 @@ export async function fetchOperationsDashboard(input: {
   to?: string;
   zoneId?: string;
   vehicle?: string;
+  nationalityCategory?: string;
+  nationalityCountry?: string;
 }): Promise<{ dashboard: OperationsDashboard; failed: boolean }> {
   const gate = await requireOpsView();
   if (!gate.ok) return { dashboard: emptyOperationsDashboard(), failed: true };
@@ -39,9 +43,43 @@ export async function fetchOperationsDashboard(input: {
   if (input.to) args.to = input.to;
   if (input.zoneId) args.zoneId = input.zoneId;
   if (input.vehicle) args.vehicle = input.vehicle;
+  if (input.nationalityCategory) args.nationalityCategory = input.nationalityCategory;
+  if (input.nationalityCountry) args.nationalityCountry = input.nationalityCountry;
   const { data, error } = await callAdminFunction<unknown>("adminOperationsDashboard", args);
   if (error || data == null) return { dashboard: emptyOperationsDashboard(), failed: true };
   return { dashboard: normalizeOperationsDashboard(data), failed: false };
+}
+
+export async function fetchOperationsHubConfig(): Promise<{ config: OperationsHubConfig }> {
+  const gate = await requireOpsView();
+  if (!gate.ok) return { config: DEFAULT_OPS_HUB_CONFIG };
+  const { data, error } = await callAdminFunction<{ customColumns?: unknown[]; customCharts?: unknown[] }>(
+    "adminGetOperationsHubConfig",
+    {},
+  );
+  if (error || !data || !Array.isArray(data.customColumns)) {
+    return { config: DEFAULT_OPS_HUB_CONFIG };
+  }
+  return {
+    config: {
+      customColumns: data.customColumns as OperationsHubConfig["customColumns"],
+      customCharts: Array.isArray(data.customCharts)
+        ? (data.customCharts as OperationsHubConfig["customCharts"])
+        : DEFAULT_OPS_HUB_CONFIG.customCharts,
+    },
+  };
+}
+
+export async function saveOperationsHubConfig(
+  config: OperationsHubConfig,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSessionUser();
+  if (!session || !session.isSuperAdmin) {
+    return { ok: false, error: "Only Super Admin can modify Operations Hub configuration" };
+  }
+  const { error } = await callAdminFunction("adminSaveOperationsHubConfig", config);
+  if (error) return { ok: false, error: error.message || "Failed to save configuration" };
+  return { ok: true };
 }
 
 export async function upsertLeavePlan(input: LeaveImportRow): Promise<{ error?: string }> {
