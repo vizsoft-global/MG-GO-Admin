@@ -454,89 +454,56 @@ export function VehiclesPageShell({
   const isRefreshing = isFetching && !isLoading;
 
   const vehicleToolbar = (
-    <>
-      <TableToolbar
-        prefs={prefs}
-        entity={t("title")}
-        columns={toolbarColumns}
-        rowKind="dynamic"
-        entityList
-        searchFirst
-        trailing={
-          prefs.view !== "grid" ? (
-            <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} inline />
-          ) : null
-        }
-        filteredCount={visible.length}
-        totalCount={vehicles.length}
-        onExport={
-          !isLoading && visible.length > 0 ? () => downloadVehicleListXlsx(visible) : undefined
-        }
-        onAdd={canCreate ? () => replaceQuery({ add: true }) : undefined}
-        addLabel={t("addVehicle")}
-      />
-      <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
-        <Select
-          items={tabSelectItems}
-          value={activeTab}
-          onValueChange={(value) => {
-            if (value) replaceQuery({ tab: parseVehicleListTab(value) });
-          }}
-        >
-          <SelectTrigger className="h-9 w-[148px] shrink-0 cursor-pointer rounded-lg text-xs">
-            <SelectValue placeholder={t("filterView")} />
-          </SelectTrigger>
-          <SelectContent>
-            {tabSelectItems.map((item) => (
-              <SelectItem key={item.value} value={item.value} className="cursor-pointer">
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {activeFilterCount > 0 ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-            onClick={clearAll}
+    <TableToolbar
+      prefs={prefs}
+      entity={t("title")}
+      columns={toolbarColumns}
+      rowKind="dynamic"
+      entityList
+      searchFirst
+      searchWidthClass="w-48 min-w-0 shrink-0"
+      hideColumnsPicker
+      leading={
+        <>
+          <Select
+            items={tabSelectItems}
+            value={activeTab}
+            onValueChange={(value) => {
+              if (value) replaceQuery({ tab: parseVehicleListTab(value) });
+            }}
           >
-            <FilterX className="h-3.5 w-3.5" aria-hidden />
-            {t("clearAllFilters")}
-            <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-white tabular-nums">
-              {activeFilterCount}
-            </span>
-          </Button>
-        ) : null}
-        <AppTableColumnPicker
-          options={pickerOptions}
-          isVisible={isVisible}
-          onToggle={toggle}
-          onReset={reset}
-          hiddenCount={hiddenToggleableCount}
-        />
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
-                onClick={() => {
-                  void queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all() });
-                  void refetch();
-                }}
-                disabled={isRefreshing}
-                aria-label={t("refresh")}
-              >
-                <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-              </Button>
-            }
+            <SelectTrigger className="h-9 w-[148px] shrink-0 cursor-pointer rounded-lg text-xs">
+              <SelectValue placeholder={t("filterView")} />
+            </SelectTrigger>
+            <SelectContent>
+              {tabSelectItems.map((item) => (
+                <SelectItem key={item.value} value={item.value} className="cursor-pointer">
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {activeFilterCount > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={clearAll}
+            >
+              <FilterX className="h-3.5 w-3.5" aria-hidden />
+              {t("clearAllFilters")}
+              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-white tabular-nums">
+                {activeFilterCount}
+              </span>
+            </Button>
+          ) : null}
+          <AppTableColumnPicker
+            options={pickerOptions}
+            isVisible={isVisible}
+            onToggle={toggle}
+            onReset={reset}
+            hiddenCount={hiddenToggleableCount}
           />
-          <TooltipContent>{t("refresh")}</TooltipContent>
-        </Tooltip>
-        {canManage ? (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -544,20 +511,55 @@ export function VehiclesPageShell({
                   type="button"
                   variant="outline"
                   size="icon"
-                  className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
-                  onClick={() => setImportOpen(true)}
-                  aria-label={t("bulkImport")}
+                  className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
+                  onClick={() => {
+                    void queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all() });
+                    void refetch();
+                  }}
+                  disabled={isRefreshing}
+                  aria-label={t("refresh")}
                 >
-                  <Upload className="h-4 w-4" />
-                  <span className="ms-1.5 hidden md:inline">{t("bulkImport")}</span>
+                  <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
                 </Button>
               }
             />
-            <TooltipContent>{t("bulkImport")}</TooltipContent>
+            <TooltipContent>{t("refresh")}</TooltipContent>
           </Tooltip>
-        ) : null}
-      </div>
-    </>
+          {canManage ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
+                    onClick={() => setImportOpen(true)}
+                    aria-label={t("bulkImport")}
+                  >
+                    <Upload className="h-4 w-4" />
+                    <span className="ms-1.5 hidden md:inline">{t("bulkImport")}</span>
+                  </Button>
+                }
+              />
+              <TooltipContent>{t("bulkImport")}</TooltipContent>
+            </Tooltip>
+          ) : null}
+        </>
+      }
+      trailing={
+        prefs.view !== "grid" ? (
+          <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} inline />
+        ) : null
+      }
+      filteredCount={visible.length}
+      totalCount={vehicles.length}
+      onExport={
+        !isLoading && visible.length > 0 ? () => downloadVehicleListXlsx(visible) : undefined
+      }
+      onAdd={canCreate ? () => replaceQuery({ add: true }) : undefined}
+      addLabel={t("addVehicle")}
+    />
   );
 
   return (
