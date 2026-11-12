@@ -78,4 +78,12 @@ firebase-debug.log
 /*.log
 /tscg.*
 
+# firebase CLI deploy overrides (a local subset of firebase.json, never shipped)
+firebase.deployonly.json
+
+# Agent tooling state — regenerated per machine, not part of the product
+.serena/cache/
+.serena/project.local.yml
+.agents/mcp/
+
 # function signer key (local).fn-signer.json
