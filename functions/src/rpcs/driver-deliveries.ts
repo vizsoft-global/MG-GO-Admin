@@ -203,8 +203,11 @@ export function isScopedDuplicate(
  * only a same-store same-day row (not cancelled) is a duplicate. A cancelled
  * row does not count, so re-attempting a delivery that fell through still works.
  *
- * The query itself stays on `external_order_id` alone — the automatic
- * single-field index answers it — and the store and day are compared here.
+ * The query itself stays on `external_order_id` alone, and the store and day
+ * are compared here. This database is Enterprise edition, which creates **no**
+ * index by itself: without the `external_order_id` entry in
+ * `firestore.indexes.json` this query reads every delivery ever stored, on every
+ * pickup. `npm run audit:indexes` lists any query in that state.
  */
 async function assertOrderIdUnused(
   orderId: string | null | undefined,
