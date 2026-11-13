@@ -4,7 +4,6 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Inbox, Send } from "lucide-react";
 import { ToggleChip } from "@/components/app/toggle-chip";
-import { AppBackButton } from "@/components/app/app-back-button";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { useEsignStatusCounts } from "@/features/esign/use-esign";
@@ -138,10 +137,6 @@ export function RequestsHubShell() {
   return (
     <div className="-m-3 flex min-h-[calc(100%+1.5rem)] flex-col bg-gradient-to-b from-[#2a2a40] via-[#35354f] via-[55%] to-[#1f1f32]">
       <div className="relative flex flex-1 flex-col items-center justify-center gap-8 px-12 py-8">
-        <AppBackButton
-          fallbackHref="/dashboard"
-          className="absolute start-4 top-4 text-[#c4c4ce] hover:bg-white/10 hover:text-white"
-        />
         <header className="flex flex-col items-center gap-2 text-center">
           <div className="mb-1 flex items-center gap-1.5">
             <ToggleChip

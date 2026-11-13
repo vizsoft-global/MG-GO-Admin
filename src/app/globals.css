@@ -467,6 +467,36 @@ th,
   font-weight: 700;
 }
 
+/* A header cell holds the top of its scroll viewport while the rows move under
+   it. The pin is on the `th` and not only on `<thead>` because Chromium ignores
+   `position: sticky` on a `thead` in several table layouts, which is how a long
+   grid ends up scrolling its header away. Unlayered so no caller utility can
+   undo it; the opaque paint is layered separately below. */
+thead th,
+[data-slot="table-head"] {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* Column rules, header and body alike — the vertical edges are what make a
+   dense grid readable once the row stripes stop carrying it. */
+thead th,
+[data-slot="table-head"],
+tbody td,
+[data-slot="table-cell"] {
+  border-inline-end: 1px solid var(--border);
+}
+
+@layer components {
+  /* Opaque, or the rows sliding underneath show through the header. Layered so
+     a table that paints its own header tint keeps that tint. */
+  thead th,
+  [data-slot="table-head"] {
+    background-color: var(--card);
+  }
+}
+
 [data-slot="button"][data-variant="default"] {
   background: var(--btn-primary);
   color: var(--btn-primary-fg);
