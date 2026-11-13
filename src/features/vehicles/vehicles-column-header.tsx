@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check, Filter } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { OpsSortButton } from "@/features/performance/ops/ops-header-filter";
+import { useMemo, useRef } from "react";
+import { Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  ColumnHeaderFilter,
+  type ColumnFilterDraft,
+  type ColumnFilterOption,
+} from "@/components/app/column-filter";
+import { OpsSortButton } from "@/features/performance/ops/ops-header-filter";
 import { filterPlateSearch } from "./vehicle-form-validation";
 import {
   isFilterActive,
@@ -31,6 +33,10 @@ export type VehiclesHeaderLabels = {
   filterBy: (label: string) => string;
 };
 
+/**
+ * The fleet funnel, delegating to the shared `ColumnHeaderFilter` so a vehicle
+ * column searches, ticks and narrows exactly like every other table.
+ */
 export function VehiclesColumnHeader({
   column,
   label,
@@ -39,6 +45,7 @@ export function VehiclesColumnHeader({
   onApply,
   sort,
   onSort,
+  onSortDir,
   options,
   optionLabel,
   labels,
@@ -50,44 +57,40 @@ export function VehiclesColumnHeader({
   onApply: (next: VehiclesColumnFilter | null) => void;
   sort: VehiclesSort;
   onSort: () => void;
+  /** Sorts the column a specific way — the Range tab's "Smallest / Largest first". */
+  onSortDir?: (dir: "asc" | "desc") => void;
   options: string[];
   optionLabel: (value: string) => string;
   labels: VehiclesHeaderLabels;
 }) {
   const active = isFilterActive(filter);
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const [draftText, setDraftText] = useState("");
-  const [draftValues, setDraftValues] = useState<string[]>([]);
-  const [draftMin, setDraftMin] = useState("");
-  const [draftMax, setDraftMax] = useState("");
+  const committedAtOpen = useRef<VehiclesColumnFilter | undefined>(filter);
 
-  const visible = useMemo(() => {
-    const all = options.map((value) => ({ value, text: optionLabel(value) }));
-    const needle = q.trim().toLowerCase();
-    return needle ? all.filter((o) => o.text.toLowerCase().includes(needle)) : all;
-  }, [optionLabel, options, q]);
+  const items = useMemo<ColumnFilterOption[]>(
+    () => options.map((value) => ({ value, label: optionLabel(value) })),
+    [optionLabel, options],
+  );
 
-  function openDraft() {
-    setQ("");
-    setDraftText(isTextFilter(filter) ? filter.contains : "");
-    setDraftValues(isListFilter(filter) ? filter.in : []);
-    setDraftMin(isRangeFilter(filter) && filter.min != null ? String(filter.min) : "");
-    setDraftMax(isRangeFilter(filter) && filter.max != null ? String(filter.max) : "");
+  function draftFromCommitted(): ColumnFilterDraft {
+    return {
+      mode: kind,
+      text: isTextFilter(filter) ? filter.contains : "",
+      query: "",
+      picked: isListFilter(filter) ? [...filter.in] : [],
+      min: isRangeFilter(filter) && filter.min != null ? String(filter.min) : "",
+      max: isRangeFilter(filter) && filter.max != null ? String(filter.max) : "",
+    };
   }
 
-  function apply() {
-    if (kind === "text") onApply({ contains: draftText });
-    else if (kind === "list") onApply({ in: draftValues });
-    else {
-      const min = draftMin === "" ? null : Number(draftMin);
-      const max = draftMax === "" ? null : Number(draftMax);
-      onApply({
-        min: min != null && Number.isFinite(min) ? min : null,
-        max: max != null && Number.isFinite(max) ? max : null,
-      });
-    }
-    setOpen(false);
+  function committedFilter(draft: ColumnFilterDraft): VehiclesColumnFilter | null {
+    if (draft.mode === "text") return { contains: draft.text };
+    if (draft.mode === "list") return { in: draft.picked };
+    const min = draft.min === "" ? null : Number(draft.min);
+    const max = draft.max === "" ? null : Number(draft.max);
+    return {
+      min: min != null && Number.isFinite(min) ? min : null,
+      max: max != null && Number.isFinite(max) ? max : null,
+    };
   }
 
   return (
@@ -99,131 +102,54 @@ export function VehiclesColumnHeader({
         onClick={onSort}
         label={labels.sortBy(label)}
       />
-      <Popover
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (next) openDraft();
+      <ColumnHeaderFilter<VehiclesColumnFilter>
+        column={column}
+        label={label}
+        title={labels.filterBy(label)}
+        modes={[kind]}
+        defaultMode={kind}
+        draftFromCommitted={draftFromCommitted}
+        options={items}
+        active={active}
+        liveFilter={(draft) =>
+          draft.mode === "list" && draft.query.trim() ? { contains: draft.query.trim() } : committedFilter(draft)
+        }
+        committedFilter={committedFilter}
+        onLive={(next) => onApply(next)}
+        onCommit={(next) => onApply(next)}
+        onClear={() => onApply(null)}
+        onRevert={() => onApply(committedAtOpen.current ?? null)}
+        onOpenChange={(open) => {
+          if (open) committedAtOpen.current = filter;
         }}
-      >
-        <PopoverTrigger
-          aria-label={labels.filterBy(label)}
-          className={cn(
-            "inline-flex size-6 items-center justify-center rounded-md transition-colors",
-            active
-              ? "bg-primary/10 text-primary ring-1 ring-primary/40 hover:bg-primary/15"
-              : "text-muted-foreground hover:bg-muted/40",
-          )}
-        >
-          <Filter className="size-3" />
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          className="w-60 origin-(--transform-origin) space-y-2 p-2 normal-case tracking-normal"
-        >
-          <form
-            className="space-y-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              apply();
-            }}
-          >
-            {kind === "text" ? (
-              <Input
-                autoFocus
-                value={draftText}
-                onChange={(e) =>
-                  setDraftText(column === "plate" ? filterPlateSearch(e.target.value) : e.target.value)
-                }
-                placeholder={labels.contains}
-                className="h-9"
-              />
-            ) : kind === "range" ? (
-              <div className="grid grid-cols-2 gap-1.5">
-                <label className="text-xs text-muted-foreground">
-                  {labels.min}
-                  <Input
-                    type="number"
-                    min={0}
-                    value={draftMin}
-                    onChange={(e) => setDraftMin(e.target.value)}
-                    className="mt-0.5 h-9"
-                  />
-                </label>
-                <label className="text-xs text-muted-foreground">
-                  {labels.max}
-                  <Input
-                    type="number"
-                    min={0}
-                    value={draftMax}
-                    onChange={(e) => setDraftMax(e.target.value)}
-                    className="mt-0.5 h-9"
-                  />
-                </label>
-              </div>
-            ) : (
-              <>
-                <Input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder={labels.search}
-                  className="h-9"
-                />
-                <label className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40">
-                  <Checkbox checked={draftValues.length === 0} onCheckedChange={() => setDraftValues([])} />
-                  <span className="min-w-0 flex-1 font-medium">{labels.all}</span>
-                  {draftValues.length === 0 ? <Check className="size-3 shrink-0 text-primary" /> : null}
-                </label>
-                <div className="max-h-56 overflow-y-auto">
-                  {visible.length === 0 ? (
-                    <p className="px-1.5 py-2 text-xs text-muted-foreground">{labels.noOptions}</p>
-                  ) : (
-                    visible.map((o) => {
-                      const on = draftValues.includes(o.value);
-                      return (
-                        <label
-                          key={o.value || "(blank)"}
-                          className={cn(
-                            "flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40",
-                            on && "font-semibold text-primary",
-                          )}
-                        >
-                          <Checkbox
-                            checked={on}
-                            onCheckedChange={() =>
-                              setDraftValues((cur) =>
-                                cur.includes(o.value)
-                                  ? cur.filter((v) => v !== o.value)
-                                  : [...cur, o.value],
-                              )
-                            }
-                          />
-                          <span className="min-w-0 flex-1 truncate">{o.text}</span>
-                        </label>
-                      );
-                    })
-                  )}
-                </div>
-              </>
-            )}
-            <div className="flex items-center justify-end gap-1.5">
-              <button
-                type="button"
-                className="h-8 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted/40"
-                onClick={() => {
-                  onApply(null);
-                  setOpen(false);
-                }}
-              >
-                {labels.clear}
-              </button>
-              <button type="submit" className="h-8 rounded-md bg-primary px-2 text-xs text-primary-foreground">
-                {labels.apply}
-              </button>
-            </div>
-          </form>
-        </PopoverContent>
-      </Popover>
+        liveDebounceMs={0}
+        onRangeShortcut={
+          onSortDir
+            ? (dir, draft) => {
+                onApply(committedFilter({ ...draft, mode: "range" }));
+                onSortDir(dir);
+              }
+            : undefined
+        }
+        sanitizeText={column === "plate" ? filterPlateSearch : undefined}
+        labels={{
+          title: () => labels.filterBy(label),
+          mode: {},
+          search: labels.search,
+          contains: labels.contains,
+          all: labels.all,
+          clear: labels.clear,
+          apply: labels.apply,
+          min: labels.min,
+          max: labels.max,
+          noOptions: labels.noOptions,
+          blank: "—",
+          filterBy: labels.filterBy,
+        }}
+        triggerIcon={<Filter className="size-3" />}
+        triggerClassName="size-6 rounded-md text-muted-foreground hover:bg-muted/40"
+        contentClassName="w-60 space-y-2 p-2 normal-case tracking-normal"
+      />
     </span>
   );
 }

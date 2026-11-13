@@ -23,6 +23,14 @@ import { TrackingGlassCard } from "./tracking-shell";
 import type { LiveTrackingFilterState } from "./live-tracking-filters";
 import { TrackingTabSwitcher, type TrackingViewTab } from "./tracking-tab-switcher";
 
+const ALL_STATUS_CHIPS: LiveTrackingFilterState["statusChips"] = [
+  "online",
+  "on_duty",
+  "idle",
+  "alert",
+  "offline",
+];
+
 export function FleetOverviewPanel({
   totalDrivers,
   trackedCount,
@@ -84,6 +92,7 @@ export function FleetOverviewPanel({
       value: string;
       tone: Tone;
       icon: typeof Users;
+      chips: LiveTrackingFilterState["statusChips"];
     }> => [
       {
         id: "total",
@@ -91,6 +100,7 @@ export function FleetOverviewPanel({
         value: totalDrivers.toLocaleString(),
         tone: "primary",
         icon: Users,
+        chips: [...ALL_STATUS_CHIPS],
       },
       {
         id: "active",
@@ -98,6 +108,7 @@ export function FleetOverviewPanel({
         value: trackedCount.toLocaleString(),
         tone: "success",
         icon: UserCheck,
+        chips: ["online"],
       },
       {
         id: "progress",
@@ -105,6 +116,7 @@ export function FleetOverviewPanel({
         value: inProgressCount.toLocaleString(),
         tone: "primary",
         icon: Package,
+        chips: ["on_duty"],
       },
       {
         id: "sos",
@@ -112,10 +124,18 @@ export function FleetOverviewPanel({
         value: alertsCount.toLocaleString(),
         tone: "danger",
         icon: AlertTriangle,
+        chips: ["alert"],
       },
     ],
     [alertsCount, inProgressCount, t, totalDrivers, trackedCount],
   );
+
+  const activeKpiId = useMemo(() => {
+    const current = [...filters.statusChips].sort().join(",");
+    if (!current || current === [...ALL_STATUS_CHIPS].sort().join(",")) return "total";
+    const match = stats.find((tile) => [...tile.chips].sort().join(",") === current);
+    return match?.id ?? null;
+  }, [filters.statusChips, stats]);
 
   const zoneSearchItems = useMemo(
     () =>
@@ -155,17 +175,30 @@ export function FleetOverviewPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
         <div className="grid grid-cols-2 gap-2 border-b border-slate-200 px-3 py-2.5 dark:border-slate-700/80">
-          {stats.map((tile) => (
-            <MetricTile
-              key={tile.id}
-              label={tile.label}
-              value={tile.value}
-              tone={tile.tone}
-              icon={tile.icon}
-              compact
-              trendPercent={undefined}
-            />
-          ))}
+          {stats.map((tile) => {
+            const selected = activeKpiId === tile.id;
+            return (
+              <MetricTile
+                key={tile.id}
+                label={tile.label}
+                value={tile.value}
+                tone={tile.tone}
+                icon={tile.icon}
+                compact
+                trendPercent={undefined}
+                selected={selected}
+                onClick={() => {
+                  onChange({
+                    ...filters,
+                    statusChips:
+                      selected || tile.id === "total"
+                        ? [...ALL_STATUS_CHIPS]
+                        : [...tile.chips],
+                  });
+                }}
+              />
+            );
+          })}
         </div>
         <div className="space-y-3 px-3 py-3">
             <div className="relative">

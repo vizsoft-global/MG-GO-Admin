@@ -120,7 +120,7 @@ import { DriverFormSheet } from "./driver-form-sheet";
 import { DriverEditSheet } from "./driver-edit-sheet";
 import { hasAnyDriverListFilter, driverListFilterCount } from "./driver-list-filters";
 import { EmployeeSettingsDialog } from "./employee-settings-dialog";
-import { DriversKpiStrip } from "./drivers-kpi-strip";
+import { DriversKpiStrip, type DriverKpiKey } from "./drivers-kpi-strip";
 import { DriversColumnHeader, type DriversHeaderLabels } from "./drivers-column-header";
 import {
   DEFAULT_DRIVERS_SORT,
@@ -130,10 +130,12 @@ import {
   driverDetailHref,
   driversListHref,
   nextSort,
+  parseDriversListKpi,
   parseDriversTab,
   withColumnFilter,
   type DriversColumnFilters,
   type DriversFixedColumn,
+  type DriversListKpi,
   type DriversSort,
   type DriversTab,
 } from "./drivers-list-query";
@@ -322,6 +324,35 @@ function DriversPageContent() {
     if (!project) return;
     setColumnFilters((current) => ({ ...current, project: { in: [project] } }));
   }, [projectParam]);
+
+  // A shared `?kpi=` link (or one the tile wrote) restores the card's filter on mount, so a
+  // reload, a Back/Forward step or a pasted address lands on the same rows the card counted.
+  const kpiParam = parseDriversListKpi(searchParams.get("kpi"));
+  useEffect(() => {
+    if (!kpiParam) return;
+    if (kpiParam === "pending") {
+      setTabFilter("pending");
+      return;
+    }
+    if (kpiParam === "online") {
+      setTabFilter("on_duty");
+      return;
+    }
+    setTabFilter("all");
+    setColumnFilters((current) => {
+      const next: DriversColumnFilters = { ...current };
+      if (kpiParam === "active") {
+        next.status = { in: ["active"] };
+        delete next.attendance;
+      }
+      if (kpiParam === "inactive") {
+        next.status = { in: ["active"] };
+        next.attendance = { in: ["off_duty"] };
+      }
+      if (kpiParam === "suspended") next.status = { in: ["suspended"] };
+      return next;
+    });
+  }, [kpiParam]);
 
   const query = useMemo(
     () => ({
@@ -546,6 +577,68 @@ function DriversPageContent() {
     router.replace(driversListHref("all"));
   };
 
+  /**
+   * The KPI card whose filter is currently applied, derived from the same two
+   * pieces of state the toolbar writes — so a filter applied through a column
+   * header, the status dropdown or a `?tab=` deep link lights the matching
+   * card without the card owning a second copy of the state.
+   */
+  const activeKpiKey: DriverKpiKey | undefined = useMemo(() => {
+    if (tabFilter === "pending") return "pending";
+    if (tabFilter === "on_duty") return "online";
+    if (tabFilter !== "all") return undefined;
+    const statusFilter = columnFilters.status;
+    const attendanceFilter = columnFilters.attendance;
+    const statusIn = statusFilter && "in" in statusFilter ? statusFilter.in : [];
+    const attendanceIn =
+      attendanceFilter && "in" in attendanceFilter ? attendanceFilter.in : [];
+    if (statusIn.length === 0 && attendanceIn.length === 0) return "total";
+    if (statusIn.length !== 1) return undefined;
+    if (statusIn[0] === "suspended" && attendanceIn.length === 0) return "suspended";
+    if (statusIn[0] !== "active") return undefined;
+    if (attendanceIn.length === 0) return "active";
+    if (attendanceIn.length === 1 && attendanceIn[0] === "off_duty") return "inactive";
+    return undefined;
+  }, [tabFilter, columnFilters]);
+
+  const handleSelectKpi = useCallback(
+    (key: DriverKpiKey) => {
+      const resetColumns = (apply?: (next: DriversColumnFilters) => void) => {
+        setColumnFilters((prev) => {
+          const next: DriversColumnFilters = { ...prev };
+          delete next.status;
+          delete next.attendance;
+          apply?.(next);
+          return next;
+        });
+      };
+      if (key === "total" || activeKpiKey === key) {
+        setTabFilter("all");
+        resetColumns();
+        router.replace(driversListHref("all"));
+        return;
+      }
+      if (key === "pending" || key === "online") {
+        const tab: DriversTab = key === "pending" ? "pending" : "on_duty";
+        setTabFilter(tab);
+        resetColumns();
+        router.replace(driversListHref(tab, { kpi: key }));
+        return;
+      }
+      setTabFilter("all");
+      resetColumns((next) => {
+        if (key === "active") next.status = { in: ["active"] };
+        if (key === "inactive") {
+          next.status = { in: ["active"] };
+          next.attendance = { in: ["off_duty"] };
+        }
+        if (key === "suspended") next.status = { in: ["suspended"] };
+      });
+      router.replace(driversListHref("all", { kpi: key }));
+    },
+    [activeKpiKey, router],
+  );
+
   function accountStatusLabelFor(status: DriverAccountStatus) {
     switch (status) {
       case "active":
@@ -687,6 +780,7 @@ function DriversPageContent() {
         onApply={(next) => setColumnFilters((cur) => withColumnFilter(cur, filterColumn, next))}
         sort={sort}
         onSort={() => setSort((cur) => nextSort(cur, filterColumn))}
+        onSortDir={(dir) => setSort({ key: filterColumn, dir })}
         context={filterContext}
         optionLabel={(value, optLabel) => optionLabelFor(filterColumn, value, optLabel)}
         labels={headerLabels}
@@ -981,6 +1075,8 @@ function DriversPageContent() {
           pending: t("kpiPending"),
           suspended: t("kpiSuspended"),
         }}
+        activeKey={activeKpiKey}
+        onSelectKey={handleSelectKpi}
       />
 
       <AppListCard

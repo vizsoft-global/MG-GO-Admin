@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { LAYOUT } from "@/components/app/layout-spacing";
@@ -39,6 +39,17 @@ import type { OpsSnapshot } from "../performance-ops-types";
 import { OpsChartCard, OpsDonut, OpsRankedBars, OpsVBars, OpsVBarsLabels, opsChartTitle } from "./ops-charts";
 import { cn } from "@/lib/utils";
 
+type CompanySortKey =
+  | "orders"
+  | "riders"
+  | "active_riders"
+  | "dpd"
+  | "dpd_eff"
+  | "tgt_eff"
+  | "utr"
+  | "avg_delivery_min";
+
+
 export function OpsOutsourceTab({
   data,
   metric,
@@ -71,6 +82,14 @@ export function OpsOutsourceTab({
     () => companyRowsFromRiders(data.riders).filter((r) => isChartableDimKey(r.key)),
     [data.riders],
   );
+  const [sortKey, setSortKey] = useState<CompanySortKey | null>(null);
+  const sortedCompanies = useMemo(() => {
+    if (!sortKey) return companies;
+    return [...companies].sort((a, b) => (b[sortKey] ?? 0) - (a[sortKey] ?? 0));
+  }, [companies, sortKey]);
+  const toggleSort = (key: CompanySortKey) =>
+    setSortKey((prev) => (prev === key ? null : key));
+
   function labelCompany(key: string) {
     return key === UNASSIGNED_COMPANY_KEY ? t("unassignedCompany") : companyLabel(key);
   }
@@ -117,7 +136,7 @@ export function OpsOutsourceTab({
       .sort((left, right) => right.value - left.value);
   }, [data.riders, t]);
 
-  const visibleRows = companies.filter((row) => {
+  const visibleRows = sortedCompanies.filter((row) => {
     const needle = prefs.appliedQuery.trim().toLowerCase();
     return !needle || labelCompany(row.key).toLowerCase().includes(needle);
   });
@@ -130,14 +149,56 @@ export function OpsOutsourceTab({
       <KpiGrid
         compact
         items={[
-          { label: t("kpi.orders"), value: formatInt(data.kpis.orders) },
-          { label: t("kpi.overallDpd"), value: formatDpd(data.kpis.overall_dpd), accent: "primary" },
-          { label: t("kpi.utr"), value: formatUtr(data.kpis.utr) },
-          { label: t("kpi.avgDelivery"), value: formatMinutesCard(data.kpis.avg_delivery_min) },
-          { label: t("kpi.riders"), value: formatInt(data.kpis.riders) },
-          { label: t("kpi.active"), value: formatInt(data.kpis.active) },
-          { label: t("kpi.dpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
-          { label: t("kpi.tgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
+          {
+            label: t("kpi.orders"),
+            value: formatInt(data.kpis.orders),
+            selected: sortKey === "orders",
+            onClick: () => toggleSort("orders"),
+          },
+          {
+            label: t("kpi.overallDpd"),
+            value: formatDpd(data.kpis.overall_dpd),
+            accent: "primary",
+            selected: sortKey === "dpd",
+            onClick: () => toggleSort("dpd"),
+          },
+          {
+            label: t("kpi.riders"),
+            value: formatInt(data.kpis.riders),
+            selected: sortKey === "riders",
+            onClick: () => toggleSort("riders"),
+          },
+          {
+            label: t("kpi.active"),
+            value: formatInt(data.kpis.active),
+            selected: sortKey === "active_riders",
+            onClick: () => toggleSort("active_riders"),
+          },
+          {
+            label: t("kpi.dpdEff"),
+            value: formatPct(data.kpis.avg_dpd_eff),
+            selected: sortKey === "dpd_eff",
+            onClick: () => toggleSort("dpd_eff"),
+          },
+          {
+            label: t("kpi.tgtEff"),
+            value: formatPct(data.kpis.avg_tgt_eff),
+            accent: "success",
+            selected: sortKey === "tgt_eff",
+            onClick: () => toggleSort("tgt_eff"),
+          },
+          {
+            label: t("kpi.utr"),
+            value: formatUtr(data.kpis.utr),
+            selected: sortKey === "utr",
+            onClick: () => toggleSort("utr"),
+          },
+          {
+            label: t("kpi.avgDelivery"),
+            value: formatMinutesCard(data.kpis.avg_delivery_min),
+            selected: sortKey === "avg_delivery_min",
+            onClick: () => toggleSort("avg_delivery_min"),
+          },
         ]}
       />
 
@@ -195,7 +256,7 @@ export function OpsOutsourceTab({
               columns={columns}
               rowKind="dynamic"
               filteredCount={visibleRows.length}
-              totalCount={companies.length}
+              totalCount={sortedCompanies.length}
               onExport={() =>
                 downloadCsv(
                   "ops-outsource-companies-table",

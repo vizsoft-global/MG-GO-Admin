@@ -76,6 +76,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { usePathname, useRouter } from "@/i18n/navigation";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/query/query-keys";
 import { useRealtimeInvalidator } from "@/lib/realtime/use-realtime-invalidator";
@@ -87,9 +89,11 @@ import {
 } from "./use-deliveries";
 import { isBulkVerifiableDeliveryStatus } from "./bulk-verifiable-status";
 import {
+  deliveryListHref,
   deliveryStatusFilterMessageKey,
   deliveryStatusFilterValues,
   deliveryStatusMessageKey,
+  parseDeliveryStatusFilter,
   type DeliveryStatusFilterValue,
 } from "./delivery-status-filter";
 import {
@@ -219,7 +223,12 @@ function DeliveriesPageContent() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
-  const [tabFilter, setTabFilter] = useState<DeliveryStatusFilterValue>("all");
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const [tabFilter, setTabFilter] = useState<DeliveryStatusFilterValue>(() =>
+    parseDeliveryStatusFilter(searchParams.get("status")),
+  );
   const [zoneFilter, setZoneFilter] = useState("all");
   const [partnerFilter, setPartnerFilter] = useState("all");
   const [cancelReasonFilter, setCancelReasonFilter] = useState<"all" | CancelReasonCode>("all");
@@ -528,6 +537,26 @@ function DeliveriesPageContent() {
     ];
   }, [filterOptions, t]);
 
+  const selectTab = useCallback(
+    (id: DeliveryStatusFilterValue) => {
+      setTabFilter(id);
+      if (id !== "cancelled") setCancelReasonFilter("all");
+      const href = deliveryListHref(pathname, id, searchParams);
+      router.replace(href, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  // Deep links (`?status=pending`) and back/forward keep the cards in step.
+  useEffect(() => {
+    const next = parseDeliveryStatusFilter(searchParams.get("status"));
+    setTabFilter((prev) => (prev === next ? prev : next));
+  }, [searchParams]);
+
+  const toggleStatusCard = (id: DeliveryStatusFilterValue) => {
+    selectTab(tabFilter === id || id === "all" ? "all" : id);
+  };
+
   const kpis = useMemo(() => {
     const dash = kpiError || !kpiCounts;
     const counts = kpiCounts;
@@ -539,39 +568,53 @@ function DeliveriesPageContent() {
         icon: Package,
         accent: "primary" as const,
         caption: t("kpiAllTime"),
+        selected: tabFilter === "all",
+        onClick: () => toggleStatusCard("all"),
       },
       {
         label: t("kpiActive"),
         value: valueOf(counts?.active),
         icon: Activity,
         accent: "primary" as const,
+        selected: tabFilter === "in_transit",
+        onClick: () => toggleStatusCard("in_transit"),
       },
       {
         label: t("kpiVerified"),
         value: valueOf(counts?.verified),
         icon: CheckCircle2,
         accent: "success" as const,
+        selected: tabFilter === "verified",
+        onClick: () => toggleStatusCard("verified"),
       },
       {
         label: t("kpiPending"),
         value: valueOf(counts?.pending),
         icon: Clock,
         accent: !dash && (counts?.pending ?? 0) > 0 ? ("warning" as const) : ("default" as const),
+        selected: tabFilter === "pending",
+        onClick: () => toggleStatusCard("pending"),
       },
       {
         label: t("kpiRejected"),
         value: valueOf(counts?.rejected),
         icon: XCircle,
         accent: !dash && (counts?.rejected ?? 0) > 0 ? ("danger" as const) : ("default" as const),
+        selected: tabFilter === "rejected",
+        onClick: () => toggleStatusCard("rejected"),
       },
       {
         label: t("kpiCancelled"),
         value: valueOf(counts?.cancelled),
         icon: Ban,
         accent: "default" as const,
+        selected: tabFilter === "cancelled",
+        onClick: () => toggleStatusCard("cancelled"),
       },
     ];
-  }, [kpiCounts, kpiError, t]);
+    // toggleStatusCard closes over tabFilter/selectTab; the memo already depends on tabFilter
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kpiCounts, kpiError, t, tabFilter]);
 
   const flagSelectItems = useMemo<Array<{ value: DeliveryFlagFilter; label: string }>>(
     () => [
@@ -698,11 +741,6 @@ function DeliveriesPageContent() {
         }),
     [isColumnVisible, labels.group.partner, prefs.orderedColumns, selected, t, verifiableVisible],
   );
-
-  const selectTab = (id: DeliveryStatusFilterValue) => {
-    setTabFilter(id);
-    if (id !== "cancelled") setCancelReasonFilter("all");
-  };
 
   const statusFilterOptions = useMemo(
     () =>

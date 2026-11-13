@@ -340,11 +340,29 @@ export function OrderReconPageShell() {
           <KpiGrid
             compact
             items={[
-              { label: t("kpiRiders"), value: kpi.riders },
+              {
+                label: t("kpiRiders"),
+                value: kpi.riders,
+                selected: result === null && tab === "both",
+                onClick: () => {
+                  setResult(null);
+                  setTab("both");
+                  setDayIndex(null);
+                },
+              },
               { label: t("kpiAm"), value: kpi.am },
               { label: t("kpiMggo"), value: kpi.mggo },
               { label: t("kpiNet"), value: kpi.net },
-              { label: t("kpiMatches"), value: kpi.matches },
+              {
+                label: t("kpiMatches"),
+                value: kpi.matches,
+                selected: result === "match",
+                onClick: () => {
+                  setTab("both");
+                  setDayIndex(null);
+                  setResult((current) => (current === "match" ? null : "match"));
+                },
+              },
               { label: t("kpiMatchRate"), value: formatPct(kpi.matchRate) },
             ]}
           />

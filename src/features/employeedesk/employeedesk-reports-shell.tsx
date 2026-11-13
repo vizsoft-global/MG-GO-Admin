@@ -224,24 +224,28 @@ export function EmployeeDeskReportsShell({
               label: t("kpi.requests"),
               value: requestKpi?.total ?? "—",
               icon: ClipboardList,
+              href: "/employeedesk/all?type=all&preset=this_month",
             },
             {
               label: t("kpi.pending"),
               value: requestKpi?.pending ?? "—",
               accent: "warning",
               icon: Clock,
+              href: "/employeedesk/all?type=all&status=pending&preset=this_month",
             },
             {
               label: t("kpi.overdue"),
               value: requestKpi?.overdue ?? "—",
               accent: "danger",
               icon: AlertTriangle,
+              href: "/employeedesk/all?type=all&status=overdue&preset=this_month",
             },
             {
               label: t("kpi.esignPending"),
               value: esign.data?.pending ?? "—",
               accent: "warning",
               icon: FileSignature,
+              href: "/employeedesk/esign/waiting",
             },
             {
               /**
@@ -258,6 +262,7 @@ export function EmployeeDeskReportsShell({
               label: t("kpi.visitsToday"),
               value: visitKpi?.today ?? "—",
               icon: BarChart3,
+              href: "/employeedesk/visits/all",
             },
           ]}
         />

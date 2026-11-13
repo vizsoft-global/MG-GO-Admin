@@ -88,6 +88,7 @@ export function EarningsPageShell() {
   const canManage = can("earnings.manage");
 
   const [tab, setTab] = useState<EarningsTab>("daily");
+  const [kpiFilter, setKpiFilter] = useState<"paid" | "incentive" | "deliveries" | null>(null);
   useEffect(() => {
     const requested = searchParams.get("tab");
     if (requested === "daily" || requested === "driver" || requested === "reports" || requested === "tools") {
@@ -133,14 +134,21 @@ export function EarningsPageShell() {
   const rows = (dailyQuery.data ?? []) as EarningsDailyListRow[];
   const visibleRows = useMemo(
     () =>
-      rows.filter((row) =>
-        fieldSearchMatch(row, prefs.appliedQuery, {
-          name: (item) => item.driver_name,
-          employee_id: (item) => item.driver_code,
-          earn_date: (item) => item.earn_date,
+      rows
+        .filter((row) =>
+          fieldSearchMatch(row, prefs.appliedQuery, {
+            name: (item) => item.driver_name,
+            employee_id: (item) => item.driver_code,
+            earn_date: (item) => item.earn_date,
+          }),
+        )
+        .filter((row) => {
+          if (kpiFilter === "paid") return row.net_kwd > 0;
+          if (kpiFilter === "incentive") return row.incentive_kwd > 0;
+          if (kpiFilter === "deliveries") return row.deliveries > 0;
+          return true;
         }),
-      ),
-    [prefs.appliedQuery, rows],
+    [kpiFilter, prefs.appliedQuery, rows],
   );
   const dailyGrouped = useMemo(
     () =>
@@ -156,14 +164,21 @@ export function EarningsPageShell() {
 
   const driverRows = useMemo(() => {
     const grouped = (driverGroupedQuery.data ?? []) as DriverGroupedRow[];
-    return grouped.filter((row) =>
-      fieldSearchMatch(row, prefs.appliedQuery, {
-        name: (item) => item.group_name,
-        employee_id: (item) => item.driver_code,
-        group_id: (item) => item.group_id,
-      }),
-    );
-  }, [driverGroupedQuery.data, prefs.appliedQuery]);
+    return grouped
+      .filter((row) =>
+        fieldSearchMatch(row, prefs.appliedQuery, {
+          name: (item) => item.group_name,
+          employee_id: (item) => item.driver_code,
+          group_id: (item) => item.group_id,
+        }),
+      )
+      .filter((row) => {
+        if (kpiFilter === "paid") return row.net_kwd > 0;
+        if (kpiFilter === "incentive") return row.incentive_kwd > 0;
+        if (kpiFilter === "deliveries") return row.delivery_count > 0;
+        return true;
+      });
+  }, [driverGroupedQuery.data, kpiFilter, prefs.appliedQuery]);
   const driverGrouped = useMemo(
     () => groupRows(driverRows, "none", {}, {}, "—"),
     [driverRows],
@@ -278,17 +293,48 @@ export function EarningsPageShell() {
 
       <KpiGrid
         items={[
-          { label: t("kpiRows"), value: Number(kpis.calculated_rows ?? 0) },
+          {
+            label: t("kpiRows"),
+            value: Number(kpis.calculated_rows ?? 0),
+            selected: kpiFilter === null,
+            onClick: () => setKpiFilter(null),
+          },
           {
             label: t("kpiTotalPaid"),
             value: Number(kpis.total_payable_kwd ?? 0).toFixed(3),
+            selected: kpiFilter === "paid",
+            onClick: () => {
+              setTab("daily");
+              setKpiFilter((prev) => (prev === "paid" ? null : "paid"));
+            },
           },
           {
             label: t("colIncentive"),
             value: Number(kpis.total_incentive_kwd ?? 0).toFixed(3),
+            selected: kpiFilter === "incentive",
+            onClick: () => {
+              setTab("daily");
+              setKpiFilter((prev) => (prev === "incentive" ? null : "incentive"));
+            },
           },
-          { label: t("colDeliveries"), value: Number(kpis.total_deliveries ?? 0) },
-          { label: t("colDriver"), value: Number(kpis.active_drivers ?? 0) },
+          {
+            label: t("colDeliveries"),
+            value: Number(kpis.total_deliveries ?? 0),
+            selected: kpiFilter === "deliveries",
+            onClick: () => {
+              setTab("daily");
+              setKpiFilter((prev) => (prev === "deliveries" ? null : "deliveries"));
+            },
+          },
+          {
+            label: t("colDriver"),
+            value: Number(kpis.active_drivers ?? 0),
+            selected: tab === "driver" && kpiFilter === null,
+            onClick: () => {
+              setKpiFilter(null);
+              setTab((prev) => (prev === "driver" ? "daily" : "driver"));
+            },
+          },
           { label: t("startDate"), value: startDate },
         ]}
       />

@@ -148,6 +148,8 @@ export function EsignSignaturesShell() {
             icon: Clock,
             accent: "warning",
             caption: t("kpiPendingCaption"),
+            selected: statusTab === "pending",
+            onClick: () => setStatusTab((tab) => (tab === "pending" ? "all" : "pending")),
           },
           {
             label: t("kpiSigned"),
@@ -155,6 +157,8 @@ export function EsignSignaturesShell() {
             icon: FileSignature,
             accent: "success",
             caption: t("kpiSignedCaption"),
+            selected: statusTab === "signed",
+            onClick: () => setStatusTab((tab) => (tab === "signed" ? "all" : "signed")),
           },
           {
             label: t("kpiRejected"),
@@ -162,12 +166,16 @@ export function EsignSignaturesShell() {
             icon: XCircle,
             accent: "danger",
             caption: t("kpiRejectedCaption"),
+            selected: statusTab === "declined",
+            onClick: () => setStatusTab((tab) => (tab === "declined" ? "all" : "declined")),
           },
           {
             label: t("kpiExpired"),
             value: counts?.expired ?? "—",
             icon: CircleSlash,
             caption: t("kpiExpiredCaption"),
+            selected: statusTab === "expired",
+            onClick: () => setStatusTab((tab) => (tab === "expired" ? "all" : "expired")),
           },
         ]}
       />

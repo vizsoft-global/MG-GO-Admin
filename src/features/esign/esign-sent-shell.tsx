@@ -17,6 +17,8 @@ import {
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { ColumnsButton } from "@/components/app/columns-button";
+import { useColumnLayout } from "@/hooks/use-column-layout";
 import {
   AppDataTable,
   AppDataTableRow,
@@ -57,6 +59,59 @@ import type { EsignRequestStatus } from "./types";
 const STATUS_TABS = ["all", "pending", "signed", "declined", "expired"] as const;
 
 type StatusTab = (typeof STATUS_TABS)[number];
+
+/**
+ * The sent list's columns, in catalogue order.
+ *
+ * The request code and the rider stay pinned: the code is the identity the row
+ * is quoted by and the rider is who it was sent to, so a list where either can
+ * be moved off the end or hidden is a list of anonymous documents.
+ */
+const SENT_COLUMNS = [
+  { id: "code", pinned: true },
+  { id: "driver", pinned: true },
+  { id: "title", pinned: false },
+  { id: "category", pinned: false },
+  { id: "batch", pinned: false },
+  { id: "status", pinned: false },
+  { id: "sent", pinned: false },
+  { id: "due", pinned: false },
+] as const;
+
+type SentColumnId = (typeof SENT_COLUMNS)[number]["id"];
+
+const SENT_COLUMN_LABELS: Record<SentColumnId, string> = {
+  code: "colCode",
+  driver: "colDriver",
+  title: "colTitle",
+  category: "colCategory",
+  batch: "colBatch",
+  status: "colStatus",
+  sent: "colSent",
+  due: "colDue",
+};
+
+const SENT_COLUMN_CLASS: Record<SentColumnId, string> = {
+  code: "",
+  driver: "",
+  title: "max-w-[320px]",
+  category: "",
+  batch: "",
+  status: "",
+  sent: "",
+  due: "",
+};
+
+const SENT_CELL_CLASS: Record<SentColumnId, string> = {
+  code: "font-mono text-xs",
+  driver: "text-sm",
+  title: "max-w-[320px] truncate text-sm font-medium",
+  category: "text-sm",
+  batch: "font-mono text-xs",
+  status: "",
+  sent: "text-sm tabular-nums",
+  due: "text-sm tabular-nums",
+};
 
 function statusVariant(
   status: EsignRequestStatus,
@@ -108,6 +163,19 @@ export function EsignSentShell() {
   );
 
   const { data, isLoading, isFetching, refetch } = useEsignRequestsList(listFilters);
+  /**
+   * Column order and visibility for this list, saved in the browser per table.
+   * Declared here so the header row and the cells read the exact same order.
+   */
+  const sentColumnIds = useMemo(() => SENT_COLUMNS.map((column) => column.id), []);
+  const sentLockedColumns = useMemo(
+    () => SENT_COLUMNS.filter((column) => column.pinned).map((column) => column.id),
+    [],
+  );
+  const sentColumns = useColumnLayout("esign.sent", sentColumnIds, {
+    lockedIds: sentLockedColumns,
+  });
+  const sentShownColumns = sentColumns.order.filter((id) => sentColumns.isVisible(id)) as SentColumnId[];
   const { data: counts } = useEsignStatusCounts();
   const { data: driversData } = useEsignDriverOptions();
   const { data: categoriesData } = useEsignCategories();
@@ -132,6 +200,62 @@ export function EsignSentShell() {
     () => categoriesData?.rows.filter((c) => c.is_active) ?? [],
     [categoriesData?.rows],
   );
+
+  /**
+   * One cell, chosen by column id, so a hidden column and a moved column cannot
+   * put the wrong value under the wrong heading.
+   */
+  function renderSentCell(row: (typeof rows)[number], id: SentColumnId) {
+    switch (id) {
+      case "code":
+        return (
+          <>
+            {row.request_code}
+            {/* ui-system §6: row click opens the detail page; the link is the affordance,
+                so the list keeps Figma's column set instead of an actions column. */}
+            <Link
+              href={`/requests/esign/${row.id}`}
+              className="mt-0.5 flex items-center gap-1 font-sans text-xs text-primary hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="h-3 w-3" />
+              {t("viewDetails")}
+            </Link>
+          </>
+        );
+      case "driver":
+        return (
+          <>
+            <div>{row.driver_name}</div>
+            <div className="text-xs text-muted-foreground">{row.driver_code}</div>
+          </>
+        );
+      case "title":
+        return (
+          <span className="block truncate" title={row.title ?? undefined}>
+            {row.title}
+          </span>
+        );
+      case "category":
+        return row.category_label ?? "—";
+      case "batch":
+        return row.batch_code ?? "—";
+      case "status":
+        return (
+          <StatusPill variant={statusVariant(row.status)}>
+            {tCommon(`status.${row.status}`)}
+          </StatusPill>
+        );
+      case "sent":
+        return formatDay(row.created_at);
+      case "due":
+        return formatDay(row.due_at);
+      default: {
+        const exhaustive: never = id;
+        return exhaustive;
+      }
+    }
+  }
 
   useEffect(() => {
     if (searchParams.get("add") === "1") {
@@ -257,6 +381,8 @@ export function EsignSentShell() {
             icon: Send,
             accent: "primary",
             caption: t("kpiSentCaption"),
+            selected: statusTab === "all",
+            onClick: () => setStatusTab("all"),
           },
           {
             label: t("kpiPending"),
@@ -264,6 +390,8 @@ export function EsignSentShell() {
             icon: Clock,
             accent: "warning",
             caption: t("kpiPendingCaption"),
+            selected: statusTab === "pending",
+            onClick: () => setStatusTab((tab) => (tab === "pending" ? "all" : "pending")),
           },
           {
             label: t("kpiSigned"),
@@ -271,12 +399,16 @@ export function EsignSentShell() {
             icon: ShieldCheck,
             accent: "success",
             caption: t("kpiSignedCaption"),
+            selected: statusTab === "signed",
+            onClick: () => setStatusTab((tab) => (tab === "signed" ? "all" : "signed")),
           },
           {
             label: t("kpiExpired"),
             value: counts?.expired ?? "—",
             icon: CircleSlash,
             caption: t("kpiExpiredCaption"),
+            selected: statusTab === "expired",
+            onClick: () => setStatusTab((tab) => (tab === "expired" ? "all" : "expired")),
           },
         ]}
       />
@@ -344,16 +476,20 @@ export function EsignSentShell() {
           <AppEmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
         ) : (
           <AppDataTable
-            columns={[
-              { id: "code", label: t("colCode") },
-              { id: "driver", label: t("colDriver") },
-              { id: "title", label: t("colTitle") },
-              { id: "category", label: t("colCategory") },
-              { id: "batch", label: t("colBatch") },
-              { id: "status", label: t("colStatus") },
-              { id: "sent", label: t("colSent") },
-              { id: "due", label: t("colDue") },
-            ]}
+            toolbar={
+              <div className="flex items-center justify-end gap-2 px-2 pb-2">
+                <ColumnsButton
+                  columns={sentColumns}
+                  labelFor={(id) => t(SENT_COLUMN_LABELS[id as SentColumnId])}
+                  pinned={t("pinnedColumns")}
+                />
+              </div>
+            }
+            columns={sentShownColumns.map((id) => ({
+              id,
+              label: t(SENT_COLUMN_LABELS[id]),
+              className: SENT_COLUMN_CLASS[id],
+            }))}
           >
             {rows.map((row) => (
               <AppDataTableRow
@@ -361,40 +497,11 @@ export function EsignSentShell() {
                 className="cursor-pointer"
                 onClick={() => router.push(`/requests/esign/${row.id}`)}
               >
-                <TableCell className="font-mono text-xs">
-                  {row.request_code}
-                  {/* ui-system §6: row click opens the detail page; the link is the affordance,
-                      so the list keeps Figma's column set instead of an actions column. */}
-                  <Link
-                    href={`/requests/esign/${row.id}`}
-                    className="mt-0.5 flex items-center gap-1 font-sans text-xs text-primary hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    {t("viewDetails")}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-sm">
-                  <div>{row.driver_name}</div>
-                  <div className="text-xs text-muted-foreground">{row.driver_code}</div>
-                </TableCell>
-                <TableCell
-                  className="max-w-[320px] truncate text-sm font-medium"
-                  title={row.title ?? undefined}
-                >
-                  {row.title}
-                </TableCell>
-                <TableCell className="text-sm">{row.category_label ?? "—"}</TableCell>
-                <TableCell className="font-mono text-xs">{row.batch_code ?? "—"}</TableCell>
-                <TableCell>
-                  <StatusPill variant={statusVariant(row.status)}>
-                    {tCommon(`status.${row.status}`)}
-                  </StatusPill>
-                </TableCell>
-                <TableCell className="text-sm tabular-nums">
-                  {formatDay(row.created_at)}
-                </TableCell>
-                <TableCell className="text-sm tabular-nums">{formatDay(row.due_at)}</TableCell>
+                {sentShownColumns.map((id) => (
+                  <TableCell key={id} className={SENT_CELL_CLASS[id]}>
+                    {renderSentCell(row, id)}
+                  </TableCell>
+                ))}
               </AppDataTableRow>
             ))}
           </AppDataTable>

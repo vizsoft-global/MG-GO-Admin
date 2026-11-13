@@ -283,9 +283,32 @@ export function ServiceRecordsShell({
       <KpiGrid
         compact
         items={[
-          { label: t("kpi.total"), value: counts.all, icon: ClipboardList },
-          { label: t("kpi.open"), value: openCount(counts), icon: AlertTriangle, accent: "warning" },
-          { label: t("kpi.doneThisMonth"), value: doneThisMonth.length, icon: CheckCircle2 },
+          {
+            label: t("kpi.total"),
+            value: counts.all,
+            icon: ClipboardList,
+            selected: stageFilter === "all",
+            onClick: () => setParam("stage", ""),
+          },
+          {
+            label: t("kpi.open"),
+            value: openCount(counts),
+            icon: AlertTriangle,
+            accent: "warning",
+            selected: stageFilter === "new" || stageFilter === "running",
+            onClick: () =>
+              setParam(
+                "stage",
+                stageFilter === "new" || stageFilter === "running" ? "" : "new",
+              ),
+          },
+          {
+            label: t("kpi.doneThisMonth"),
+            value: doneThisMonth.length,
+            icon: CheckCircle2,
+            selected: stageFilter === "done",
+            onClick: () => setParam("stage", stageFilter === "done" ? "" : "done"),
+          },
           { label: t("kpi.costThisMonth"), value: formatKwd(costThisMonth), icon: Wallet },
           { label: t("kpi.types"), value: types.data?.length ?? 0, icon: Hash },
         ]}

@@ -441,6 +441,7 @@ export function VehiclesPageShell({
             onApply={(next) => setColumnFilters((prev) => withColumnFilter(prev, id, next))}
             sort={sort}
             onSort={() => setSort((prev) => nextSort(prev, id))}
+            onSortDir={(dir) => setSort({ key: id, dir })}
             options={uniqueColumnValues(scoped, id)}
             optionLabel={(value) => optionLabel(id, value)}
             labels={headerLabels}

@@ -1,134 +1,50 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { ArrowDownAZ, ArrowUpAZ, Check, ListFilter, X } from "lucide-react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Input } from "@/components/ui/input";
+import { ArrowDownAZ, ArrowUpAZ, ListFilter, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  ColumnHeaderFilter,
+  type ColumnFilterDraft,
+  type ColumnFilterLabels,
+  type ColumnFilterMode,
+  type ColumnFilterOption,
+} from "@/components/app/column-filter";
 import { countValueOccurrences, sortParticularValues } from "./payroll-particulars";
+import { draftToColumnFilter, draftToLiveFilter } from "./payroll-column-filter-map";
+import {
+  columnFilterActive,
+  type ColumnFilterValue,
+  type ColumnSort,
+} from "./payroll-column-filter-match";
 
 /**
- * The one Excel-style header filter the three payroll grids share.
- *
- * A column is filtered in exactly one of three modes at a time — text contains,
- * a ticked value list, or a numeric range — because Excel behaves that way and
- * mixing them silently would make a column look unrestricted while it is not.
+ * The value shapes and row-matching rules live in a plain module so they can be
+ * asserted without a renderer; this file re-exports them so every existing
+ * import keeps its path.
  */
-export type ColumnFilterValue =
-  | { kind: "text"; text: string }
-  | { kind: "list"; values: string[] }
-  | { kind: "range"; min: number | null; max: number | null };
+export {
+  activeFilterChips,
+  columnFilterActive,
+  listMatches,
+  matchesColumnFilter,
+  rangeMatches,
+  rowMatchesColumnFilters,
+  sortByColumn,
+  textMatches,
+  type ColumnFilters,
+  type ColumnFilterValue,
+  type ColumnSort,
+} from "./payroll-column-filter-match";
 
-export type ColumnFilters = Record<string, ColumnFilterValue>;
-
-export type ColumnSort = { columnId: string; dir: "asc" | "desc" } | null;
-
-export function columnFilterActive(filter: ColumnFilterValue | undefined): boolean {
-  if (!filter) return false;
-  if (filter.kind === "text") return filter.text.trim().length > 0;
-  if (filter.kind === "list") return filter.values.length > 0;
-  return filter.min !== null || filter.max !== null;
-}
-
-export function textMatches(value: string, text: string): boolean {
-  const needle = text.trim().toLowerCase();
-  if (!needle) return true;
-  return value.toLowerCase().includes(needle);
-}
-
-export function listMatches(value: string, values: readonly string[]): boolean {
-  if (!values.length) return true;
-  return values.includes(value);
-}
-
-export function rangeMatches(
-  value: number,
-  min: number | null,
-  max: number | null,
-): boolean {
-  if (min !== null && value < min) return false;
-  if (max !== null && value > max) return false;
-  return true;
-}
-
-export function matchesColumnFilter(
-  value: string | number | null,
-  filter: ColumnFilterValue | undefined,
-  numeric = false,
-  textValue?: string,
-): boolean {
-  if (!columnFilterActive(filter) || !filter) return true;
-  // A column can print something other than its stored value (Efficiency shows
-  // `87.1%`), so Text mode is matched against the printed string.
-  if (filter.kind === "text") return textMatches(textValue ?? String(value ?? ""), filter.text);
-  if (filter.kind === "list") return listMatches(String(value ?? ""), filter.values);
-  const parsed = typeof value === "number" ? value : Number(value ?? Number.NaN);
-  if (!Number.isFinite(parsed)) return false;
-  void numeric;
-  return rangeMatches(parsed, filter.min, filter.max);
-}
-
-/** True when a row passes every active column filter. */
-export function rowMatchesColumnFilters(
-  row: Record<string, string | number | null>,
-  filters: ColumnFilters,
-  numericColumns: ReadonlySet<string> = new Set(),
-  textOf?: (columnId: string, value: string | number | null) => string,
-): boolean {
-  for (const [columnId, filter] of Object.entries(filters)) {
-    if (!columnFilterActive(filter)) continue;
-    const value = row[columnId] ?? null;
-    if (!matchesColumnFilter(value, filter, numericColumns.has(columnId), textOf?.(columnId, value))) {
-      return false;
-    }
-  }
-  return true;
-}
-
-export function activeFilterChips(
-  filters: ColumnFilters,
-  labelFor: (columnId: string) => string,
-  listSeparator = ", ",
-): Array<{ columnId: string; text: string }> {
-  const chips: Array<{ columnId: string; text: string }> = [];
-  for (const [columnId, filter] of Object.entries(filters)) {
-    if (!columnFilterActive(filter)) continue;
-    if (filter.kind === "text") {
-      chips.push({ columnId, text: `${labelFor(columnId)}: ${filter.text.trim()}` });
-    } else if (filter.kind === "list") {
-      chips.push({ columnId, text: `${labelFor(columnId)}: ${filter.values.join(listSeparator)}` });
-    } else {
-      const min = filter.min === null ? "" : String(filter.min);
-      const max = filter.max === null ? "" : String(filter.max);
-      chips.push({ columnId, text: `${labelFor(columnId)}: ${min}–${max}` });
-    }
-  }
-  return chips;
-}
-
-/** Sorts rows by a column accessor, leaving the input untouched. */
-export function sortByColumn<T>(
-  rows: readonly T[],
-  sort: ColumnSort,
-  accessor: (row: T, columnId: string) => string | number | null,
-): T[] {
-  if (!sort) return [...rows];
-  const factor = sort.dir === "asc" ? 1 : -1;
-  return [...rows].sort((a, b) => {
-    const left = accessor(a, sort.columnId);
-    const right = accessor(b, sort.columnId);
-    if (typeof left === "number" && typeof right === "number") {
-      return (left - right) * factor;
-    }
-    const ls = String(left ?? "");
-    const rs = String(right ?? "");
-    return ls.localeCompare(rs, undefined, { numeric: true, sensitivity: "base" }) * factor;
-  });
+/** The bounds a Range filter is actually applying, for the header hint. */
+export function rangeBoundsLabel(filter: ColumnFilterValue | undefined): string | null {
+  if (!filter || filter.kind !== "range") return null;
+  if (filter.min === null && filter.max === null) return null;
+  const min = filter.min === null ? "" : String(filter.min);
+  const max = filter.max === null ? "" : String(filter.max);
+  return `${min || "…"} – ${max || "…"}`;
 }
 
 export function PayrollFilterChips({
@@ -195,7 +111,7 @@ function defaultFilterMode(
   values: readonly string[] | undefined,
   numeric: boolean,
   fixedList?: readonly string[],
-): ColumnFilterValue["kind"] {
+): ColumnFilterMode {
   if (fixedList && fixedList.length > 0) return "list";
   if (filter?.kind) return filter.kind;
   // A numeric column opens on Range, not List: money, counts, hours, days and
@@ -206,15 +122,14 @@ function defaultFilterMode(
   return "text";
 }
 
-/** The bounds a Range filter is actually applying, for the header hint. */
-export function rangeBoundsLabel(filter: ColumnFilterValue | undefined): string | null {
-  if (!filter || filter.kind !== "range") return null;
-  if (filter.min === null && filter.max === null) return null;
-  const min = filter.min === null ? "" : String(filter.min);
-  const max = filter.max === null ? "" : String(filter.max);
-  return `${min || "…"} – ${max || "…"}`;
-}
-
+/**
+ * The payroll funnel, delegating to the shared `ColumnHeaderFilter`.
+ *
+ * Two behaviours are worth naming because they are the point of sharing it:
+ * typing in the List search narrows **this table** on the keystroke (not just
+ * the checklist), and closing the popover without Apply puts the committed
+ * filter back, so a half-typed query cannot leave a column silently narrowed.
+ */
 export function PayrollColumnHeader({
   label,
   columnId,
@@ -256,80 +171,61 @@ export function PayrollColumnHeader({
   listLabel?: (value: string) => string;
 }) {
   const t = useTranslations("pages.payroll.columnFilter");
-  const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<ColumnFilterValue["kind"]>(
-    defaultFilterMode(filter, values, numeric, fixedList),
-  );
-  const [text, setText] = useState(filter?.kind === "text" ? filter.text : "");
-  const [picked, setPicked] = useState<string[]>(
-    filter?.kind === "list" ? [...filter.values] : [],
-  );
-  const [min, setMin] = useState(filter?.kind === "range" && filter.min !== null ? String(filter.min) : "");
-  const [max, setMax] = useState(filter?.kind === "range" && filter.max !== null ? String(filter.max) : "");
-  const [search, setSearch] = useState("");
+  /** The filter that was committed when the popover opened, restored on close. */
+  const committedAtOpen = useRef<ColumnFilterValue | undefined>(filter);
 
   const counts = useMemo(() => countValueOccurrences(values ?? []), [values]);
   const uniqueValues = useMemo(
     () => (fixedList ? [...fixedList] : sortParticularValues([...new Set(values ?? [])])),
     [fixedList, values],
   );
-  const modeIds = fixedList
-    ? (["list"] as const)
+  const options = useMemo<ColumnFilterOption[]>(
+    () =>
+      uniqueValues.map((value) => ({
+        value,
+        label: listLabel ? listLabel(value) || t("blank") : value || t("blank"),
+        count: counts.get(value) ?? 0,
+      })),
+    [uniqueValues, counts, listLabel, t],
+  );
+
+  const modes: readonly ColumnFilterMode[] = fixedList
+    ? ["list"]
     : numeric
-      ? (["range", "text", "list"] as const)
-      : (["text", "list"] as const);
-  const visibleValues = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return uniqueValues;
-    return uniqueValues.filter((value) => value.toLowerCase().includes(needle));
-  }, [uniqueValues, search]);
+      ? ["range", "text", "list"]
+      : ["text", "list"];
+  const defaultMode = defaultFilterMode(filter, values, numeric, fixedList);
 
   const active = columnFilterActive(filter);
   const sorted = sort?.columnId === columnId ? sort.dir : null;
   const bounds = rangeBoundsLabel(filter);
 
-  function openChanged(next: boolean) {
-    setOpen(next);
-    if (next) {
-      setMode(defaultFilterMode(filter, values, numeric, fixedList));
-      setText(filter?.kind === "text" ? filter.text : "");
-      setPicked(filter?.kind === "list" ? [...filter.values] : []);
-      setMin(filter?.kind === "range" && filter.min !== null ? String(filter.min) : "");
-      setMax(filter?.kind === "range" && filter.max !== null ? String(filter.max) : "");
-      setSearch("");
-    }
-  }
+  const labels: ColumnFilterLabels = {
+    title: (column) => t("title", { column }),
+    mode: { text: t("mode.text"), list: t("mode.list"), range: t("mode.range") },
+    search: t("searchPlaceholder"),
+    contains: t("textPlaceholder"),
+    all: t("all"),
+    clear: t("clear"),
+    apply: t("apply"),
+    min: t("min"),
+    max: t("max"),
+    noOptions: t("noOptions"),
+    blank: t("blank"),
+    filterBy: (column) => t("title", { column }),
+    sortSmallest: t("sortSmallest"),
+    sortLargest: t("sortLargest"),
+  };
 
-  function apply() {
-    if (mode === "text") {
-      const next = text.trim();
-      onChange(next ? { kind: "text", text: next } : null);
-    } else if (mode === "list") {
-      onChange(picked.length ? { kind: "list", values: picked } : null);
-    } else {
-      const parsedMin = min.trim() === "" ? null : Number(min);
-      const parsedMax = max.trim() === "" ? null : Number(max);
-      const safeMin = parsedMin !== null && Number.isFinite(parsedMin) ? parsedMin : null;
-      const safeMax = parsedMax !== null && Number.isFinite(parsedMax) ? parsedMax : null;
-      onChange(safeMin === null && safeMax === null ? null : { kind: "range", min: safeMin, max: safeMax });
-    }
-    setOpen(false);
-  }
-
-  function clear() {
-    onChange(null);
-    setOpen(false);
-  }
-
-  function toggleValue(value: string) {
-    setPicked((prev) =>
-      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value],
-    );
-  }
-
-  function toggleAll() {
-    const pool = search.trim() ? visibleValues : uniqueValues;
-    setPicked((prev) => (pool.length > 0 && pool.every((value) => prev.includes(value)) ? [] : [...pool]));
+  function draftFromCommitted(): ColumnFilterDraft {
+    return {
+      mode: defaultMode,
+      text: filter?.kind === "text" ? filter.text : "",
+      query: "",
+      picked: filter?.kind === "list" ? [...filter.values] : [],
+      min: filter?.kind === "range" && filter.min !== null ? String(filter.min) : "",
+      max: filter?.kind === "range" && filter.max !== null ? String(filter.max) : "",
+    };
   }
 
   /** asc → desc → none, so a third click clears the sort. */
@@ -338,10 +234,6 @@ export function PayrollColumnHeader({
     else if (sorted === "desc") onSort(null);
     else onSort({ columnId, dir: "asc" });
   }
-
-  const allTicked =
-    (search.trim() ? visibleValues : uniqueValues).length > 0 &&
-    (search.trim() ? visibleValues : uniqueValues).every((value) => picked.includes(value));
 
   return (
     <th
@@ -366,177 +258,39 @@ export function PayrollColumnHeader({
             {sorted === "desc" ? <ArrowDownAZ className="size-3" /> : <ArrowUpAZ className="size-3" />}
           </button>
         ) : null}
-        <Popover open={open} onOpenChange={openChanged}>
-          <PopoverTrigger
-            className={cn(
-              "inline-flex size-5 shrink-0 items-center justify-center rounded-sm transition-colors",
-              active
-                ? "bg-primary/10 text-primary ring-1 ring-primary/40"
-                : "text-muted-foreground/60 hover:bg-muted hover:text-foreground",
-            )}
-            aria-label={t("title", { column: label })}
-          >
-            <ListFilter className="size-3" />
-          </PopoverTrigger>
-          <PopoverContent
-            align="start"
-            className="w-[min(260px,92vw)] origin-(--transform-origin) p-3"
-          >
-            <p className="mb-2 text-xs font-semibold">{t("title", { column: label })}</p>
-            {modeIds.length > 1 ? (
-            <div className="mb-2 flex flex-wrap gap-1">
-              {modeIds.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setMode(id)}
-                  className={cn(
-                    "inline-flex h-7 items-center rounded-md border px-2 text-xs font-semibold transition-colors",
-                    mode === id
-                      ? "border-primary bg-primary text-primary-foreground ring-1 ring-primary/40"
-                      : "border-border bg-muted/30 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {t(`mode.${id}`)}
-                </button>
-              ))}
-            </div>
-            ) : null}
-
-            {mode === "text" ? (
-              <Input
-                className="h-9"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder={t("textPlaceholder")}
-              />
-            ) : mode === "list" ? (
-              <div className="space-y-2">
-                <Input
-                  className="h-9"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t("searchPlaceholder")}
-                />
-                <div className="max-h-44 overflow-auto rounded-md border border-border">
-                  <button
-                    type="button"
-                    onClick={toggleAll}
-                    className="flex w-full items-center gap-2 border-b border-border px-2 py-1.5 text-xs font-semibold hover:bg-muted/50"
-                  >
-                    <span
-                      className={cn(
-                        "flex size-3.5 items-center justify-center rounded-sm border",
-                        allTicked ? "border-primary bg-primary text-primary-foreground" : "border-border",
-                      )}
-                    >
-                      {allTicked ? <Check className="size-2.5" /> : null}
-                    </span>
-                    {t("all")}
-                  </button>
-                  {visibleValues.map((value) => {
-                    const ticked = picked.includes(value);
-                    const count = counts.get(value) ?? 0;
-                    return (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => toggleValue(value)}
-                        className="flex w-full items-center gap-2 px-2 py-1.5 text-start text-xs hover:bg-muted/50"
-                      >
-                        <span
-                          className={cn(
-                            "flex size-3.5 shrink-0 items-center justify-center rounded-sm border",
-                            ticked ? "border-primary bg-primary text-primary-foreground" : "border-border",
-                          )}
-                        >
-                          {ticked ? <Check className="size-2.5" /> : null}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate">{listLabel ? listLabel(value) || t("blank") : value || t("blank")}</span>
-                        <span className="tabular-nums text-muted-foreground">{count}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMin(min);
-                      setMax(max);
-                      onChange({
-                        kind: "range",
-                        min: min.trim() === "" ? null : Number(min),
-                        max: max.trim() === "" ? null : Number(max),
-                      });
-                      onSort({ columnId, dir: "asc" });
-                    }}
-                    className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border text-xs font-semibold hover:bg-muted/50"
-                  >
-                    <ArrowUpAZ className="size-3" />
-                    {t("sortSmallest")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSort({ columnId, dir: "desc" });
-                    }}
-                    className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-md border border-border text-xs font-semibold hover:bg-muted/50"
-                  >
-                    <ArrowDownAZ className="size-3" />
-                    {t("sortLargest")}
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Input
-                    className="h-9"
-                    inputMode="decimal"
-                    value={min}
-                    onChange={(e) => setMin(e.target.value)}
-                    placeholder={t("min")}
-                  />
-                  <span className="text-xs text-muted-foreground">–</span>
-                  <Input
-                    className="h-9"
-                    inputMode="decimal"
-                    value={max}
-                    onChange={(e) => setMax(e.target.value)}
-                    placeholder={t("max")}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={clear}
-                className="inline-flex h-8 items-center rounded-md px-2 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/10"
-              >
-                {t("clear")}
-              </button>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => onSort({ columnId, dir: sorted === "asc" ? "desc" : "asc" })}
-                  className="inline-flex h-8 items-center rounded-md border border-border px-2 text-xs font-semibold hover:bg-muted/50"
-                >
-                  {sorted === "desc" ? <ArrowDownAZ className="size-3" /> : <ArrowUpAZ className="size-3" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={apply}
-                  className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground"
-                >
-                  {t("apply")}
-                </button>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
+        <ColumnHeaderFilter<ColumnFilterValue>
+          column={columnId}
+          label={label}
+          modes={modes}
+          defaultMode={defaultMode}
+          draftFromCommitted={draftFromCommitted}
+          options={options}
+          labels={labels}
+          active={active}
+          liveFilter={draftToLiveFilter}
+          committedFilter={draftToColumnFilter}
+          liveDebounceMs={0}
+          onLive={(next) => onChange(next)}
+          onCommit={(next) => onChange(next)}
+          onClear={() => onChange(null)}
+          onRevert={() => onChange(committedAtOpen.current ?? null)}
+          onOpenChange={(next) => {
+            if (next) committedAtOpen.current = filter;
+          }}
+          onRangeShortcut={(dir, draft) => {
+            onChange(draftToColumnFilter({ ...draft, mode: "range" }));
+            onSort({ columnId, dir });
+          }}
+          footerExtra={
+            <button
+              type="button"
+              onClick={() => onSort({ columnId, dir: sorted === "asc" ? "desc" : "asc" })}
+              className="inline-flex h-8 items-center rounded-md border border-border px-2 text-xs font-semibold hover:bg-muted/50"
+            >
+              {sorted === "desc" ? <ArrowDownAZ className="size-3" /> : <ArrowUpAZ className="size-3" />}
+            </button>
+          }
+        />
         {bounds ? (
           <span
             className="rounded-sm bg-primary/10 px-1 text-[10px] font-semibold tabular-nums text-primary"

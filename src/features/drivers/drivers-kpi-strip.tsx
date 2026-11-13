@@ -12,12 +12,20 @@ import {
 import { MetricTile, type Tone } from "@/components/ui/metric-tile";
 
 type KpiItem = {
-  id: string;
+  id: DriverKpiKey;
   label: string;
   value: number;
   icon: LucideIcon;
   tone: Tone;
 };
+
+export type DriverKpiKey =
+  | "total"
+  | "active"
+  | "online"
+  | "inactive"
+  | "pending"
+  | "suspended";
 
 export function DriversKpiStrip({
   total,
@@ -27,6 +35,8 @@ export function DriversKpiStrip({
   pendingVerification,
   suspended,
   labels,
+  activeKey,
+  onSelectKey,
 }: {
   total: number;
   activeToday: number;
@@ -42,6 +52,8 @@ export function DriversKpiStrip({
     pending: string;
     suspended: string;
   };
+  activeKey?: DriverKpiKey;
+  onSelectKey?: (key: DriverKpiKey) => void;
 }) {
   const items: KpiItem[] = [
     { id: "total", label: labels.total, value: total, icon: Users, tone: "primary" },
@@ -92,6 +104,10 @@ export function DriversKpiStrip({
           icon={item.icon}
           tone={item.tone}
           className="p-2.5"
+          selected={activeKey === item.id}
+          onClick={() => onSelectKey?.(item.id)}
+          ariaLabel={`${item.label}: ${item.value.toLocaleString()}`}
+          disabled={!onSelectKey}
         />
       ))}
     </div>

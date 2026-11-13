@@ -2197,6 +2197,7 @@
       "colZone": "المنطقة",
       "kpiUsed": "مستخدم",
       "kpiRemaining": "متبقٍ",
+      "clearAssetFilter": "مسح عامل تصفية الأصل",
       "emptyAssignments": "لا توجد تعيينات",
       "emptyAssignmentsHint": "تظهر المعدات هنا بعد تسليمها للسائق.",
       "sectionEmployee": "الموظف والشركة",
@@ -6648,7 +6649,8 @@
           "filterTemplateSearch": "بحث القوالب",
           "filterBatch": "كل الدفعات",
           "filterBatchSearch": "بحث BAT-####",
-          "colBatch": "الدفعة"
+          "colBatch": "الدفعة",
+          "pinnedColumns": "رمز الطلب · الراكب مثبتة ولا يمكن نقلها."
         },
         "signatures": {
           "title": "التوقيعات الإلكترونية",
@@ -10931,7 +10933,8 @@
         "sortLargest": "الأكبر أولاً",
         "searchPlaceholder": "بحث القيم",
         "sortPair": "ترتيب {column}",
-        "activeRange": "يُعرض {bounds}"
+        "activeRange": "يُعرض {bounds}",
+        "noOptions": "لا توجد قيم"
       },
       "adjust": {
         "title": "تعديل أيام الرواتب",
@@ -13964,6 +13967,7 @@
       "clientsTableTitle": "العملاء",
       "clientsTableSubtitle": "كل عميل يرى راكبيه فقط",
       "searchClients": "بحث عن العملاء",
+      "clearAllFilters": "مسح الفلتر",
       "colClient": "العميل",
       "colRiders": "الراكبون",
       "colUsers": "المستخدمون",
@@ -14233,7 +14237,9 @@
       "ridersUnavailable": "هذا الجدول يحتاج أحدث نسخة من الخادم؛ أعد التحميل بعد النشر القادم.",
       "pagerRange": "{from}–{to} من {total}",
       "pagerPrev": "السابق",
-      "pagerNext": "التالي"
+      "pagerNext": "التالي",
+      "pinnedColumns": "رقم MG · رقم العميل · الاسم الكامل مثبتة ولا يمكن نقلها.",
+      "pinnedColumnsConfirm": "العميل · الإجراءات مثبتة ولا يمكن نقلها."
     },
     "clientPortal": {
       "title": "راكبوك اليوم",

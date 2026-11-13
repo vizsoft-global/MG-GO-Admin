@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check, Filter } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { useRef } from "react";
+import { Filter } from "lucide-react";
+import {
+  ColumnHeaderFilter,
+  matchingValues,
+  type ColumnFilterDraft,
+  type ColumnFilterOption,
+} from "@/components/app/column-filter";
 import {
   filterActive,
   filterKind,
@@ -16,6 +18,12 @@ import {
   type ComparisonRangeFilter,
 } from "./order-comparison-filters";
 
+/**
+ * Order reconciliation's funnel, delegating to the shared `ColumnHeaderFilter`.
+ *
+ * Typing narrows the comparison grid before Apply, and a close without Apply
+ * restores the filter record the popover opened with.
+ */
 export function ComparisonHeaderFilter({
   columnId,
   values,
@@ -28,6 +36,7 @@ export function ComparisonHeaderFilter({
   minLabel,
   maxLabel,
   containsLabel,
+  onSortDir,
 }: {
   columnId: string;
   values: string[];
@@ -40,153 +49,131 @@ export function ComparisonHeaderFilter({
   minLabel: string;
   maxLabel: string;
   containsLabel: string;
+  /** Sorts the column a specific way — the Range tab's "Smallest / Largest first". */
+  onSortDir?: (dir: "asc" | "desc") => void;
 }) {
   const kind = filterKind(columnId);
   const textLike = kind === "text" || kind === "number";
   const current = filters[columnId];
   const active = filterActive(current);
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const [draftText, setDraftText] = useState("");
-  const [draftValues, setDraftValues] = useState<string[]>([]);
-  const [draftMin, setDraftMin] = useState("");
-  const [draftMax, setDraftMax] = useState("");
+  const snapshot = useRef<ComparisonColumnFilters>(filters);
 
-  function openDraft() {
+  const options: ColumnFilterOption[] = values.map((value) => ({
+    value,
+    label: value || "—",
+  }));
+
+  function draftFromCommitted(): ColumnFilterDraft {
     if (kind === "range") {
       const range: ComparisonRangeFilter = isRangeFilter(current) ? current : {};
-      setDraftMin(range.min == null ? "" : String(range.min));
-      setDraftMax(range.max == null ? "" : String(range.max));
-      return;
+      return {
+        mode: "range",
+        text: "",
+        query: "",
+        picked: [],
+        min: range.min == null ? "" : String(range.min),
+        max: range.max == null ? "" : String(range.max),
+      };
     }
     if (textLike) {
-      setDraftText(isContainsFilter(current) ? current.contains : "");
-      return;
+      return {
+        mode: "text",
+        text: isContainsFilter(current) ? current.contains : "",
+        query: "",
+        picked: [],
+        min: "",
+        max: "",
+      };
     }
-    setDraftValues(Array.isArray(current) ? current : []);
-    setQ("");
+    return {
+      mode: "list",
+      text: "",
+      query: "",
+      picked: Array.isArray(current) ? [...current] : [],
+      min: "",
+      max: "",
+    };
   }
 
-  const visible = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return values;
-    return values.filter((v) => v.toLowerCase().includes(needle));
-  }, [q, values]);
+  function valueOf(draft: ColumnFilterDraft): ComparisonColumnFilters[string] | null {
+    if (draft.mode === "range") {
+      const min = draft.min === "" ? null : Number(draft.min);
+      const max = draft.max === "" ? null : Number(draft.max);
+      const range: ComparisonRangeFilter = {
+        min: min != null && Number.isFinite(min) ? min : null,
+        max: max != null && Number.isFinite(max) ? max : null,
+      };
+      return range.min != null || range.max != null ? range : null;
+    }
+    if (draft.mode === "text") {
+      const text = draft.text.trim();
+      return text ? { contains: text } : null;
+    }
+    return draft.picked.length ? draft.picked : null;
+  }
+
+  function liveOf(draft: ColumnFilterDraft): ComparisonColumnFilters[string] | null {
+    if (draft.mode === "list" && draft.query.trim()) {
+      const matched = matchingValues(values, draft.query);
+      return matched.length ? matched : null;
+    }
+    return valueOf(draft);
+  }
+
+  function withValue(value: ComparisonColumnFilters[string] | null): ComparisonColumnFilters {
+    const next = { ...filters };
+    if (value === null) delete next[columnId];
+    else next[columnId] = value;
+    return next;
+  }
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) openDraft();
+    <ColumnHeaderFilter<ComparisonColumnFilters[string]>
+      column={columnId}
+      label={columnId}
+      title={`Filter ${columnId}`}
+      modes={textLike ? ["text"] : kind === "range" ? ["range"] : ["list"]}
+      defaultMode={textLike ? "text" : kind === "range" ? "range" : "list"}
+      draftFromCommitted={draftFromCommitted}
+      options={options}
+      active={active}
+      liveFilter={liveOf}
+      committedFilter={valueOf}
+      onLive={(next) => onApply(withValue(next))}
+      onCommit={(next) => onApply(withValue(next))}
+      onClear={() => onApply(withValue(null))}
+      onRevert={() => onApply(snapshot.current)}
+      onOpenChange={(open) => {
+        if (open) snapshot.current = filters;
       }}
-    >
-      <PopoverTrigger
-        aria-label={`Filter ${columnId}`}
-        className={cn(
-          "inline-flex size-6 items-center justify-center rounded-md",
-          active ? "text-emerald-800 hover:bg-emerald-50" : "text-muted-foreground hover:bg-muted/40",
-        )}
-      >
-        <Filter className="size-3" />
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-56 origin-(--transform-origin) space-y-2 p-2">
-        {kind === "range" ? (
-          <div className="grid grid-cols-2 gap-1.5">
-            <label className="text-xs text-muted-foreground">
-              {minLabel}
-              <Input type="number" value={draftMin} onChange={(e) => setDraftMin(e.target.value)} className="mt-0.5 h-9" />
-            </label>
-            <label className="text-xs text-muted-foreground">
-              {maxLabel}
-              <Input type="number" value={draftMax} onChange={(e) => setDraftMax(e.target.value)} className="mt-0.5 h-9" />
-            </label>
-          </div>
-        ) : textLike ? (
-          <label className="text-xs text-muted-foreground">
-            {containsLabel}
-            <Input
-              value={draftText}
-              inputMode={kind === "number" ? "numeric" : undefined}
-              onChange={(e) =>
-                setDraftText(kind === "number" ? sanitizeNumericFilter(e.target.value) : e.target.value)
-              }
-              placeholder={placeholder}
-              className="mt-0.5 h-9"
-            />
-          </label>
-        ) : (
-          <>
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} className="h-9" />
-            <label className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40">
-              <Checkbox checked={draftValues.length === 0} onCheckedChange={() => setDraftValues([])} />
-              <span className="min-w-0 flex-1 font-medium">{allLabel}</span>
-              {draftValues.length === 0 ? <Check className="size-3 shrink-0 text-emerald-700" /> : null}
-            </label>
-            <div className="max-h-48 overflow-y-auto">
-              {visible.map((v) => {
-                const on = draftValues.includes(v);
-                return (
-                  <label
-                    key={v || "(empty)"}
-                    className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40"
-                  >
-                    <Checkbox
-                      checked={on}
-                      onCheckedChange={() =>
-                        setDraftValues((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))
-                      }
-                    />
-                    <span className="min-w-0 flex-1 truncate">{v || "—"}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </>
-        )}
-        <div className="flex items-center justify-end gap-1.5">
-          <button
-            type="button"
-            className="h-8 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted/40"
-            onClick={() => {
-              const next = { ...filters };
-              delete next[columnId];
-              onApply(next);
-              setOpen(false);
-            }}
-          >
-            {clearLabel}
-          </button>
-          <button
-            type="button"
-            className="h-8 rounded-md bg-primary px-2 text-xs text-primary-foreground"
-            onClick={() => {
-              const next = { ...filters };
-              if (kind === "range") {
-                const min = draftMin === "" ? null : Number(draftMin);
-                const max = draftMax === "" ? null : Number(draftMax);
-                const range: ComparisonRangeFilter = {
-                  min: min != null && Number.isFinite(min) ? min : null,
-                  max: max != null && Number.isFinite(max) ? max : null,
-                };
-                if (range.min != null || range.max != null) next[columnId] = range;
-                else delete next[columnId];
-              } else if (textLike) {
-                if (draftText.trim()) next[columnId] = { contains: draftText.trim() };
-                else delete next[columnId];
-              } else if (draftValues.length === 0) {
-                delete next[columnId];
-              } else {
-                next[columnId] = draftValues;
-              }
-              onApply(next);
-              setOpen(false);
-            }}
-          >
-            {applyLabel}
-          </button>
-        </div>
-      </PopoverContent>
-    </Popover>
+      liveDebounceMs={0}
+      onRangeShortcut={
+        onSortDir
+          ? (dir, draft) => {
+              onApply(withValue(valueOf({ ...draft, mode: "range" })));
+              onSortDir(dir);
+            }
+          : undefined
+      }
+      sanitizeNumber={kind === "number" ? sanitizeNumericFilter : undefined}
+      textLabel={containsLabel}
+      labels={{
+        title: (column) => `Filter ${column}`,
+        mode: {},
+        search: placeholder,
+        contains: placeholder,
+        all: allLabel,
+        clear: clearLabel,
+        apply: applyLabel,
+        min: minLabel,
+        max: maxLabel,
+        noOptions: allLabel,
+        blank: "—",
+        filterBy: (column) => `Filter ${column}`,
+      }}
+      triggerIcon={<Filter className="size-3" />}
+      triggerClassName="size-6 rounded-md text-emerald-800 hover:bg-emerald-50"
+      contentClassName="w-56 space-y-2 p-2"
+    />
   );
 }

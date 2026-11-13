@@ -53,7 +53,8 @@ export type IncomingHubFilter =
   | "forwarded"
   | "new"
   | "in_review"
-  | "clarification";
+  | "clarification"
+  | "in_progress";
 
 /** Which rows the client keeps for a status filter (the fetch is the same). */
 export function incomingStatusMatch(status: string, filter: IncomingHubFilter): boolean {
@@ -64,6 +65,8 @@ export function incomingStatusMatch(status: string, filter: IncomingHubFilter): 
       return status === "in_review";
     case "clarification":
       return status === "needs_clarification";
+    case "in_progress":
+      return status === "in_review" || status === "needs_clarification";
     default:
       return true;
   }

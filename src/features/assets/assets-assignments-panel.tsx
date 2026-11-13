@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { AppListCard } from "@/components/app";
 import {
   AppDataTable,
@@ -19,6 +19,7 @@ import {
   type TableToolbarColumn,
 } from "@/components/app/table-toolbar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import {
   GroupTableHeaderRow,
   groupRows,
@@ -29,6 +30,7 @@ import { isDriverProjectKey } from "@/features/fleet/fleet-labels";
 import { AssetsFleetKpiStrip } from "./assets-fleet-kpi-strip";
 import { AssetAssignmentDialog } from "./asset-assignment-dialog";
 import { useFleetAssetAssignments, useFleetAssetKpis } from "./use-assets";
+import type { FleetAssetKpiCode } from "./types";
 
 export function AssetsAssignmentsPanel() {
   const t = useTranslations("pages.assets");
@@ -50,11 +52,15 @@ export function AssetsAssignmentsPanel() {
   );
   const prefs = useTablePrefs("asset-assignments", columns);
   const [projectKey, setProjectKey] = useState("all");
+  const [assetCode, setAssetCode] = useState<FleetAssetKpiCode | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const visible = useMemo(() => {
     const needle = prefs.appliedQuery.trim().toLowerCase();
     return rows.filter((row) => {
+      if (assetCode && row.catalog_code !== assetCode) {
+        return false;
+      }
       if (projectKey !== "all" && isDriverProjectKey(projectKey) && row.project_key !== projectKey) {
         return false;
       }
@@ -73,7 +79,7 @@ export function AssetsAssignmentsPanel() {
         .toLowerCase()
         .includes(needle);
     });
-  }, [prefs.appliedQuery, projectKey, rows]);
+  }, [assetCode, prefs.appliedQuery, projectKey, rows]);
   const grouped = useMemo(
     () =>
       groupRows(
@@ -91,7 +97,7 @@ export function AssetsAssignmentsPanel() {
   const listView = useGroupedListView(
     grouped,
     prefs.groupBy !== "none",
-    `${prefs.groupBy}\u0001${prefs.appliedQuery}\u0001${projectKey}`,
+    `${prefs.groupBy}\u0001${prefs.appliedQuery}\u0001${projectKey}\u0001${assetCode ?? ""}`,
   );
   const shownColumns = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
 
@@ -99,7 +105,13 @@ export function AssetsAssignmentsPanel() {
 
   return (
     <>
-      <AssetsFleetKpiStrip items={kpis} usedLabel={t("kpiUsed")} remainingLabel={t("kpiRemaining")} />
+      <AssetsFleetKpiStrip
+        items={kpis}
+        usedLabel={t("kpiUsed")}
+        remainingLabel={t("kpiRemaining")}
+        activeCode={assetCode}
+        onSelectCode={(code) => setAssetCode((current) => (current === code ? null : code))}
+      />
       <AppListCard
         toolbar={
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -145,6 +157,20 @@ export function AssetsAssignmentsPanel() {
           <AppDataTable
             toolbar={
               <TableToolbar
+              leading={
+                assetCode ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-9 gap-1.5 border-orange-500 bg-orange-500/5 text-orange-700 hover:bg-orange-500/10"
+                    onClick={() => setAssetCode(null)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    {t("clearAssetFilter")}
+                  </Button>
+                ) : undefined
+              }
                 prefs={prefs}
                 entity={t("assignmentsTitle")}
                 columns={columns}

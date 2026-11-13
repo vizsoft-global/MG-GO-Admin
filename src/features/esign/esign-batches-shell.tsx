@@ -460,24 +460,32 @@ export function EsignBatchesShell() {
               label: t("kpiBatches30d"),
               value: kpis.batchesSent,
               dotClass: "bg-rose-500",
+              selected: tab === "all",
+              onClick: () => setTab("all"),
             },
             {
               label: t("kpiWaiting"),
               value: kpis.waitingSignatures,
               unit: t("unitEmployees"),
               dotClass: "bg-sky-500",
+              selected: tab === "waiting",
+              onClick: () => setTab(tab === "waiting" ? "all" : "waiting"),
             },
             {
               label: t("kpiSigned"),
               value: kpis.fullySigned,
               unit: t("unitBatches"),
               dotClass: "bg-emerald-500",
+              selected: tab === "completed",
+              onClick: () => setTab(tab === "completed" ? "all" : "completed"),
             },
             {
               label: t("kpiDeclined"),
               value: kpis.declined,
               unit: t("unitEmployees"),
               dotClass: "bg-rose-500",
+              selected: tab === "has_declines",
+              onClick: () => setTab(tab === "has_declines" ? "all" : "has_declines"),
             },
           ]}
         />

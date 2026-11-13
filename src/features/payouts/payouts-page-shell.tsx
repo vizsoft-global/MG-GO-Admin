@@ -60,19 +60,22 @@ export function PayoutsPageShell() {
   const [startDate, setStartDate] = useState(defaultStartDateMonthsAgo);
   const [endDate, setEndDate] = useState(defaultEndDate);
   const [newRunOpen, setNewRunOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("");
   const runsQuery = usePayoutRuns(startDate, endDate);
   const runs = runsQuery.data ?? [];
 
   const filtered = useMemo(
     () =>
-      runs.filter((row) =>
-        fieldSearchMatch(row, prefs.appliedQuery, {
-          name: (item) => item.period_start,
-          status: (item) => item.status,
-          employee_id: (item) => item.id,
-        }),
-      ),
-    [prefs.appliedQuery, runs],
+      runs
+        .filter((row) => !statusFilter || row.status === statusFilter)
+        .filter((row) =>
+          fieldSearchMatch(row, prefs.appliedQuery, {
+            name: (item) => item.period_start,
+            status: (item) => item.status,
+            employee_id: (item) => item.id,
+          }),
+        ),
+    [prefs.appliedQuery, runs, statusFilter],
   );
   const grouped = useMemo(
     () =>
@@ -134,10 +137,30 @@ export function PayoutsPageShell() {
 
       <KpiGrid
         items={[
-          { label: t("kpiDraft"), value: totalDraft },
-          { label: t("kpiApproved"), value: totalApproved },
-          { label: t("kpiPaid"), value: totalPaid },
-          { label: t("kpiTotal"), value: totalKw.toFixed(3) },
+          {
+            label: t("kpiDraft"),
+            value: totalDraft,
+            selected: statusFilter === "draft",
+            onClick: () => setStatusFilter((prev) => (prev === "draft" ? "" : "draft")),
+          },
+          {
+            label: t("kpiApproved"),
+            value: totalApproved,
+            selected: statusFilter === "approved",
+            onClick: () => setStatusFilter((prev) => (prev === "approved" ? "" : "approved")),
+          },
+          {
+            label: t("kpiPaid"),
+            value: totalPaid,
+            selected: statusFilter === "paid",
+            onClick: () => setStatusFilter((prev) => (prev === "paid" ? "" : "paid")),
+          },
+          {
+            label: t("kpiTotal"),
+            value: totalKw.toFixed(3),
+            selected: !statusFilter,
+            onClick: () => setStatusFilter(""),
+          },
           { label: t("periodStart"), value: startDate },
           { label: t("periodEnd"), value: endDate },
         ]}

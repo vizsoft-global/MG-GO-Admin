@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronRight, Download, Eye, FileText, Search, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
@@ -8,6 +8,8 @@ import { AppBackButton } from "@/components/app/app-back-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ColumnsButton } from "@/components/app/columns-button";
+import { useColumnLayout } from "@/hooks/use-column-layout";
 import { formatKuwaitDateLabel } from "@/lib/date/kuwait-dates";
 import {
   fetchClientPortalDocuments,
@@ -24,6 +26,33 @@ const TABLE = "text-[13px] [&_thead_tr]:bg-[var(--surface-subtle)] [&_td]:px-3 [
 const TH = "text-start text-[12px] font-medium text-[var(--text-secondary)]";
 /** Rows per page. 8 is what the card was already showing, so the height holds. */
 const PAGE_SIZE = 8;
+
+/**
+ * The roster's columns, in catalogue order.
+ *
+ * The identity three stay pinned: a roster whose name column has been moved off
+ * the end, or hidden entirely, is a list of numbers. They can still not be
+ * reordered, so the arrows on those rows are drawn disabled.
+ */
+const EMPLOYEE_COLUMNS = [
+  { id: "mgId", pinned: true },
+  { id: "clientId", pinned: true },
+  { id: "fullName", pinned: true },
+  { id: "civilId", pinned: false },
+  { id: "status", pinned: false },
+  { id: "open", pinned: true },
+] as const;
+
+type EmployeeColumnId = (typeof EMPLOYEE_COLUMNS)[number]["id"];
+
+const EMPLOYEE_COLUMN_LABELS: Record<EmployeeColumnId, string> = {
+  mgId: "colMgId",
+  clientId: "colClientId",
+  fullName: "colFullName",
+  civilId: "colCivilId",
+  status: "colStatus",
+  open: "colActions",
+};
 
 function maskedCivil(civilId: string): string {
   if (!civilId) return "—";
@@ -53,6 +82,15 @@ export function ClientEmployeesV2({ project }: { project: string }) {
       : project === "unassigned"
         ? tOps("projectUnassigned")
         : tOps("projectKeeta");
+
+  const employeeColumnIds = useMemo(() => EMPLOYEE_COLUMNS.map((column) => column.id), []);
+  const lockedEmployeeColumns = useMemo(
+    () => EMPLOYEE_COLUMNS.filter((column) => column.pinned).map((column) => column.id),
+    [],
+  );
+  const columns = useColumnLayout("portal-v2.employees", employeeColumnIds, {
+    lockedIds: lockedEmployeeColumns,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +133,48 @@ export function ClientEmployeesV2({ project }: { project: string }) {
    * `1–8 / 209` and stop, which reads as a pager that does nothing.
    */
   const paged = pageSlice(filtered, page, PAGE_SIZE);
+
+  /** Header row and every body cell read the same order, so they cannot drift. */
+  const shownColumns = columns.order.filter((id) => columns.isVisible(id)) as EmployeeColumnId[];
+
+  function renderCell(row: ClientPortalEmployee, id: EmployeeColumnId): ReactNode {
+    switch (id) {
+      case "mgId":
+        return <span className="tabular-nums">{row.mgId || "—"}</span>;
+      case "clientId":
+        return <span className="tabular-nums">{row.clientId || "—"}</span>;
+      case "fullName":
+        return <span className="font-medium">{row.fullName}</span>;
+      case "civilId":
+        return <span className="tabular-nums">{maskedCivil(row.civilId)}</span>;
+      case "status":
+        return (
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${statusClass(row.status)}`}>
+            <span
+              className={
+                /leave/i.test(row.status)
+                  ? "size-1.5 rounded-full bg-[var(--status-leave-fg)]"
+                  : /absent|sick/i.test(row.status)
+                    ? "size-1.5 rounded-full bg-[var(--status-sick-fg)]"
+                    : "size-1.5 rounded-full bg-[var(--status-working-fg)]"
+              }
+              aria-hidden
+            />
+            {row.status || t("notMarked")}
+          </span>
+        );
+      case "open":
+        return (
+          <span className="block text-end">
+            <ChevronRight className="ms-auto size-4 text-[var(--text-muted)]" aria-hidden />
+          </span>
+        );
+      default: {
+        const exhaustive: never = id;
+        return exhaustive;
+      }
+    }
+  }
 
   async function openDocument(doc: ClientPortalDocument, mode: "view" | "download") {
     if (!selected) return;
@@ -180,52 +260,41 @@ export function ClientEmployeesV2({ project }: { project: string }) {
                 className="h-9 w-60 border-[var(--border-default)] bg-[var(--surface-card)] ps-8"
               />
             </span>
+            <ColumnsButton
+              columns={columns}
+              labelFor={(id) => t(EMPLOYEE_COLUMN_LABELS[id as EmployeeColumnId])}
+              pinned={
+                project === "unassigned"
+                  ? undefined
+                  : t("pinnedColumns")
+              }
+            />
           </div>
 
           <div className="mt-3 overflow-x-auto">
             <Table className={TABLE}>
               <TableHeader>
                 <TableRow>
-                  <TableHead className={TH}>{t("colMgId")}</TableHead>
-                  <TableHead className={TH}>{t("colClientId")}</TableHead>
-                  <TableHead className={TH}>{t("colFullName")}</TableHead>
-                  <TableHead className={TH}>{t("colCivilId")}</TableHead>
-                  <TableHead className={TH}>{t("colStatus")}</TableHead>
-                  <TableHead className={TH} />
+                  {shownColumns.map((id) => (
+                    <TableHead key={id} className={TH}>
+                      {id === "open" ? null : t(EMPLOYEE_COLUMN_LABELS[id])}
+                    </TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paged.slice.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-6 text-center text-[var(--text-secondary)]">
+                    <TableCell colSpan={shownColumns.length} className="py-6 text-center text-[var(--text-secondary)]">
                       {t("noDocuments")}
                     </TableCell>
                   </TableRow>
                 ) : (
                   paged.slice.map((row) => (
                     <TableRow key={row.id} onClick={() => openEmployee(row)} className="cursor-pointer">
-                      <TableCell className="tabular-nums">{row.mgId || "—"}</TableCell>
-                      <TableCell className="tabular-nums">{row.clientId || "—"}</TableCell>
-                      <TableCell className="font-medium">{row.fullName}</TableCell>
-                      <TableCell className="tabular-nums">{maskedCivil(row.civilId)}</TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${statusClass(row.status)}`}>
-                          <span
-                            className={
-                              /leave/i.test(row.status)
-                                ? "size-1.5 rounded-full bg-[var(--status-leave-fg)]"
-                                : /absent|sick/i.test(row.status)
-                                  ? "size-1.5 rounded-full bg-[var(--status-sick-fg)]"
-                                  : "size-1.5 rounded-full bg-[var(--status-working-fg)]"
-                            }
-                            aria-hidden
-                          />
-                          {row.status || t("notMarked")}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-end">
-                        <ChevronRight className="ms-auto size-4 text-[var(--text-muted)]" aria-hidden />
-                      </TableCell>
+                      {shownColumns.map((id) => (
+                        <TableCell key={id}>{renderCell(row, id)}</TableCell>
+                      ))}
                     </TableRow>
                   ))
                 )}

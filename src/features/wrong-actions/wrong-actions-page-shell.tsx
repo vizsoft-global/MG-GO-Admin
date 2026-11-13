@@ -37,7 +37,7 @@ import {
 } from "@/components/app/app-data-table";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { Badge } from "@/components/ui/badge";
-import { KpiGrid } from "@/components/dashboard/kpi-grid";
+import { KpiGrid, type KpiGridItem } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { useAuth } from "@/contexts/auth-context";
 import { WrongActionFormDialog } from "./wrong-action-form-dialog";
@@ -162,17 +162,47 @@ export function WrongActionsPageShell({
 
   const counts = useMemo(() => wrongActionKpis(rows, now), [now, rows]);
   const dash = (value: number) => (isLoading ? "—" : String(value));
-  const kpis = [
-    { label: t("kpiTotal"), value: dash(counts.total), icon: Layers, accent: "primary" as const },
-    { label: t("kpiHigh"), value: dash(counts.high), icon: ShieldAlert, accent: "danger" as const },
+  const selectTab = (next: WrongActionTab) =>
+    replaceQuery({ tab: activeTab === next && next !== "all" ? "all" : next });
+  const kpis: KpiGridItem[] = [
+    {
+      label: t("kpiTotal"),
+      value: dash(counts.total),
+      icon: Layers,
+      accent: "primary",
+      selected: activeTab === "all",
+      onClick: () => replaceQuery({ tab: "all" }),
+    },
+    {
+      label: t("kpiHigh"),
+      value: dash(counts.high),
+      icon: ShieldAlert,
+      accent: "danger",
+      selected: activeTab === "high",
+      onClick: () => selectTab("high"),
+    },
     {
       label: t("kpiMedium"),
       value: dash(counts.medium),
       icon: AlertTriangle,
-      accent: "warning" as const,
+      accent: "warning",
+      selected: activeTab === "medium",
+      onClick: () => selectTab("medium"),
     },
-    { label: t("kpiLow"), value: dash(counts.low), icon: AlertTriangle },
-    { label: t("kpiThisWeek"), value: dash(counts.thisWeek), icon: CalendarClock },
+    {
+      label: t("kpiLow"),
+      value: dash(counts.low),
+      icon: AlertTriangle,
+      selected: activeTab === "low",
+      onClick: () => selectTab("low"),
+    },
+    {
+      label: t("kpiThisWeek"),
+      value: dash(counts.thisWeek),
+      icon: CalendarClock,
+      selected: activeTab === "week",
+      onClick: () => selectTab("week"),
+    },
     { label: t("kpiWeighted"), value: dash(counts.weighted), icon: Scale },
     { label: t("kpiDrivers"), value: dash(counts.driversInvolved), icon: Users },
   ];

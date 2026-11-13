@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { LAYOUT } from "@/components/app/layout-spacing";
@@ -94,10 +94,34 @@ export function OpsDpdTab({
     [t],
   );
   const storePrefs = useTablePrefs("ops-dpd-stores", storeColumns);
+  const [storeSort, setStoreSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const riders = useMemo(() => data.riders.map(enrichOpsRider), [data.riders]);
   const seriesName = t(`viewBy.${metric}`);
   const series = [{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }];
   const fmt = (value: number) => formatOpsMetricValue(metric, value);
+
+  function toggleStoreSort(key: string, dir: "asc" | "desc" = "desc") {
+    setStoreSort((prev) => (prev?.key === key && prev.dir === dir ? null : { key, dir }));
+  }
+
+  const storeRows = useMemo(() => {
+    const needle = storePrefs.appliedQuery.trim().toLowerCase();
+    const rows = data.stores.filter(
+      (s) => !needle || `${s.store_name ?? ""} ${s.zone_name ?? ""}`.toLowerCase().includes(needle),
+    );
+    if (!storeSort) return rows;
+    const dir = storeSort.dir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const pick = (row: typeof a) => {
+        if (storeSort.key === "store_dpd") return row.store_dpd ?? 0;
+        if (storeSort.key === "utr") return row.utr ?? 0;
+        if (storeSort.key === "orders") return row.orders ?? 0;
+        if (storeSort.key === "avg_delivery_min") return row.avg_delivery_min ?? 0;
+        return row.active_riders ?? 0;
+      };
+      return (pick(a) - pick(b)) * dir;
+    });
+  }, [data.stores, storePrefs.appliedQuery, storeSort]);
 
   /**
    * The two distributions the reference draws side by side with the trend.
@@ -165,24 +189,58 @@ export function OpsDpdTab({
     );
   }
 
-  const storeRows = data.stores.filter((s) => {
-    const needle = storePrefs.appliedQuery.trim().toLowerCase();
-    return !needle || `${s.store_name ?? ""} ${s.zone_name ?? ""}`.toLowerCase().includes(needle);
-  });
-
   return (
     <div className={cn("flex flex-col", LAYOUT.stackGap)}>
       <KpiGrid
         compact
         items={[
-          { label: t("kpi.orders"), value: formatInt(data.kpis.orders) },
-          { label: t("kpi.overallDpd"), value: formatDpd(data.kpis.overall_dpd), accent: "primary" },
-          { label: t("kpi.utr"), value: formatUtr(data.kpis.utr) },
-          { label: t("kpi.dpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
-          { label: t("kpi.tgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
+          {
+            label: t("kpi.orders"),
+            value: formatInt(data.kpis.orders),
+            selected: storeSort?.key === "orders",
+            onClick: () => toggleStoreSort("orders"),
+          },
+          {
+            label: t("kpi.overallDpd"),
+            value: formatDpd(data.kpis.overall_dpd),
+            accent: "primary",
+            selected: storeSort?.key === "store_dpd",
+            onClick: () => toggleStoreSort("store_dpd"),
+          },
+          {
+            label: t("kpi.utr"),
+            value: formatUtr(data.kpis.utr),
+            selected: storeSort?.key === "utr",
+            onClick: () => toggleStoreSort("utr"),
+          },
+          {
+            label: t("kpi.avgDpdEff"),
+            value: formatPct(data.kpis.avg_dpd_eff),
+            selected: storeSort?.key === "avg_delivery_min",
+            onClick: () => toggleStoreSort("avg_delivery_min", "asc"),
+          },
+          {
+            label: t("kpi.avgTgtEff"),
+            value: formatPct(data.kpis.avg_tgt_eff),
+            accent: "success",
+            selected: storeSort?.key === "riders",
+            onClick: () => toggleStoreSort("riders"),
+          },
           { label: t("kpi.targetDpd"), value: formatDpd(data.target_dpd) },
-          { label: t("kpi.storesAbove"), value: formatInt(data.kpis.stores_above), accent: "success" },
-          { label: t("kpi.storesBelow"), value: formatInt(data.kpis.stores_below), accent: "danger" },
+          {
+            label: t("kpi.storesAbove"),
+            value: formatInt(data.kpis.stores_above),
+            accent: "success",
+            selected: storeSort?.key === "store_dpd" && storeSort.dir === "desc",
+            onClick: () => toggleStoreSort("store_dpd", "desc"),
+          },
+          {
+            label: t("kpi.storesBelow"),
+            value: formatInt(data.kpis.stores_below),
+            accent: "danger",
+            selected: storeSort?.key === "store_dpd" && storeSort.dir === "asc",
+            onClick: () => toggleStoreSort("store_dpd", "asc"),
+          },
         ]}
       />
 

@@ -74,7 +74,7 @@ import type { EsignListRow } from "./types";
  * the rows whose state has not landed yet, and the server refuses an inside-window
  * id regardless — a disabled button is a hint, not the lock.
  */
-export type WaitingTab = "all" | "not_opened" | "opened";
+export type WaitingTab = "all" | "not_opened" | "opened" | "expired";
 
 /**
  * The tab ids, kept as a value rather than only as a type so the `TabBar`
@@ -82,7 +82,7 @@ export type WaitingTab = "all" | "not_opened" | "opened";
  * string, and `id as WaitingTab` would accept any future id the bar grows and
  * silently read `TAB_STATUS[undefined]` as the filter.
  */
-const WAITING_TABS: readonly WaitingTab[] = ["all", "not_opened", "opened"];
+const WAITING_TABS: readonly WaitingTab[] = ["all", "not_opened", "opened", "expired"];
 
 function isWaitingTab(id: string): id is WaitingTab {
   return (WAITING_TABS as readonly string[]).includes(id);
@@ -96,10 +96,11 @@ function isWaitingTab(id: string): id is WaitingTab {
  * are built from, which is what keeps the tab badge and the KPI from describing
  * different populations.
  */
-const TAB_STATUS: Record<WaitingTab, "pending" | "opened" | "not_opened"> = {
+const TAB_STATUS: Record<WaitingTab, "pending" | "opened" | "not_opened" | "expired"> = {
   all: "pending",
   not_opened: "not_opened",
   opened: "opened",
+  expired: "expired",
 };
 
 function daysBetween(fromYmd: string, toYmd: string): number {
@@ -235,6 +236,7 @@ export function EsignWaitingShell({
     { id: "all", label: `${t("tabAll")} (${counts?.pending ?? rows.length})` },
     { id: "not_opened", label: `${t("tabNotOpened")} (${counts?.notOpened ?? 0})` },
     { id: "opened", label: `${t("tabOpened")} (${counts?.opened ?? 0})` },
+    { id: "expired", label: `${t("kpiExpired")} (${counts?.expired ?? 0})` },
   ];
 
   /**
@@ -334,6 +336,8 @@ export function EsignWaitingShell({
             icon: Clock,
             accent: "warning",
             caption: t("kpiWaitingCaption"),
+            selected: tab === "all",
+            onClick: () => setTab("all"),
           },
           {
             label: t("kpiNotOpened"),
@@ -341,6 +345,8 @@ export function EsignWaitingShell({
             icon: EyeOff,
             accent: "danger",
             caption: t("kpiNotOpenedCaption"),
+            selected: tab === "not_opened",
+            onClick: () => setTab((prev) => (prev === "not_opened" ? "all" : "not_opened")),
           },
           {
             label: t("kpiOpened"),
@@ -348,6 +354,8 @@ export function EsignWaitingShell({
             icon: Eye,
             accent: "primary",
             caption: t("kpiOpenedCaption"),
+            selected: tab === "opened",
+            onClick: () => setTab((prev) => (prev === "opened" ? "all" : "opened")),
           },
           {
             label: t("kpiExpired"),
@@ -355,6 +363,8 @@ export function EsignWaitingShell({
             icon: CircleSlash,
             accent: "default",
             caption: t("kpiExpiredCaption"),
+            selected: tab === "expired",
+            onClick: () => setTab((prev) => (prev === "expired" ? "all" : "expired")),
           },
         ]}
       />

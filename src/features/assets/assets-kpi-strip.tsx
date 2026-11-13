@@ -16,6 +16,8 @@ type KpiItem = {
 export function AssetsKpiStrip({
   kpis,
   labels,
+  activeKey,
+  onSelectKey,
 }: {
   kpis: AssetCatalogKpis;
   labels: {
@@ -25,6 +27,8 @@ export function AssetsKpiStrip({
     available: string;
     lowStock: string;
   };
+  activeKey?: string;
+  onSelectKey?: (key: string) => void;
 }) {
   const items: KpiItem[] = [
     { id: "skus", label: labels.skus, value: kpis.total_skus, icon: Tags, tone: "primary" },
@@ -62,6 +66,9 @@ export function AssetsKpiStrip({
           icon={item.icon}
           tone={item.tone}
           className="p-2.5"
+          selected={activeKey === item.id}
+          onClick={onSelectKey ? () => onSelectKey(item.id) : undefined}
+          ariaLabel={item.label}
         />
       ))}
     </div>

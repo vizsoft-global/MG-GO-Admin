@@ -5,6 +5,14 @@ export type Tone = "primary" | "success" | "warning" | "danger" | "neutral";
 export const NEUTRAL_TILE =
   "border border-border bg-card shadow-[0_1px_2px_rgba(15,15,15,0.04)] transition-shadow duration-150 hover:shadow-[0_4px_12px_rgba(15,15,15,0.06)]";
 
+/** Interaction styling shared by every summary card that filters a list. */
+export const INTERACTIVE_TILE =
+  "cursor-pointer select-none transition-[box-shadow,transform,border-color,background-color] duration-150 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-1 focus-visible:ring-offset-background";
+
+/** Active-filter styling shared by every summary card that filters a list. */
+export const SELECTED_TILE =
+  "border-orange-500 bg-orange-500/5 ring-2 ring-orange-500 ring-offset-1 ring-offset-background hover:border-orange-500 hover:shadow-md";
+
 export const TONE_STYLES: Record<
   Tone,
   {

@@ -1,5 +1,6 @@
 import { formatUnitPct } from "@/lib/format/percent";
 import { countryLabel } from "@/lib/geo/countries";
+import { parseNumericText } from "@/lib/search/numeric";
 import type { PayrollRiderRow } from "./payroll-types";
 import { HR_COLUMNS, HR_FOOTER_KEYS } from "./hr-payroll-columns";
 import { hrRateLabel, hrRateRevenue, hrVehicleLabel, matchHrRates, type HrRateLine } from "./hr-rate";
@@ -496,10 +497,10 @@ export type HrFunnelFilter =
   | { kind: "range"; min: number | null; max: number | null };
 
 function parseHrNumber(text: string): number | null {
-  const match = text.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
-  if (!match) return null;
-  const value = Number(match[0]);
-  return Number.isFinite(value) ? value : null;
+  // Shared with the payroll funnels so `30 KWD`, `22.4%` and `12 h` compare the
+  // same way in every sheet. An unreadable cell answers null, and a null cell is
+  // never inside a range.
+  return parseNumericText(text);
 }
 
 function hrFunnelDisplay(row: HrPayrollRow, index: number, key: string, awaiting: string): string {

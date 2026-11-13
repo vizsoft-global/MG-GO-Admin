@@ -55,9 +55,43 @@ export function parseDriversTab(value: string | null | undefined): DriversTab {
   return DRIVERS_TABS.find((tab) => tab === value) ?? "all";
 }
 
-/** The list address for a tab; `all` stays bare so the default page keeps one URL. */
-export function driversListHref(tab: DriversTab): string {
-  return tab === "all" ? "/drivers" : `/drivers?tab=${tab}`;
+/**
+ * The summary tiles whose selection can be rebuilt from the address.
+ *
+ * A tile click already narrows the table in memory, but a filter that lives only
+ * in state cannot survive a reload, a shared link or the browser's Back button,
+ * and the toolbar beside it then has no way to say why the list is short. `total`
+ * is deliberately absent: it is the unfiltered list, so `?kpi=total` would be a
+ * second spelling of `/drivers`.
+ */
+export const DRIVERS_LIST_KPIS = [
+  "active",
+  "online",
+  "inactive",
+  "pending",
+  "suspended",
+] as const;
+export type DriversListKpi = (typeof DRIVERS_LIST_KPIS)[number];
+
+/** Unknown or missing `?kpi=` is "no tile chosen" rather than a broken filter. */
+export function parseDriversListKpi(
+  value: string | null | undefined,
+): DriversListKpi | null {
+  return DRIVERS_LIST_KPIS.find((kpi) => kpi === value) ?? null;
+}
+
+/** The list address for a tab; `all` with no tile stays bare so the default page keeps one URL. */
+export function driversListHref(
+  tab: DriversTab,
+  options?: { kpi?: DriversListKpi | null; project?: string | null },
+): string {
+  const params = new URLSearchParams();
+  if (tab !== "all") params.set("tab", tab);
+  if (options?.kpi) params.set("kpi", options.kpi);
+  const project = options?.project?.trim();
+  if (project) params.set("project", project);
+  const query = params.toString();
+  return query ? `/drivers?${query}` : "/drivers";
 }
 
 /** Detail link carrying the tab it was opened from, so Back returns to that queue. */

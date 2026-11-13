@@ -49,6 +49,11 @@ export function ServiceReportsTab({ canExport }: { canExport: boolean }) {
   const [category, setCategory] = useState("all");
   const [type, setType] = useState("all");
   const [vendor, setVendor] = useState("all");
+  const [partSort, setPartSort] = useState<"total" | "records" | "avgUnit" | "qty" | null>(null);
+
+  function togglePartSort(next: "total" | "records" | "avgUnit" | "qty") {
+    setPartSort((prev) => (prev === next ? null : next));
+  }
 
   const records = useMemo(() => data.data?.records ?? [], [data.data]);
   const carType = useMemo(() => {
@@ -99,6 +104,17 @@ export function ServiceReportsTab({ canExport }: { canExport: boolean }) {
     () => buildServiceReport({ records: scoped, carTypeByVehicleId: carType, locale, months }),
     [scoped, carType, locale, months],
   );
+
+  const partRows = useMemo(() => {
+    if (!partSort) return report.parts;
+    const pick = (row: (typeof report.parts)[number]) => {
+      if (partSort === "records") return row.records;
+      if (partSort === "avgUnit") return row.avgUnitKwd;
+      if (partSort === "qty") return row.qty;
+      return row.totalKwd;
+    };
+    return [...report.parts].sort((a, b) => pick(b) - pick(a));
+  }, [report.parts, partSort]);
 
   function drillDown(input: Parameters<typeof reportDrillDownParams>[0]) {
     const params = reportDrillDownParams({
@@ -155,20 +171,40 @@ export function ServiceReportsTab({ canExport }: { canExport: boolean }) {
       <KpiGrid
         compact
         items={[
-          { label: t("reports.totalSpend"), value: kwd(report.kpis.totalKwd) },
-          { label: t("reports.records"), value: report.kpis.records },
-          { label: t("reports.avgPerRecord"), value: kwd(report.kpis.avgPerRecordKwd) },
+          {
+            label: t("reports.totalSpend"),
+            value: kwd(report.kpis.totalKwd),
+            selected: partSort === "total",
+            onClick: () => togglePartSort("total"),
+          },
+          {
+            label: t("reports.records"),
+            value: report.kpis.records,
+            selected: partSort === "records",
+            onClick: () => togglePartSort("records"),
+          },
+          {
+            label: t("reports.avgPerRecord"),
+            value: kwd(report.kpis.avgPerRecordKwd),
+            selected: partSort === "avgUnit",
+            onClick: () => togglePartSort("avgUnit"),
+          },
           {
             label: t("reports.topVehicle"),
             value: report.kpis.mostExpensiveVehicle
               ? `${report.kpis.mostExpensiveVehicle.label} · ${kwd(report.kpis.mostExpensiveVehicle.totalKwd)}`
               : "—",
+            onClick: report.kpis.mostExpensiveVehicle
+              ? () => drillDown({ vehicleId: report.kpis.mostExpensiveVehicle?.key ?? null })
+              : undefined,
           },
           {
             label: t("reports.topPart"),
             value: report.kpis.mostReplacedPart
               ? `${report.kpis.mostReplacedPart.name} · ${report.kpis.mostReplacedPart.qty}`
               : "—",
+            selected: partSort === "qty",
+            onClick: () => togglePartSort("qty"),
           },
         ]}
       />
@@ -356,7 +392,7 @@ export function ServiceReportsTab({ canExport }: { canExport: boolean }) {
               </tr>
             </thead>
             <tbody>
-              {report.parts.slice(0, 25).map((part) => (
+              {partRows.slice(0, 25).map((part) => (
                 <tr key={part.name} className="border-t border-border">
                   <td className="py-1.5">{part.name}</td>
                   <td className="py-1.5 text-end tabular-nums">{part.qty}</td>

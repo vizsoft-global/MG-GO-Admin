@@ -2197,6 +2197,7 @@
       "colZone": "Zone",
       "kpiUsed": "Used",
       "kpiRemaining": "Remaining",
+      "clearAssetFilter": "Clear asset filter",
       "emptyAssignments": "No assignments",
       "emptyAssignmentsHint": "Issued kit appears here once a rider holds an item.",
       "sectionEmployee": "Employee & company",
@@ -6648,7 +6649,8 @@
           "filterTemplateSearch": "Search templates",
           "filterBatch": "All batches",
           "filterBatchSearch": "Search BAT-####",
-          "colBatch": "Batch"
+          "colBatch": "Batch",
+          "pinnedColumns": "Request code · Rider stay pinned and cannot be moved."
         },
         "signatures": {
           "title": "E-Signatures",
@@ -10931,7 +10933,8 @@
         "sortLargest": "Largest first",
         "searchPlaceholder": "Search values",
         "sortPair": "Sort {column}",
-        "activeRange": "Showing {bounds}"
+        "activeRange": "Showing {bounds}",
+        "noOptions": "No values"
       },
       "adjust": {
         "title": "Adjust payroll days",
@@ -13964,6 +13967,7 @@
       "clientsTableTitle": "Clients",
       "clientsTableSubtitle": "Each client only ever sees its own riders",
       "searchClients": "Search clients",
+      "clearAllFilters": "Clear filter",
       "colClient": "Client",
       "colRiders": "Riders",
       "colUsers": "Users",
@@ -14233,7 +14237,9 @@
       "ridersUnavailable": "This table needs the latest server build; reload after the next deploy.",
       "pagerRange": "{from}–{to} of {total}",
       "pagerPrev": "Previous",
-      "pagerNext": "Next"
+      "pagerNext": "Next",
+      "pinnedColumns": "MG ID · Client ID · Full name stay pinned and cannot be moved.",
+      "pinnedColumnsConfirm": "Client · Actions stay pinned and cannot be moved."
     },
     "clientPortal": {
       "title": "Your Riders Today",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import Link from "next/link";
 import { CheckCircle2, Clock, Package, ShieldAlert, Truck, XCircle } from "lucide-react";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { MetricTile } from "@/components/ui/metric-tile";
@@ -77,6 +78,7 @@ export function DeliveryMonitorWidget({
           icon={Package}
           tone="primary"
           className="p-2.5"
+          href={`/${locale}/deliveries`}
         />
         <MetricTile
           label={t("metricPending")}
@@ -84,6 +86,7 @@ export function DeliveryMonitorWidget({
           icon={Clock}
           tone={metrics.pending > 0 ? "warning" : "neutral"}
           className="p-2.5"
+          href={`/${locale}/deliveries?status=pending`}
         />
         <MetricTile
           label={t("metricVerified")}
@@ -91,6 +94,7 @@ export function DeliveryMonitorWidget({
           icon={CheckCircle2}
           tone="success"
           className="p-2.5"
+          href={`/${locale}/deliveries?status=verified`}
         />
         <MetricTile
           label={t("metricRejected")}
@@ -98,14 +102,18 @@ export function DeliveryMonitorWidget({
           icon={XCircle}
           tone={metrics.rejected > 0 ? "danger" : "neutral"}
           className="p-2.5"
+          href={`/${locale}/deliveries?status=rejected`}
         />
       </div>
       {metrics.underReview > 0 ? (
-        <div className="flex items-center gap-2 border-b border-border bg-warning-bg/40 px-4 py-2 text-xs">
+        <Link
+          href={`/${locale}/deliveries?status=under_review`}
+          className="flex items-center gap-2 border-b border-border bg-warning-bg/40 px-4 py-2 text-xs transition-colors hover:bg-warning-bg/60"
+        >
           <ShieldAlert className="size-3.5 text-warning" />
           <span className="font-medium tabular-nums text-foreground">{metrics.underReview}</span>
           <span className="text-muted-foreground">{t("metricUnderReview")}</span>
-        </div>
+        </Link>
       ) : null}
       <ul className="divide-y divide-border">
         {feed.length === 0 ? (

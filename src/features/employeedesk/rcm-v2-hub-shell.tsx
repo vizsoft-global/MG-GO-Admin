@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
+import { Check } from "lucide-react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -866,21 +867,33 @@ export function RcmV2HubShell() {
                 label={t("statToReview")}
                 tone="rust"
                 emphasised
+                selected={incomingFilter === "new"}
+                ariaLabel={t("statToReview")}
+                onClick={() => setIncomingFilter((prev) => (prev === "new" ? "all" : "new"))}
               />
               <StatCard
                 glyph="/hub/v2/stat-progress.svg"
                 value={incomingStats.inProgress}
                 label={t("statInProgress")}
+                selected={incomingFilter === "in_progress"}
+                ariaLabel={t("statInProgress")}
+                onClick={() =>
+                  setIncomingFilter((prev) => (prev === "in_progress" ? "all" : "in_progress"))
+                }
               />
               <StatCard
                 glyph="/hub/v2/stat-signature.svg"
                 value={incomingStats.signature}
                 label={t("statWaitingSignature")}
+                href="/employeedesk/esign/signing"
+                ariaLabel={t("statWaitingSignature")}
               />
               <StatCard
                 glyph="/hub/v2/stat-closed.svg"
                 value={incomingStats.closed}
                 label={t("statClosedThisMonth")}
+                href="/employeedesk/all?scope=all&status=approved"
+                ariaLabel={t("statClosedThisMonth")}
               />
             </div>
 
@@ -1135,21 +1148,24 @@ function StatCard({
   label,
   emphasised,
   tone,
+  selected = false,
+  onClick,
+  href,
+  ariaLabel,
 }: {
   glyph: string;
   value: number;
   label: string;
   emphasised?: boolean;
   tone?: "rust";
+  selected?: boolean;
+  onClick?: () => void;
+  href?: string;
+  ariaLabel?: string;
 }) {
-  return (
-    <div
-      className={cn(
-        "flex min-w-0 items-center gap-3.5 rounded-[24px] border bg-white p-5",
-        emphasised ? "border-[#ebc9bc]" : "border-[#eee2d8]",
-        "shadow-[0_1px_2px_0px_rgba(0,0,0,0.04),0_10px_30px_0px_rgba(122,74,42,0.06)]",
-      )}
-    >
+  const interactive = Boolean(onClick || href);
+  const content = (
+    <>
       <Tile glyph={glyph} size="md" />
       <div className="flex min-w-0 flex-col gap-0.5">
         <span
@@ -1162,8 +1178,36 @@ function StatCard({
         </span>
         <span className="text-[13px] leading-[normal] [font-weight:500] text-[#77707c]">{label}</span>
       </div>
-    </div>
+      {selected ? (
+        <span className="ms-auto flex size-6 shrink-0 items-center justify-center rounded-full bg-[#a63a24] text-white">
+          <Check aria-hidden className="size-3.5" strokeWidth={3} />
+        </span>
+      ) : null}
+    </>
   );
+  const shellClass = cn(
+    "flex min-w-0 items-center gap-3.5 rounded-[24px] border bg-white p-5",
+    emphasised ? "border-[#ebc9bc]" : "border-[#eee2d8]",
+    "shadow-[0_1px_2px_0px_rgba(0,0,0,0.04),0_10px_30px_0px_rgba(122,74,42,0.06)]",
+    interactive && "cursor-pointer transition-colors duration-150 hover:border-[#d9b8a8] hover:bg-[#fffaf7]",
+    selected && "border-[#a63a24] bg-[#fdf3ee] ring-2 ring-[#a63a24]",
+  );
+
+  if (href) {
+    return (
+      <Link href={href} aria-label={ariaLabel} className={cn(shellClass, "outline-none focus-visible:ring-2 focus-visible:ring-[#a63a24]")}>
+        {content}
+      </Link>
+    );
+  }
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} aria-pressed={selected} aria-label={ariaLabel} className={cn(shellClass, "text-start")}>
+        {content}
+      </button>
+    );
+  }
+  return <div className={shellClass}>{content}</div>;
 }
 
 function AdminToolsCard({

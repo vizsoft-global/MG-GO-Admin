@@ -87,6 +87,8 @@ export function RequestsTab({
   const t = useTranslations("pages.payroll");
   const [tile, setTile] = useState<PayrollTileKey | "all">("all");
   const [status, setStatus] = useState<PayrollUiStatus | "all">("all");
+  const selectStatus = (next: PayrollUiStatus) =>
+    setStatus((current) => (current === next ? "all" : next));
 
   const requestColumns = useMemo<TableToolbarColumn[]>(
     () => [
@@ -118,11 +120,46 @@ export function RequestsTab({
         <b>{t("requestsBannerTitle")}</b> {t("requestsBannerBody")}
       </div>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
-        <KpiCard compact label={t("reqKpi.total")} value={kpis.total} icon={Inbox} />
-        <KpiCard compact label={t("reqKpi.pending")} value={kpis.pending} accent="warning" />
-        <KpiCard compact label={t("reqKpi.underReview")} value={kpis.underReview} accent="primary" />
-        <KpiCard compact label={t("reqKpi.approved")} value={kpis.approved} accent="success" />
-        <KpiCard compact label={t("reqKpi.rejected")} value={kpis.rejected} accent="danger" />
+        <KpiCard
+          compact
+          label={t("reqKpi.total")}
+          value={kpis.total}
+          icon={Inbox}
+          selected={status === "all"}
+          onClick={() => setStatus("all")}
+        />
+        <KpiCard
+          compact
+          label={t("reqKpi.pending")}
+          value={kpis.pending}
+          accent="warning"
+          selected={status === "pending"}
+          onClick={() => selectStatus("pending")}
+        />
+        <KpiCard
+          compact
+          label={t("reqKpi.underReview")}
+          value={kpis.underReview}
+          accent="primary"
+          selected={status === "under_review"}
+          onClick={() => selectStatus("under_review")}
+        />
+        <KpiCard
+          compact
+          label={t("reqKpi.approved")}
+          value={kpis.approved}
+          accent="success"
+          selected={status === "approved"}
+          onClick={() => selectStatus("approved")}
+        />
+        <KpiCard
+          compact
+          label={t("reqKpi.rejected")}
+          value={kpis.rejected}
+          accent="danger"
+          selected={status === "rejected"}
+          onClick={() => selectStatus("rejected")}
+        />
         <KpiCard
           compact
           label={t("reqKpi.rate")}
