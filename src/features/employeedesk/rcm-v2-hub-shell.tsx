@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
-import { AppBackButton } from "@/components/app/app-back-button";
 import {
   useEsignBatches,
   useEsignCategories,
@@ -494,7 +493,6 @@ export function RcmV2HubShell() {
       <div className="flex w-full flex-col gap-6 px-6 pt-7 lg:px-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-col gap-[14px]">
-            <AppBackButton className="self-start" />
             <nav aria-label={t("breadcrumbHome")} className="flex items-center gap-1.5">
               <img src="/hub/v2/home.svg" alt="" width={14} height={14} className="block" />
               <Link
