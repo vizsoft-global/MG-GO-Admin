@@ -149,6 +149,7 @@
     "payouts": "Payouts",
     "earningsCalculation": "Earnings calculation",
     "storage": "Cloudflare R2",
+    "usageMonitor": "Usage monitor",
     "roles": "Roles & Permissions",
     "staffAccess": "Staff access",
     "accessRequests": "Access Requests",
@@ -9399,6 +9400,158 @@
           "load_failed": "Could not load overview",
           "list_failed": "Could not list bucket objects",
           "connection_failed": "Could not connect to R2"
+        }
+      },
+      "usageMonitor": {
+        "title": "Usage monitor",
+        "subtitle": "Live Firebase and Cloudflare usage, with the monthly cost each recent window points to",
+        "refresh": "Refresh",
+        "loading": "Reading usage from Google Cloud Monitoring…",
+        "dataTo": "Data to {time} · refreshes every minute",
+        "permissionHelp": "Grant the role Monitoring Viewer to {email} in Google Cloud IAM, then refresh.",
+        "partial": "Some metrics could not be read and are shown as zero: {list}",
+        "footer": "Project {project} · read at {time} (Kuwait time). Google publishes these counters a few minutes late.",
+        "errors": {
+          "not_authorized": "Only a super admin can open the usage monitor.",
+          "not_configured": "The Firebase service account is not configured on this deployment.",
+          "token_failed": "Could not sign in to Google Cloud with the service account.",
+          "permission_denied": "The service account is not allowed to read Cloud Monitoring.",
+          "monitoring_failed": "Cloud Monitoring did not answer. Try again in a minute."
+        },
+        "basis": {
+          "units": "This database reports Enterprise billing units, so read and write costs are priced on billed units, not document counts.",
+          "documents": "No Enterprise billing units are reported, so read and write costs are priced on document counts."
+        },
+        "usage": {
+          "title": "Usage",
+          "metric": "Metric",
+          "h1": "Last 1 h",
+          "h5": "Last 5 h",
+          "h24": "Last 24 h",
+          "perDay": "Per day",
+          "perDayNote": "Per day is the last hour's rate held for 24 hours."
+        },
+        "rows": {
+          "reads": "Document reads",
+          "writes": "Document writes",
+          "deletes": "Document deletes",
+          "ttlDeletes": "TTL deletions",
+          "billedReadUnits": "Billed read units",
+          "billedWriteUnits": "Billed write units",
+          "invocations": "Function calls",
+          "vcpuSeconds": "Compute (vCPU-seconds)",
+          "gibSeconds": "Compute (GiB-seconds)"
+        },
+        "forecast": {
+          "title": "Projected monthly cost",
+          "line": "Cost line",
+          "total": "Total",
+          "perMonth": "per month, Firebase only",
+          "target": "Monthly target",
+          "targetNote": "Firebase and Cloudflare together",
+          "under": "Under target",
+          "over": "Over target",
+          "note": "Each column assumes every hour of the month looks like that window. Free quotas are already taken off.",
+          "tile": {
+            "h1": "At the last 1 h rate",
+            "h5": "At the last 5 h rate",
+            "h24": "At the last 24 h rate"
+          },
+          "at": {
+            "h1": "1 h rate",
+            "h5": "5 h rate",
+            "h24": "24 h rate"
+          },
+          "lines": {
+            "reads": "Firestore reads",
+            "writes": "Firestore writes",
+            "deletes": "Firestore deletes",
+            "invocations": "Function calls",
+            "compute": "Function compute"
+          },
+          "split": "Firebase {firebase} · Cloudflare {cloudflare}",
+          "firebaseOnly": "Firebase only — Cloudflare figures unavailable"
+        },
+        "charts": {
+          "reads": "Reads per 15 minutes, last 24 hours",
+          "writes": "Writes per 15 minutes, last 24 hours",
+          "peak": "Peak",
+          "none": "No activity in the last 24 hours."
+        },
+        "functions": {
+          "title": "Busiest functions",
+          "name": "Function",
+          "share": "Share of 24 h",
+          "empty": "No function traffic in the last 24 hours.",
+          "count": "{count} functions had traffic"
+        },
+        "rates": {
+          "title": "Price assumptions",
+          "description": "These prices drive the forecast. Replace them with the rates on your Google Cloud bill; they are saved in this browser only.",
+          "reset": "Reset",
+          "fields": {
+            "readsPer100k": "Reads, $ per 100,000",
+            "writesPer100k": "Writes, $ per 100,000",
+            "deletesPer100k": "Deletes, $ per 100,000",
+            "freeReadsPerDay": "Free reads per day",
+            "freeWritesPerDay": "Free writes per day",
+            "freeDeletesPerDay": "Free deletes per day",
+            "invocationsPerMillion": "Function calls, $ per million",
+            "freeInvocationsPerMonth": "Free function calls per month",
+            "vcpuSecond": "Compute, $ per vCPU-second",
+            "gibSecond": "Compute, $ per GiB-second",
+            "freeVcpuSecondsPerMonth": "Free vCPU-seconds per month",
+            "freeGibSecondsPerMonth": "Free GiB-seconds per month"
+          }
+        },
+        "headings": {
+          "firebase": "Firebase",
+          "cloudflare": "Cloudflare"
+        },
+        "cloudflare": {
+          "title": "Cloudflare usage",
+          "costTitle": "Cloudflare projected monthly cost",
+          "loading": "Reading usage from Cloudflare…",
+          "notAvailable": "n/a",
+          "accountNote": "Cloudflare figures cover the whole account, every project on it. Image resizing and Workers Logs are not exposed by Cloudflare's analytics, so they are not in this forecast.",
+          "unknown": "Not available from Cloudflare's analytics and left out of the forecast: {list}",
+          "approximate": "Only readable by whole day, so the 1 h and 5 h figures are averages over today: {list}",
+          "failed": "Could not be read: {list}",
+          "storage": "R2 storage: {size} in {objects} objects",
+          "storageUnknown": "R2 storage size could not be read.",
+          "costNote": "Workers Paid list prices with the monthly allowances already taken off. The plan fee is charged whatever the usage.",
+          "errors": {
+            "not_authorized": "Only a super admin can read Cloudflare usage.",
+            "missing_cloudflare_token": "CLOUDFLARE_API_TOKEN is not set on this deployment.",
+            "missing_cloudflare_account": "The Cloudflare account id (R2_ACCOUNT_ID) is not set on this deployment.",
+            "cloudflare_denied": "The Cloudflare API token cannot read analytics. It needs the Account Analytics: Read permission.",
+            "cloudflare_failed": "Cloudflare analytics did not answer. Try again in a minute."
+          },
+          "rows": {
+            "workerRequests": "Worker requests",
+            "workerCpuMs": "Worker CPU (ms)",
+            "doRequests": "Durable Object requests",
+            "doWebsocketMessages": "Incoming WebSocket messages",
+            "doDurationGbs": "Durable Object duration (GB-seconds)",
+            "doRowsRead": "SQLite rows read",
+            "doRowsWritten": "SQLite rows written",
+            "r2ClassA": "R2 Class A operations (writes, lists)",
+            "r2ClassB": "R2 Class B operations (reads)"
+          },
+          "lines": {
+            "base": "Workers Paid plan",
+            "workerRequests": "Worker requests",
+            "workerCpu": "Worker CPU time",
+            "doRequests": "Durable Object requests",
+            "doDuration": "Durable Object duration",
+            "doRows": "SQLite rows",
+            "r2Operations": "R2 operations",
+            "r2Storage": "R2 storage"
+          },
+          "scripts": {
+            "title": "Busiest Workers",
+            "name": "Worker"
+          }
         }
       },
       "adminTools": {

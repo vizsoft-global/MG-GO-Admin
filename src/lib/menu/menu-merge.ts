@@ -419,6 +419,7 @@ const SETTINGS_SPLIT: ReadonlyArray<{ id: string; group: string; after?: string 
   { id: "driver-app", group: SYSTEM_GROUP_ID },
   { id: "document-expiry", group: SYSTEM_GROUP_ID },
   { id: "storage", group: SYSTEM_GROUP_ID },
+  { id: "usage-monitor", group: SYSTEM_GROUP_ID, after: "storage" },
   { id: "maintenance", group: SYSTEM_GROUP_ID },
   { id: "languages", group: SYSTEM_GROUP_ID },
   { id: "data-cleanup", group: SYSTEM_GROUP_ID },

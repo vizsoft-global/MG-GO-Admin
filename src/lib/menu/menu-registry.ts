@@ -921,6 +921,15 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
     superAdminOnly: true,
   },
   {
+    id: "usage-monitor",
+    defaultLabel: "Usage monitor",
+    defaultIcon: "Activity",
+    href: "/settings/usage-monitor",
+    defaultGroup: "System",
+    defaultOrder: 1,
+    superAdminOnly: true,
+  },
+  {
     id: "roles",
     defaultLabel: "Roles & Permissions",
     defaultIcon: "Shield",
@@ -1095,6 +1104,7 @@ export const APP_NAV_KEY_BY_ID: Record<string, string> = {
   sponsorships: "sponsorships",
   "bank-codes": "bankCodes",
   storage: "storage",
+  "usage-monitor": "usageMonitor",
   roles: "roles",
   "access-requests": "accessRequests",
   maintenance: "maintenance",
