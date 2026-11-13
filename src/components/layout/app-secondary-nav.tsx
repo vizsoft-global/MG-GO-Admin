@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
 import { LayoutDashboard } from "lucide-react";
@@ -51,6 +52,8 @@ export function AppSecondaryNav({
   const pathname = usePathname();
   const { tree } = useSidebarMenu({ accessEpoch, menuEpoch });
   const tItemLabel = useItemLabel();
+  // Load a linked page when the pointer reaches it, not all of them on every render.
+  const [warmId, setWarmId] = useState<string | null>(null);
 
   const group = findInlineGroupForPath(tree, pathname);
   if (!group) return null;
@@ -85,7 +88,11 @@ export function AppSecondaryNav({
                       isActive={isActive}
                       className="h-8 cursor-pointer rounded-md text-sm font-normal"
                       render={
-                        <Link href={child.href} prefetch>
+                        <Link
+                          href={child.href}
+                          prefetch={warmId === child.id ? null : false}
+                          onMouseEnter={() => setWarmId(child.id)}
+                        >
                           <MenuIcon
                             name={child.icon}
                             className="h-3.5 w-3.5 shrink-0"
