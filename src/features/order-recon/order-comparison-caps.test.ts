@@ -90,10 +90,35 @@ test("the delivery scan reaches past midnight for an overnight shift", () => {
     const body = source.slice(start, start + 6000);
     assert.match(
       body,
-      /reconScanUpperDay\(to\)|loadDeliveriesByDayChunked\(from, to, RECON_DELIVERY_SCAN_CAP\)/,
+      /reconScanUpperDay\(to\)|loadDeliveriesByDayChunked\(from, to, RECON_DELIVERY_SCAN_CAP\)|loadLoggedCounts\(from, to\)/,
       `${fn} does not scan into the shift's after-midnight tail`,
     );
   }
+  // The snapshot's scan now lives in `loadLoggedCounts`, which may answer part of
+  // the range from the rider-day rollup. Whatever it does scan must still reach
+  // the day after its own last day.
+  const helper = source.indexOf("async function loadLoggedCounts");
+  assert.ok(helper > 0, "loadLoggedCounts is missing");
+  assert.match(
+    source.slice(helper, helper + 2500),
+    /loadDeliveriesByDayChunked\(\s*window\.from,\s*reconScanUpperDay\(window\.to\),\s*RECON_DELIVERY_SCAN_CAP,?\s*\)/,
+    "the scanned half of loadLoggedCounts no longer reaches the after-midnight tail",
+  );
+});
+
+test("the rollup is read only from the day an operator has marked as trusted", () => {
+  /*
+   * `rollups_driver_day` is an eighth of the documents a delivery scan reads,
+   * but a day from before every status path maintained it would undercount on a
+   * screen used to settle order disputes. Unset must mean "scan", and a
+   * malformed value must mean the same.
+   */
+  assert.match(source, /const ROLLUP_TRUSTED_FROM_FIELD = "order_rollups_trusted_from";/);
+  assert.match(
+    source,
+    /if \(!trustedFrom \|\| !isRealDay\(trustedFrom\) \|\| trustedFrom > to\) \{\s*return \{ scan: \{ from, to \}, rollup: null \};/,
+    "an unset or malformed trusted day must fall back to the full scan",
+  );
 });
 
 test("the sliced delivery scan cannot count an overnight order twice", () => {

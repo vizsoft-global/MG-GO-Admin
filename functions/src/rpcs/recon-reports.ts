@@ -30,6 +30,7 @@ import {
 } from "./_shared";
 import { driverRestaurantIds } from "./deliveries-shared";
 import { applyDeliveryRollup } from "../core/rollups";
+import { verifiedOrdersOf } from "../core/order-count";
 import { stampStoredRow } from "../core/search-text";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -73,6 +74,22 @@ const SHIFT_QUERY_CONCURRENCY = 20;
 const VERIFICATION_BALANCES = "verification_balances";
 const APP_SETTINGS_DOC_ID = "1";
 const LOGGED_STATUSES = new Set(["pending", "in_transit", "verified"]);
+/**
+ * `app_settings/1` field naming the first Kuwait day from which
+ * `rollups_driver_day` is known to agree with a scan of `deliveries`.
+ *
+ * Order Comparison reads a month of deliveries (~176k documents) to print one
+ * number per rider-day, and that number already exists as a counter on the
+ * rider-day rollup (~22k documents for the same month). But the rollup is only
+ * as good as its writers were on the day in question: a day from before every
+ * status path maintained it would silently undercount, on a screen that is used
+ * to settle order disputes. So nothing reads the rollup until an operator has
+ * run `scripts/probe-rollup-coverage.mjs`, seen which days agree, and written
+ * that day here. Unset — the default — is the scan this report has always done.
+ */
+const ROLLUP_TRUSTED_FROM_FIELD = "order_rollups_trusted_from";
+/** 93 days at ~900 rider-days a day is ~84k rollup rows. */
+const RECON_ROLLUP_SCAN_CAP = 200_000;
 
 function str(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
@@ -244,6 +261,154 @@ async function loadDeliveriesByDayChunked(
   return dedupeById(out);
 }
 
+/** `${driverId}|${workDate}` -> orders the rider logged that shift day. */
+export type LoggedCounts = Map<string, number>;
+
+/**
+ * Logged orders per rider-day from delivery rows: the count Order Comparison
+ * has always printed. A row counts when its status is logged and it has a
+ * `delivered_at`, and it lands on its booked shift day.
+ */
+export function loggedCountsFromDeliveries(
+  deliveries: ReadonlyArray<{ data: Dict }>,
+  from: string,
+  to: string,
+): LoggedCounts {
+  const counts: LoggedCounts = new Map();
+  for (const { data: d } of deliveries) {
+    if (!LOGGED_STATUSES.has(String(d.status))) continue;
+    const deliveredAt = millisOf(d.delivered_at);
+    if (deliveredAt === null) continue;
+    const workDate = resolveWorkDay(deliveredAt, d.shift_date);
+    if (workDate === null) continue;
+    if (workDate < from || workDate > to) continue;
+    const driverId = str(d.driver_id);
+    if (!driverId) continue;
+    const key = `${driverId}|${workDate}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * The same number from `rollups_driver_day` rows.
+ *
+ * The scan ranges on `delivered_at`, so an order still in transit — which has
+ * none — never reaches it; the rollup's `in_transit` counter is therefore left
+ * out, and the logged count is the delivered orders awaiting review plus the
+ * verified ones. `verified` and `orders` are two names for one counter.
+ */
+export function loggedCountsFromRollups(
+  rows: ReadonlyArray<Dict>,
+  from: string,
+  to: string,
+): LoggedCounts {
+  const counts: LoggedCounts = new Map();
+  for (const row of rows) {
+    const driverId = str(row.driver_id);
+    const day = str(row.day);
+    if (!driverId || !day || day < from || day > to) continue;
+    const pending = Math.max(0, Math.trunc(numberOrNull(row.pending) ?? 0));
+    const verified = Math.max(
+      0,
+      Math.trunc(
+        verifiedOrdersOf({
+          verified: numberOrNull(row.verified) ?? 0,
+          orders: numberOrNull(row.orders) ?? 0,
+          pending: 0,
+          under_review: 0,
+        }),
+      ),
+    );
+    const total = pending + verified;
+    if (total <= 0) continue;
+    const key = `${driverId}|${day}`;
+    counts.set(key, (counts.get(key) ?? 0) + total);
+  }
+  return counts;
+}
+
+/**
+ * Which days of `[from, to]` are answered by the scan and which by the rollup.
+ * Days before `trustedFrom` are scanned; the rest are read from the rollup.
+ */
+export function splitRollupWindow(
+  from: string,
+  to: string,
+  trustedFrom: string | null,
+): { scan: { from: string; to: string } | null; rollup: { from: string; to: string } | null } {
+  if (!trustedFrom || !isRealDay(trustedFrom) || trustedFrom > to) {
+    return { scan: { from, to }, rollup: null };
+  }
+  if (trustedFrom <= from) return { scan: null, rollup: { from, to } };
+  return { scan: { from, to: addDays(trustedFrom, -1) }, rollup: { from: trustedFrom, to } };
+}
+
+async function rollupTrustedFrom(): Promise<string | null> {
+  try {
+    const snap = await getFirestore()
+      .collection(COLLECTIONS.appSettings)
+      .doc(APP_SETTINGS_DOC_ID)
+      .get();
+    const value = snap.get(ROLLUP_TRUSTED_FROM_FIELD);
+    return typeof value === "string" && isRealDay(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadRollupRows(fromDay: string, toDay: string): Promise<Dict[]> {
+  const snap = await getFirestore()
+    .collection(COLLECTIONS.rollupsDriverDay)
+    .where("day", ">=", fromDay)
+    .where("day", "<=", toDay)
+    .select("driver_id", "day", "pending", "verified", "orders")
+    .limit(RECON_ROLLUP_SCAN_CAP + 1)
+    .get();
+  if (snap.size > RECON_ROLLUP_SCAN_CAP) throw new HttpsError("out-of-range", "scan_cap_exceeded");
+  return snap.docs.map((doc) => (doc.data() ?? {}) as Dict);
+}
+
+/**
+ * Logged orders per rider-day for `[from, to]`: the rollup for the days it is
+ * trusted for, the delivery scan for the rest. The two halves cover different
+ * shift days, so a rider-day is never counted from both.
+ */
+async function loadLoggedCounts(from: string, to: string): Promise<LoggedCounts> {
+  const plan = splitRollupWindow(from, to, await rollupTrustedFrom());
+
+  const scanOf = async (window: { from: string; to: string }): Promise<LoggedCounts> =>
+    loggedCountsFromDeliveries(
+      await loadDeliveriesByDayChunked(
+        window.from,
+        reconScanUpperDay(window.to),
+        RECON_DELIVERY_SCAN_CAP,
+      ),
+      window.from,
+      window.to,
+    );
+
+  const rollupOf = async (window: { from: string; to: string }): Promise<LoggedCounts> => {
+    let rows: Dict[];
+    try {
+      rows = await loadRollupRows(window.from, window.to);
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      // A rollup that cannot be read is not a reason to print nothing.
+      return scanOf(window);
+    }
+    return loggedCountsFromRollups(rows, window.from, window.to);
+  };
+
+  const [scanned, rolled] = await Promise.all([
+    plan.scan ? scanOf(plan.scan) : Promise.resolve<LoggedCounts>(new Map()),
+    plan.rollup ? rollupOf(plan.rollup) : Promise.resolve<LoggedCounts>(new Map()),
+  ]);
+  const merged: LoggedCounts = new Map(scanned);
+  for (const [key, count] of rolled) merged.set(key, (merged.get(key) ?? 0) + count);
+  return merged;
+}
+
 /** `MIN(name)` over a driver's restaurants, optionally only published ones. */
 function firstRestaurantName(
   driver: Dict | undefined,
@@ -286,7 +451,7 @@ export const adminOrderComparisonSnapshot = onCall(async (request) => {
   // call's wall time: one month is ~86k AM rows plus ~176k deliveries. Running
   // them back to back put a legal month within a second of the scan lane's
   // 120s ceiling; started together the call costs the longer of the two.
-  const [rowsSnap, deliveries] = await Promise.all([
+  const [rowsSnap, loggedCounts] = await Promise.all([
     db
       .collection(COLLECTIONS.orderReconRows)
       .where("work_date", ">=", from)
@@ -294,7 +459,7 @@ export const adminOrderComparisonSnapshot = onCall(async (request) => {
       .select(...RECON_ROW_FIELDS)
       .limit(RECON_ROW_SCAN_CAP + 1)
       .get(),
-    loadDeliveriesByDayChunked(from, reconScanUpperDay(to), RECON_DELIVERY_SCAN_CAP),
+    loadLoggedCounts(from, to),
   ]);
 
   // A cap is a "too many rows" answer, not a span answer: the page must suggest
@@ -352,9 +517,8 @@ export const adminOrderComparisonSnapshot = onCall(async (request) => {
   }
 
   const deliveryDriverIds = new Set<string>();
-  for (const { data: d } of deliveries) {
-    const driverId = str(d.driver_id);
-    if (driverId) deliveryDriverIds.add(driverId);
+  for (const key of loggedCounts.keys()) {
+    deliveryDriverIds.add(key.slice(0, key.indexOf("|")));
   }
 
   const [driverSnap, deliveryDrivers] = await Promise.all([
@@ -369,22 +533,18 @@ export const adminOrderComparisonSnapshot = onCall(async (request) => {
 
   type MggoRow = { mgId: string; mgIdRaw: string; workDate: string; orders: number };
   const mggoByKey = new Map<string, MggoRow>();
-  for (const { data: d } of deliveries) {
-    if (!LOGGED_STATUSES.has(String(d.status))) continue;
-    const deliveredAt = millisOf(d.delivered_at);
-    if (deliveredAt === null) continue;
-    const workDate = resolveWorkDay(deliveredAt, d.shift_date);
-    if (workDate === null) continue;
-    if (workDate < from || workDate > to) continue;
-    const driverId = str(d.driver_id);
-    const driver = driverId ? deliveryDrivers.get(driverId) : undefined;
+  for (const [countKey, count] of loggedCounts) {
+    const separator = countKey.indexOf("|");
+    const driverId = countKey.slice(0, separator);
+    const workDate = countKey.slice(separator + 1);
+    const driver = deliveryDrivers.get(driverId);
     const mgIdRaw = driver && typeof driver.employee_id === "string" ? driver.employee_id : null;
     const mgId = trimmedOrNull(mgIdRaw)?.toLowerCase();
     if (!mgIdRaw || !mgId) continue;
     const key = `${mgId}|${workDate}`;
     const row = mggoByKey.get(key) ?? { mgId, mgIdRaw, workDate, orders: 0 };
     if (compareText(mgIdRaw, row.mgIdRaw) > 0) row.mgIdRaw = mgIdRaw;
-    row.orders += 1;
+    row.orders += count;
     mggoByKey.set(key, row);
   }
 
