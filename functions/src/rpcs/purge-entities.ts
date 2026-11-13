@@ -4,7 +4,6 @@ import { COLLECTIONS, FIELDS } from "../core/collections";
 import { parseIdList } from "../core/query";
 import { requireStaff } from "../core/staff";
 import { rebuildDeliveryContextSafe } from "./delivery-context-build";
-import { pushRestaurantMirror } from "./bites-mirror";
 
 /** Firestore caps one commit at 500 writes, and an `in` filter at 30 values. */
 export const DELETE_CHUNK = 400;
@@ -266,23 +265,7 @@ export const adminPurgeIntakes = onCall(async (request) => {
   return { deleted: ids.length, storage_prefixes: storagePrefixes, storage_keys: storageKeys };
 });
 
-/**
- * Rebuilds the mirror for stores whose rows were just deleted.
- *
- * `pushRestaurantMirror` recomputes the rider from `driver_restaurants`, so a store
- * that lost its rider is cleared and a store that is itself gone drops both mirror
- * documents. Best effort: the destructive half has already committed by this point.
- */
-async function refreshStores(restaurantIds: readonly string[]): Promise<void> {
-  if (restaurantIds.length === 0) return;
-  const db = getFirestore();
-  const at = new Date();
-  for (const restaurantId of restaurantIds) {
-    await pushRestaurantMirror(db, restaurantId, at);
-  }
-}
-
-/** `admin_purge_restaurants` — the geofences first, then the merchant and its mirror. */
+/** `admin_purge_restaurants` — the geofences first, then the merchant. */
 export const adminPurgeRestaurants = onCall(async (request) => {
   const data = (request.data ?? {}) as Record<string, unknown>;
   await requireStaff(request, "restaurants.bulk_delete");
@@ -293,9 +276,7 @@ export const adminPurgeRestaurants = onCall(async (request) => {
 
   const storagePrefixes = ids.map((id) => `restaurants/${id}/`);
   await deleteByIds(COLLECTIONS.restaurants, ids);
-  // The rows are gone, so each push drops that store's catalogue and rider mirror.
   await rebuildDeliveryContextSafe("admin_purge_restaurants");
-  await refreshStores(ids);
 
   return { deleted: ids.length, storage_prefixes: storagePrefixes };
 });
