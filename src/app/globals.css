@@ -467,6 +467,36 @@ th,
   font-weight: 700;
 }
 
+/* A header cell holds the top of its scroll viewport while the rows move under
+   it. The pin is on the `th` and not only on `<thead>` because Chromium ignores
+   `position: sticky` on a `thead` in several table layouts, which is how a long
+   grid ends up scrolling its header away. Unlayered so no caller utility can
+   undo it; the opaque paint is layered separately below. */
+thead th,
+[data-slot="table-head"] {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* Column rules, header and body alike — the vertical edges are what make a
+   dense grid readable once the row stripes stop carrying it. */
+thead th,
+[data-slot="table-head"],
+tbody td,
+[data-slot="table-cell"] {
+  border-inline-end: 1px solid var(--border);
+}
+
+@layer components {
+  /* Opaque, or the rows sliding underneath show through the header. Layered so
+     a table that paints its own header tint keeps that tint. */
+  thead th,
+  [data-slot="table-head"] {
+    background-color: var(--card);
+  }
+}
+
 [data-slot="button"][data-variant="default"] {
   background: var(--btn-primary);
   color: var(--btn-primary-fg);
@@ -611,4 +641,88 @@ svg.lucide {
    passed. */
 [data-slot="card"]:has([data-table-scroll]) {
   padding-bottom: 0;
+}
+
+/* ── Frozen leading columns ────────────────────────────────────────────────
+   The first three columns of a data table hold their place while the rest pan
+   sideways; the header row keeps sitting above them. `Table` sets
+   `data-frozen-cols` and `use-frozen-column-offsets.ts` writes `--fc-1` /
+   `--fc-2` from the measured header widths, so a page with a different column
+   set, a hidden column or an RTL layout still lines up to the pixel without any
+   page telling us what its columns are.
+
+   Every frozen cell paints an opaque background of its own, because the cells
+   sliding underneath it would otherwise show through the gaps around the text.
+   Because that background has to be opaque, the translucent tints a page puts on
+   a row (`bg-muted/20` selected, `bg-primary/5` header band) are mirrored back
+   on the frozen cells by class substring — otherwise the first three columns
+   alone would stay white on a tinted row.
+
+   `position` and `z-index` are unlayered so they outrank the utilities a caller
+   passes to a cell. The backgrounds deliberately sit in `@layer components`
+   instead: a data table that colours its own cells (`bg-emerald-50` for an
+   approved day, `bg-rose-50` for an exception) must keep painting that colour on
+   a frozen column too, and the utilities layer outranks components. */
+
+[data-frozen-cols] thead th:nth-child(1):not([colspan]),
+[data-frozen-cols] tbody td:nth-child(1):not([colspan]) {
+  position: sticky;
+  inset-inline-start: 0;
+}
+
+[data-frozen-cols="2"] thead th:nth-child(2),
+[data-frozen-cols="2"] tbody td:nth-child(2):not([colspan]),
+[data-frozen-cols="3"] thead th:nth-child(2),
+[data-frozen-cols="3"] tbody td:nth-child(2):not([colspan]) {
+  position: sticky;
+  inset-inline-start: var(--fc-1, 0px);
+}
+
+[data-frozen-cols="3"] thead th:nth-child(3),
+[data-frozen-cols="3"] tbody td:nth-child(3):not([colspan]) {
+  position: sticky;
+  inset-inline-start: var(--fc-2, 0px);
+}
+
+/* Header cells above the scrollable header cells and above every body cell. */
+[data-frozen-cols] thead th:nth-child(-n + 3):not([colspan]) {
+  z-index: 30;
+}
+
+/* Body cells above the cells that pan underneath them. */
+[data-frozen-cols] tbody td:nth-child(-n + 3):not([colspan]) {
+  z-index: 10;
+}
+
+/* The seam that says "everything after this scrolls". */
+[data-frozen-cols="3"] thead th:nth-child(3):not([colspan]),
+[data-frozen-cols="3"] tbody td:nth-child(3):not([colspan]) {
+  border-inline-end: 1px solid var(--border);
+}
+
+@layer components {
+  [data-frozen-cols] thead th:nth-child(-n + 3):not([colspan]),
+  [data-frozen-cols] tbody td:nth-child(-n + 3):not([colspan]) {
+    background-color: var(--card);
+  }
+
+  /* Row state, mirrored onto the opaque frozen cells. */
+  [data-frozen-cols] tbody tr[class*="bg-muted"] > td:nth-child(-n + 3):not([colspan]),
+  [data-frozen-cols] thead tr[class*="bg-muted"] > th:nth-child(-n + 3) {
+    background-color: color-mix(in oklab, var(--muted) 24%, var(--card));
+  }
+
+  [data-frozen-cols] tbody tr[class*="bg-primary"] > td:nth-child(-n + 3):not([colspan]),
+  [data-frozen-cols] thead tr[class*="bg-primary"] > th:nth-child(-n + 3) {
+    background-color: color-mix(in oklab, var(--primary) 5%, var(--card));
+  }
+
+  [data-frozen-cols] tbody tr[data-state="selected"] > td:nth-child(-n + 3):not([colspan]),
+  [data-frozen-cols] tbody tr[aria-selected="true"] > td:nth-child(-n + 3):not([colspan]) {
+    background-color: var(--muted);
+  }
+
+  [data-frozen-cols] tbody tr:hover > td:nth-child(-n + 3):not([colspan]) {
+    background-color: color-mix(in oklab, var(--muted) 40%, var(--card));
+  }
 }

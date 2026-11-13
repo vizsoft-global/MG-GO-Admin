@@ -3,15 +3,36 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import {
+  FROZEN_COLUMN_LIMIT,
+  useFrozenColumnOffsets,
+} from "@/components/ui/use-frozen-column-offsets"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+type TableProps = React.ComponentProps<"table"> & {
+  /**
+   * Leading columns that hold their place while the rest pan sideways
+   * (`globals.css` → "Frozen leading columns"). Three by default, because a
+   * data table's identity — reference, name, status — lives in its first three
+   * columns and an operator scrolling to a far-right figure should not lose
+   * track of the row. `0` opts a table out entirely.
+   */
+  frozenColumns?: number
+}
+
+function Table({ className, frozenColumns = 3, ...props }: TableProps) {
+  const tableRef = React.useRef<HTMLTableElement>(null)
+  const frozen = Math.min(Math.max(frozenColumns, 0), FROZEN_COLUMN_LIMIT)
+  useFrozenColumnOffsets(tableRef, frozen)
+
   return (
     <div
       data-slot="table-container"
       className="relative w-full overflow-x-auto"
     >
       <table
+        ref={tableRef}
         data-slot="table"
+        data-frozen-cols={frozen || undefined}
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}
       />
@@ -23,7 +44,13 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      className={cn(
+        // Pins the header inside whichever scroll viewport the table sits in
+        // (a page list viewport, or a dialog/sheet body). The opaque card
+        // background is what stops scrolling rows showing through the row.
+        "sticky top-0 z-20 bg-card [&_tr]:border-b",
+        className,
+      )}
       {...props}
     />
   )

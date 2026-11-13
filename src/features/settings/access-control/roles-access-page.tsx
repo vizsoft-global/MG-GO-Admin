@@ -5,7 +5,6 @@ import type {
   RequestTypeOption,
   StaffAccessListRow,
 } from "@/features/settings/staff-access-actions";
-import { AppBackButton } from "@/components/app/app-back-button";
 import { AccessControlShell } from "./access-control-shell";
 import type { PermissionRow } from "@/features/settings/roles-permissions-panel";
 
@@ -31,19 +30,16 @@ export function RolesAccessPage({
   nowMs: number;
 }) {
   return (
-    <>
-      <AppBackButton fallbackHref="/settings" className="mb-2" />
-      <AccessControlShell
-        rows={rows}
-        loadError={loadError}
-        roles={roles}
-        requestTypes={requestTypes}
-        initialUserId={userId}
-        initialTab={tab ?? "staff"}
-        permissions={permissions}
-        usageCounts={usageCounts}
-        nowMs={nowMs}
-      />
-    </>
+    <AccessControlShell
+      rows={rows}
+      loadError={loadError}
+      roles={roles}
+      requestTypes={requestTypes}
+      initialUserId={userId}
+      initialTab={tab ?? "staff"}
+      permissions={permissions}
+      usageCounts={usageCounts}
+      nowMs={nowMs}
+    />
   );
 }
