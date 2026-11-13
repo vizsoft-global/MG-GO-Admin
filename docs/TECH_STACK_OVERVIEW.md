@@ -316,7 +316,7 @@ Work that belongs next to the renderer, not in a function:
 
 | Job | Schedule | Job | Schedule |
 |---|---|---|---|
-| `locations-cleanup` | every 2 min | `expire-stale-pickups` | every 15 min |
+| `locations-cleanup` | hourly | `expire-stale-pickups` | every 15 min |
 | `notifications-dispatch` | every 5 min | `roster-alerts` | every 15 min |
 | `notifications-automations` | every 5 min | `requests-sweep` | hourly |
 | `attendance-auto-checkout` | every 5 min | `driver-ops-retention` | daily 01:20 |
