@@ -1,7 +1,7 @@
 import { cache } from "react";
 import type { DocumentData } from "firebase-admin/firestore";
 import { withDeadline } from "@/lib/async/deadline";
-import { asEpochReader, getEpochCache, readEpochSettings } from "@/lib/auth/epoch-cache";
+import { asEpochReader, getEpochCache, readEpochQuery, readEpochSettings } from "@/lib/auth/epoch-cache";
 import { getSessionUser } from "@/lib/auth/get-session";
 import {
   DEFAULT_APP_SETTINGS,
@@ -172,23 +172,45 @@ function normalizeRow(
   };
 }
 
+/** Cache id of the custom theme list, held under the settings counter. */
+export const THEMES_CACHE_ID = "app_themes";
+
+/**
+ * The custom theme list is part of every rendered page, and it used to be a
+ * collection read on each one. It is held under the settings counter like the
+ * settings row beside it: every theme writer bumps that counter, so an edit is
+ * seen on the next request, and the cache's own time limit covers a change made
+ * outside the panel. A page with no session (the login page) reads it directly.
+ */
 async function fetchCustomThemes(): Promise<AppThemeRecord[]> {
   try {
     const db = await staffDb();
     if (!db) return [];
-    const snap = await db.collection(THEMES).get();
-    return snap.docs
-      .map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          name: text(data.name) ?? "",
-          basePreset: text(data.base_preset) ?? DEFAULT_THEME_ID,
-          lightTokens: parseTokens(data.light_tokens),
-          darkTokens: parseTokens(data.dark_tokens),
-        };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const load = async (): Promise<AppThemeRecord[]> => {
+      const snap = await db.collection(THEMES).get();
+      return snap.docs
+        .map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            name: text(data.name) ?? "",
+            basePreset: text(data.base_preset) ?? DEFAULT_THEME_ID,
+            lightTokens: parseTokens(data.light_tokens),
+            darkTokens: parseTokens(data.dark_tokens),
+          };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+    };
+    const session = await getSessionUser();
+    if (!session) return await load();
+    return await readEpochQuery(
+      asEpochReader(db),
+      getEpochCache(),
+      "settings",
+      THEMES_CACHE_ID,
+      session.epochs.settings,
+      load,
+    );
   } catch {
     return [];
   }

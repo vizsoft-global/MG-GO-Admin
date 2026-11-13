@@ -4,13 +4,17 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ImageOff } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { resolveAttendancePhoto } from "./attendance-reporting-actions";
+import { resolveAttendancePhotos } from "./attendance-reporting-actions";
+import { createAttendancePhotoLoader } from "./attendance-photo-loader";
 
 type CheckInPhoto = { url: string; contentType: string | null };
 
+/** Shared by every row on the page: the rows of one render become one request. */
+const photoLoader = createAttendancePhotoLoader((keys) => resolveAttendancePhotos(keys));
+
 /**
- * Lazy check-in proof. The list carries the R2 key only, so a page of 50 rows
- * does not sign 50 URLs the operator never opens.
+ * Check-in proof. The list carries the R2 key only; the rows ask the shared
+ * loader, which signs a whole page in one server action and remembers the links.
  */
 export function AttendanceCheckInCell({
   photoKey,
@@ -34,7 +38,8 @@ export function AttendanceCheckInCell({
     }
     let cancelled = false;
     setFailed(false);
-    void resolveAttendancePhoto(photoKey)
+    void photoLoader
+      .load(photoKey)
       .then((resolved) => {
         if (cancelled) return;
         if (!resolved) {

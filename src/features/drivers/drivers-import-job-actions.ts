@@ -22,6 +22,7 @@ import { pendingRowDocId, storedImportRow } from "./import/import-job-rows";
 import {
   IMPORT_HEARTBEAT_MS,
   IMPORT_JOB_STALE_MS,
+  importJobNeedsStalePause,
   nextImportJobStatus,
   type ImportJobAction,
   type ImportJobStatus,
@@ -187,13 +188,30 @@ export async function listDriverImportJobs(): Promise<
   const auth = await requireDriversManager();
   if (auth.error) return { error: auth.error };
   const db = await staffClient();
-  await pauseStaleJobs(db);
-  const { data, error } = await db
-    .from("driver_import_batches")
-    .select(`${JOB_SUMMARY_COLUMNS}, uploaded_by`)
-    .order("uploaded_at", { ascending: false })
-    .limit(30);
+  const readJobs = () =>
+    db
+      .from("driver_import_batches")
+      .select(`${JOB_SUMMARY_COLUMNS}, uploaded_by`)
+      .order("uploaded_at", { ascending: false })
+      .limit(30);
+  let { data, error } = await readJobs();
   if (error) return { error: "save_failed" };
+  // This is polled from every page. Pausing is a gated write, so it runs only
+  // when a row in hand is actually stale, and the list is read again after it.
+  const nowMs = Date.now();
+  const stale = (data ?? []).some((row) => {
+    const job = row as { status?: unknown; heartbeat_at?: unknown };
+    return importJobNeedsStalePause(
+      job.status as ImportJobStatus,
+      typeof job.heartbeat_at === "string" ? job.heartbeat_at : null,
+      nowMs,
+    );
+  });
+  if (stale) {
+    await pauseStaleJobs(db);
+    ({ data, error } = await readJobs());
+    if (error) return { error: "save_failed" };
+  }
   const mine = (data ?? []).filter((row) =>
     ownsImport((row as { uploaded_by?: unknown }).uploaded_by, auth.session.id),
   );

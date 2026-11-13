@@ -1,8 +1,9 @@
 "use server";
 
 import { updateTag } from "next/cache";
-import { writeWithEpochCounters } from "@/lib/auth/auth-epochs";
-import type { EpochCounters } from "@/lib/auth/epoch-cache";
+import { bumpEpochs, writeWithEpochCounters } from "@/lib/auth/auth-epochs";
+import { getEpochCache, type EpochCounters } from "@/lib/auth/epoch-cache";
+import { THEMES_CACHE_ID } from "@/lib/branding/get-app-settings";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
 import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
@@ -22,6 +23,18 @@ async function requireManage() {
 function invalidateThemeCaches() {
   updateTag("app-settings");
   updateTag("app-theme");
+}
+
+/**
+ * The theme list is cached under the settings counter (`get-app-settings.ts`),
+ * so a writer that changes a theme document moves the counter. A failed bump is
+ * not a failed save: the cache's own time limit shows the edit a few minutes later.
+ */
+async function bumpThemeList(db: NonNullable<Awaited<ReturnType<typeof staffDb>>>) {
+  // This request read the counter before the save, so the page it renders in
+  // reply would still match the old entry: drop it here as well.
+  getEpochCache().delete("settings", THEMES_CACHE_ID);
+  await bumpEpochs(db, "settings").catch(() => undefined);
 }
 
 export async function setActiveTheme(
@@ -59,6 +72,7 @@ export async function setActiveTheme(
     return { error: "save_failed" };
   }
 
+  await bumpThemeList(db);
   invalidateThemeCaches();
   return { success: true, epochs };
 }
@@ -94,6 +108,7 @@ export async function createCustomTheme(input: {
     return { error: "save_failed" };
   }
 
+  await bumpThemeList(db);
   invalidateThemeCaches();
   return { success: true, id };
 }
@@ -129,6 +144,7 @@ export async function updateCustomTheme(
     return { error: "save_failed" };
   }
 
+  await bumpThemeList(db);
   invalidateThemeCaches();
   return { success: true };
 }

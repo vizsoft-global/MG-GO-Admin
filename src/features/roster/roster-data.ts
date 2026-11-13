@@ -407,19 +407,60 @@ async function zoneName(db: Firestore, cache: Map<string, string>, zoneId: strin
   return name;
 }
 
+type RestaurantPlace = { zoneId: string | null; name: string; lat: number | null; lng: number | null };
+
+/** Restaurants already read during one roster pass, by id. */
+type PlaceCache = Map<string, RestaurantPlace>;
+
+const NO_PLACE: RestaurantPlace = { zoneId: null, name: "", lat: null, lng: null };
+
+function placeOf(data: DocumentData | undefined): RestaurantPlace {
+  const row = data ?? {};
+  return {
+    zoneId: str(row.zone_id) || null,
+    name: str(row.name),
+    lat: num(row.latitude),
+    lng: num(row.longitude),
+  };
+}
+
+/**
+ * Reads the restaurants a set of shifts points at, together, into `cache`.
+ *
+ * Every roster loop below asked for a shift's restaurant with its own document
+ * read, awaited inside the loop: three hundred shifts across a hundred-odd
+ * stores was three hundred sequential round trips, on a read the live map
+ * repeats every minute. One batched read fills the cache; `restaurantZone`
+ * still reads on its own for an id the batch did not include (a restaurant an
+ * approved schedule change points at), and remembers that too.
+ */
+async function preloadRestaurantPlaces(
+  db: Firestore,
+  shifts: ReadonlyArray<Record<string, unknown>>,
+  cache: PlaceCache,
+): Promise<void> {
+  const ids = new Set<string>();
+  for (const shift of shifts) {
+    const id = str(shift.restaurant_id);
+    if (id && !cache.has(id)) ids.add(id);
+  }
+  if (ids.size === 0) return;
+  const docs = await docsById(db, COLLECTIONS.restaurants, ids);
+  for (const [id, data] of docs) cache.set(id, placeOf(data));
+}
+
 async function restaurantZone(
   db: Firestore,
   restaurantId: string | null,
-): Promise<{ zoneId: string | null; name: string; lat: number | null; lng: number | null }> {
-  if (!restaurantId) return { zoneId: null, name: "", lat: null, lng: null };
+  cache?: PlaceCache,
+): Promise<RestaurantPlace> {
+  if (!restaurantId) return NO_PLACE;
+  const hit = cache?.get(restaurantId);
+  if (hit) return hit;
   const snap = await db.collection(COLLECTIONS.restaurants).doc(restaurantId).get();
-  const data = snap.data() ?? {};
-  return {
-    zoneId: str(data.zone_id) || null,
-    name: str(data.name),
-    lat: num(data.latitude),
-    lng: num(data.longitude),
-  };
+  const place = placeOf(snap.data());
+  cache?.set(restaurantId, place);
+  return place;
 }
 
 async function docsById(db: Firestore, collection: string, ids: Iterable<string>) {
@@ -493,6 +534,8 @@ export async function sweepRosterDay(db: Firestore, day: string) {
   let written = 0;
   let pending = 0;
   let batch = db.batch();
+  const places: PlaceCache = new Map();
+  await preloadRestaurantPlaces(db, shifts, places);
   for (const raw of shifts) {
     const driverId = str(raw.driver_id);
     if (!driverId || raw.source !== "roster") continue;
@@ -514,7 +557,7 @@ export async function sweepRosterDay(db: Firestore, day: string) {
       continue;
     }
     const restaurantId = str(shift.restaurant_id) || null;
-    const place = await restaurantZone(db, restaurantId);
+    const place = await restaurantZone(db, restaurantId, places);
     const ref = db.collection(ALERTS).doc(`${duty.status}_${driverId}_${day}`);
     batch.set(
       ref,
@@ -684,13 +727,15 @@ export async function loadRosterLive(db: Firestore, scope: RosterScope) {
   const zoneCache = new Map<string, string>();
   const drivers = [];
   const restaurants = new Map<string, { name: string; lat: number | null; lng: number | null }>();
+  const places: PlaceCache = new Map();
+  await preloadRestaurantPlaces(db, shifts, places);
   for (const raw of shifts) {
     if (raw.source !== "roster") continue;
     const driverId = str(raw.driver_id);
     const overlay = overlays.get(driverId);
     const shift = withOverlay(raw, overlay);
     const restaurantId = str(shift.restaurant_id) || null;
-    const place = await restaurantZone(db, restaurantId);
+    const place = await restaurantZone(db, restaurantId, places);
     if (!inScope(scope, place.zoneId)) continue;
     const window = shiftWindow(shift, day);
     const originalWindow = overlay ? shiftWindow(raw, day) : null;
@@ -789,6 +834,7 @@ export async function loadRosterReport(
 ): Promise<{ rows: RosterReportRow[] } | { error: "range_too_large" }> {
   if (filter.from > filter.to) return { rows: [] };
   const days = eachDay(filter.from, filter.to);
+  const places: PlaceCache = new Map();
   if (days.length > 31) return { error: "range_too_large" };
   const thresholds = await readThresholds(db);
   const rows: RosterReportRow[] = [];
@@ -836,6 +882,7 @@ export async function loadRosterReport(
       });
       dropsByDriver.set(driverId, list);
     }
+    await preloadRestaurantPlaces(db, shifts, places);
     for (const raw of shifts) {
       if (raw.source !== "roster") continue;
       const driverId = str(raw.driver_id);
@@ -844,7 +891,7 @@ export async function loadRosterReport(
       const shift = withOverlay(raw, overlay);
       const restaurantId = str(shift.restaurant_id) || null;
       if (filter.restaurantId && restaurantId !== filter.restaurantId) continue;
-      const place = await restaurantZone(db, restaurantId);
+      const place = await restaurantZone(db, restaurantId, places);
       if (!inScope(scope, place.zoneId)) continue;
       if (filter.zoneId && place.zoneId !== filter.zoneId) continue;
       let driver = names.get(driverId);
