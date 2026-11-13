@@ -49,6 +49,7 @@
     "docs:admin": "node scripts/build-user-manual-pdf.mjs admin",
     "docs:admin:docx": "node scripts/build-user-manual-docx.mjs admin",
     "docs:stack": "node scripts/build-user-manual-pdf.mjs stack",
+    "docs:architecture": "node scripts/build-user-manual-pdf.mjs architecture",
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
     "migrate:storage-r2": "node scripts/migrate-storage-to-r2.mjs",
     "migrate:storage-r2:dry": "node scripts/migrate-storage-to-r2.mjs --dry-run",
