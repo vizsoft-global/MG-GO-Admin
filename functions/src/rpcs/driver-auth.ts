@@ -7,6 +7,28 @@ import { requireRider, riderError } from "../core/rider";
 import { isoTimestamp, logDriverOperation, pickBoolean, pickText, type Dict } from "./_shared";
 
 const FLUSH_GRACE_MS = 5 * 60 * 1000;
+
+/**
+ * How often a heartbeat refreshes the device session's `last_seen_at`. The app
+ * calls every minute or so and each call used to rewrite the session; everything
+ * that reads `last_seen_at` works in days (the multi-device windows) or shows it
+ * as "last seen", so five minutes of age changes nothing a person can see.
+ */
+export const HEARTBEAT_WRITE_MS = 5 * 60 * 1000;
+
+export function heartbeatWriteDue(lastSeen: unknown, nowMs: number): boolean {
+  const at =
+    lastSeen instanceof Timestamp
+      ? lastSeen.toMillis()
+      : lastSeen instanceof Date
+        ? lastSeen.getTime()
+        : typeof lastSeen === "string"
+          ? Date.parse(lastSeen)
+          : NaN;
+  // No readable stamp, or one from the future: write, so the session is never left without one.
+  if (!Number.isFinite(at) || at > nowMs) return true;
+  return nowMs - at >= HEARTBEAT_WRITE_MS;
+}
 export const FIRST_GATED_VERSION_CODE = 83;
 
 export const DEFAULT_UPDATE_MESSAGE =
@@ -460,7 +482,7 @@ export const driverHeartbeat = onCall(async (request) => {
 
   const now = Timestamp.now();
   const session = await sessionOnDevice(uid, deviceId);
-  if (session) {
+  if (session && heartbeatWriteDue(session.data["last_seen_at"], now.toMillis())) {
     await getFirestore().collection(COLLECTIONS.driverDeviceSessions).doc(session.id).set(
       { last_seen_at: now, updated_at: now },
       { merge: true },

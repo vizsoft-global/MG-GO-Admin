@@ -1,8 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { Timestamp } from "../core/fs";
 import {
   DEFAULT_UPDATE_MESSAGE,
   FIRST_GATED_VERSION_CODE,
+  HEARTBEAT_WRITE_MS,
+  heartbeatWriteDue,
   parseDeviceMeta,
   sanitizeDeviceMetaBlob,
   updateRequiredKind,
@@ -53,5 +56,27 @@ describe("driver-auth force-update kind", () => {
   it("keeps the bilingual default message", () => {
     assert.match(DEFAULT_UPDATE_MESSAGE, /Google Play/);
     assert.match(DEFAULT_UPDATE_MESSAGE, /يلزم تحديث/);
+  });
+});
+
+describe("heartbeat session write", () => {
+  const now = Date.parse("2026-11-13T20:00:00.000Z");
+
+  it("writes when the session was last stamped five minutes ago or more", () => {
+    assert.equal(heartbeatWriteDue(Timestamp.fromMillis(now - HEARTBEAT_WRITE_MS), now), true);
+    assert.equal(heartbeatWriteDue(new Date(now - 60 * 60_000), now), true);
+    assert.equal(heartbeatWriteDue("2026-11-13T19:00:00.000Z", now), true);
+  });
+
+  it("skips the write inside five minutes", () => {
+    assert.equal(heartbeatWriteDue(Timestamp.fromMillis(now - 60_000), now), false);
+    assert.equal(heartbeatWriteDue(Timestamp.fromMillis(now - HEARTBEAT_WRITE_MS + 1), now), false);
+  });
+
+  it("writes when there is no readable stamp, or one from the future", () => {
+    assert.equal(heartbeatWriteDue(undefined, now), true);
+    assert.equal(heartbeatWriteDue(null, now), true);
+    assert.equal(heartbeatWriteDue("not a date", now), true);
+    assert.equal(heartbeatWriteDue(Timestamp.fromMillis(now + 60_000), now), true);
   });
 });
