@@ -468,7 +468,12 @@ export function PerformancePageShell() {
         ) : !data ? (
           <AppEmptyState title={t("emptyTitle")} description={t("emptyHint")} />
         ) : tab === "overview" ? (
-          <OpsOverviewTab data={data} metric={viewMetric} granularity={granularity} />
+          <OpsOverviewTab
+            data={data}
+            metric={viewMetric}
+            granularity={granularity}
+            onSelectMetric={setMetric}
+          />
         ) : tab === "dpd" ? (
           <OpsDpdTab data={data} metric={viewMetric} granularity={granularity} />
         ) : tab === "riders" ? (

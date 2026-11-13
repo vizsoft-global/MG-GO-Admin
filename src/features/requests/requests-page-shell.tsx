@@ -546,6 +546,11 @@ export function RequestsPageShell({
             value: kpi ? kpi.total : "—",
             icon: Building2,
             caption: kpi ? trendCaption(kpi.total, kpi.prev_total, false, t) : null,
+            selected: status === "all" && datePreset === "all",
+            onClick: () => {
+              setStatus("all");
+              setDatePreset("all");
+            },
           },
           {
             label: t("kpi.pending"),
@@ -553,6 +558,8 @@ export function RequestsPageShell({
             accent: "warning",
             icon: Clock,
             caption: kpi ? trendCaption(kpi.pending, kpi.prev_pending, true, t) : null,
+            selected: status === "pending",
+            onClick: () => setStatus(status === "pending" ? "all" : "pending"),
           },
           {
             label: t("kpi.avgResolution"),
@@ -574,6 +581,8 @@ export function RequestsPageShell({
             accent: "danger",
             icon: TriangleAlert,
             caption: kpi ? trendCaption(kpi.overdue, kpi.prev_overdue, true, t) : null,
+            selected: status === "overdue",
+            onClick: () => setStatus(status === "overdue" ? "all" : "overdue"),
           },
         ]}
       />

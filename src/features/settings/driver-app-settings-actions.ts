@@ -25,7 +25,6 @@ import { callAdminFunction } from "@/lib/firebase/callable";
 import { getFirebaseStorage } from "@/lib/firebase/admin";
 import { APP_SETTINGS_DOC_ID, COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
-import { refreshDeliveryContext } from "@/lib/firebase/refresh-delivery-context";
 import {
   getSentryDeviceOverview,
   sentryBuildIssuesUrl,
@@ -137,9 +136,6 @@ async function patchAppSettings(
         { merge: true },
       );
     });
-    // `driver_app_delivery_proximity_meters`, the early-drop distances and the
-    // proof mode are read from the cached context, so a settings save rebuilds it.
-    await refreshDeliveryContext();
     return { epochs: written.epochs };
   } catch (error) {
     logWriteError(scope, error);

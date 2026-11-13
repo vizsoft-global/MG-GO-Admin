@@ -25,6 +25,7 @@ export function ColumnsPopover({
       options={columns.map((column) => ({
         id: column.id,
         label: column.locked ? `${column.label} *` : column.label,
+        locked: column.locked,
       }))}
       isVisible={isVisible}
       onToggle={onToggle}

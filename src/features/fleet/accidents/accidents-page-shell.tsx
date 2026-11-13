@@ -41,6 +41,7 @@ import {
   accidentMatchesSearch,
   computeAccidentKpis,
   filterAccidents,
+  isRiderReportAwaitingCompletion,
 } from "./accident-model";
 import { downloadAccidentsXlsx } from "./accident-xlsx";
 import { recordAccidentExport } from "./accident-actions";
@@ -143,8 +144,10 @@ export function AccidentsPageShell({
   }, [vehicles.data]);
 
   const filtered = useMemo(() => {
+    const isCaseStatus =
+      caseFilter === "pending" || caseFilter === "delay" || caseFilter === "close";
     const byFilters = filterAccidents(rows, {
-      caseStatus: caseFilter,
+      caseStatus: isCaseStatus ? caseFilter : "",
       source: sourceFilter,
       vehicleId: vehicleFilter,
       driverId: driverFilter,
@@ -153,7 +156,13 @@ export function AccidentsPageShell({
       insuranceClaimStatus: claimFilter,
       policeReportStatus: policeFilter,
     });
-    return byFilters.filter((row) =>
+    const byCase =
+      caseFilter === "open"
+        ? byFilters.filter((row) => accidentCaseStatusOf(row) !== "close")
+        : caseFilter === "awaiting"
+          ? byFilters.filter((row) => isRiderReportAwaitingCompletion(row))
+          : byFilters;
+    return byCase.filter((row) =>
       accidentMatchesSearch(row, prefs.appliedQuery, vehicleLabel.get(row.vehicle_id)),
     );
   }, [
@@ -288,13 +297,45 @@ export function AccidentsPageShell({
             value: kpis.open,
             icon: AlertTriangle,
             accent: "warning",
+            selected: caseFilter === "open",
+            onClick: () => setParam("case", caseFilter === "open" ? "" : "open"),
+          },
+          {
+            label: tCase("pending"),
+            value: kpis.pending,
+            icon: Clock,
+            selected: caseFilter === "pending",
+            onClick: () => setParam("case", caseFilter === "pending" ? "" : "pending"),
+          },
+          {
+            label: tCase("delay"),
+            value: kpis.delay,
+            icon: AlertTriangle,
+            accent: "danger",
+            selected: caseFilter === "delay",
+            onClick: () => setParam("case", caseFilter === "delay" ? "" : "delay"),
+          },
+          {
+            label: tCase("close"),
+            value: kpis.close,
+            icon: CheckCircle2,
+            selected: caseFilter === "close",
+            onClick: () => setParam("case", caseFilter === "close" ? "" : "close"),
+          },
+          {
+            label: t("kpi.riderAwaiting"),
+            value: kpis.riderAwaiting,
+            icon: UserRoundCheck,
+            selected: caseFilter === "awaiting",
+            onClick: () => setParam("case", caseFilter === "awaiting" ? "" : "awaiting"),
+          },
+          {
+            label: t("kpi.total"),
+            value: kpis.total,
+            icon: ClipboardList,
+            selected: caseFilter === "",
             onClick: () => setParam("case", ""),
           },
-          { label: tCase("pending"), value: kpis.pending, icon: Clock, onClick: () => setParam("case", "pending") },
-          { label: tCase("delay"), value: kpis.delay, icon: AlertTriangle, accent: "danger", onClick: () => setParam("case", "delay") },
-          { label: tCase("close"), value: kpis.close, icon: CheckCircle2, onClick: () => setParam("case", "close") },
-          { label: t("kpi.riderAwaiting"), value: kpis.riderAwaiting, icon: UserRoundCheck },
-          { label: t("kpi.total"), value: kpis.total, icon: ClipboardList },
         ]}
       />
 

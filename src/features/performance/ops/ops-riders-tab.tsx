@@ -183,19 +183,71 @@ export function OpsRidersTab({
     overscan: 12,
   });
 
+  function toggleKpiSort(key: string) {
+    if (sortKey === key && sortDir === "desc") {
+      setSortKey(null);
+      setSortDir(null);
+      return;
+    }
+    setSortKey(key);
+    setSortDir("desc");
+  }
+
   return (
     <div className={cn("flex flex-col", LAYOUT.stackGap)}>
       <KpiGrid
         compact
         items={[
-          { label: t("kpi.orders"), value: formatInt(data.kpis.orders) },
-          { label: t("kpi.workingDays"), value: formatInt(data.kpis.working_days) },
-          { label: t("kpi.overallDpd"), value: formatDpd(data.kpis.overall_dpd), accent: "primary" },
-          { label: t("kpi.dpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
-          { label: t("kpi.tgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
-          { label: t("kpi.workingHours"), value: formatDpd(data.kpis.working_hours) },
-          { label: t("kpi.utr"), value: formatUtr(data.kpis.utr) },
-          { label: t("kpi.avgDelivery"), value: formatMinutes(data.kpis.avg_delivery_min) },
+          {
+            label: t("kpi.orders"),
+            value: formatInt(data.kpis.orders),
+            selected: sortKey === "orders",
+            onClick: () => toggleKpiSort("orders"),
+          },
+          {
+            label: t("kpi.workingDays"),
+            value: formatInt(data.kpis.working_days),
+            selected: sortKey === "working_days",
+            onClick: () => toggleKpiSort("working_days"),
+          },
+          {
+            label: t("kpi.overallDpd"),
+            value: formatDpd(data.kpis.overall_dpd),
+            accent: "primary",
+            selected: sortKey === "dpd",
+            onClick: () => toggleKpiSort("dpd"),
+          },
+          {
+            label: t("kpi.dpdEff"),
+            value: formatPct(data.kpis.avg_dpd_eff),
+            selected: sortKey === "dpd_eff",
+            onClick: () => toggleKpiSort("dpd_eff"),
+          },
+          {
+            label: t("kpi.tgtEff"),
+            value: formatPct(data.kpis.avg_tgt_eff),
+            accent: "success",
+            selected: sortKey === "tgt_eff",
+            onClick: () => toggleKpiSort("tgt_eff"),
+          },
+          {
+            label: t("kpi.workingHours"),
+            value: formatDpd(data.kpis.working_hours),
+            selected: sortKey === "working_hours",
+            onClick: () => toggleKpiSort("working_hours"),
+          },
+          {
+            label: t("kpi.utr"),
+            value: formatUtr(data.kpis.utr),
+            selected: sortKey === "utr",
+            onClick: () => toggleKpiSort("utr"),
+          },
+          {
+            label: t("kpi.avgDelivery"),
+            value: formatMinutes(data.kpis.avg_delivery_min),
+            selected: sortKey === "avg_delivery_min",
+            onClick: () => toggleKpiSort("avg_delivery_min"),
+          },
         ]}
       />
       <p className="text-xs text-muted-foreground">{t("tableFiltersHint")}</p>
@@ -255,6 +307,10 @@ export function OpsRidersTab({
                     filters={filters}
                     onApply={setFilters}
                     numeric={NUMERIC_COLS.has(c.id)}
+                    onSortDir={(dir) => {
+                      setSortKey(c.id);
+                      setSortDir(dir);
+                    }}
                     searchPlaceholder={t("filterSearch")}
                     allLabel={t("slicer.all")}
                     clearLabel={t("filterClear")}

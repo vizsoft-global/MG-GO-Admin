@@ -168,10 +168,34 @@ export function DocumentExpiryPageShell() {
 
       <KpiGrid
         items={[
-          { label: t("kpi.expired"), value: summary.expired, accent: "danger" },
-          { label: t("kpi.week"), value: summary.week, accent: "warning" },
-          { label: t("kpi.month"), value: summary.month, accent: "warning" },
-          { label: t("kpi.quarter"), value: summary.quarter, accent: "success" },
+          {
+            label: t("kpi.expired"),
+            value: summary.expired,
+            accent: "danger",
+            selected: bucket === "expired",
+            onClick: () => setBucket("expired"),
+          },
+          {
+            label: t("kpi.week"),
+            value: summary.week,
+            accent: "warning",
+            selected: bucket === "week",
+            onClick: () => setBucket("week"),
+          },
+          {
+            label: t("kpi.month"),
+            value: summary.month,
+            accent: "warning",
+            selected: bucket === "month",
+            onClick: () => setBucket("month"),
+          },
+          {
+            label: t("kpi.quarter"),
+            value: summary.quarter,
+            accent: "success",
+            selected: bucket === "quarter",
+            onClick: () => setBucket("quarter"),
+          },
         ]}
       />
 

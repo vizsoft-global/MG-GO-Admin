@@ -381,41 +381,56 @@ export function DriverDevicesPageShell() {
     }
   };
 
+  const selectTab = (tab: DriverDevicesTab) =>
+    replaceQuery({ tab: activeTab === tab ? "all" : tab });
+
   const kpiItems = [
     {
       label: t("kpiTotal"),
       value: isLoading ? "—" : String(kpis.total),
       icon: Smartphone,
       accent: "primary" as const,
+      selected: activeTab === "all",
+      onClick: () => replaceQuery({ tab: "all" }),
     },
     {
       label: t("kpiCritical"),
       value: isLoading ? "—" : String(kpis.critical),
       icon: AlertOctagon,
       accent: "danger" as const,
+      selected: activeTab === "critical",
+      onClick: () => selectTab("critical"),
     },
     {
       label: t("kpiHigh"),
       value: isLoading ? "—" : String(kpis.high),
       icon: AlertTriangle,
       accent: "warning" as const,
+      selected: activeTab === "high",
+      onClick: () => selectTab("high"),
     },
     {
       label: t("kpiOutdated"),
       value: isLoading ? "—" : String(kpis.outdated),
       icon: SmartphoneNfc,
       accent: "warning" as const,
+      selected: activeTab === "outdated",
+      onClick: () => selectTab("outdated"),
     },
     {
       label: t("kpiNoDevice"),
       value: isLoading ? "—" : String(kpis.noDevice),
       icon: ShieldAlert,
+      selected: activeTab === "no-device",
+      onClick: () => selectTab("no-device"),
     },
     {
       label: t("kpiErrors"),
       value: isLoading ? "—" : String(kpis.withErrors),
       icon: Bug,
       accent: "danger" as const,
+      selected: activeTab === "errors",
+      onClick: () => selectTab("errors"),
     },
   ];
 
@@ -492,7 +507,7 @@ export function DriverDevicesPageShell() {
                   : undefined
               }
               onRemoveChip={() => replaceQuery({ build: null })}
-              onClearChips={() => replaceQuery({ build: null })}
+              onClearChips={() => replaceQuery({ build: null, tab: "all" })}
             />
             {sentry && !sentry.connected ? (
               <div className="px-4 pb-3">

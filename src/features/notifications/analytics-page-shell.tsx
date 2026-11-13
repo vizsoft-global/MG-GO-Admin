@@ -30,12 +30,15 @@ import { formatPct, roundPercent } from "@/lib/format/percent";
 import { NotificationsTabBar } from "./notifications-tab-bar";
 import { useNotificationAnalyticsDaily, useNotificationDashboard } from "./use-notifications";
 
+type AnalyticsMetricFilter = "all" | "delivered" | "opened" | "failed";
+
 export function AnalyticsPageShell() {
   const t = useTranslations("pages.notifications");
   const { data: kpis, isLoading: kpisLoading } = useNotificationDashboard();
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [metricFilter, setMetricFilter] = useState<AnalyticsMetricFilter>("all");
   const filters = { fromDate: fromDate || undefined, toDate: toDate || undefined };
   const { data: daily, isLoading, refetch } = useNotificationAnalyticsDaily(filters);
   const columns = useMemo((): TableToolbarColumn[] => [
@@ -50,9 +53,26 @@ export function AnalyticsPageShell() {
   const prefs = useTablePrefs("notification-analytics", columns);
   const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
   const needle = prefs.appliedQuery.trim().toLowerCase();
-  const rows = (daily ?? []).filter((row) =>
-    !needle || `${row.metric_date} ${row.campaign?.title ?? ""} ${row.campaign_id}`.toLowerCase().includes(needle),
-  );
+  const rows = (daily ?? [])
+    .filter((row) =>
+      !needle || `${row.metric_date} ${row.campaign?.title ?? ""} ${row.campaign_id}`.toLowerCase().includes(needle),
+    )
+    .filter((row) => {
+      switch (metricFilter) {
+        case "all":
+          return true;
+        case "delivered":
+          return row.delivered_count > 0;
+        case "opened":
+          return row.opened_count > 0;
+        case "failed":
+          return row.failed_count > 0;
+        default: {
+          const unreachable: never = metricFilter;
+          return unreachable;
+        }
+      }
+    });
 
   const totals = (daily ?? []).reduce(
     (acc, row) => ({
@@ -85,10 +105,30 @@ export function AnalyticsPageShell() {
 
       <KpiGrid
         items={[
-          { label: t("kpiSent"), value: kpisLoading ? "…" : String(kpis?.sentToday ?? 0) },
-          { label: t("kpiDeliveryRate"), value: kpisLoading ? "…" : formatPct(kpis?.deliveryRate ?? 0) },
-          { label: t("kpiOpenRate"), value: kpisLoading ? "…" : formatPct(kpis?.openRate ?? 0) },
-          { label: t("kpiFailed"), value: kpisLoading ? "…" : String(kpis?.failedDeliveries ?? 0) },
+          {
+            label: t("kpiSent"),
+            value: kpisLoading ? "…" : String(kpis?.sentToday ?? 0),
+            selected: metricFilter === "all",
+            onClick: () => setMetricFilter("all"),
+          },
+          {
+            label: t("kpiDeliveryRate"),
+            value: kpisLoading ? "…" : formatPct(kpis?.deliveryRate ?? 0),
+            selected: metricFilter === "delivered",
+            onClick: () => setMetricFilter((current) => (current === "delivered" ? "all" : "delivered")),
+          },
+          {
+            label: t("kpiOpenRate"),
+            value: kpisLoading ? "…" : formatPct(kpis?.openRate ?? 0),
+            selected: metricFilter === "opened",
+            onClick: () => setMetricFilter((current) => (current === "opened" ? "all" : "opened")),
+          },
+          {
+            label: t("kpiFailed"),
+            value: kpisLoading ? "…" : String(kpis?.failedDeliveries ?? 0),
+            selected: metricFilter === "failed",
+            onClick: () => setMetricFilter((current) => (current === "failed" ? "all" : "failed")),
+          },
         ]}
       />
 

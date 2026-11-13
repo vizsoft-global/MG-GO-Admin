@@ -189,6 +189,11 @@ export function OrderExceptionsPageShell() {
     setCursors([null]);
   }
 
+  function selectStatusTab(next: OrderExceptionStatusFilter) {
+    setTab(next === tab && next !== "all" ? "all" : next);
+    resetPage();
+  }
+
   useEffect(() => {
     if (slow) return;
     setCursors((prev) => {
@@ -382,10 +387,38 @@ export function OrderExceptionsPageShell() {
       <AppPageHeader title={t("title")} description={t("subtitle")} />
       <KpiGrid
         items={[
-          { label: t("kpiPending"), value: counts?.pending ?? "—", icon: Clock, accent: "warning" },
-          { label: t("kpiApproved"), value: counts?.approved ?? "—", icon: CheckCircle2, accent: "success" },
-          { label: t("kpiRejected"), value: counts?.rejected ?? "—", icon: Ban, accent: "danger" },
-          { label: t("kpiTotal"), value: counts?.total ?? "—", icon: ClipboardList, accent: "primary" },
+          {
+            label: t("kpiPending"),
+            value: counts?.pending ?? "—",
+            icon: Clock,
+            accent: "warning",
+            selected: tab === "pending",
+            onClick: () => selectStatusTab("pending"),
+          },
+          {
+            label: t("kpiApproved"),
+            value: counts?.approved ?? "—",
+            icon: CheckCircle2,
+            accent: "success",
+            selected: tab === "approved",
+            onClick: () => selectStatusTab("approved"),
+          },
+          {
+            label: t("kpiRejected"),
+            value: counts?.rejected ?? "—",
+            icon: Ban,
+            accent: "danger",
+            selected: tab === "rejected",
+            onClick: () => selectStatusTab("rejected"),
+          },
+          {
+            label: t("kpiTotal"),
+            value: counts?.total ?? "—",
+            icon: ClipboardList,
+            accent: "primary",
+            selected: tab === "all",
+            onClick: () => selectStatusTab("all"),
+          },
           { label: t("kpiRejectedOrders"), value: counts?.rejected_orders ?? "—", accent: "default" },
           { label: t("kpiCancelledOrders"), value: counts?.cancelled_orders ?? "—", accent: "default" },
         ]}
@@ -393,8 +426,7 @@ export function OrderExceptionsPageShell() {
       <TabBar
         activeId={tab}
         onSelect={(id) => {
-          setTab(id as OrderExceptionStatusFilter);
-          resetPage();
+          selectStatusTab(id as OrderExceptionStatusFilter);
         }}
         items={[
           { id: "all", label: t("tabAll") },

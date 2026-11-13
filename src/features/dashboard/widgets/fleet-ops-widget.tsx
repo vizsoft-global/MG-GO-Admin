@@ -40,6 +40,7 @@ export function FleetOpsWidget() {
             icon={UserCheck}
             tone="success"
             className="p-2.5"
+            href="/live-tracking-v2?duty=on_duty"
           />
           <MetricTile
             label={t("online")}
@@ -47,6 +48,7 @@ export function FleetOpsWidget() {
             icon={Timer}
             tone="primary"
             className="p-2.5"
+            href="/live-tracking-v2?duty=online"
           />
           <MetricTile
             label={t("unvalidated")}
@@ -54,6 +56,7 @@ export function FleetOpsWidget() {
             icon={AlertTriangle}
             tone={counts.unvalidated_today > 0 ? "warning" : "neutral"}
             className="p-2.5"
+            href="/attendance?tab=live"
           />
           <MetricTile
             label={t("outOfZone")}
@@ -61,6 +64,7 @@ export function FleetOpsWidget() {
             icon={Radar}
             tone={counts.out_of_zone > 0 ? "danger" : "neutral"}
             className="p-2.5"
+            href="/live-tracking-v2?status=out_of_zone"
           />
         </div>
         <div className="flex flex-wrap gap-3 border-t border-border pt-3 text-xs">

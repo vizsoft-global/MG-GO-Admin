@@ -50,7 +50,6 @@ const TABLE = "text-[13px] [&_thead_tr]:bg-[var(--surface-subtle)] [&_td]:px-3 [
 const TH = "text-start text-[12px] font-medium text-[var(--text-secondary)]";
 /** Rows per page in the rider table a KPI card opens. */
 const RIDER_PAGE_SIZE = 8;
-const SELECTED_KPI = "ring-1 ring-[var(--accent-rust)]";
 /** Stable identity for "this read sent no riders", so the filter memo cannot re-run. */
 const NO_RIDERS: ClientPortalRider[] = [];
 
@@ -374,7 +373,7 @@ export function ClientDashboardV2({
           value={data?.kpis.assigned ?? 0}
           caption={t("captionContracted", { count: "—" })}
           onClick={() => openRiderWidget("assigned")}
-          className={riderWidget === "assigned" ? SELECTED_KPI : undefined}
+          selected={riderWidget === "assigned"}
         />
         <KpiCard
           layout="portal"
@@ -383,7 +382,7 @@ export function ClientDashboardV2({
           value={data?.kpis.working ?? 0}
           caption={t("captionWorkingRate", { pct: formatPct(data?.kpis.workingRate ?? 0) })}
           onClick={() => openRiderWidget("working")}
-          className={riderWidget === "working" ? SELECTED_KPI : undefined}
+          selected={riderWidget === "working"}
         />
         <KpiCard
           layout="portal"
@@ -392,7 +391,7 @@ export function ClientDashboardV2({
           value={data?.kpis.onLeave ?? 0}
           caption={t("captionBackThisWeek", { count: backThisWeek })}
           onClick={() => openRiderWidget("onLeave")}
-          className={riderWidget === "onLeave" ? SELECTED_KPI : undefined}
+          selected={riderWidget === "onLeave"}
         />
         <KpiCard
           layout="portal"
@@ -401,7 +400,7 @@ export function ClientDashboardV2({
           value={data?.kpis.absentSick ?? 0}
           caption={t("captionAbsentSick", { absent: todayBar?.absent ?? 0, sick: todayBar?.sick ?? 0 })}
           onClick={() => openRiderWidget("absentSick")}
-          className={riderWidget === "absentSick" ? SELECTED_KPI : undefined}
+          selected={riderWidget === "absentSick"}
         />
         <KpiCard
           layout="portal"
@@ -410,7 +409,7 @@ export function ClientDashboardV2({
           value={todayBar?.other ?? 0}
           caption={t("captionAttendancePending")}
           onClick={() => openRiderWidget("notMarked")}
-          className={riderWidget === "notMarked" ? SELECTED_KPI : undefined}
+          selected={riderWidget === "notMarked"}
         />
         {/* Contracted count is not recorded anywhere yet, so this card opens
             nothing rather than opening an empty table and implying it has rows. */}

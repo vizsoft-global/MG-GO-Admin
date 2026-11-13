@@ -19,7 +19,6 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -33,6 +32,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { ColumnVisibilityCheck } from "./column-visibility-check";
 import type { TableColumnVisibilityOption } from "@/hooks/use-table-column-visibility";
 
 export function AppTableColumnPicker({
@@ -118,8 +118,7 @@ export function AppTableColumnPicker({
         <DropdownMenuSeparator />
         <DropdownMenuItem className="cursor-pointer" onClick={onReset}>
           {t("resetColumns")}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
+        </DropdownMenuItem>      </DropdownMenuContent>
     </DropdownMenu>
   );
 }
@@ -254,13 +253,26 @@ function ColumnOptionBody({
           <GripVertical className="h-3.5 w-3.5" />
         </button>
       ) : null}
-      <DropdownMenuCheckboxItem
+      {/*
+       * The square tick sits between the handle and the label, the same order the
+       * payroll sheets use. It replaced a menu item's built-in indicator, which
+       * painted a bare tick on the trailing edge and left a hidden column as an
+       * empty gap — so "is this column on?" depended on which side you read.
+       */}
+      <ColumnVisibilityCheck
         checked={checked}
-        onCheckedChange={() => onToggle(option.id)}
-        className="min-w-0 flex-1 cursor-pointer"
+        locked={option.locked ?? false}
+        onToggle={() => onToggle(option.id)}
+        label={option.label}
+      />
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate ps-1.5 text-xs font-medium",
+          !checked && "text-muted-foreground",
+        )}
       >
         {option.label}
-      </DropdownMenuCheckboxItem>
+      </span>
       {onMove ? (
         <div className="flex shrink-0">
           <Button

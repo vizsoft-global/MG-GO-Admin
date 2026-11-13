@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import {
@@ -380,15 +380,52 @@ export function VerificationsPageShell() {
     [t],
   );
 
+  const selectTab = useCallback((id: VerificationTabFilter) => {
+    setTabFilter(id);
+    setStatusFilter("all");
+  }, []);
+
+  const toggleTabCard = useCallback(
+    (id: VerificationTabFilter) => {
+      selectTab(tabFilter === id || id === "all" ? "all" : id);
+    },
+    [selectTab, tabFilter],
+  );
+
   const kpiItems = useMemo(
     () => [
-      { label: t("kpiTotal"), value: stats?.total ?? "—" },
-      { label: t("kpiNeedsAction"), value: stats?.needs_action ?? "—" },
-      { label: t("kpiMatched"), value: stats?.matched ?? "—" },
-      { label: t("kpiDeficit"), value: stats?.deficit ?? "—" },
-      { label: t("kpiPending"), value: stats?.pending ?? "—" },
+      {
+        label: t("kpiTotal"),
+        value: stats?.total ?? "—",
+        selected: tabFilter === "all",
+        onClick: () => toggleTabCard("all"),
+      },
+      {
+        label: t("kpiNeedsAction"),
+        value: stats?.needs_action ?? "—",
+        selected: tabFilter === "needs_action",
+        onClick: () => toggleTabCard("needs_action"),
+      },
+      {
+        label: t("kpiMatched"),
+        value: stats?.matched ?? "—",
+        selected: tabFilter === "matched",
+        onClick: () => toggleTabCard("matched"),
+      },
+      {
+        label: t("kpiDeficit"),
+        value: stats?.deficit ?? "—",
+        selected: tabFilter === "deficit",
+        onClick: () => toggleTabCard("deficit"),
+      },
+      {
+        label: t("kpiPending"),
+        value: stats?.pending ?? "—",
+        selected: tabFilter === "pending",
+        onClick: () => toggleTabCard("pending"),
+      },
     ],
-    [stats, t],
+    [stats, t, tabFilter, toggleTabCard],
   );
 
   const tableColumns = useMemo(
@@ -605,10 +642,7 @@ export function VerificationsPageShell() {
               <TabBar
                 items={tabItems}
                 activeId={tabFilter}
-                onSelect={(id) => {
-                  setTabFilter(id as VerificationTabFilter);
-                  setStatusFilter("all");
-                }}
+                onSelect={(id) => selectTab(id as VerificationTabFilter)}
                 className="border-b-0 pb-0"
               />
             </div>

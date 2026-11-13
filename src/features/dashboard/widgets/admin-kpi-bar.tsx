@@ -37,6 +37,7 @@ export function AdminKpiBar({
       value: kpis.pendingAccessRequests,
       icon: UserPlus,
       tone: kpis.pendingAccessRequests > 0 ? "warning" : "neutral",
+      href: "/settings/access-requests",
     },
   ];
 
@@ -57,30 +58,35 @@ export function AdminKpiBar({
       value: kpis.verificationBacklog,
       icon: ClipboardX,
       tone: kpis.verificationBacklog > 0 ? "warning" : "neutral",
+      href: "/dpd-verification",
     },
     {
       label: t("kpiDeliveryReview"),
       value: kpis.deliveryReviewPending,
       icon: ShieldAlert,
       tone: kpis.deliveryReviewPending > 0 ? "danger" : "neutral",
+      href: "/order-exceptions",
     },
     {
       label: t("kpiPayrollBlockers"),
       value: kpis.payrollBlockers,
       icon: Wallet,
       tone: kpis.payrollBlockers > 0 ? "danger" : "success",
+      href: "/payroll",
     },
     {
       label: t("kpiDriverExceptions"),
       value: kpis.driverExceptions,
       icon: AlertTriangle,
       tone: kpis.driverExceptions > 0 ? "warning" : "success",
+      href: "/order-exceptions",
     },
     {
       label: t("kpiAbsentToday"),
       value: kpis.absentToday,
       icon: UserMinus,
       tone: kpis.absentToday > 0 ? "danger" : "success",
+      href: "/attendance?status=absent",
     },
   );
 

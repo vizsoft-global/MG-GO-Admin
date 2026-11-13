@@ -1,3 +1,4 @@
+import { parseNumericText } from "@/lib/search/numeric";
 import type { ComparisonRider, ComparisonResult } from "./order-comparison-model";
 
 export type ComparisonContainsFilter = { contains: string };
@@ -79,8 +80,8 @@ export function applyComparisonFilters(
         return String(raw).toLowerCase().includes(allowed.contains.trim().toLowerCase());
       }
       if (isRangeFilter(allowed)) {
-        const n = typeof raw === "number" ? raw : Number(raw);
-        if (!Number.isFinite(n)) return false;
+        const n = parseNumericText(raw);
+        if (n === null) return false;
         if (allowed.min != null && Number.isFinite(allowed.min) && n < allowed.min) return false;
         if (allowed.max != null && Number.isFinite(allowed.max) && n > allowed.max) return false;
         return true;

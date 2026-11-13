@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Eye, Pencil, Plus, Search, Trash2, UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { ColumnsButton } from "@/components/app/columns-button";
+import { useColumnLayout } from "@/hooks/use-column-layout";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { fetchPortalDirectory, type PortalDirectoryRow } from "./portal-v2-actions";
@@ -29,6 +31,42 @@ const HEAD_BTN = "h-9 cursor-pointer";
 const TABLE = "text-[13px] [&_thead_tr]:bg-[var(--surface-subtle)] [&_td]:px-3 [&_td]:py-3 [&_th]:h-9 [&_th]:px-3";
 const TH = "text-start text-[12px] font-medium text-[var(--text-secondary)]";
 const PROJECT_KEYS = ["keeta", "americana", "unassigned"] as const;
+
+/**
+ * The clients table's columns, in catalogue order.
+ *
+ * The client cell and the actions cell stay pinned: the first is the row's
+ * identity and the second is the only way to open or edit a portal, so a list
+ * that can hide either is a list nobody can act on.
+ */
+const CLIENT_COLUMNS = [
+  { id: "client", pinned: true },
+  { id: "riders", pinned: false },
+  { id: "users", pinned: false },
+  { id: "contractFill", pinned: false },
+  { id: "status", pinned: false },
+  { id: "actions", pinned: true },
+] as const;
+
+type ClientColumnId = (typeof CLIENT_COLUMNS)[number]["id"];
+
+const CLIENT_COLUMN_LABELS: Record<ClientColumnId, string> = {
+  client: "colClient",
+  riders: "colRiders",
+  users: "colUsers",
+  contractFill: "colContractFill",
+  status: "colStatus",
+  actions: "colActions",
+};
+
+const CLIENT_HEAD_CLASS: Record<ClientColumnId, string> = {
+  client: TH,
+  riders: `${TH} text-center`,
+  users: `${TH} text-center`,
+  contractFill: TH,
+  status: TH,
+  actions: `${TH} text-end`,
+};
 
 type Tab = "clients" | "users" | "visibility";
 
@@ -62,6 +100,7 @@ export function ClientsV2() {
   const [configs, setConfigs] = useState<PortalConfig[]>([]);
   const [directory, setDirectory] = useState<PortalDirectoryRow[]>([]);
   const [query, setQuery] = useState("");
+  const [clientKpi, setClientKpi] = useState<"active" | "noUsers" | "riders" | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [newUser, setNewUser] = useState<{ project: string; name: string; email: string; role: PortalUserRole }>({
@@ -117,8 +156,118 @@ export function ClientsV2() {
   );
   const matched = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return needle ? rows.filter((row) => row.clientName.toLowerCase().includes(needle)) : rows;
-  }, [rows, query]);
+    const filtered = rows.filter((row) => {
+      if (clientKpi === "active") return row.exists && row.status === "active";
+      if (clientKpi === "noUsers") return row.exists && row.users.length === 0;
+      if (clientKpi === "riders") return row.exists && (directory.find((item) => item.projectKey === row.projectKey)?.riders ?? 0) > 0;
+      return true;
+    });
+    return needle ? filtered.filter((row) => row.clientName.toLowerCase().includes(needle)) : filtered;
+  }, [rows, query, clientKpi, directory]);
+
+  /** Column order and visibility for this table, saved in the browser. */
+  const clientColumnIds = useMemo(() => CLIENT_COLUMNS.map((column) => column.id), []);
+  const clientLockedColumns = useMemo(
+    () => CLIENT_COLUMNS.filter((column) => column.pinned).map((column) => column.id),
+    [],
+  );
+  const clientColumns = useColumnLayout("portal-v2.clients", clientColumnIds, {
+    lockedIds: clientLockedColumns,
+  });
+  const clientShownColumns = clientColumns.order.filter((id) =>
+    clientColumns.isVisible(id),
+  ) as ClientColumnId[];
+
+  /**
+   * One cell per column id, so a hidden or moved column cannot put a value under
+   * the wrong heading. `facts` is computed once per row by the caller.
+   */
+  function renderClientCell(
+    row: (typeof rows)[number],
+    id: ClientColumnId,
+    facts: { riders: number; fill: number | null; active: boolean },
+  ): ReactNode {
+    switch (id) {
+      case "client":
+        return (
+          <span className="flex items-center gap-2.5">
+            <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--accent-rust)] text-[11px] font-semibold text-white">
+              {row.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={row.logoUrl} alt="" className="size-9 object-cover" />
+              ) : (
+                portalInitials(row.clientName)
+              )}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate font-semibold text-[var(--text-primary)]">{row.clientName}</span>
+              <span className="block truncate text-[11px] text-[var(--text-secondary)]">
+                {row.clientCode ? `${t("colClient")}: ${row.clientCode}` : projectName(row.projectKey)}
+              </span>
+            </span>
+          </span>
+        );
+      case "riders":
+        return <span className="block text-center tabular-nums">{facts.riders}</span>;
+      case "users":
+        return <span className="block text-center tabular-nums">{row.users.length}</span>;
+      case "contractFill":
+        return facts.fill == null ? (
+          "—"
+        ) : (
+          <span className="flex items-center gap-2">
+            <span className="h-1.5 w-14 overflow-hidden rounded-full bg-[var(--surface-subtle)]">
+              <span className="block h-full rounded-full bg-[var(--status-working-fg)]" style={{ width: `${Math.min(100, facts.fill)}%` }} />
+            </span>
+            <span className="tabular-nums text-[var(--text-secondary)]">{facts.fill.toFixed(1)}%</span>
+          </span>
+        );
+      case "status":
+        return (
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+              facts.active
+                ? "bg-[var(--status-working-bg)] text-[var(--status-working-fg)]"
+                : "bg-[var(--surface-subtle)] text-[var(--text-secondary)]",
+            )}
+          >
+            <span
+              className={cn("size-1.5 rounded-full", facts.active ? "bg-[var(--status-working-fg)]" : "bg-[var(--status-neutral-fg)]")}
+              aria-hidden
+            />
+            {facts.active ? t("statusActive") : t("statusDraft")}
+          </span>
+        );
+      case "actions":
+        return (
+          <span className="flex items-center justify-end gap-1">
+            <Button variant="portal-secondary" className="h-8 cursor-pointer" render={<Link href={`/client-portal-v2/preview/${row.projectKey}`} />}>
+              <Eye className="size-4" aria-hidden />
+              {t("preview")}
+            </Button>
+            <Button
+              variant="portal-secondary"
+              className="size-8 cursor-pointer p-0"
+              aria-label={t("editPortal")}
+              title={t("editPortal")}
+              render={<Link href={`/client-portal-v2/new?project=${row.projectKey}`} />}
+            >
+              <Pencil className="size-4" aria-hidden />
+            </Button>
+          </span>
+        );
+      default: {
+        const exhaustive: never = id;
+        return exhaustive;
+      }
+    }
+  }
+
+  const toggleClientKpi = (key: "active" | "noUsers" | "riders") => {
+    setTab("clients");
+    setClientKpi((current) => (current === key ? null : key));
+  };
 
   const attention = useMemo(
     () =>
@@ -244,17 +393,32 @@ export function ClientsV2() {
           portalAccent="green"
           label={t("kpiActivePortals")}
           value={activePortals}
+          selected={clientKpi === "active"}
+          onClick={() => toggleClientKpi("active")}
           caption={t("captionPortalMix", {
             drafts: rows.filter((row) => row.exists && row.status !== "active").length,
             invites: rows.filter((row) => row.exists && row.users.length === 0).length,
           })}
         />
-        <KpiCard layout="portal" portalAccent="ink" label={t("kpiClientUsers")} value={totalUsers} caption={t("captionSignedInWeek", { count: 0 })} />
+        <KpiCard
+          layout="portal"
+          portalAccent="ink"
+          label={t("kpiClientUsers")}
+          value={totalUsers}
+          selected={tab === "users"}
+          onClick={() => {
+            setClientKpi(null);
+            setTab((current) => (current === "users" ? "clients" : "users"));
+          }}
+          caption={t("captionSignedInWeek", { count: 0 })}
+        />
         <KpiCard
           layout="portal"
           portalAccent="green"
           label={t("kpiRidersVisible")}
           value={ridersVisible}
+          selected={clientKpi === "riders"}
+          onClick={() => toggleClientKpi("riders")}
           caption={t("captionRidersSplit", { keeta: ridersOf("keeta"), americana: ridersOf("americana") })}
         />
         <KpiCard layout="portal" portalAccent="ochre" label={t("kpiDocumentViews")} value="—" caption="—" />
@@ -277,17 +441,30 @@ export function ClientsV2() {
                   className="h-9 w-56 border-[var(--border-default)] bg-[var(--surface-card)] ps-8"
                 />
               </span>
+              {clientKpi ? (
+                <button
+                  type="button"
+                  onClick={() => setClientKpi(null)}
+                  className="h-9 cursor-pointer rounded-lg border border-[var(--border-default)] px-3 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]"
+                >
+                  {t("clearAllFilters")}
+                </button>
+              ) : null}
+              <ColumnsButton
+                columns={clientColumns}
+                labelFor={(id) => t(CLIENT_COLUMN_LABELS[id as ClientColumnId])}
+                pinned={t("pinnedColumnsConfirm")}
+              />
             </div>
             <div className="mt-3 overflow-x-auto">
               <Table className={TABLE}>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className={TH}>{t("colClient")}</TableHead>
-                    <TableHead className={`${TH} text-center`}>{t("colRiders")}</TableHead>
-                    <TableHead className={`${TH} text-center`}>{t("colUsers")}</TableHead>
-                    <TableHead className={TH}>{t("colContractFill")}</TableHead>
-                    <TableHead className={TH}>{t("colStatus")}</TableHead>
-                    <TableHead className={`${TH} text-end`}>{t("colActions")}</TableHead>
+                    {clientShownColumns.map((id) => (
+                      <TableHead key={id} className={CLIENT_HEAD_CLASS[id]}>
+                        {id === "actions" ? null : t(CLIENT_COLUMN_LABELS[id])}
+                      </TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -298,71 +475,11 @@ export function ClientsV2() {
                     const active = row.exists && row.status === "active";
                     return (
                       <TableRow key={row.projectKey}>
-                        <TableCell>
-                          <span className="flex items-center gap-2.5">
-                            <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-[var(--accent-rust)] text-[11px] font-semibold text-white">
-                              {row.logoUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={row.logoUrl} alt="" className="size-9 object-cover" />
-                              ) : (
-                                portalInitials(row.clientName)
-                              )}
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block truncate font-semibold text-[var(--text-primary)]">{row.clientName}</span>
-                              <span className="block truncate text-[11px] text-[var(--text-secondary)]">
-                                {row.clientCode ? `${t("colClient")}: ${row.clientCode}` : projectName(row.projectKey)}
-                              </span>
-                            </span>
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center tabular-nums">{riders}</TableCell>
-                        <TableCell className="text-center tabular-nums">{row.users.length}</TableCell>
-                        <TableCell>
-                          {fill == null ? (
-                            "—"
-                          ) : (
-                            <span className="flex items-center gap-2">
-                              <span className="h-1.5 w-14 overflow-hidden rounded-full bg-[var(--surface-subtle)]">
-                                <span className="block h-full rounded-full bg-[var(--status-working-fg)]" style={{ width: `${Math.min(100, fill)}%` }} />
-                              </span>
-                              <span className="tabular-nums text-[var(--text-secondary)]">{fill.toFixed(1)}%</span>
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                              active
-                                ? "bg-[var(--status-working-bg)] text-[var(--status-working-fg)]"
-                                : "bg-[var(--surface-subtle)] text-[var(--text-secondary)]",
-                            )}
-                          >
-                            <span
-                              className={cn("size-1.5 rounded-full", active ? "bg-[var(--status-working-fg)]" : "bg-[var(--status-neutral-fg)]")}
-                              aria-hidden
-                            />
-                            {active ? t("statusActive") : t("statusDraft")}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="flex items-center justify-end gap-1">
-                            <Button variant="portal-secondary" className="h-8 cursor-pointer" render={<Link href={`/client-portal-v2/preview/${row.projectKey}`} />}>
-                              <Eye className="size-4" aria-hidden />
-                              {t("preview")}
-                            </Button>
-                            <Button
-                              variant="portal-secondary"
-                              className="size-8 cursor-pointer p-0"
-                              aria-label={t("editPortal")}
-                              title={t("editPortal")}
-                              render={<Link href={`/client-portal-v2/new?project=${row.projectKey}`} />}
-                            >
-                              <Pencil className="size-4" aria-hidden />
-                            </Button>
-                          </span>
-                        </TableCell>
+                        {clientShownColumns.map((id) => (
+                          <TableCell key={id}>
+                            {renderClientCell(row, id, { riders, fill, active })}
+                          </TableCell>
+                        ))}
                       </TableRow>
                     );
                   })}

@@ -19,6 +19,15 @@ export { VisibleTableCell } from "./visible-table-cell";
 export { SortableTableHeadLabel } from "./sortable-table-head-label";
 export { AppEmptyState } from "./app-empty-state";
 export { SearchField } from "./search-field";
+export {
+  ColumnHeaderFilter,
+  filterColumnOptions,
+  matchingValues,
+  type ColumnFilterDraft,
+  type ColumnFilterLabels,
+  type ColumnFilterMode,
+  type ColumnFilterOption,
+} from "./column-filter";
 export { AppFormSection } from "./app-form-section";
 export { AppModalFooter } from "./app-modal-footer";
 export { TableFooterExport } from "./table-footer-export";

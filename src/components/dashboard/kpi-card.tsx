@@ -1,9 +1,11 @@
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
+import { Check, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   accentToTone,
+  INTERACTIVE_TILE,
   NEUTRAL_TILE,
+  SELECTED_TILE,
   TONE_STYLES,
 } from "@/lib/ui/tone-styles";
 import { isZeroMetricValue } from "@/lib/ui/kpi-zero";
@@ -77,18 +79,27 @@ export function KpiCard({
      * Every other screen keeps the row layout.
      */
     layout === "default" && "data-ops-kpi",
-    interactive && "cursor-pointer",
-    interactive &&
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+    interactive && INTERACTIVE_TILE,
     isEmpty &&
-      "border-dashed border-border bg-muted/20 hover:border-border hover:bg-muted/20",
-    !isEmpty && selected && (accent === "success" ? "ring-1 ring-success" : "ring-1 ring-primary"),
+      !selected &&
+      "border-dashed border-border bg-muted/20 hover:border-border hover:bg-muted/20 hover:shadow-none",
+    selected && SELECTED_TILE,
     className,
   );
+
+  const selectedBadge = selected ? (
+    <span
+      aria-hidden
+      className="absolute end-2 top-2 inline-flex size-4 items-center justify-center rounded-full bg-orange-500 text-white shadow-sm"
+    >
+      <Check className="size-3" strokeWidth={3} />
+    </span>
+  ) : null;
 
   const body =
     layout === "portal" ? (
       <>
+        {selectedBadge}
         <p className="flex items-center gap-2 text-[13px] font-medium text-[var(--portal-muted)]">
           <span className={cn("size-2 shrink-0 rounded-[2px]", PORTAL_ACCENT[portalAccent])} />
           {label}
@@ -98,6 +109,7 @@ export function KpiCard({
       </>
     ) : (
       <>
+        {selectedBadge}
         {Icon ? (
           <span
             className={cn(

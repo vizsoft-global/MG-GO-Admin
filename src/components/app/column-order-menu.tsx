@@ -14,10 +14,11 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowDown, ArrowUp, Check, Columns3, GripVertical, RotateCcw } from "lucide-react";
+import { ArrowDown, ArrowUp, Columns3, GripVertical, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { ColumnVisibilityCheck } from "./column-visibility-check";
 
 /** The slice of `useListColumns` this menu drives. */
 export type ColumnOrderController = {
@@ -29,6 +30,14 @@ export type ColumnOrderController = {
   move: (id: string, dir: -1 | 1) => void;
   reorder: (activeId: string, overId: string) => void;
   reset: () => void;
+  /**
+   * Identity columns that stay where they are. Optional and absent by default,
+   * so every caller that has no pinned columns draws exactly what it drew
+   * before — the arrows only become disabled on a table that declares them.
+   */
+  lockedIds?: readonly string[];
+  /** Whether an arrow would move the column; defaults to "yes when not locked". */
+  canMove?: (id: string, dir: -1 | 1) => boolean;
 };
 
 export type ColumnOrderMenuLabels = {
@@ -113,6 +122,9 @@ export function ColumnOrderMenu({
                     dragLabel={labels.drag}
                     showLabel={labels.show}
                     hideLabel={labels.hide}
+                    locked={columns.lockedIds?.includes(id) ?? false}
+                    canMoveUp={columns.canMove ? columns.canMove(id, -1) : !columns.lockedIds?.includes(id)}
+                    canMoveDown={columns.canMove ? columns.canMove(id, 1) : !columns.lockedIds?.includes(id)}
                   />
                 ))}
               </div>
@@ -144,6 +156,9 @@ function ColumnOrderRow({
   dragLabel,
   showLabel,
   hideLabel,
+  locked = false,
+  canMoveUp = true,
+  canMoveDown = true,
 }: {
   id: string;
   label: string;
@@ -153,6 +168,10 @@ function ColumnOrderRow({
   dragLabel: string;
   showLabel: string;
   hideLabel: string;
+  /** A pinned column: no drag handle, no arrows. */
+  locked?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id });
   return (
@@ -166,41 +185,56 @@ function ColumnOrderRow({
     >
       <button
         type="button"
-        className="flex h-7 w-6 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-muted active:cursor-grabbing"
+        disabled={locked}
+        className={cn(
+          "flex h-7 w-6 shrink-0 items-center justify-center rounded text-muted-foreground",
+          locked ? "cursor-default opacity-30" : "cursor-grab hover:bg-muted active:cursor-grabbing",
+        )}
         aria-label={dragLabel}
         {...attributes}
         {...listeners}
       >
         <GripVertical className="size-3.5" />
       </button>
-      <button
-        type="button"
-        aria-pressed={checked}
-        aria-label={checked ? hideLabel : showLabel}
-        onClick={() => onToggle(id)}
-        className={cn(
-          "inline-flex size-5 shrink-0 items-center justify-center rounded-sm border",
-          checked
-            ? "border-emerald-500 bg-emerald-500 text-white"
-            : "border-border bg-muted/30 text-transparent",
-        )}
-      >
-        <Check className="size-3" />
-      </button>
-      <span className="min-w-0 flex-1 truncate ps-1.5 text-xs font-medium">{label}</span>
+      <ColumnVisibilityCheck
+        checked={checked}
+        locked={locked}
+        onToggle={() => onToggle(id)}
+        label={checked ? hideLabel : showLabel}
+        size="md"
+        uncheckedClassName="border-border bg-muted/30"
+      />
+      <span className="min-w-0 flex-1 truncate ps-1.5 text-xs font-medium">
+        {label}
+        {locked ? (
+          <span className="ms-1 text-[10px] font-semibold text-muted-foreground/70">pinned</span>
+        ) : null}
+      </span>
       <button
         type="button"
         aria-label={`${label} ↑`}
+        disabled={!canMoveUp}
         onClick={() => onMove(id, -1)}
-        className="inline-flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+        className={cn(
+          "inline-flex size-6 items-center justify-center rounded",
+          canMoveUp
+            ? "text-muted-foreground hover:bg-muted hover:text-foreground"
+            : "cursor-not-allowed text-muted-foreground/30",
+        )}
       >
         <ArrowUp className="size-3" />
       </button>
       <button
         type="button"
         aria-label={`${label} ↓`}
+        disabled={!canMoveDown}
         onClick={() => onMove(id, 1)}
-        className="inline-flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+        className={cn(
+          "inline-flex size-6 items-center justify-center rounded",
+          canMoveDown
+            ? "text-muted-foreground hover:bg-muted hover:text-foreground"
+            : "cursor-not-allowed text-muted-foreground/30",
+        )}
       >
         <ArrowDown className="size-3" />
       </button>

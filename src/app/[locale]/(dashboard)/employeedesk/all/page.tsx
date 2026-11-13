@@ -17,10 +17,10 @@ export default async function EmployeeDeskAllPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ type?: string; preset?: string; scope?: string }>;
+  searchParams: Promise<{ type?: string; preset?: string; scope?: string; status?: string }>;
 }) {
   const { locale } = await params;
-  const { type, preset, scope } = await searchParams;
+  const { type, preset, scope, status } = await searchParams;
   setRequestLocale(locale);
   await requirePermission(locale, "requests.view");
   if (isRcmQueueType(type)) {
@@ -37,6 +37,7 @@ export default async function EmployeeDeskAllPage({
     <RequestsPageShell
       initialType={type ?? "all"}
       initialDatePreset={preset}
+      initialStatus={status}
       listScope={parseRequestListScope(scope) ?? "all"}
       scopeTabs
     />

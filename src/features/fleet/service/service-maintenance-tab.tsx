@@ -168,6 +168,15 @@ export function ServiceMaintenanceTab({
     [programs],
   );
 
+  function selectStatus(next: (typeof STATUS_TABS)[number] | "needs_setup") {
+    const current = tab === "needs_baseline" || tab === "no_rule" ? "needs_setup" : tab;
+    if (current === next) {
+      setTab("all");
+      return;
+    }
+    setTab(next === "needs_setup" ? "needs_baseline" : next);
+  }
+
   const filtered = useMemo(
     () =>
       rows.filter((row) => {
@@ -264,10 +273,30 @@ export function ServiceMaintenanceTab({
             value: counts.normal,
             icon: CheckCircle2,
             caption: provisional ? t("maintenance.provisionalTag") : undefined,
+            selected: tab === "normal",
+            onClick: () => selectStatus("normal"),
           },
-          { label: tStatus("due_soon"), value: counts.due_soon, icon: CalendarClock },
-          { label: tStatus("due"), value: counts.due, icon: Gauge },
-          { label: tStatus("overdue"), value: counts.overdue, icon: AlertTriangle },
+          {
+            label: tStatus("due_soon"),
+            value: counts.due_soon,
+            icon: CalendarClock,
+            selected: tab === "due_soon",
+            onClick: () => selectStatus("due_soon"),
+          },
+          {
+            label: tStatus("due"),
+            value: counts.due,
+            icon: Gauge,
+            selected: tab === "due",
+            onClick: () => selectStatus("due"),
+          },
+          {
+            label: tStatus("overdue"),
+            value: counts.overdue,
+            icon: AlertTriangle,
+            selected: tab === "overdue",
+            onClick: () => selectStatus("overdue"),
+          },
           {
             // "Needs setup" is both worklists: a program with a rule but no
             // baseline, and a program with no rule at all. They need different
@@ -275,6 +304,8 @@ export function ServiceMaintenanceTab({
             label: tStatus("needs_baseline"),
             value: counts.needs_baseline + counts.no_rule,
             icon: Wrench,
+            selected: tab === "needs_baseline" || tab === "no_rule",
+            onClick: () => selectStatus("needs_setup"),
           },
         ]}
       />

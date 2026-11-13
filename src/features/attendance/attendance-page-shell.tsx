@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   AlertTriangle,
@@ -28,7 +28,7 @@ import {
   AppDataTableRow,
   TableCell,
 } from "@/components/app/app-data-table";
-import { KpiGrid } from "@/components/dashboard/kpi-grid";
+import { KpiGrid, type KpiGridItem } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { TrackingTableToolbar } from "@/features/driver-tracking/table-toolbar";
@@ -110,6 +110,25 @@ import {
 
 const PAGE_SIZE = 80;
 
+/**
+ * The five reporting cards plus Problems are the same six statuses the daily
+ * list already filters on, so the card, the URL and the table all read one key.
+ */
+const KPI_FILTER_KEYS = [
+  "scheduled",
+  "checked_in",
+  "late",
+  "absent",
+  "online",
+  "problems",
+] as const;
+
+type KpiFilterKey = (typeof KPI_FILTER_KEYS)[number];
+
+function readKpiFilter(value: string | null): KpiFilterKey | null {
+  return KPI_FILTER_KEYS.includes(value as KpiFilterKey) ? (value as KpiFilterKey) : null;
+}
+
 function countActiveFilters(filters: AttendanceFiltersState): number {
   return [
     filters.partnerId,
@@ -125,6 +144,8 @@ function AttendancePageContent() {
   const auth = useAuth();
   const canManage = auth.can("attendance.manage");
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
 
   const today = kuwaitToday();
   const initialTab = (searchParams.get("tab") as AttendanceHubTab) ?? "today";
@@ -168,7 +189,9 @@ function AttendancePageContent() {
   const [page, setPage] = useState(0);
   const [fromDate, setFromDate] = useState(addDays(today, -6));
   const [toDate, setToDate] = useState(today);
-  const [kpiFilter, setKpiFilter] = useState<string | null>(null);
+  const [kpiFilter, setKpiFilter] = useState<KpiFilterKey | null>(() =>
+    readKpiFilter(searchParams.get("status")),
+  );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -193,6 +216,33 @@ function AttendancePageContent() {
       setSortKey("problems_first");
     }
   }, [tab, sortKey]);
+
+  const selectKpiFilter = useCallback(
+    (key: KpiFilterKey | null) => {
+      const next = key !== null && kpiFilter === key ? null : key;
+      setKpiFilter(next);
+      const params = new URLSearchParams(searchParams.toString());
+      if (next) params.set("status", next);
+      else params.delete("status");
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    },
+    [kpiFilter, pathname, router, searchParams],
+  );
+
+  const applyFilters = useCallback(
+    (next: AttendanceFiltersState) => {
+      setFilters(next);
+      if (next.status !== "all" && kpiFilter !== null) {
+        setKpiFilter(null);
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete("status");
+        const query = params.toString();
+        router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+      }
+    },
+    [kpiFilter, pathname, router, searchParams],
+  );
 
   const statusFilter = kpiFilter ?? (filters.status !== "all" ? filters.status : undefined);
 
@@ -287,7 +337,7 @@ function AttendancePageContent() {
     { id: "analytics", label: t("tabAnalytics"), icon: BarChart3 },
   ];
 
-  const kpiItems = kpis
+  const kpiItems: Array<KpiGridItem & { filterKey: KpiFilterKey }> = kpis
     ? [
       {
         label: t("kpiScheduled"),
@@ -678,35 +728,22 @@ function AttendancePageContent() {
                       label: k.label,
                       value: k.value,
                       accent: k.accent,
+                      selected: kpiFilter === k.filterKey,
+                      onClick: () => selectKpiFilter(k.filterKey),
                     }))}
                   />
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {kpiItems.map((k) => (
-                      <Button
-                        key={k.filterKey}
-                        type="button"
-                        size="sm"
-                        variant={kpiFilter === k.filterKey ? "default" : "outline"}
-                        onClick={() =>
-                          setKpiFilter((prev) =>
-                            prev === k.filterKey ? null : k.filterKey,
-                          )
-                        }
-                      >
-                        {k.label}
-                      </Button>
-                    ))}
-                    {kpiFilter ? (
+                  {kpiFilter ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
                       <Button
                         type="button"
                         size="sm"
                         variant="ghost"
-                        onClick={() => setKpiFilter(null)}
+                        onClick={() => selectKpiFilter(null)}
                       >
                         {t("clearFilters")}
                       </Button>
-                    ) : null}
-                  </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : undefined
             }
@@ -932,7 +969,7 @@ function AttendancePageContent() {
         open={filtersOpen}
         onOpenChange={setFiltersOpen}
         filters={filters}
-        onApply={setFilters}
+        onApply={applyFilters}
         showStatus={tab !== "problems"}
       />
       <AttendanceResolveSheet row={resolveRow} open={resolveOpen} onOpenChange={setResolveOpen} />

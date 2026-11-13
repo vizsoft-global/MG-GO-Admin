@@ -1,15 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Check, Filter } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
+import { useRef } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Filter } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { toggleOpsMultiSelect } from "../performance-ops-formulas";
+  ColumnHeaderFilter,
+  matchingValues,
+  type ColumnFilterDraft,
+  type ColumnFilterOption,
+} from "@/components/app/column-filter";
 import {
   isRangeFilter,
   rangeFilterActive,
@@ -17,7 +16,6 @@ import {
   type OpsRangeFilter,
   type OpsSortDir,
 } from "../performance-ops-table";
-import { cn } from "@/lib/utils";
 
 export function OpsSortButton({
   active,
@@ -48,12 +46,19 @@ export function OpsSortButton({
   );
 }
 
+/**
+ * The Performance funnel, delegating to the shared `ColumnHeaderFilter`.
+ *
+ * The operator's funnel record travels whole, so every live/commit/revert path
+ * below writes `{...filters}` rather than a single key.
+ */
 export function OpsHeaderFilter({
   columnId,
   values,
   filters,
   onApply,
   numeric,
+  onSortDir,
   searchPlaceholder,
   allLabel,
   clearLabel,
@@ -66,6 +71,8 @@ export function OpsHeaderFilter({
   filters: OpsColumnFilter;
   onApply: (next: OpsColumnFilter) => void;
   numeric?: boolean;
+  /** Sorts the column a specific way — the Range tab's "Smallest / Largest first". */
+  onSortDir?: (dir: "asc" | "desc") => void;
   searchPlaceholder: string;
   allLabel: string;
   clearLabel: string;
@@ -77,149 +84,119 @@ export function OpsHeaderFilter({
   const active = numeric
     ? rangeFilterActive(isRangeFilter(current) ? current : undefined)
     : Array.isArray(current) && current.length > 0;
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const [draftValues, setDraftValues] = useState<string[]>([]);
-  const [draftMin, setDraftMin] = useState("");
-  const [draftMax, setDraftMax] = useState("");
+  const snapshot = useRef<OpsColumnFilter>(filters);
 
-  function openDraft() {
+  const options: ColumnFilterOption[] = values.map((value) => ({
+    value,
+    label: value || "—",
+  }));
+
+  function draftFromCommitted(): ColumnFilterDraft {
     if (numeric) {
       const range: OpsRangeFilter = isRangeFilter(current) ? current : {};
-      setDraftMin(range.min == null ? "" : String(range.min));
-      setDraftMax(range.max == null ? "" : String(range.max));
-      return;
+      return {
+        mode: "range",
+        text: "",
+        query: "",
+        picked: [],
+        min: range.min == null ? "" : String(range.min),
+        max: range.max == null ? "" : String(range.max),
+      };
     }
-    setDraftValues(Array.isArray(current) ? current : []);
-    setQ("");
+    return {
+      mode: "list",
+      text: "",
+      query: "",
+      picked: Array.isArray(current) ? [...current] : [],
+      min: "",
+      max: "",
+    };
   }
 
-  const visible = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return values;
-    return values.filter((v) => v.toLowerCase().includes(needle));
-  }, [q, values]);
+  function asLiveFilter(draft: ColumnFilterDraft): string[] | OpsRangeFilter | null {
+    if (draft.mode === "list" && draft.query.trim()) {
+      // A typed search is a value-list of its own: keep every option whose
+      // label contains it so the table narrows without losing the ticks.
+      const matched = matchingValues(values, draft.query);
+      return matched.length ? matched : null;
+    }
+    return asCommittedFilter(draft);
+  }
+
+  function asCommittedFilter(draft: ColumnFilterDraft): string[] | OpsRangeFilter | null {
+    if (draft.mode === "range") {
+      const min = draft.min === "" ? null : Number(draft.min);
+      const max = draft.max === "" ? null : Number(draft.max);
+      const range: OpsRangeFilter = {
+        min: min != null && Number.isFinite(min) ? min : null,
+        max: max != null && Number.isFinite(max) ? max : null,
+      };
+      return rangeFilterActive(range) ? range : null;
+    }
+    return draft.picked.length ? draft.picked : null;
+  }
+
+  function withFilter(value: string[] | OpsRangeFilter | null): OpsColumnFilter {
+    return mergeOpsFilter(filters, columnId, value);
+  }
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) openDraft();
+    <ColumnHeaderFilter<string[] | OpsRangeFilter>
+      column={columnId}
+      label={columnId}
+      title={`Filter ${columnId}`}
+      modes={numeric ? ["range"] : ["list"]}
+      defaultMode={numeric ? "range" : "list"}
+      draftFromCommitted={draftFromCommitted}
+      options={options}
+      active={active}
+      liveFilter={asLiveFilter}
+      committedFilter={asCommittedFilter}
+      onLive={(next) => onApply(withFilter(next))}
+      onCommit={(next) => onApply(withFilter(next))}
+      onClear={() => onApply(mergeOpsFilter(filters, columnId, null))}
+      onRevert={() => onApply(snapshot.current)}
+      onOpenChange={(open) => {
+        if (open) snapshot.current = filters;
       }}
-    >
-      <PopoverTrigger
-        aria-label={`Filter ${columnId}`}
-        className={cn(
-          "inline-flex size-6 items-center justify-center rounded-md",
-          active
-            ? "text-emerald-800 hover:bg-emerald-50"
-            : "text-muted-foreground hover:bg-muted/40",
-        )}
-      >
-        <Filter className="size-3" />
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-56 origin-(--transform-origin) space-y-2 p-2">
-        {numeric ? (
-          <div className="grid grid-cols-2 gap-1.5">
-            <label className="text-xs text-muted-foreground">
-              {minLabel}
-              <Input
-                type="number"
-                value={draftMin}
-                onChange={(e) => setDraftMin(e.target.value)}
-                className="mt-0.5 h-9"
-              />
-            </label>
-            <label className="text-xs text-muted-foreground">
-              {maxLabel}
-              <Input
-                type="number"
-                value={draftMax}
-                onChange={(e) => setDraftMax(e.target.value)}
-                className="mt-0.5 h-9"
-              />
-            </label>
-          </div>
-        ) : (
-          <>
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={searchPlaceholder}
-              className="h-9"
-            />
-            <label className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40">
-              <Checkbox
-                checked={draftValues.length === 0}
-                onCheckedChange={() => setDraftValues([])}
-              />
-              <span className="min-w-0 flex-1 font-medium">{allLabel}</span>
-              {draftValues.length === 0 ? (
-                <Check className="size-3 shrink-0 text-emerald-700" />
-              ) : null}
-            </label>
-            <div className="max-h-48 overflow-y-auto">
-              {visible.map((v) => {
-                const on = draftValues.includes(v);
-                return (
-                  <label
-                    key={v || "(empty)"}
-                    className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1.5 text-xs hover:bg-muted/40"
-                  >
-                    <Checkbox
-                      checked={on}
-                      onCheckedChange={() =>
-                        setDraftValues(toggleOpsMultiSelect(values, draftValues, v))
-                      }
-                    />
-                    <span className="min-w-0 flex-1 truncate">{v || "—"}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </>
-        )}
-        <div className="flex items-center justify-end gap-1.5">
-          <button
-            type="button"
-            className="h-8 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted/40"
-            onClick={() => {
-              const next = { ...filters };
-              delete next[columnId];
-              onApply(next);
-              setOpen(false);
-            }}
-          >
-            {clearLabel}
-          </button>
-          <button
-            type="button"
-            className="h-8 rounded-md bg-primary px-2 text-xs text-primary-foreground"
-            onClick={() => {
-              const next = { ...filters };
-              if (numeric) {
-                const min = draftMin === "" ? null : Number(draftMin);
-                const max = draftMax === "" ? null : Number(draftMax);
-                const range: OpsRangeFilter = {
-                  min: min != null && Number.isFinite(min) ? min : null,
-                  max: max != null && Number.isFinite(max) ? max : null,
-                };
-                if (rangeFilterActive(range)) next[columnId] = range;
-                else delete next[columnId];
-              } else if (draftValues.length === 0) {
-                delete next[columnId];
-              } else {
-                next[columnId] = draftValues;
-              }
-              onApply(next);
-              setOpen(false);
-            }}
-          >
-            {applyLabel}
-          </button>
-        </div>
-      </PopoverContent>
-    </Popover>
+      liveDebounceMs={0}
+      onRangeShortcut={
+        onSortDir
+          ? (dir, draft) => {
+              onApply(withFilter(asCommittedFilter({ ...draft, mode: "range" })));
+              onSortDir(dir);
+            }
+          : undefined
+      }
+      labels={{
+        title: (column) => `Filter ${column}`,
+        mode: {},
+        search: searchPlaceholder,
+        contains: searchPlaceholder,
+        all: allLabel,
+        clear: clearLabel,
+        apply: applyLabel,
+        min: minLabel,
+        max: maxLabel,
+        noOptions: allLabel,
+        blank: "—",
+        filterBy: (column) => `Filter ${column}`,
+      }}
+      triggerIcon={<Filter className="size-3" />}
+      triggerClassName="size-6 rounded-md text-emerald-800 hover:bg-emerald-50"
+      contentClassName="w-56 space-y-2 p-2"
+    />
   );
+}
+
+/** Writes one column into the record, deleting it when the value is empty. */
+function mergeOpsFilter(
+  filters: OpsColumnFilter,
+  columnId: string,
+  value: string[] | OpsRangeFilter | null,
+): OpsColumnFilter {
+  const next = { ...filters };
+  if (value === null) delete next[columnId];
+  else next[columnId] = value;
+  return next;
 }

@@ -1,11 +1,14 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp } from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowDown, ArrowUp, Check } from "lucide-react";
+import type { KeyboardEvent, ReactNode } from "react";
+import { Link } from "@/i18n/navigation";
 import {
+  INTERACTIVE_TILE,
   NEUTRAL_TILE,
   normalizeTone,
+  SELECTED_TILE,
   TONE_STYLES,
   type Tone,
 } from "@/lib/ui/tone-styles";
@@ -25,6 +28,10 @@ export function MetricTile({
   hint,
   compact = false,
   className,
+  onClick,
+  href,
+  ariaLabel,
+  disabled = false,
 }: {
   label: string;
   value: string | number;
@@ -36,33 +43,43 @@ export function MetricTile({
   hint?: string;
   compact?: boolean;
   className?: string;
+  onClick?: () => void;
+  /** Locale-relative path; the whole tile becomes a real link to the filtered view. */
+  href?: string;
+  ariaLabel?: string;
+  disabled?: boolean;
 }) {
   const resolvedTone = normalizeTone(tone);
   const toneStyle = TONE_STYLES[resolvedTone];
   const TrendIcon = trendDirection === "up" ? ArrowUp : ArrowDown;
   const trendClass =
     trendDirection === "up" ? "text-success" : "text-danger";
+  const interactive = Boolean(onClick || href) && !disabled;
 
-  return (
-    <article
-      className={cn(
-        "min-w-0 overflow-hidden rounded-xl",
-        compact ? "p-2.5" : "p-3",
-        NEUTRAL_TILE,
-        toneStyle.accentBar,
-        selected && "ring-2 ring-primary/50 ring-offset-1 ring-offset-background",
-        className,
-      )}
-    >
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!interactive || !onClick) return;
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onClick();
+  };
+
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-1.5">
         <p
           className={cn(
             "min-w-0 flex-1 font-semibold uppercase tracking-wide text-muted-foreground",
             compact ? "text-xs leading-tight" : "text-xs",
+            selected && "text-orange-600",
           )}
         >
           {label}
         </p>
+        {selected ? (
+          <span className="inline-flex shrink-0 items-center justify-center rounded-full bg-orange-500 text-white">
+            <Check className={compact ? "size-3" : "size-3.5"} aria-hidden />
+          </span>
+        ) : null}
         {Icon ? (
           <span
             className={cn(
@@ -101,6 +118,45 @@ export function MetricTile({
       {hint ? (
         <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
       ) : null}
+    </>
+  );
+
+  const shellClass = cn(
+    "min-w-0 overflow-hidden rounded-xl",
+    compact ? "p-2.5" : "p-3",
+    NEUTRAL_TILE,
+    toneStyle.accentBar,
+    interactive && INTERACTIVE_TILE,
+    disabled && "cursor-not-allowed opacity-60",
+    selected && SELECTED_TILE,
+    className,
+  );
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        aria-label={ariaLabel ?? label}
+        aria-current={selected ? "true" : undefined}
+        className={shellClass}
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <article
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-pressed={interactive ? selected : undefined}
+      aria-label={interactive ? ariaLabel : undefined}
+      aria-disabled={disabled || undefined}
+      onClick={interactive && onClick ? onClick : undefined}
+      onKeyDown={handleKeyDown}
+      className={shellClass}
+    >
+      {content}
     </article>
   );
 }

@@ -78,9 +78,23 @@ import { AssetCatalogIcon } from "./asset-catalog-icon";
 import { useAssetsCatalog } from "./use-assets";
 import type { AssetCatalogRow } from "./types";
 
-type StatusFilter = "all" | "lowStock" | "inactive" | "assigned";
+type StatusFilter = "all" | "lowStock" | "inactive" | "assigned" | "available";
 const ASSET_TABS = ["assignments", "catalog", "request"] as const;
 type AssetTab = (typeof ASSET_TABS)[number];
+
+const ASSET_STATUS_FILTERS: StatusFilter[] = [
+  "all",
+  "lowStock",
+  "inactive",
+  "assigned",
+  "available",
+];
+
+function parseAssetStatusFilter(value: string | null): StatusFilter {
+  return ASSET_STATUS_FILTERS.includes(value as StatusFilter)
+    ? (value as StatusFilter)
+    : "all";
+}
 
 function parseAssetTab(value: string | null): AssetTab | null {
   return ASSET_TABS.includes(value as AssetTab) ? (value as AssetTab) : null;
@@ -187,7 +201,14 @@ function AssetsPageContent() {
     low_stock_count: 0,
   };
 
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const statusFilter = parseAssetStatusFilter(searchParams.get("status"));
+  const setStatusFilter = (next: StatusFilter) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "all") params.delete("status");
+    else params.set("status", next);
+    const qs = params.toString();
+    router.replace(qs ? `/assets?${qs}` : "/assets");
+  };
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -196,6 +217,7 @@ function AssetsPageContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const hasActiveFilters = statusFilter !== "all" || categoryFilter !== "all";
+  const activeKpiKey = statusFilter === "all" ? "skus" : statusFilter;
 
   const categories = useMemo(
     () =>
@@ -221,6 +243,7 @@ function AssetsPageContent() {
       if (statusFilter === "lowStock" && !row.is_low_stock) return false;
       if (statusFilter === "inactive" && row.is_active) return false;
       if (statusFilter === "assigned" && row.holder_count === 0) return false;
+      if (statusFilter === "available" && row.available_qty === 0) return false;
       if (categoryFilter !== "all" && row.category !== categoryFilter) return false;
       return true;
     });
@@ -396,6 +419,18 @@ function AssetsPageContent() {
             assigned: t("kpiAssigned"),
             available: t("kpiAvailable"),
             lowStock: t("kpiLowStock"),
+          }}
+          activeKey={activeKpiKey}
+          onSelectKey={(key) => {
+            if (key === "skus" || key === "units" || activeKpiKey === key) {
+              setStatusFilter("all");
+              return;
+            }
+            setStatusFilter(
+              key === "assigned" || key === "available" || key === "lowStock"
+                ? key
+                : "all",
+            );
           }}
         />
 

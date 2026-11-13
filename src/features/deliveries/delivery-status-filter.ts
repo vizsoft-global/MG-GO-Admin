@@ -24,6 +24,29 @@ export function deliveryStatusFilterValues(): DeliveryStatusFilterValue[] {
   ];
 }
 
+/** Read a `?status=` value, falling back to "all" for anything not in the enum. */
+export function parseDeliveryStatusFilter(
+  value: string | null,
+): DeliveryStatusFilterValue {
+  if (!value) return DELIVERY_STATUS_FILTER_ALL;
+  return (deliveryStatusFilterValues() as readonly string[]).includes(value)
+    ? (value as DeliveryStatusFilterValue)
+    : DELIVERY_STATUS_FILTER_ALL;
+}
+
+/** Build the list href for a status, dropping `status` entirely for "all". */
+export function deliveryListHref(
+  pathname: string,
+  value: DeliveryStatusFilterValue,
+  params?: URLSearchParams,
+): string {
+  const next = new URLSearchParams(params?.toString() ?? "");
+  if (value === DELIVERY_STATUS_FILTER_ALL) next.delete("status");
+  else next.set("status", value);
+  const qs = next.toString();
+  return qs ? `${pathname}?${qs}` : pathname;
+}
+
 export function deliveryStatusMessageKey(status: DeliveryStatus): string {
   switch (status) {
     case "verified":

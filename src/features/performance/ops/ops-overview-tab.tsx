@@ -59,10 +59,13 @@ export function OpsOverviewTab({
   data,
   metric,
   granularity,
+  onSelectMetric,
 }: {
   data: OpsSnapshot;
   metric: OpsChartMetric;
   granularity: OpsGranularity;
+  /** Selecting a KPI card drives the View-by chart the same way the pills do. */
+  onSelectMetric?: (next: OpsChartMetric) => void;
 }) {
   const t = useTranslations("pages.performance.ops");
   const k = data.kpis;
@@ -70,30 +73,50 @@ export function OpsOverviewTab({
   const color = OPS_METRIC_COLOR[metric];
   const series = [{ key: "value", name: seriesName, color }];
 
+  /**
+   * A card is clickable only when the chart can actually be drawn from it, so
+   * `hoursExcluded`, `workingHours`, `riders`, `active` and `restaurants` stay
+   * plain tiles — a card that sets a metric the chart cannot plot would empty
+   * the chart it claimed to select.
+   */
+  const metricCard = (key: OpsChartMetric) =>
+    onSelectMetric
+      ? { selected: metric === key, onClick: () => onSelectMetric(key) }
+      : {};
+
   const items = [
     {
       label: t("kpi.orders"),
       value: formatInt(k.orders),
       caption: <OpsKpiDelta {...formatDelta(k.orders, k.orders_prev)} />,
+      ...metricCard("orders"),
     },
     {
       label: t("kpi.overallDpd"),
       value: formatDpd(k.overall_dpd),
       caption: <OpsKpiDelta {...formatDelta(k.overall_dpd, k.overall_dpd_prev)} />,
       accent: "primary" as const,
+      ...metricCard("dpd"),
     },
     {
       label: t("kpi.avgDpdEff"),
       value: formatPct(k.avg_dpd_eff),
       caption: <OpsKpiDelta {...formatDelta(k.avg_dpd_eff, k.avg_dpd_eff_prev)} />,
+      ...metricCard("dpd_eff"),
     },
     {
       label: t("kpi.avgTgtEff"),
       value: formatPct(k.avg_tgt_eff),
       caption: <OpsKpiDelta {...formatDelta(k.avg_tgt_eff, k.avg_tgt_eff_prev)} />,
       accent: "success" as const,
+      ...metricCard("tgt_eff"),
     },
-    { label: t("kpi.utr"), value: formatUtr(k.utr), accent: "primary" as const },
+    {
+      label: t("kpi.utr"),
+      value: formatUtr(k.utr),
+      accent: "primary" as const,
+      ...metricCard("utr"),
+    },
     { label: t("kpi.workingHours"), value: formatDpd(k.working_hours) },
     /**
      * The hours the ratio excludes. Shown, not hidden: this is the difference

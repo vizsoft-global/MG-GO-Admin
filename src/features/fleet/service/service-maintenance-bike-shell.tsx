@@ -68,6 +68,7 @@ export function ServiceBikeShell({
   const data = useServiceMaintenance("bike");
   const [importOpen, setImportOpen] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<MaintenanceStatus | "all">("all");
 
   const today = kuwaitTodayYmd();
   const programs = data.data?.programs?.length ? data.data.programs : curatedPrograms();
@@ -92,6 +93,11 @@ export function ServiceBikeShell({
   );
 
   const counts = programCounts(rows);
+  const visibleRows = statusFilter === "all" ? rows : rows.filter((row) => row.status === statusFilter);
+  const statusCard = (status: MaintenanceStatus) => ({
+    selected: statusFilter === status,
+    onClick: () => setStatusFilter((current) => (current === status ? "all" : status)),
+  });
 
 
   function intervalText(row: MaintenanceProgramRow): string {
@@ -198,11 +204,11 @@ export function ServiceBikeShell({
       <KpiGrid
         compact
         items={[
-          { label: tStatus("normal"), value: counts.normal, icon: CheckCircle2 },
-          { label: tStatus("due_soon"), value: counts.due_soon, icon: CalendarClock },
-          { label: tStatus("due"), value: counts.due, icon: Gauge },
-          { label: tStatus("overdue"), value: counts.overdue, icon: AlertTriangle },
-          { label: tStatus("needs_baseline"), value: counts.needs_baseline, icon: Wrench },
+          { label: tStatus("normal"), value: counts.normal, icon: CheckCircle2, ...statusCard("normal") },
+          { label: tStatus("due_soon"), value: counts.due_soon, icon: CalendarClock, ...statusCard("due_soon") },
+          { label: tStatus("due"), value: counts.due, icon: Gauge, ...statusCard("due") },
+          { label: tStatus("overdue"), value: counts.overdue, icon: AlertTriangle, ...statusCard("overdue") },
+          { label: tStatus("needs_baseline"), value: counts.needs_baseline, icon: Wrench, ...statusCard("needs_baseline") },
         ]}
       />
 
@@ -214,7 +220,7 @@ export function ServiceBikeShell({
         <AppDataTable
           columns={Object.entries(columnLabels).map(([id, label]) => ({ id, label }))}
           empty={
-            rows.length === 0 ? (
+            visibleRows.length === 0 ? (
               <AppDataTableEmpty>
                 <AppEmptyState
                   title={t("bikes.emptyTitle")}
@@ -224,7 +230,7 @@ export function ServiceBikeShell({
             ) : null
           }
         >
-          {rows.map((row) => (
+          {visibleRows.map((row) => (
             <AppDataTableRow key={`${row.vehicleId}_${row.programKey}`}>
               <TableCell className="whitespace-nowrap font-medium">{row.plate}</TableCell>
               <TableCell className="whitespace-nowrap">{row.programLabel}</TableCell>

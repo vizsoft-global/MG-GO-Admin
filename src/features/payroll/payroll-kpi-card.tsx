@@ -1,7 +1,14 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { NEUTRAL_TILE, TONE_STYLES, accentToTone } from "@/lib/ui/tone-styles";
+import { Check } from "lucide-react";
+import {
+  INTERACTIVE_TILE,
+  NEUTRAL_TILE,
+  SELECTED_TILE,
+  TONE_STYLES,
+  accentToTone,
+} from "@/lib/ui/tone-styles";
 import { cn } from "@/lib/utils";
 import type { KpiAccent } from "@/components/dashboard/kpi-card";
 
@@ -58,11 +65,17 @@ export function PayrollKpiCard({
         "group relative flex items-start gap-2 overflow-hidden rounded-xl px-3 py-1.5 text-start",
         NEUTRAL_TILE,
         tone.accentBar,
-        interactive ? "cursor-pointer transition-shadow hover:ring-1 hover:ring-primary/40" : "opacity-70",
+        !interactive && "opacity-70",
         (disabled || empty) && "cursor-not-allowed",
-        selected && "ring-2 ring-primary",
+        interactive && INTERACTIVE_TILE,
+        selected && SELECTED_TILE,
       )}
     >
+      {selected && interactive ? (
+        <span className="absolute end-1.5 top-1.5 inline-flex size-4 items-center justify-center rounded-full bg-orange-500 text-white">
+          <Check className="size-2.5" strokeWidth={3} />
+        </span>
+      ) : null}
       {Icon ? (
         <span
           className={cn(
