@@ -8,12 +8,33 @@
  * caller itself.
  */
 export async function panelGet<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    method: "GET",
-    credentials: "same-origin",
-    cache: "no-store",
-    headers: { accept: "application/json" },
-  });
+  return answerOf<T>(
+    await fetch(url, {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { accept: "application/json" },
+    }),
+  );
+}
+
+/**
+ * The same, for a read whose question does not belong in the address (a search
+ * the operator typed, a set of filters). Still a read; still outside the queue.
+ */
+export async function panelPost<T>(url: string, question: unknown): Promise<T> {
+  return answerOf<T>(
+    await fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: JSON.stringify(question),
+    }),
+  );
+}
+
+async function answerOf<T>(response: Response): Promise<T> {
   const body = (await response.json().catch(() => null)) as T | { error?: string } | null;
   if (!response.ok || body == null) {
     const code = body && typeof body === "object" && "error" in body ? String(body.error) : `http_${response.status}`;

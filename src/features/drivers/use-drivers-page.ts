@@ -1,11 +1,12 @@
 "use client";
 
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { panelPost } from "@/lib/browser/panel-get";
 import { queryKeys } from "@/lib/query/query-keys";
 import {
   fetchDriverFilterValues,
-  fetchDriversPage,
   type DriversPageQuery,
+  type DriversPageResult,
 } from "./drivers-list-actions";
 import type { DriversColumnFilters } from "./drivers-list-query";
 
@@ -32,7 +33,15 @@ const DRIVERS_PAGE_STALE_MS = 5 * 60_000;
 export function useDriversPage(query: DriversPageQuery) {
   return useInfiniteQuery({
     queryKey: queryKeys.drivers.page(query),
-    queryFn: ({ pageParam }) => fetchDriversPage(query, pageParam, DRIVERS_PAGE_LIMIT),
+    // A fetch, not a server action. The page fires eight small actions on mount
+    // and Next sends them one at a time; as an action this request was ninth in
+    // line and the riders did not start loading for about five seconds.
+    queryFn: ({ pageParam }) =>
+      panelPost<DriversPageResult>("/api/drivers/page", {
+        query,
+        offset: pageParam,
+        limit: DRIVERS_PAGE_LIMIT,
+      }),
     initialPageParam: 0,
     getNextPageParam: (last, pages) => {
       const loaded = pages.reduce((n, p) => n + p.rows.length, 0);

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, it } from "node:test";
 
-import { panelGet } from "./panel-get";
+import { panelGet, panelPost } from "./panel-get";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -45,6 +45,27 @@ describe("the shell's reads are plain GETs", () => {
     );
     assert.doesNotMatch(banner, /\blistDriverImportJobs\b/);
     assert.match(banner, /panelGet<\{ jobs: DriverImportJobSummary\[\] \}>\("\/api\/drivers\/import-jobs"\)/);
+  });
+
+  it("sends a question that does not belong in the address as a JSON body", async () => {
+    const calls = answer(200, { rows: [], filteredTotal: 0 });
+    await panelPost("/api/drivers/page", { query: { search: "Ali" }, offset: 0, limit: 500 });
+    assert.equal(calls[0]?.url, "/api/drivers/page");
+    assert.equal(calls[0]?.init?.method, "POST");
+    assert.equal(calls[0]?.init?.credentials, "same-origin");
+    assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), { query: { search: "Ali" }, offset: 0, limit: 500 });
+    answer(403, { error: "not_authorized" });
+    await assert.rejects(() => panelPost("/api/drivers/page", {}), /not_authorized/);
+  });
+
+  it("is how the Employees list itself loads, so it is not ninth in the action queue", () => {
+    const list = readFileSync(new URL("../../features/drivers/use-drivers-page.ts", import.meta.url), "utf8");
+    assert.match(list, /panelPost<DriversPageResult>\("\/api\/drivers\/page", \{/);
+    assert.doesNotMatch(list, /\bfetchDriversPage\(/);
+    // The search text travels in the body: the route is a POST and reads JSON.
+    const route = readFileSync(new URL("../../app/api/drivers/page/route.ts", import.meta.url), "utf8");
+    assert.match(route, /export async function POST\(request: Request\)/);
+    assert.match(route, /await fetchDriversPage\(/);
   });
 
   it("is how Employees loads the fleet's levels: once, and advancing by what came back", () => {
