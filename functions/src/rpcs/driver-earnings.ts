@@ -23,7 +23,7 @@ import {
   countEligibleDeliveries,
   dpdTargetForRule,
   loadIncentiveContext,
-  loadVerifiedDeliveriesForDeliveredDay,
+  loadVerifiedDeliveriesForEarnDay,
   normaliseDelivery,
   type IncentiveContext,
   type RawDelivery,
@@ -1359,7 +1359,7 @@ async function riderEarningsDetail(request: CallableRequest<unknown>) {
       .where("entry_type", "==", "earning_credit")
       .limit(1)
       .get(),
-    loadVerifiedDeliveriesForDeliveredDay(ctx.uid, earnDate),
+    loadVerifiedDeliveriesForEarnDay(ctx.uid, earnDate),
   ]);
 
   const dailyRaw = dailySnap.exists ? ((dailySnap.data() ?? {}) as Dict) : null;
@@ -1409,6 +1409,7 @@ async function riderEarningsDetail(request: CallableRequest<unknown>) {
           driver_id: ctx.uid,
           earn_date: earnDate,
           deliveries: asNumber(dailyRaw["deliveries"]),
+          recorded_deliveries: asNumber(dailyRaw["recorded_deliveries"]),
           base_kwd: asNumber(dailyRaw["base_kwd"]),
           incentive_kwd: asNumber(dailyRaw["incentive_kwd"]),
           loan_deduction_kwd: asNumber(dailyRaw["loan_deduction_kwd"]),

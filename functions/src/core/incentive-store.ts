@@ -12,6 +12,7 @@
 
 import { getFirestore } from "./fs";
 import { COLLECTIONS } from "./collections";
+import { RECORDED_ORDER_STATUSES } from "./order-count";
 import { loadAppSettings } from "./settings";
 import { kuwaitDayEnd, kuwaitDayStart } from "./kuwait";
 import { periodStart } from "./money";
@@ -339,14 +340,24 @@ function deliveryInPeriod(delivery: RawDelivery, startDay: string, endDay: strin
 }
 
 /**
- * Verified deliveries for a driver on a Kuwait day, with the legacy fallback.
+ * Verified deliveries for a driver on a **Kuwait earn day**, attributed by the
+ * rider's booked shift.
  *
- * Two queries rather than one: Firestore cannot express an `OR` across
- * `shift_date == day` and "`shift_date` absent and the timestamp falls in the
- * day", and an `!= null` filter would silently drop the legacy rows this branch
- * exists to keep.
+ * An earn day is the day the shift started, not the calendar day of
+ * `delivered_at`: a 14:00 → 02:00 shift's post-midnight orders belong to the day
+ * the shift began, which is how `deliveries.shift_date` is stamped at pickup and
+ * what Payroll, Order Reconciliation and Performance all bucket on. Earnings
+ * used to attribute by the timestamp alone, so the same order landed on Nov 16
+ * here and Nov 15 on the other three surfaces — the client's 4.2 report.
+ *
+ * A row with no `shift_date` (written before the stamp existed, or by a rider who
+ * booked no shift) falls back to the Kuwait calendar day of `delivered_at`, which
+ * is what every report used before. Two queries rather than one, because
+ * Firestore cannot express an `OR` across "`shift_date` equals this day" and
+ * "`shift_date` is absent and the timestamp falls in this day", and a `!= null`
+ * filter would silently drop the legacy rows this branch exists to keep.
  */
-export async function loadVerifiedDeliveriesForDriverDay(
+export async function loadVerifiedDeliveriesForEarnDay(
   driverId: string,
   day: string,
 ): Promise<RawDelivery[]> {
@@ -373,12 +384,50 @@ export async function loadVerifiedDeliveriesForDriverDay(
   return [...out.values()];
 }
 
-/** Every driver with a verified delivery on a day, for the range/date sweeps. */
-export async function loadVerifiedDriverIdsForDay(day: string): Promise<string[]> {
+/**
+ * Every **completed** order for a driver on an earn day, whatever its
+ * verification state.
+ *
+ * `loadVerifiedDeliveriesForEarnDay` answers "what is paid"; this answers "what
+ * was recorded", which is the figure Payroll prints. Both bucket on
+ * `deliveries.shift_date` with the same legacy fallback, so the two counts for
+ * one rider-day can only differ by the orders still waiting for the office.
+ */
+export async function loadRecordedDeliveriesForEarnDay(
+  driverId: string,
+  day: string,
+): Promise<RawDelivery[]> {
   const db = getFirestore();
   const base = db
     .collection(COLLECTIONS.deliveries)
-    .where("status", "==", "verified");
+    .where("driver_id", "==", driverId);
+
+  const [shiftSnap, legacySnap] = await Promise.all([
+    base
+      .where("shift_date", "==", day)
+      .where("status", "in", [...RECORDED_ORDER_STATUSES])
+      .limit(SCAN_CAP)
+      .get(),
+    base
+      .where("shift_date", "==", null)
+      .where("status", "in", [...RECORDED_ORDER_STATUSES])
+      .where("delivered_at", ">=", kuwaitDayStart(day))
+      .where("delivered_at", "<", kuwaitDayEnd(day))
+      .limit(SCAN_CAP)
+      .get(),
+  ]);
+
+  const out = new Map<string, RawDelivery>();
+  for (const doc of [...shiftSnap.docs, ...legacySnap.docs]) {
+    out.set(doc.id, normaliseDelivery(doc.id, doc.data() ?? {}));
+  }
+  return [...out.values()];
+}
+
+/** Every driver with a verified delivery on an earn day, for the range sweeps. */
+export async function loadVerifiedDriverIdsForEarnDay(day: string): Promise<string[]> {
+  const db = getFirestore();
+  const base = db.collection(COLLECTIONS.deliveries).where("status", "==", "verified");
 
   const [shiftSnap, legacySnap] = await Promise.all([
     base.where("shift_date", "==", day).select("driver_id").limit(SCAN_CAP).get(),
@@ -402,14 +451,12 @@ export async function loadVerifiedDriverIdsForDay(day: string): Promise<string[]
 /**
  * Verified deliveries for a driver on the **Kuwait civil day of `delivered_at`**.
  *
- * This is the timestamp-day predicate the earnings RPCs use
- * (`(delivered_at AT TIME ZONE 'Asia/Kuwait')::date = p_earn_date`), and it is
- * deliberately not the same query as `loadVerifiedDeliveriesForDriverDay` above:
- * that one attributes by `shift_date` first, which is what
- * `count_eligible_deliveries` does. Both live side by side because the deployed
- * earnings functions use both — the `deliveries` figure on a day is counted one
- * way and the eligible count for an incentive rule the other — and collapsing
- * them would change a payout.
+ * This is the timestamp-day predicate the earnings RPCs used to run
+ * (`(delivered_at AT TIME ZONE 'Asia/Kuwait')::date = p_earn_date`). It is kept
+ * only because `countEligibleDeliveries`' per-rule window is still expressed on
+ * the delivered instant; every earnings row, sweep and detail read now goes
+ * through `loadVerifiedDeliveriesForEarnDay` above, so an overnight order lands
+ * on its shift's day on all of them.
  *
  * A denormalised `delivered_day` field exists in `FIELDS`, but nothing populates
  * it, so filtering on it would return zero deliveries and quietly zero a

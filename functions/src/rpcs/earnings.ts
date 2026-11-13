@@ -17,8 +17,9 @@ import {
   countEligibleDeliveries,
   dpdTargetForRule,
   loadIncentiveContext,
-  loadVerifiedDeliveriesForDeliveredDay,
-  loadVerifiedDriverIdsForDeliveredDay,
+  loadRecordedDeliveriesForEarnDay,
+  loadVerifiedDeliveriesForEarnDay,
+  loadVerifiedDriverIdsForEarnDay,
   type IncentiveContext,
   type RawDelivery,
 } from "../core/incentive-store";
@@ -148,6 +149,7 @@ export const adminIncentiveDailyReport = onCall(async (request) => {
       driverId: asString(raw["driver_id"]) ?? "",
       earnDate: asString(raw["earn_date"]) ?? "",
       deliveries: asNumber(raw["deliveries"]),
+      recordedDeliveries: asNumber(raw["recorded_deliveries"]),
       incentiveKwd: asNumber(raw["incentive_kwd"]),
       appliedRule: appliedRuleOf(raw),
     }))
@@ -204,6 +206,7 @@ export const adminIncentiveDailyReport = onCall(async (request) => {
         restaurant_name: restaurantNamesFor(driver, restaurantById),
         zone_name: zoneId ? (asString(zoneById.get(zoneId)?.["name"]) ?? null) : null,
         deliveries: row.deliveries,
+        recorded_deliveries: row.recordedDeliveries,
         applied_rule: row.appliedRule,
         daily_amount_kwd: row.incentiveKwd,
         period_total_kwd: periodTotal.get(row.driverId) ?? 0,
@@ -290,6 +293,7 @@ export const listDriverEarningsDaily = onCall(async (request) => {
         driver_name: trimmedOrNull(driver?.["name"]) ?? "—",
         earn_date: row.earnDate,
         deliveries: asNumber(raw["deliveries"]),
+        recorded_deliveries: asNumber(raw["recorded_deliveries"]),
         base_kwd: asNumber(raw["base_kwd"]),
         incentive_kwd: asNumber(raw["incentive_kwd"]),
         loan_deduction_kwd: asNumber(raw["loan_deduction_kwd"]),
@@ -554,8 +558,18 @@ export async function recalculateDriverEarningsCore(args: {
     onDate: earnDate,
   });
 
-  const dayDeliveries = await loadVerifiedDeliveriesForDeliveredDay(driverId, earnDate);
+  const dayDeliveries = await loadVerifiedDeliveriesForEarnDay(driverId, earnDate);
 
+  /**
+   * The other half of the count. `dayDeliveries` is verified-only because that is
+   * what pays; a `pending` or `under_review` order is work the rider did that the
+   * office has not stamped, and Payroll prints it while Earnings does not pay it.
+   * Reading it here keeps the two rows describing the same day rather than two
+   * different days.
+   */
+  const recordedDeliveries = (await loadRecordedDeliveriesForEarnDay(driverId, earnDate)).filter(
+    (delivery) => deliveryMatches(delivery, earnDate, context) || delivery.status === "verified",
+  );
   let deliveries = 0;
   let incentive = 0;
   let breakdown: Record<string, unknown>[] = [];
@@ -648,7 +662,15 @@ export async function recalculateDriverEarningsCore(args: {
     id: earningsDocId(driverId, earnDate),
     driver_id: driverId,
     earn_date: earnDate,
+    /**
+     * `deliveries` is the **payout basis** — verified orders on this rider's
+     * booked shift. `recorded_deliveries` is every order they completed on that
+     * same day (`pending` and `under_review` included), which is the figure
+     * Payroll and HR Payroll print. Both are stored rather than derived so a
+     * surface never has to guess which question it is answering.
+     */
     deliveries,
+    recorded_deliveries: recordedDeliveries.length,
     base_kwd: base,
     incentive_kwd: incentive,
     loan_deduction_kwd: loan,
@@ -715,7 +737,7 @@ export const recalculateEarningsForDate = onCall(async (request) => {
   const earnDate = requireDay(data["earnDate"] ?? data["p_earn_date"], "earn_date");
 
   const [driverIds, context] = await Promise.all([
-    loadVerifiedDriverIdsForDeliveredDay(earnDate),
+    loadVerifiedDriverIdsForEarnDay(earnDate),
     loadIncentiveContext(),
   ]);
   const companyCache = new Map<string, SourceCompanyConfig | null>();
@@ -752,10 +774,10 @@ export const recalculateEarningsForRange = onCall(async (request) => {
   let count = 0;
   for (const day of kuwaitDayRange(startDate, endDate)) {
     const driverIds = driverId
-      ? (await loadVerifiedDeliveriesForDeliveredDay(driverId, day)).length > 0
+      ? (await loadVerifiedDeliveriesForEarnDay(driverId, day)).length > 0
         ? [driverId]
         : []
-      : await loadVerifiedDriverIdsForDeliveredDay(day);
+      : await loadVerifiedDriverIdsForEarnDay(day);
 
     for (const id of driverIds) {
       await recalculateDriverEarningsCore({ driverId: id, earnDate: day, context, companyCache });
@@ -899,7 +921,7 @@ export const getDriverEarningsDetail = onCall(async (request) => {
       .where("entry_type", "==", "earning_credit")
       .limit(1)
       .get(),
-    loadVerifiedDeliveriesForDeliveredDay(driverId, earnDate),
+    loadVerifiedDeliveriesForEarnDay(driverId, earnDate),
   ]);
 
   const dailyRaw = dailySnap.exists ? (dailySnap.data() ?? {}) : null;
@@ -932,6 +954,7 @@ export const getDriverEarningsDetail = onCall(async (request) => {
           driver_id: driverId,
           earn_date: earnDate,
           deliveries: asNumber(dailyRaw["deliveries"]),
+          recorded_deliveries: asNumber(dailyRaw["recorded_deliveries"]),
           base_kwd: asNumber(dailyRaw["base_kwd"]),
           incentive_kwd: asNumber(dailyRaw["incentive_kwd"]),
           loan_deduction_kwd: asNumber(dailyRaw["loan_deduction_kwd"]),
@@ -994,11 +1017,11 @@ export const previewDriverEarnings = onCall(async (request) => {
   const earnDate = requireDay(data["earnDate"] ?? data["p_earn_date"], "earn_date");
 
   const context = await loadIncentiveContext();
-  const driverIds = await loadVerifiedDriverIdsForDeliveredDay(earnDate);
+  const driverIds = await loadVerifiedDriverIdsForEarnDay(earnDate);
   const rows: Record<string, unknown>[] = [];
 
   for (const driverId of driverIds) {
-    const dayDeliveries = await loadVerifiedDeliveriesForDeliveredDay(driverId, earnDate);
+    const dayDeliveries = await loadVerifiedDeliveriesForEarnDay(driverId, earnDate);
     const legacy = legacyIncentiveFor({ driverId, earnDate, dayDeliveries, context, forDetail: false });
     rows.push({
       driver_id: driverId,
