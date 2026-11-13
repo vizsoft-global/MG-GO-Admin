@@ -128,6 +128,9 @@ describe("function shapes", () => {
     assert.deepEqual(functionShape("adminApiScan"), { cpu: 1, memGib: 4 });
     assert.deepEqual(functionShape("workerfleetread"), { cpu: 1, memGib: 0.25 });
     assert.deepEqual(functionShape("driverheartbeat"), { cpu: 0.08, memGib: 0.25 });
+    // Given a whole CPU on 2026-11-13; counted at 0.08 it hid most of its own cost.
+    assert.deepEqual(functionShape("driverReportLocation"), { cpu: 1, memGib: 0.5 });
+    assert.deepEqual(functionShape("drivergethomedashboard"), { cpu: 1, memGib: 1 });
   });
 });
 

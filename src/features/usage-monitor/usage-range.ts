@@ -54,6 +54,8 @@ export type FirebaseRange = {
   vcpuSeconds: number;
   gibSeconds: number;
   functions: Array<{ name: string; calls: number }>;
+  /** Billed instance time by function, largest first, with the size it was multiplied by. */
+  compute: Array<{ name: string; instanceSeconds: number; cpu: number; memGib: number; vcpuSeconds: number }>;
   functionCount: number;
   errors: string[];
 };
@@ -211,13 +213,18 @@ async function loadFirebase(window: {
 
   let vcpuSeconds = 0;
   let gibSeconds = 0;
+  let compute: FirebaseRange["compute"] = [];
   if (instance.ok) {
     for (const series of instance.series) {
       const shape = functionShape(series.key);
       const seconds = series.points.reduce((total, point) => total + point.v, 0);
       vcpuSeconds += seconds * shape.cpu;
       gibSeconds += seconds * shape.memGib;
+      if (seconds > 0) {
+        compute.push({ name: series.key, instanceSeconds: seconds, cpu: shape.cpu, memGib: shape.memGib, vcpuSeconds: seconds * shape.cpu });
+      }
     }
+    compute = compute.sort((a, b) => b.vcpuSeconds - a.vcpuSeconds).slice(0, TOP_FUNCTIONS);
   } else {
     real.push(`compute:${failure(instance)}`);
   }
@@ -233,6 +240,7 @@ async function loadFirebase(window: {
     vcpuSeconds,
     gibSeconds,
     functions,
+    compute,
     functionCount,
     errors: real,
   };

@@ -191,6 +191,17 @@ export function functionShape(serviceName: string): { cpu: number; memGib: numbe
     case "adminingestdriverpositions":
     case "adminrecordfleetevents":
       return { cpu: 1, memGib: 0.25 };
+    // Sizes read from the live functions on 2026-11-13. A function that is given a
+    // whole CPU and is missing here is counted at a twelfth of what it costs.
+    case "driverreportlocation":
+    case "homesnapshotrepair":
+    case "serviceodometersync":
+      return { cpu: 1, memGib: 0.5 };
+    case "drivergethomedashboard":
+    case "servicevehicledistancesweep":
+    case "driversubmitesignature":
+    case "esigncomposesigneddocument":
+      return { cpu: 1, memGib: 1 };
     default:
       return { cpu: 0.08, memGib: 0.25 };
   }
