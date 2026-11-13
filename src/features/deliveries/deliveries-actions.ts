@@ -517,7 +517,28 @@ function rowMatches(row: Row, params: DeliveriesQueryFilter, driverIds: string[]
   return true;
 }
 
-async function pageDeliveryRows(
+/**
+ * Firestore's "this query needs an index" failure.
+ *
+ * A composite index is created by a deploy and then **builds in the background**;
+ * for a collection this size that is tens of minutes. Until it flips to READY, a
+ * filtered query throws 9/FAILED_PRECONDITION instead of returning rows. Reading
+ * that as a hard error would turn "slow and wrong" into "the list does not load",
+ * so the caller falls back to the in-memory path it used before the index existed.
+ */
+function isMissingIndexError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  const message = String((error as { message?: unknown }).message ?? "").toLowerCase();
+  return (
+    code === 9 ||
+    code === "failed-precondition" ||
+    message.includes("requires an index") ||
+    message.includes("index") && message.includes("create")
+  );
+}
+
+async function scanDeliveryRows(
   db: Firestore,
   params: DeliveriesQueryFilter,
   driverIds: string[],
@@ -525,10 +546,6 @@ async function pageDeliveryRows(
   limit: number,
 ): Promise<{ rows: Row[]; hitCap: boolean }> {
   const query = indexedQuery(db, params);
-  if (!needsMemoryFilter(params)) {
-    const snap = await query.offset(offset).limit(limit).get();
-    return { rows: snap.docs.map((doc) => asRow(doc.id, doc.data())), hitCap: false };
-  }
   const matches: Row[] = [];
   let skipped = 0;
   let cursor: QueryDocumentSnapshot | undefined;
@@ -559,6 +576,31 @@ async function pageDeliveryRows(
   }
   if (scanned >= DELIVERY_SEARCH_CAP && matches.length < limit) hitCap = true;
   return { rows: matches, hitCap };
+}
+
+async function pageDeliveryRows(
+  db: Firestore,
+  params: DeliveriesQueryFilter,
+  driverIds: string[],
+  offset: number,
+  limit: number,
+): Promise<{ rows: Row[]; hitCap: boolean }> {
+  const query = indexedQuery(db, params);
+  if (!needsMemoryFilter(params)) {
+    try {
+      const snap = await query.offset(offset).limit(limit).get();
+      return { rows: snap.docs.map((doc) => asRow(doc.id, doc.data())), hitCap: false };
+    } catch (error) {
+      /**
+       * The flag composites build in the background after deploy. Serving the
+       * filtered list from the scan until they are READY is slower, but it is a
+       * right answer rather than an error page.
+       */
+      if (!isMissingIndexError(error)) throw error;
+      return scanDeliveryRows(db, params, driverIds, offset, limit);
+    }
+  }
+  return scanDeliveryRows(db, params, driverIds, offset, limit);
 }
 
 async function hydrateListRows(db: Firestore, rows: Row[]): Promise<DeliveryDbRowForList[]> {
