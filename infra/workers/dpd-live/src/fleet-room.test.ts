@@ -277,7 +277,7 @@ describe("flushPositions archive safety", () => {
         archivedPoints = points.length;
         return { accepted: true };
       },
-      persistBuffers: () => ({ capped: false }),
+      persistBuffers: () => ({ capped: false, cappedDrivers: new Set<string>() }),
       distanceTodayM: () => 42,
     };
     const capture = captureFlushCalls();
@@ -307,7 +307,7 @@ describe("flushPositions archive safety", () => {
     const entity = seedPending(room, batch(2));
     (room as unknown as { archive: unknown }).archive = {
       record: () => ({ accepted: false, reason: "buffer_capped" }),
-      persistBuffers: () => ({ capped: false }),
+      persistBuffers: () => ({ capped: false, cappedDrivers: new Set<string>() }),
       distanceTodayM: () => null,
     };
     const capture = captureFlushCalls();
@@ -318,6 +318,43 @@ describe("flushPositions archive safety", () => {
 
       await (room as unknown as { flushPositions: () => Promise<void> }).flushPositions();
       assert.equal(entity.pending.length, 0);
+      assert.equal(capture.calls.length, 1);
+      assert.equal(capture.calls[0]!.p_events[0]!.history_in_r2, false);
+    } finally {
+      capture.restore();
+    }
+  });
+
+  it("keeps a rider in the archive when only another rider's row is full", async () => {
+    const room = fakeRoom();
+    seedPending(room, batch(2));
+    (room as unknown as { archive: unknown }).archive = {
+      record: () => ({ accepted: true }),
+      // "driver-b" has a full row waiting; "driver-a" was stored.
+      persistBuffers: () => ({ capped: true, cappedDrivers: new Set(["driver-b"]) }),
+      distanceTodayM: () => 7,
+    };
+    const capture = captureFlushCalls();
+    try {
+      await (room as unknown as { flushPositions: () => Promise<void> }).flushPositions();
+      assert.equal(capture.calls.length, 1);
+      assert.equal(capture.calls[0]!.p_events[0]!.history_in_r2, true);
+    } finally {
+      capture.restore();
+    }
+  });
+
+  it("sends a rider to Firestore when their own row is full", async () => {
+    const room = fakeRoom();
+    seedPending(room, batch(2));
+    (room as unknown as { archive: unknown }).archive = {
+      record: () => ({ accepted: true }),
+      persistBuffers: () => ({ capped: true, cappedDrivers: new Set(["driver-a"]) }),
+      distanceTodayM: () => 7,
+    };
+    const capture = captureFlushCalls();
+    try {
+      await (room as unknown as { flushPositions: () => Promise<void> }).flushPositions();
       assert.equal(capture.calls.length, 1);
       assert.equal(capture.calls[0]!.p_events[0]!.history_in_r2, false);
     } finally {

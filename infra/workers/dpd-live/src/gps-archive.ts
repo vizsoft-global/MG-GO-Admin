@@ -645,12 +645,18 @@ export class GpsArchive {
    * a bucket; refused lines stay in memory (never deleted) so the next flush can
    * retry them or hand them to Firestore.
    *
+   * `cappedDrivers` names the riders whose bucket was refused. A refused bucket
+   * waits in memory until its hour is compacted, so it is seen again by every
+   * later call; a caller that reads the bare `capped` flag as "this rider's
+   * batch was refused" would send the whole fleet to Firestore for one rider's
+   * full row.
+   *
    * Successfully inserted buckets are removed even if a later insert throws, so a
    * retry cannot append the same line twice.
    */
-  persistBuffers(): { capped: boolean } {
+  persistBuffers(): { capped: boolean; cappedDrivers: Set<string> } {
     this.ensureSchema();
-    let capped = false;
+    const cappedDrivers = new Set<string>();
     const usage = this.sqlBufferUsage();
     const done: Array<[string, string]> = [];
     try {
@@ -675,7 +681,7 @@ export class GpsArchive {
             usage.bytes + bytes > this.limits.maxBytes ||
             rowBytes + bytes > this.limits.maxRowBytes
           ) {
-            capped = true;
+            cappedDrivers.add(driverId);
             continue;
           }
           this.sql.exec(
@@ -702,7 +708,7 @@ export class GpsArchive {
         if (rows && rows.size === 0) this.pendingRows.delete(driverId);
       }
     }
-    return { capped };
+    return { capped: cappedDrivers.size > 0, cappedDrivers };
   }
 
   private persistLatest(): void {

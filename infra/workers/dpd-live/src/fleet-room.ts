@@ -1823,8 +1823,10 @@ export class FleetRoom implements DurableObject {
           } else {
             // Persist in the same turn as record(): a deploy between the two
             // would otherwise lose the batch that only lived in memory.
+            // Only this rider's own refusal counts: another rider's full row is
+            // still waiting in the archive and would be reported on every call.
             const persisted = this.archive.persistBuffers();
-            if (persisted.capped) {
+            if (persisted.cappedDrivers.has(entity.driverId)) {
               historyInR2 = false;
               console.error(
                 JSON.stringify({

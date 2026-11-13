@@ -358,10 +358,15 @@ test("a rider-hour stops growing at the row cap instead of failing the insert", 
   archive.record("r1", [point(BASE + 5_000, 29.37, 47.97)], true);
   assert.equal(archive.persistBuffers().capped, false);
   archive.record("r1", [point(BASE + 10_000, 29.37, 47.97)], true);
-  assert.equal(archive.persistBuffers().capped, true, "the third line would pass the row cap");
-  // Another rider is not affected by r1's full row.
+  const third = archive.persistBuffers();
+  assert.equal(third.capped, true, "the third line would pass the row cap");
+  assert.deepEqual([...third.cappedDrivers], ["r1"]);
+  // Another rider is not affected by r1's full row: r1's refused line is still
+  // waiting, and it is r1 that is named, not r2.
   archive.record("r2", [point(BASE, 29.3, 47.9)], true);
-  assert.equal(archive.persistBuffers().capped, true, "r1's refused line is still waiting");
+  const later = archive.persistBuffers();
+  assert.equal(later.capped, true, "r1's refused line is still waiting");
+  assert.deepEqual([...later.cappedDrivers], ["r1"]);
   assert.equal(archive.bufferedPoints("r2", DAY).length, 1);
 });
 
