@@ -74,14 +74,14 @@ export function RcmTypeQueueShell({
   const [datePreset, setDatePreset] = useState<RequestDatePreset>(initialDatePreset);
   const [zoneId, setZoneId] = useState("all");
   const [due, setDue] = useState<"any" | "today">(initialDueToday ? "today" : "any");
-  const [searchInput, setSearchInput] = useState("");
+  /**
+   * The applied query is the table's own: `useTablePrefs` owns the 150ms
+   * debounce and the instant clear, so this shell only mirrors it. It used to
+   * run a second 300ms timer on top, which made a keystroke take ~450ms to
+   * reach the queue.
+   */
   const [searchApplied, setSearchApplied] = useState("");
   const [offset, setOffset] = useState(0);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSearchApplied(searchInput.trim()), 300);
-    return () => window.clearTimeout(timer);
-  }, [searchInput]);
 
   useEffect(() => {
     setOffset(0);
@@ -259,7 +259,6 @@ export function RcmTypeQueueShell({
   }, [t, type]);
   const tablePrefs = useTablePrefs(`rcm.queue.${type}`, columns);
   useEffect(() => {
-    setSearchInput(tablePrefs.appliedQuery);
     setSearchApplied(tablePrefs.appliedQuery.trim());
   }, [tablePrefs.appliedQuery]);
   const shownColumns = tablePrefs.orderedColumns.filter((column) => tablePrefs.isVisible(column.id));

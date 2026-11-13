@@ -133,6 +133,40 @@
   width: min(440px, 100%);
 }
 
+/* The clear `×` the shared list toolbars already have, so a search typed into
+   the HR sheet can be undone in place instead of by hand. */
+.hrpay-search-wrap {
+  position: relative;
+  display: flex;
+  width: min(440px, 100%);
+}
+
+.hrpay-search-wrap .hrpay-search {
+  width: 100%;
+  padding-inline-end: 26px;
+}
+
+.hrpay-search-clear {
+  position: absolute;
+  inset-inline-end: 4px;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #8a8a99;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.hrpay-search-clear:hover {
+  background: #f0f0f5;
+  color: #333344;
+}
+
 .hrpay-kpis {
   display: flex;
   flex-wrap: nowrap;

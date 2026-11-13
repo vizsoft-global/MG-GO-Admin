@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
+import { X } from "lucide-react";
 import { toast } from "sonner";
 import { ColumnOrderMenu } from "@/components/app/column-order-menu";
 import { TableFooterExport } from "@/components/app/table-footer-export";
@@ -153,6 +154,8 @@ export function HrPayrollTab(props: {
   const t = useTranslations("pages.payroll.hr");
   /** The Columns menu the shared toolbar renders for this sheet. */
   const tc = useTranslations("pages.payroll.columnsMenu");
+  /** The shared list-toolbar copy, so the clear affordance reads the same here. */
+  const tToolbar = useTranslations("common.tableToolbar");
   const locale = useLocale();
   const queryClient = useQueryClient();
   const bundleQuery = useQuery({
@@ -1104,12 +1107,26 @@ export function HrPayrollTab(props: {
           </div>
           <div className="hrpay-sheet">
             <div className="hrpay-tools">
-              <input
-                className="hrpay-search"
-                value={search}
-                placeholder={t("searchPlaceholder")}
-                onChange={(event) => setSearch(event.target.value)}
-              />
+              <div className="hrpay-search-wrap">
+                <input
+                  className="hrpay-search"
+                  value={search}
+                  placeholder={t("searchPlaceholder")}
+                  aria-label={t("searchPlaceholder")}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+                {search ? (
+                  <button
+                    type="button"
+                    className="hrpay-search-clear"
+                    onClick={() => setSearch("")}
+                    aria-label={tToolbar("clearSearch")}
+                    title={tToolbar("clearSearch")}
+                  >
+                    <X size={14} aria-hidden />
+                  </button>
+                ) : null}
+              </div>
               <select
                 className="hrpay-select"
                 value={groupBy}
