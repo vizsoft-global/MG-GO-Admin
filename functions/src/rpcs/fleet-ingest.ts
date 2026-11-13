@@ -13,7 +13,7 @@ import {
   loadDriverZone,
   loadProximitySettings,
 } from "./driver-deliveries";
-import { odometerSegmentMeters, shouldWriteLocationHistory } from "./driver-location";
+import { EDGE_SEEN_FIELD, odometerSegmentMeters, shouldWriteLocationHistory } from "./driver-location";
 import {
   clampHistoryRecordedAt,
   parseFleetEventBatch,
@@ -263,6 +263,8 @@ async function ingestDriver(args: {
   const prevSeen = asDate(location?.last_seen_at);
   const prevZone = text(location?.zone_status);
   const lastWrite = asDate(location?.updated_at);
+  // When the tracking server last wrote this pin; the rider app's callable writes it too.
+  const edgeSeen = asDate(location?.[EDGE_SEEN_FIELD]);
   const stamp = Timestamp.fromDate(args.now);
 
   let distance = 0;
@@ -363,7 +365,7 @@ async function ingestDriver(args: {
     const due = r2PinWriteDue({
       prev: location
         ? {
-            updatedAtMs: lastWrite?.getTime() ?? null,
+            updatedAtMs: edgeSeen?.getTime() ?? null,
             zoneStatus: prevZone,
             trackingStatus: text(location.tracking_status),
             activeDeliveryId: text(location.active_delivery_id),
@@ -413,6 +415,7 @@ async function ingestDriver(args: {
           driver_id: args.driverId,
           last_report_at: stamp,
           coalesced_since_count: (numberOrNull(location?.coalesced_since_count) ?? 0) + 1,
+          [EDGE_SEEN_FIELD]: stamp,
           updated_at: stamp,
         },
       });
@@ -457,6 +460,8 @@ async function ingestDriver(args: {
       last_report_at: stamp,
       coalesced_since_count: 0,
       out_of_zone_since: outOfZoneSince,
+      // The tracking server has this rider: read by driverReportLocation (edgeCoversReport).
+      [EDGE_SEEN_FIELD]: stamp,
       updated_at: stamp,
     },
   });

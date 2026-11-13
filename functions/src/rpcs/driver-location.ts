@@ -93,6 +93,61 @@ export function shouldCoalesceLocation(args: {
   );
 }
 
+/** Stamped on the pin by the tracking server's ingest each time it writes it. */
+export const EDGE_SEEN_FIELD = "edge_seen_at";
+
+/**
+ * How long a tracking-server stamp vouches for a rider. The ingest restamps
+ * every five minutes (`R2_PIN_HEARTBEAT_MS`) plus up to a minute of its own
+ * cadence, so eight leaves room for one late batch and no more.
+ */
+export const EDGE_COVER_MS = 8 * 60_000;
+
+/**
+ * Whether this report repeats what the tracking server already holds, so the
+ * callable may answer without saving anything.
+ *
+ * The rider app streams every fix to the tracking server, which archives the
+ * route and keeps the pin current. The app also calls `driverReportLocation`
+ * from its fifteen-second watchdog for the whole of a delivery, and each such
+ * call used to write the pin and a history row: about two thirds of all
+ * document writes, for positions that were already stored.
+ *
+ * A report is still saved when it carries something the tracking server may
+ * not have written yet, or that must exist as a row of its own:
+ * - the tracking server has not stamped this rider's pin recently (the phone
+ *   cannot reach it, or the rider has only just come on duty);
+ * - a real submission: `delivery_submit` naming a delivery that is not the
+ *   open delivery the heartbeat carries. The pickup and drop-off screens send
+ *   exactly that, with no active delivery id, and their rows are what the
+ *   panel reads as the delivery's submit positions;
+ * - a mocked fix, which is evidence;
+ * - a status or open-delivery that differs from the pin.
+ */
+export function edgeCoversReport(args: {
+  prev: {
+    edgeSeenAt: Date | null;
+    trackingStatus: string | null;
+    activeDeliveryId: string | null;
+  } | null;
+  now: Date;
+  status: string;
+  deliveryId: string | null;
+  activeDeliveryId: string | null;
+  isMocked: boolean | null;
+}): boolean {
+  const prev = args.prev;
+  if (!prev?.edgeSeenAt) return false;
+  const age = args.now.getTime() - prev.edgeSeenAt.getTime();
+  if (!(age >= -60_000 && age < EDGE_COVER_MS)) return false;
+  if (args.isMocked === true) return false;
+  if (args.status === "delivery_submit" && args.deliveryId && args.activeDeliveryId !== args.deliveryId) {
+    return false;
+  }
+  if (prev.trackingStatus !== args.status) return false;
+  return (prev.activeDeliveryId ?? null) === (args.activeDeliveryId ?? null);
+}
+
 export function odometerSegmentMeters(args: {
   prev: {
     lastSeenAt: Date;
@@ -270,6 +325,37 @@ export const driverReportLocation = onCall(LOCATION_REPORT_CAPACITY, async (requ
   const prevLat = prev ? latOf(prev) : null;
   const prevLng = prev ? lngOf(prev) : null;
   const prevSeen = prev ? asDate(prev["last_seen_at"]) ?? asDate(prev[FIELDS.driverLocations.at]) : null;
+
+  // The tracking server holds this rider's positions: nothing here is new, so nothing is written.
+  if (
+    edgeCoversReport({
+      prev: prev
+        ? {
+            edgeSeenAt: asDate(prev[EDGE_SEEN_FIELD]),
+            trackingStatus: asString(prev["tracking_status"]),
+            activeDeliveryId: asString(prev["active_delivery_id"]),
+          }
+        : null,
+      now,
+      status,
+      deliveryId,
+      activeDeliveryId,
+      isMocked: pickTriBool(data, "p_is_mocked", "is_mocked", "isMocked") ?? null,
+    })
+  ) {
+    return {
+      zone_status: asString(prev?.["zone_status"]) ?? "unknown",
+      in_range: asString(prev?.["zone_status"]) !== "out_of_zone",
+      last_seen_at: isoTimestamp(prev?.["last_seen_at"]) ?? prevSeen?.toISOString() ?? null,
+      history_written: false,
+      tracking_status: asString(prev?.["tracking_status"]),
+      speed_mps: numberOrNull(prev?.["speed_mps"]),
+      distance_today_meters: numberOrNull(prev?.["distance_today_meters"]) ?? 0,
+      coalesced: true,
+      edge_covered: true,
+    };
+  }
+
   const settings = await memoGeo("settings", () => loadProximitySettings());
 
   if (

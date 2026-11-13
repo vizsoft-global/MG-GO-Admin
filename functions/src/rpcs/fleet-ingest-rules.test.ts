@@ -243,6 +243,9 @@ describe("r2PinWriteDue", () => {
   it("writes the first pin", () => {
     assert.equal(r2PinWriteDue({ ...base, prev: null }), true);
   });
+  it("writes a pin the tracking server has never stamped", () => {
+    assert.equal(r2PinWriteDue({ ...base, prev: { ...prev, updatedAtMs: null } }), true);
+  });
   it("skips an unchanged pin inside the heartbeat", () => {
     assert.equal(r2PinWriteDue(base), false);
   });

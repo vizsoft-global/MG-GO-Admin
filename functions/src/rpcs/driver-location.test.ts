@@ -1,7 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
+  EDGE_COVER_MS,
   deferCoarsePin,
+  edgeCoversReport,
   odometerSegmentMeters,
   resolveTrackingStatus,
   shouldCoalesceLocation,
@@ -210,5 +213,87 @@ describe("history and coarse defer", () => {
       }),
       false,
     );
+  });
+});
+
+describe("edgeCoversReport", () => {
+  const now = new Date("2026-11-13T19:00:00.000Z");
+  const minutesAgo = (minutes: number) => new Date(now.getTime() - minutes * 60_000);
+  const heartbeat = {
+    prev: { edgeSeenAt: minutesAgo(3), trackingStatus: "delivery_submit", activeDeliveryId: "d1" },
+    now,
+    status: "delivery_submit",
+    deliveryId: "d1",
+    activeDeliveryId: "d1",
+    isMocked: false,
+  };
+
+  it("covers the fifteen-second heartbeat of an open delivery", () => {
+    assert.equal(edgeCoversReport(heartbeat), true);
+  });
+
+  it("covers an idle or moving report the tracking server already has", () => {
+    const prev = { edgeSeenAt: minutesAgo(1), trackingStatus: "moving", activeDeliveryId: null };
+    assert.equal(
+      edgeCoversReport({ prev, now, status: "moving", deliveryId: null, activeDeliveryId: null, isMocked: null }),
+      true,
+    );
+  });
+
+  it("does not cover a rider the tracking server has not stamped, or not lately", () => {
+    assert.equal(edgeCoversReport({ ...heartbeat, prev: null }), false);
+    assert.equal(edgeCoversReport({ ...heartbeat, prev: { ...heartbeat.prev, edgeSeenAt: null } }), false);
+    assert.equal(
+      edgeCoversReport({ ...heartbeat, prev: { ...heartbeat.prev, edgeSeenAt: new Date(now.getTime() - EDGE_COVER_MS) } }),
+      false,
+    );
+    assert.equal(
+      edgeCoversReport({ ...heartbeat, prev: { ...heartbeat.prev, edgeSeenAt: new Date(now.getTime() - EDGE_COVER_MS + 1) } }),
+      true,
+    );
+    // A stamp from the future is a clock fault, not cover.
+    assert.equal(edgeCoversReport({ ...heartbeat, prev: { ...heartbeat.prev, edgeSeenAt: minutesAgo(-5) } }), false);
+  });
+
+  it("saves the real pickup and drop-off submissions, which carry no active delivery id", () => {
+    // The pickup screen: the pin does not show this delivery yet.
+    assert.equal(
+      edgeCoversReport({
+        ...heartbeat,
+        prev: { edgeSeenAt: minutesAgo(2), trackingStatus: "moving", activeDeliveryId: null },
+        activeDeliveryId: null,
+      }),
+      false,
+    );
+    // The drop-off screen: same delivery, same status as the pin, still a submission.
+    assert.equal(edgeCoversReport({ ...heartbeat, activeDeliveryId: null }), false);
+  });
+
+  it("saves a mocked fix", () => {
+    assert.equal(edgeCoversReport({ ...heartbeat, isMocked: true }), false);
+  });
+
+  it("saves a change of status or of open delivery", () => {
+    assert.equal(edgeCoversReport({ ...heartbeat, prev: { ...heartbeat.prev, trackingStatus: "moving" } }), false);
+    assert.equal(edgeCoversReport({ ...heartbeat, prev: { ...heartbeat.prev, activeDeliveryId: "d0" } }), false);
+    assert.equal(
+      edgeCoversReport({ ...heartbeat, status: "moving", deliveryId: null, activeDeliveryId: null }),
+      false,
+    );
+  });
+});
+
+describe("the tracking server's stamp", () => {
+  const ingest = readFileSync(new URL("./fleet-ingest.ts", import.meta.url), "utf8");
+  const callable = readFileSync(new URL("./driver-location.ts", import.meta.url), "utf8");
+
+  it("is written with every pin the ingest writes, and is what its heartbeat counts from", () => {
+    assert.equal(ingest.match(/\[EDGE_SEEN_FIELD\]: stamp/g)?.length, 2);
+    assert.match(ingest, /updatedAtMs: edgeSeen\?\.getTime\(\) \?\? null/);
+  });
+
+  it("is never written by the callable, which would vouch for itself", () => {
+    assert.doesNotMatch(callable, /\[EDGE_SEEN_FIELD\]:/);
+    assert.doesNotMatch(callable, /edge_seen_at:/);
   });
 });

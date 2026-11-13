@@ -205,6 +205,13 @@ export function parseIngestBatch(raw: unknown, now: Date): IngestParse {
 /**
  * Pins for R2-archived riders are written on a state change or once per heartbeat,
  * not every second: nothing reads the in-between pins once the DO serves live positions.
+ *
+ * `updatedAtMs` is the last time the **tracking server** wrote this pin
+ * (`edge_seen_at`), not the pin's `updated_at`. The rider app's own
+ * `driverReportLocation` also writes the pin, and while it wrote every fifteen
+ * seconds during a delivery this heartbeat never came due, so the pin carried no
+ * sign that the tracking server had the rider. That sign is what lets the
+ * callable stop saving positions the tracking server already holds.
  */
 export function r2PinWriteDue(args: {
   prev: {
