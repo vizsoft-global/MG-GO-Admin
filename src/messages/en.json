@@ -3512,6 +3512,7 @@
       "listErrorTitle": "Deliveries could not be loaded",
       "listErrorHint": "The counters above are unfiltered. Retry the table, or clear filters if this persists.",
       "listRetry": "Retry",
+      "filterLoading": "Applying the filter…",
       "kpiActive": "In transit",
       "kpiVerified": "Verified",
       "kpiPending": "Pending",

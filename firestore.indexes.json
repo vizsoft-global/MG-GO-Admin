@@ -3268,6 +3268,54 @@
         { "fieldPath": "created_by", "order": "ASCENDING" },
         { "fieldPath": "sent_at", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "is_early_drop", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "is_early_drop", "order": "ASCENDING" },
+        { "fieldPath": "delivered_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "is_out_of_zone", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "is_out_of_zone", "order": "ASCENDING" },
+        { "fieldPath": "delivered_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "order_proof_ocr_matched", "order": "ASCENDING" },
+        { "fieldPath": "created_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "deliveries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "order_proof_ocr_matched", "order": "ASCENDING" },
+        { "fieldPath": "delivered_at", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
