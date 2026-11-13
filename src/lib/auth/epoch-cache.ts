@@ -129,6 +129,8 @@ type CacheBox = { epoch: number; storedAt: number; doc: CachedDoc };
 export type EpochCache = {
   get(kind: EpochKind, id: string, epoch: number): CachedDoc | undefined;
   set(kind: EpochKind, id: string, epoch: number, doc: CachedDoc): void;
+  /** Drops one entry, for a writer that has just changed what it holds. */
+  delete(kind: EpochKind, id: string): void;
   snapshot(): Array<{ kind: EpochKind; id: string; epoch: number; doc: CachedDoc }>;
 };
 
@@ -150,6 +152,9 @@ export function createEpochCache(now: () => number = Date.now): EpochCache {
     },
     set(kind, id, epoch, doc) {
       maps[kind].set(id, { epoch, storedAt: now(), doc });
+    },
+    delete(kind, id) {
+      maps[kind].delete(id);
     },
     snapshot() {
       const out: Array<{ kind: EpochKind; id: string; epoch: number; doc: CachedDoc }> = [];

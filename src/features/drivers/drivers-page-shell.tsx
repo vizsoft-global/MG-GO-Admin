@@ -309,7 +309,6 @@ function DriversPageContent() {
   const [columnFilters, setColumnFilters] = useState<DriversColumnFilters>({});
   const [sort, setSort] = useState<DriversSort>(DEFAULT_DRIVERS_SORT);
   const [levelFilter, setLevelFilter] = useState<DriverLevelFilter>("all");
-  const levelIndex = useDriverLevelIndex();
 
   // The dashboard tile links straight to `?tab=pending`, and the detail page returns to the same
   // address — so the queue survives whatever the router does with the mounted shell.
@@ -336,6 +335,10 @@ function DriversPageContent() {
   );
   const pageQuery = useDriversPage(query);
   const { fetchNextPage, hasNextPage, isFetchingNextPage } = pageQuery;
+  // The level badges walk the whole fleet in pages of 500. Requests from one tab
+  // are served one at a time, so that walk waits until the list itself is on
+  // screen — unless a level filter is set, where the list cannot be drawn without it.
+  const levelIndex = useDriverLevelIndex(pageQuery.data !== undefined || levelFilter !== "all");
   /**
    * A failed **background** refetch is not a failed list.
    *

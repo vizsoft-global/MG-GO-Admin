@@ -105,15 +105,7 @@ const EMPTY_EXPIRIES = Object.fromEntries(
 const NO_CATALOG_ITEMS: DriverFormCatalogItem[] = [];
 const NO_CUSTOM_FIELD_DEFS: CustomFieldDefinition[] = [];
 
-export function DriverFormSheet({
-  mode,
-  open,
-  onOpenChange,
-  driver,
-  intakeId,
-  detailRouteId,
-  onSaved,
-}: {
+type DriverFormSheetProps = {
   mode: DriverFormMode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -121,7 +113,32 @@ export function DriverFormSheet({
   intakeId?: string;
   detailRouteId?: string;
   onSaved?: () => void;
-}) {
+};
+
+/**
+ * The form is mounted the first time it is opened, and kept after that.
+ *
+ * It used to mount with the page behind it, closed, and load its partners,
+ * zones, vehicles, restaurants, four catalogs and custom fields straight away.
+ * Next runs a tab's server actions one at a time, so those requests stood in
+ * the queue ahead of the employee list the page was actually opened for.
+ */
+export function DriverFormSheet(props: DriverFormSheetProps) {
+  const [everOpened, setEverOpened] = useState(props.open);
+  if (props.open && !everOpened) setEverOpened(true);
+  if (!everOpened) return null;
+  return <DriverFormSheetBody {...props} />;
+}
+
+function DriverFormSheetBody({
+  mode,
+  open,
+  onOpenChange,
+  driver,
+  intakeId,
+  detailRouteId,
+  onSaved,
+}: DriverFormSheetProps) {
   const tNew = useTranslations("pages.driverNew");
   const tDetail = useTranslations("pages.driverDetail");
   const tDrivers = useTranslations("pages.drivers");

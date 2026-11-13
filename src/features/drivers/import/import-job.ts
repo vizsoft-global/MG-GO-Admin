@@ -56,6 +56,38 @@ export function isImportJobStale(
   return nowMs - at > IMPORT_JOB_STALE_MS;
 }
 
+/**
+ * Whether a listed job has to be paused before it is shown: it says it is
+ * running but nothing has beaten its heart inside the stale window (or ever).
+ *
+ * The list is polled from every page, and pausing is a write behind the
+ * mutation gate — a revocation check against Google plus two profile reads.
+ * Asking this of the rows already in hand keeps that cost off every poll that
+ * finds nothing stale, which is nearly all of them.
+ */
+export function importJobNeedsStalePause(
+  status: ImportJobStatus,
+  heartbeatAt: string | null,
+  nowMs: number = Date.now(),
+): boolean {
+  if (status !== "running") return false;
+  if (!heartbeatAt) return true;
+  const at = new Date(heartbeatAt).getTime();
+  if (Number.isNaN(at)) return true;
+  return nowMs - at > IMPORT_JOB_STALE_MS;
+}
+
+/**
+ * How often the job list is re-read. A running job is watched closely and a
+ * paused one loosely; with neither, the list only matters when another tab or
+ * device starts an import, which five minutes is soon enough to notice.
+ */
+export function importJobPollMs(statuses: readonly ImportJobStatus[]): number {
+  if (statuses.includes("running")) return 4_000;
+  if (statuses.includes("paused")) return 20_000;
+  return 5 * 60_000;
+}
+
 export function nextImportJobStatus(
   status: ImportJobStatus,
   action: ImportJobAction,

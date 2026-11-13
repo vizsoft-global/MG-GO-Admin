@@ -19,6 +19,7 @@ import type {
 } from "./attendance-reporting-types";
 import { attendanceWindowTooLarge } from "./attendance-query-error";
 import { sessionDaySummary } from "./working-hours";
+import { ATTENDANCE_PHOTO_BATCH } from "./attendance-photo-loader";
 import { resolveOrderProofUrl } from "@/lib/storage/order-proof-resolve";
 
 const KUWAIT_TZ = "Asia/Kuwait";
@@ -138,6 +139,39 @@ export async function resolveAttendancePhoto(
   }
   const resolved = await resolveOrderProofUrl(objectKey);
   return resolved ? { url: resolved.url, contentType: resolved.contentType } : null;
+}
+
+/**
+ * The same, for a page of rows in one call.
+ *
+ * A tab's server actions run one at a time, so a photo action per row put up to
+ * eighty requests in front of every filter change on the page. The permission
+ * is checked once, each key is still prefix-checked, and the list is capped so
+ * this cannot be used to sign an arbitrary number of objects in one request.
+ */
+export async function resolveAttendancePhotos(
+  objectKeys: string[],
+): Promise<Record<string, { url: string; contentType: string | null } | null>> {
+  await requireAttendanceView();
+  const keys = [...new Set(Array.isArray(objectKeys) ? objectKeys : [])]
+    .filter((key): key is string => typeof key === "string")
+    .slice(0, ATTENDANCE_PHOTO_BATCH);
+  const out: Record<string, { url: string; contentType: string | null } | null> = {};
+  const PARALLEL = 12;
+  for (let index = 0; index < keys.length; index += PARALLEL) {
+    const slice = keys.slice(index, index + PARALLEL);
+    const resolved = await Promise.all(
+      slice.map(async (key) => {
+        if (!key.startsWith("drivers/") || key.includes("..")) return null;
+        const photo = await resolveOrderProofUrl(key).catch(() => null);
+        return photo ? { url: photo.url, contentType: photo.contentType } : null;
+      }),
+    );
+    slice.forEach((key, position) => {
+      out[key] = resolved[position] ?? null;
+    });
+  }
+  return out;
 }
 
 function parseExceptionRow(raw: Record<string, unknown>): AttendanceExceptionRow {

@@ -6,6 +6,8 @@ import {
   canCancelImportJob,
   canPauseImportJob,
   canResumeImportJob,
+  importJobNeedsStalePause,
+  importJobPollMs,
   importJobProgress,
   isImportJobStale,
   nextImportJobStatus,
@@ -77,5 +79,30 @@ describe("importJobProgress", () => {
   it("counts processed ready rows", () => {
     assert.deepEqual(importJobProgress(80, 20), { done: 60, total: 80 });
     assert.deepEqual(importJobProgress(0, 0), { done: 0, total: 0 });
+  });
+});
+
+describe("the job list is polled from every page", () => {
+  const now = Date.parse("2026-11-13T10:00:00.000Z");
+  const beat = (agoMs: number) => new Date(now - agoMs).toISOString();
+
+  it("needs the gated pause only for a running job whose heartbeat has gone stale", () => {
+    assert.equal(importJobNeedsStalePause("running", beat(IMPORT_JOB_STALE_MS + 1), now), true);
+    assert.equal(importJobNeedsStalePause("running", beat(1_000), now), false);
+    assert.equal(importJobNeedsStalePause("running", null, now), true, "never beaten");
+    assert.equal(importJobNeedsStalePause("running", "not a date", now), true);
+  });
+
+  it("never asks for it on a job that is not running", () => {
+    for (const status of ["paused", "completed", "cancelled", "failed"] as const) {
+      assert.equal(importJobNeedsStalePause(status, beat(IMPORT_JOB_STALE_MS * 10), now), false);
+    }
+  });
+
+  it("watches a running job closely, a paused one loosely, and nothing rarely", () => {
+    assert.equal(importJobPollMs(["completed", "running"]), 4_000);
+    assert.equal(importJobPollMs(["completed", "paused"]), 20_000);
+    assert.equal(importJobPollMs(["completed", "cancelled"]), 5 * 60_000);
+    assert.equal(importJobPollMs([]), 5 * 60_000);
   });
 });

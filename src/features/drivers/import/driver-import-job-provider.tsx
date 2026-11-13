@@ -22,7 +22,7 @@ import {
   startDriverImportJob,
   appendDriverImportRows,
 } from "../drivers-import-job-actions";
-import { isActiveImportJob, shouldAutoContinueImport } from "./import-job";
+import { importJobPollMs, isActiveImportJob, shouldAutoContinueImport } from "./import-job";
 import { IMPORT_PAYLOAD_SLICE_BYTES, sliceImportRows } from "./import-job-rows";
 import type { DriverImportJobSummary } from "./import-job-types";
 import type { DriverImportPreviewRow } from "../types";
@@ -80,10 +80,8 @@ export function DriverImportJobProvider({ children }: { children: ReactNode }) {
     },
     enabled: canManage,
     staleTime: 2_000,
-    refetchInterval: (query) => {
-      const jobs = query.state.data ?? [];
-      return jobs.some((job) => job.status === "running") ? 4_000 : 20_000;
-    },
+    refetchInterval: (query) =>
+      importJobPollMs((query.state.data ?? []).map((job) => job.status)),
   });
 
   const jobs = jobsQuery.data ?? [];
