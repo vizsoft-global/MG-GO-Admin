@@ -66,7 +66,12 @@ import {
 /** A month of rider-days is ~27k rows for a 900-rider fleet; this is headroom. */
 const WINDOW_SCAN_CAP = 120_000;
 const LIST_DEFAULT = 50;
-const LIST_MAX = 500;
+/**
+ * Every call builds the whole roster's levels before it slices, so a page of 500
+ * made a 962-rider fleet two full computations of about 4.6 seconds each. The
+ * cap now holds the fleet in one answer.
+ */
+const LIST_MAX = 2000;
 const SWEEP_WRITE_CHUNK = 400;
 
 export const DRIVER_LEVEL_PERMISSION_READ = "drivers.view";

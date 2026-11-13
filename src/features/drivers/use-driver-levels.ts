@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
+import { panelGet } from "@/lib/browser/panel-get";
 import {
   evaluateDriverLevels,
   listDriverLevels,
@@ -12,8 +13,16 @@ import {
 
 export type { DriverLevelFilter };
 
-const PAGE = 500;
-const CAP = 2000;
+type LevelsAnswer = Awaited<ReturnType<typeof listDriverLevels>>;
+
+/**
+ * One request for the whole fleet. The backend builds every rider's level on each
+ * call and only then slices, so asking 500 at a time repeated that work for each
+ * slice. The loop stays for a fleet larger than one answer, and for a backend
+ * that still caps the answer lower: it advances by what actually came back.
+ */
+const PAGE = 2000;
+const CAP = 6000;
 
 export const driverLevelKeys = {
   index: () => ["driver-levels", "index"] as const,
@@ -25,12 +34,16 @@ async function loadIndex(): Promise<Map<string, DriverLevelRow>> {
   let offset = 0;
   let total = Infinity;
   while (offset < total && offset < CAP) {
-    const { data, error } = await listDriverLevels({ limit: PAGE, offset });
+    // A GET, not a server action: this is the slowest read on the page and it must
+    // not hold the page's own requests behind it. See `panelGet`.
+    const { data, error } = await panelGet<LevelsAnswer>(
+      `/api/drivers/levels?limit=${PAGE}&offset=${offset}`,
+    );
     if (error || !data) throw new Error(error ?? "unknown");
     for (const row of data.rows) map.set(row.driver_id, row);
     total = data.total;
     if (data.rows.length === 0) break;
-    offset += PAGE;
+    offset += data.rows.length;
   }
   return map;
 }

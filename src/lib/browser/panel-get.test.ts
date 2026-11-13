@@ -46,4 +46,15 @@ describe("the shell's reads are plain GETs", () => {
     assert.doesNotMatch(banner, /\blistDriverImportJobs\b/);
     assert.match(banner, /panelGet<\{ jobs: DriverImportJobSummary\[\] \}>\("\/api\/drivers\/import-jobs"\)/);
   });
+
+  it("is how Employees loads the fleet's levels: once, and advancing by what came back", () => {
+    const levels = readFileSync(new URL("../../features/drivers/use-driver-levels.ts", import.meta.url), "utf8");
+    assert.match(levels, /panelGet<LevelsAnswer>\(\s*`\/api\/drivers\/levels\?limit=\$\{PAGE\}&offset=\$\{offset\}`/);
+    assert.match(levels, /const PAGE = 2000;/);
+    // A backend that still caps the answer at 500 must not make the loop skip riders.
+    assert.match(levels, /offset \+= data\.rows\.length;/);
+    assert.doesNotMatch(levels, /offset \+= PAGE;/);
+    const backend = readFileSync(new URL("../../../functions/src/rpcs/driver-levels.ts", import.meta.url), "utf8");
+    assert.match(backend, /const LIST_MAX = 2000;/);
+  });
 });
