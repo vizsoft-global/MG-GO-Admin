@@ -866,15 +866,18 @@ export const adminRunAttendanceAutoCheckout = onCall(async (request) => {
 
   const drivers = await onDutyDrivers();
   const outcomes = await inParallel(drivers, async (driver) => {
-    const [openLog, online, closed, locationSnap] = await Promise.all([
+    const [openLog, online, locationSnap] = await Promise.all([
       latestOpenLog(driver.id),
       onlineSessionsOf(driver.id),
-      closedSessionsOf(driver.id),
       db.collection(COLLECTIONS.driverLocations).doc(driver.id).get(),
     ]);
 
     let offlineAt: Date | null = null;
     if (online.length === 0) {
+      // Only a rider with no online session can be "offline since". Reading every
+      // closed session for riders who are online was the bulk of this cron's reads,
+      // and it grew with each rider's history.
+      const closed = await closedSessionsOf(driver.id);
       for (const session of closed) {
         const at = asDate(session.went_offline_at);
         if (at && (!offlineAt || at > offlineAt)) offlineAt = at;

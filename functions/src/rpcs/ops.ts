@@ -131,16 +131,6 @@ function shiftEndAt(shift: Dict): Date | null {
   return end;
 }
 
-async function loadShift(driverId: string, day: string): Promise<Dict | null> {
-  const snap = await getFirestore()
-    .collection(COLLECTIONS.driverDailyShifts)
-    .where("driver_id", "==", driverId)
-    .where("shift_date", "==", day)
-    .limit(1)
-    .get();
-  return snap.empty ? null : (snap.docs[0].data() as Dict);
-}
-
 async function countDeliveries(
   driverId: string,
   field: string,
@@ -152,25 +142,28 @@ async function countDeliveries(
     .where("driver_id", "==", driverId)
     .where(field, ">=", kuwaitDayStart(day))
     .where(field, "<", kuwaitDayEnd(day));
-  if (statuses && statuses.length === 1) query = query.where("status", "==", statuses[0]);
+  if (statuses && statuses.length === 1) {
+    // An aggregate is billed per thousand index entries, not per delivery read.
+    const counted = await query.where("status", "==", statuses[0]).count().get();
+    return counted.data().count;
+  }
   const snap = await query.get();
   if (!statuses) return snap.size;
   return snap.docs.filter((doc) => statuses.includes(String((doc.data() as Dict).status))).length;
 }
 
+type DpdRuleSet = {
+  rules: Row[];
+  scopeByRule: Map<string, { restaurantId: string | null; zoneId: string | null }>;
+};
+
 /**
- * `_driver_daily_dpd_state` — the rider's target for the day, the verified count,
- * and the in-flight count. Target resolves restaurant rule first, then zone.
+ * Every active delivery rule and its scope. This is the same for every rider,
+ * so a caller that walks many riders loads it once and passes it down — read
+ * per rider it was ~230 documents each, on a five-minute cron.
  */
-async function driverDailyDpdState(driverId: string, day: string): Promise<DailyDpdState> {
+async function loadDpdRuleSet(): Promise<DpdRuleSet> {
   const db = getFirestore();
-  const driverSnap = await db.collection(COLLECTIONS.drivers).doc(driverId).get();
-  if (!driverSnap.exists) return emptyDailyDpdState(day);
-  const driver = driverSnap.data() as Dict;
-
-  const restaurantId = parseId(driver.restaurant_id);
-  const zoneId = parseId(driver.zone_id);
-
   const ruleSnap = await db
     .collection(COLLECTIONS.deliveryRules)
     .where("status", "==", "active")
@@ -178,7 +171,7 @@ async function driverDailyDpdState(driverId: string, day: string): Promise<Daily
   const rules = ruleSnap.docs.map((doc) => toRow(doc.id, doc.data() as Dict));
 
   const scopesSnap = await db.collection(COLLECTIONS.deliveryRuleScopes).get();
-  const scopeByRule = new Map<string, { restaurantId: string | null; zoneId: string | null }>();
+  const scopeByRule: DpdRuleSet["scopeByRule"] = new Map();
   for (const doc of scopesSnap.docs) {
     const row = doc.data() as Dict;
     const ruleId = parseId(row.delivery_rule_id) ?? parseId(row.rule_id);
@@ -188,7 +181,16 @@ async function driverDailyDpdState(driverId: string, day: string): Promise<Daily
       zoneId: parseId(row.zone_id),
     });
   }
+  return { rules, scopeByRule };
+}
 
+/** The rule that sets a rider's target: their restaurant's first, then their zone's. */
+function resolveDpdRule(
+  ruleSet: DpdRuleSet,
+  restaurantId: string | null,
+  zoneId: string | null,
+): Dict | null {
+  const { rules, scopeByRule } = ruleSet;
   let winner: Dict | null = null;
   for (const rule of rules) {
     const scope = scopeByRule.get(String(rule.id)) ?? { restaurantId: null, zoneId: null };
@@ -208,25 +210,38 @@ async function driverDailyDpdState(driverId: string, day: string): Promise<Daily
       }
     }
   }
+  return winner;
+}
 
+/**
+ * `_driver_daily_dpd_state` — the rider's target for the day, the verified count,
+ * and the in-flight count. Target resolves restaurant rule first, then zone.
+ */
+async function driverDailyDpdState(
+  driverId: string,
+  day: string,
+  ruleSet?: DpdRuleSet,
+): Promise<DailyDpdState> {
+  const db = getFirestore();
+  const driverSnap = await db.collection(COLLECTIONS.drivers).doc(driverId).get();
+  if (!driverSnap.exists) return emptyDailyDpdState(day);
+  const driver = driverSnap.data() as Dict;
+
+  const restaurantId = parseId(driver.restaurant_id);
+  const zoneId = parseId(driver.zone_id);
+
+  const winner = resolveDpdRule(ruleSet ?? (await loadDpdRuleSet()), restaurantId, zoneId);
   const target = winner ? num(winner.dpd_target) : null;
 
-  const [completed, progress, earningsSnap, restaurantDoc] = await Promise.all([
+  const [completed, progress, restaurantDoc] = await Promise.all([
     countDeliveries(driverId, FIELDS.deliveries.deliveredAt, day, ["verified"]),
     countDeliveries(driverId, FIELDS.deliveries.createdAt, day, ["in_transit", "pending", "under_review"]),
-    db
-      .collection(COLLECTIONS.driverEarningsDaily)
-      .where("driver_id", "==", driverId)
-      .where("earn_date", "==", day)
-      .limit(1)
-      .get(),
     restaurantId
       ? db.collection(COLLECTIONS.restaurants).doc(restaurantId).get()
       : Promise.resolve(null),
   ]);
 
   const restaurant = restaurantDoc && restaurantDoc.exists ? (restaurantDoc.data() as Dict) : null;
-  void earningsSnap;
 
   return {
     target,
@@ -573,11 +588,17 @@ export const adminDpdNoticeCandidates = onCall(async (request) => {
   ]);
 
   const pairs = new Map<string, { driverId: string; day: string }>();
+  // The shift rows are already in hand; the loop used to query each one again.
+  const shiftByPair = new Map<string, Dict>();
   for (const doc of shiftSnaps.docs) {
     const row = doc.data() as Dict;
     const driverId = parseId(row.driver_id);
     const day = typeof row.shift_date === "string" ? row.shift_date : null;
-    if (driverId && day) pairs.set(`${driverId}|${day}`, { driverId, day });
+    if (driverId && day) {
+      const key = `${driverId}|${day}`;
+      pairs.set(key, { driverId, day });
+      if (!shiftByPair.has(key)) shiftByPair.set(key, row);
+    }
   }
   for (const doc of attendanceSnaps.docs) {
     const driverId = parseId((doc.data() as Dict).driver_id);
@@ -617,6 +638,8 @@ export const adminDpdNoticeCandidates = onCall(async (request) => {
     locale: string | null;
   }> = [];
 
+  const ruleSet = await loadDpdRuleSet();
+
   for (const { driverId, day } of pairs.values()) {
     const driver = driverById.get(driverId);
     if (!driver) continue;
@@ -625,15 +648,27 @@ export const adminDpdNoticeCandidates = onCall(async (request) => {
     if (driver.is_blocked === true) continue;
     if (driverIds && !driverIds.includes(driverId)) continue;
 
-    const state = await driverDailyDpdState(driverId, day);
-    if (state.target === null || state.target <= 0) continue;
+    // Target first: it needs no read, and a rider with no rule produces no notice.
+    const rule = resolveDpdRule(ruleSet, parseId(driver.restaurant_id), parseId(driver.zone_id));
+    const target = rule ? num(rule.dpd_target) : null;
+    if (target === null || target <= 0) continue;
 
-    const shift = await loadShift(driverId, day);
+    const shift = shiftByPair.get(`${driverId}|${day}`) ?? null;
     const end = shift ? shiftEndAt(shift) : null;
 
     if (day < today && (!end || now.getTime() > end.getTime() + 6 * 3600000)) continue;
 
     const wantsKind = (kind: string) => !kinds || kinds.includes(kind);
+    // No notice left to send for this rider-day, so nothing below can add a row.
+    const open = (kind: string) => wantsKind(kind) && !claimed.has(`${driverId}|${day}|${kind}`);
+    if (!open("warning") && !(day === today && open("congrats")) && !open("summary")) continue;
+
+    const state = {
+      target,
+      completed_today: await countDeliveries(driverId, FIELDS.deliveries.deliveredAt, day, [
+        "verified",
+      ]),
+    };
     const profile = profileById.get(driverId) ?? EMPTY_ROW;
     const locale = typeof profile.locale === "string" ? profile.locale : null;
 
@@ -678,7 +713,7 @@ export const adminDpdNoticeCandidates = onCall(async (request) => {
       continue;
     }
 
-    if (wantsKind("summary")) {
+    if (open("summary")) {
       const earningsSnap = await db
         .collection(COLLECTIONS.driverEarningsDaily)
         .where("driver_id", "==", driverId)
@@ -688,6 +723,8 @@ export const adminDpdNoticeCandidates = onCall(async (request) => {
       const incentive = earningsSnap.empty
         ? 0
         : num((earningsSnap.docs[0].data() as Dict).incentive_kwd) ?? 0;
+      // The row below needs an incentive; without one the attendance read is wasted.
+      if (!(incentive > 0)) continue;
 
       const attendanceSnap = await db
         .collection(COLLECTIONS.attendanceLogs)
