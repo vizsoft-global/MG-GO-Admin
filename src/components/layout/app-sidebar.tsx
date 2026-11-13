@@ -238,6 +238,18 @@ function superAdminPortalHref(id: string, href: string, isSuperAdmin: boolean): 
   return href;
 }
 
+/**
+ * Sidebar links load their page when the pointer reaches them, not before.
+ *
+ * They used to carry `prefetch`, which for a dynamic route means "render the
+ * whole page and its data now". The sidebar holds about seventeen links and
+ * every page shows it, so each page load, and each refresh after it, started
+ * seventeen more full page renders on the server: seventeen session checks and
+ * seventeen sets of page queries nobody had asked for. Under that load the
+ * session check on a busy instance ran out of time and the panel showed
+ * "Reconnecting your session". `false` until hover, then the framework's
+ * default (the shell down to the nearest loading boundary).
+ */
 function NavItemLink({
   node,
   label,
@@ -249,6 +261,7 @@ function NavItemLink({
   const badges = useContext(NavBadgeContext);
   const queryClient = useQueryClient();
   const { isSuperAdmin } = useAuth();
+  const [warm, setWarm] = useState(false);
   if (!node.href) return null;
   const isActive = node.id === activeLeafId;
   const badge = badges[node.id];
@@ -261,7 +274,14 @@ function NavItemLink({
         tooltip={label}
         className="h-8 cursor-pointer rounded-md px-2.5 text-sm font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-normal data-active:text-slate-900 data-active:shadow-sm"
         render={
-          <Link href={href} prefetch onMouseEnter={() => prefetchAdminRoute(queryClient, href)}>
+          <Link
+            href={href}
+            prefetch={warm ? null : false}
+            onMouseEnter={() => {
+              setWarm(true);
+              prefetchAdminRoute(queryClient, href);
+            }}
+          >
             <NavIcon id={node.id} name={node.icon} iconUrl={node.iconUrl} iconColor={node.iconColor} />
             <span>{label}</span>
             {badge ? (
@@ -305,6 +325,7 @@ function NavGroup({
   const { state } = useSidebar();
   const queryClient = useQueryClient();
   const { isSuperAdmin } = useAuth();
+  const [warm, setWarm] = useState(false);
   const children = node.children ?? [];
   const groupLabel = tGroupLabel(node.label);
   const collapsed = state === "collapsed";
@@ -326,7 +347,14 @@ function NavGroup({
           tooltip={groupLabel}
           className="h-8 cursor-pointer rounded-md px-2.5 text-sm font-normal text-sidebar-foreground shadow-none hover:bg-white/70 hover:text-slate-900 focus-visible:ring-0 data-active:bg-white data-active:font-normal data-active:text-slate-900 data-active:shadow-sm"
           render={
-            <Link href={href} prefetch onMouseEnter={() => prefetchAdminRoute(queryClient, href)}>
+            <Link
+            href={href}
+            prefetch={warm ? null : false}
+            onMouseEnter={() => {
+              setWarm(true);
+              prefetchAdminRoute(queryClient, href);
+            }}
+          >
               <NavIcon id={node.id} name={node.icon} iconUrl={node.iconUrl} iconColor={node.iconColor} />
               <span>{groupLabel}</span>
             </Link>
