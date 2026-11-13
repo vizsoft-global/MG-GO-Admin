@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/get-session";
 import { hasPermissionInSet } from "@/lib/auth/permissions";
 import { COLLECTIONS } from "@/lib/firebase/db";
 import { staffDb } from "@/lib/firebase/staff-db";
+import { mapEventRow, type RawEventRow } from "./operation-event-row";
 
 export type DriverOperationEvent = {
   id: string;
@@ -65,62 +66,6 @@ async function requireOpsView() {
     throw new Error("not_authorized");
   }
   return session;
-}
-
-type RawEventRow = {
-  id: number | string;
-  driver_id: string;
-  category: string;
-  operation_key: string;
-  source: string;
-  source_name: string | null;
-  success: boolean;
-  error_code: string | null;
-  entity_type: string | null;
-  entity_id: string | null;
-  context: Record<string, unknown> | null;
-  latitude: number | string | null;
-  longitude: number | string | null;
-  device_id: string | null;
-  app_version_code: number | null;
-  occurred_at: string;
-  drivers:
-    | {
-        driver_code: string | null;
-        profiles: { full_name: string | null } | { full_name: string | null }[] | null;
-      }
-    | Array<{
-        driver_code: string | null;
-        profiles: { full_name: string | null } | { full_name: string | null }[] | null;
-      }>
-    | null;
-};
-
-function mapEventRow(row: RawEventRow): DriverOperationEvent {
-  const driver = Array.isArray(row.drivers) ? row.drivers[0] : row.drivers;
-  const profile = Array.isArray(driver?.profiles) ? driver?.profiles[0] : driver?.profiles;
-  const driverCode = driver?.driver_code ?? "—";
-
-  return {
-    id: String(row.id),
-    driverId: row.driver_id,
-    driverName: profile?.full_name?.trim() || driverCode,
-    driverCode,
-    category: row.category,
-    operationKey: row.operation_key,
-    source: row.source,
-    sourceName: row.source_name,
-    success: row.success,
-    errorCode: row.error_code,
-    entityType: row.entity_type,
-    entityId: row.entity_id,
-    context: row.context ?? {},
-    latitude: row.latitude != null ? Number(row.latitude) : null,
-    longitude: row.longitude != null ? Number(row.longitude) : null,
-    deviceId: row.device_id,
-    appVersionCode: row.app_version_code,
-    occurredAt: row.occurred_at,
-  };
 }
 
 function fromValue(value: unknown): unknown {
