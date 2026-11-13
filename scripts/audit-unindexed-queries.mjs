@@ -284,11 +284,45 @@ function definition(entry) {
   return { collectionGroup: entry.collection, queryScope: "COLLECTION", fields };
 }
 
-const definitions = wanted.map(definition).filter(Boolean);
+/**
+ * Queries the walk cannot see, because the field or the collection is a loop
+ * variable or a parameter. Each was read by hand; the comment names the caller.
+ */
+const EXTRA = [
+  // src/app/api/driver-uploads/read/route.ts: "does this rider own this photo?", asked for
+  // every proof photo a rider opens, as three equality and three array queries on deliveries.
+  { collection: "deliveries", fields: ["order_proof_url"] },
+  { collection: "deliveries", fields: ["pickup_proof_url"] },
+  { collection: "deliveries", fields: ["cancel_proof_url"] },
+  { collection: "deliveries", fields: ["order_proof_urls"], array: ["order_proof_urls"] },
+  { collection: "deliveries", fields: ["pickup_proof_urls"], array: ["pickup_proof_urls"] },
+  { collection: "deliveries", fields: ["cancel_proof_urls"], array: ["cancel_proof_urls"] },
+  // src/features/deliveries/deliveries-actions.ts fetchDashboardDeliveryRows: four date ranges.
+  { collection: "deliveries", fields: ["cancelled_at"] },
+  // The same route's e-sign ownership check (src/features/esign/esign-rider-access.ts).
+  { collection: "esign_requests", fields: ["document_storage_key"] },
+  { collection: "esign_requests", fields: ["signed_document_storage_key"] },
+  { collection: "esign_requests", fields: ["signature_storage_key"] },
+  // functions/src/rpcs/driver-requests.ts loadByRequestId.
+  { collection: "request_approval_steps", fields: ["request_id"] },
+  { collection: "request_clarifications", fields: ["request_id"] },
+  { collection: "request_attachments", fields: ["request_id"] },
+  // functions/src/rpcs/driver-vehicle.ts loadLedger.
+  { collection: "vehicle_handovers", fields: ["vehicle_id"] },
+  { collection: "vehicle_accidents", fields: ["vehicle_id"] },
+  { collection: "vehicle_documents", fields: ["vehicle_id"] },
+  { collection: "vehicle_services", fields: ["vehicle_id"] },
+];
+
+const extraDefinitions = EXTRA.filter(
+  (entry) => !indexes.some((index) => index.collection === entry.collection && index.fields[0] === entry.fields[0]),
+).map((entry) => definition({ ...entry, array: new Set(entry.array ?? []), descending: false, dynamicOnly: false, uses: [] }));
+
+const definitions = [...wanted.map(definition).filter(Boolean), ...extraDefinitions.filter(Boolean)];
 
 console.log(`index list: ${path.relative(root, indexFile) || indexFile} (${indexes.length} indexes)`);
 console.log(`queries found: ${shapes.length} in ${files.length} files | no index: ${missing.length} | collection not resolved: ${unresolved.length}`);
-console.log(`distinct indexes missing: ${wanted.length} | definitions that can be written: ${definitions.length}
+console.log(`distinct indexes missing: ${wanted.length} (+${extraDefinitions.length} read by hand) | definitions that can be written: ${definitions.length}
 `);
 for (const entry of wanted) {
   console.log(`${entry.collection}  [${entry.fields.join(", ")}]${entry.descending ? " desc" : ""}  x${entry.uses.length}${definition(entry) ? "" : "  (not written)"}`);
