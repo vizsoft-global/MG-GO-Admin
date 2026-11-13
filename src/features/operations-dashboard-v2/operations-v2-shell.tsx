@@ -1,19 +1,15 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   BarChart2,
   ChevronRight,
   Download,
-  Eye,
-  EyeOff,
   Info,
   PieChart,
-  Plus,
   RefreshCw,
   Search,
   Sliders,
-  Trash2,
   Users,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -52,8 +48,6 @@ import {
   filterRoster,
   leaveExportRows,
   periodBounds,
-  type CustomChartDef,
-  type CustomColumnDef,
   type DashboardPeriod,
   type EmployeeStatusKey,
   type JobEndCardKey,
@@ -80,6 +74,15 @@ import {
   type V2Tone,
 } from "@/features/portal-v2/v2-ui";
 import { jobEndMatrix, monthLabel, upcomingLeaveRows, type UpcomingLeaveRow } from "./helpers";
+import { CustomColumnsDialog } from "./custom-columns-dialog";
+import {
+  planRosterColumns,
+  rosterCustomFieldText,
+  visibleRosterColumns,
+} from "./custom-columns";
+import { useCustomFieldDefinitions } from "@/features/custom-fields/use-custom-fields";
+import { formatCustomFieldDisplay } from "@/lib/custom-fields/validate";
+import { DRIVER_ENTITY_TYPE, type CustomFieldDefinition, type CustomFieldValue } from "@/lib/custom-fields/types";
 import { v2DayMonth, v2WeekdayDate } from "@/features/portal-v2/v2-format";
 
 type Translator = ReturnType<typeof useTranslations<"pages.operationsDashboardV2">>;
@@ -266,6 +269,8 @@ export function OperationsV2Shell() {
 
   const today = kuwaitTodayYmd();
   const bounds = useMemo(() => periodBounds(period, today, today, today), [period, today]);
+  const customFieldsQuery = useCustomFieldDefinitions(DRIVER_ENTITY_TYPE);
+  const customFieldDefinitions = useMemo(() => customFieldsQuery.data ?? [], [customFieldsQuery.data]);
 
   useEffect(() => {
     void fetchOperationsHubConfig().then((res) => {
@@ -344,6 +349,12 @@ export function OperationsV2Shell() {
         })
     : "";
 
+  const customFieldByKey = useMemo(() => {
+    const map = new Map<string, CustomFieldDefinition>();
+    for (const definition of customFieldDefinitions) map.set(definition.key, definition);
+    return map;
+  }, [customFieldDefinitions]);
+
   const rosterColumns = useMemo<OperationsV2Column<RosterRow>[]>(() => {
     const columns: OperationsV2Column<RosterRow>[] = [
       {
@@ -386,7 +397,7 @@ export function OperationsV2Shell() {
       },
       {
         id: "nationalityCategory",
-        label: "Nationality Category",
+        label: t("colNationalityCategory"),
         render: (row) => (
           <span className="inline-flex rounded px-1.5 py-0.5 text-[11px] font-medium bg-[var(--surface-subtle)] text-[var(--text-primary)]">
             {row.nationalityCategory || "—"}
@@ -395,7 +406,7 @@ export function OperationsV2Shell() {
       },
       {
         id: "nationalityCountry",
-        label: "Nationality Country",
+        label: t("colNationalityCountry"),
         render: (row) => (
           <span className="inline-flex rounded px-1.5 py-0.5 text-[11px] font-medium bg-[var(--surface-subtle)] text-[var(--text-primary)]">
             {row.nationalityCountry || "—"}
@@ -411,22 +422,57 @@ export function OperationsV2Shell() {
       });
     }
 
-    const existingIds = new Set(columns.map((c) => c.id));
-    for (const customCol of hubConfig.customColumns) {
-      if (!existingIds.has(customCol.id) && customCol.visible) {
-        columns.push({
-          id: customCol.id,
-          label: customCol.label,
-          render: (row) => {
-            const val = (row as Record<string, unknown>)[customCol.field];
-            return typeof val === "string" || typeof val === "number" ? String(val) : "—";
-          },
-        });
+    /**
+     * The stored definition decides the order, the headings and which columns
+     * exist at all; the renderers above stay the app's own, so a renamed column
+     * still prints a real status pill rather than a raw enum key.
+     */
+    const byId = new Map(columns.map((column) => [column.id, column]));
+    const ordered: OperationsV2Column<RosterRow>[] = [];
+    for (const entry of visibleRosterColumns(
+      planRosterColumns(hubConfig.customColumns, { includePhone: !readOnly }),
+    )) {
+      if (entry.kind === "base") {
+        const base = byId.get(entry.id);
+        if (!base) continue;
+        ordered.push(entry.label ? { ...base, label: entry.label } : base);
+        continue;
       }
+      const definition = customFieldByKey.get(entry.field);
+      ordered.push({
+        id: entry.id,
+        label: entry.label,
+        render: (row) => {
+          const value = entry.field ? row.customFields?.[entry.field] : undefined;
+          if (definition) {
+            return (
+              formatCustomFieldDisplay(
+                definition.field_type,
+                value as CustomFieldValue,
+                definition.options ?? [],
+              ) || "—"
+            );
+          }
+          return rosterCustomFieldText(value);
+        },
+      });
     }
-    return columns;
-  }, [t, readOnly, hubConfig.customColumns]);
-  const rosterColumnVisibility = useTableColumnVisibility("dpd:operations-v2:roster-columns", rosterColumns);
+    return ordered;
+  }, [t, readOnly, hubConfig.customColumns, customFieldByKey]);
+  /**
+   * The definition is part of the per-user storage key.
+   *
+   * `useTableColumnVisibility` remembers this operator's own order and hidden
+   * columns, which would otherwise outrank a change an admin just made — the
+   * saved order would win and the global reorder would look like it did nothing.
+   * A definition change therefore starts a fresh personal order, so an edit in the
+   * dialog is visible in the table immediately, for everyone.
+   */
+  const rosterColumnSignature = useMemo(() => rosterColumns.map((column) => column.id).join("|"), [rosterColumns]);
+  const rosterColumnVisibility = useTableColumnVisibility(
+    `dpd:operations-v2:roster-columns:${rosterColumnSignature}`,
+    rosterColumns,
+  );
   const rosterVisibleColumns = columnsInOrder(rosterColumns, rosterColumnVisibility.orderedVisibleColumnIds);
 
   const openRoster = useCallback(
@@ -787,15 +833,16 @@ export function OperationsV2Shell() {
     ]);
   }, [data?.byNationalityCountry]);
 
-  const handleSaveHubConfig = async (newConfig: OperationsHubConfig) => {
+  /**
+   * One write per change. The dialog reports the outcome itself, so this returns
+   * a boolean instead of toasting — a toast per toggle would be noise on a screen
+   * whose whole point is that the change is already applied.
+   */
+  const handleSaveHubConfig = async (newConfig: OperationsHubConfig): Promise<boolean> => {
     const res = await saveOperationsHubConfig(newConfig);
-    if (!res.ok) {
-      toast.error(res.error || "Failed to save configuration");
-      return;
-    }
+    if (!res.ok) return false;
     setHubConfig(newConfig);
-    toast.success("Operations Hub configuration saved and synchronized centrally.");
-    reload();
+    return true;
   };
 
   return (
@@ -818,7 +865,7 @@ export function OperationsV2Shell() {
                 onClick={() => setConfigModalOpen(true)}
               >
                 <Sliders className="size-4" aria-hidden />
-                Customize Hub
+                {t("customize.title")}
               </Button>
             ) : null}
             <Button
@@ -1889,12 +1936,15 @@ export function OperationsV2Shell() {
 
       <AddLeaveDialog open={addOpen} onOpenChange={setAddOpen} onSaved={reload} />
       <ImportLeaveDialog open={importOpen} onOpenChange={setImportOpen} onImported={reload} />
-      <OperationsHubConfigModal
-        open={configModalOpen}
-        onOpenChange={setConfigModalOpen}
-        config={hubConfig}
-        onSave={handleSaveHubConfig}
-      />
+      {isSuperAdmin ? (
+        <CustomColumnsDialog
+          key={configModalOpen ? "custom-columns-open" : "custom-columns-closed"}
+          open={configModalOpen}
+          onOpenChange={setConfigModalOpen}
+          config={hubConfig}
+          onSave={handleSaveHubConfig}
+        />
+      ) : null}
     </V2Surface>
   );
 }
@@ -2169,348 +2219,3 @@ function ImportLeaveDialog({
     </Dialog>
   );
 }
-
-function OperationsHubConfigModal({
-  open,
-  onOpenChange,
-  config,
-  onSave,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  config: OperationsHubConfig;
-  onSave: (newConfig: OperationsHubConfig) => Promise<void>;
-}) {
-  const [activeTab, setActiveTab] = useState<"columns" | "charts">("columns");
-  const [columns, setColumns] = useState<CustomColumnDef[]>(config.customColumns);
-  const [charts, setCharts] = useState<CustomChartDef[]>(config.customCharts);
-  const [saving, setSaving] = useState(false);
-
-  const [newColLabel, setNewColLabel] = useState("");
-  const [newColField, setNewColField] = useState("");
-
-  const [newChartTitle, setNewChartTitle] = useState("");
-  const [newChartType, setNewChartType] = useState<"bar" | "donut" | "pie">("donut");
-  const [newChartDim, setNewChartDim] = useState<
-    "nationalityCategory" | "nationalityCountry" | "status" | "project" | "zone"
-  >("nationalityCategory");
-
-  useEffect(() => {
-    setColumns(config.customColumns);
-    setCharts(config.customCharts);
-  }, [config, open]);
-
-  const toggleCol = (id: string) => {
-    setColumns((prev) =>
-      prev.map((col) => (col.id === id ? { ...col, visible: !col.visible } : col))
-    );
-  };
-
-  const removeCol = (id: string) => {
-    setColumns((prev) => prev.filter((col) => col.id !== id));
-  };
-
-  const addColumn = () => {
-    if (!newColLabel.trim() || !newColField.trim()) return;
-    const id = newColField.trim().replace(/[^a-zA-Z0-9_]/g, "_");
-    setColumns((prev) => [
-      ...prev,
-      { id, label: newColLabel.trim(), field: newColField.trim(), visible: true },
-    ]);
-    setNewColLabel("");
-    setNewColField("");
-  };
-
-  const removeChart = (id: string) => {
-    setCharts((prev) => prev.filter((ch) => ch.id !== id));
-  };
-
-  const addChart = () => {
-    if (!newChartTitle.trim()) return;
-    const id = `chart_${Date.now()}`;
-    setCharts((prev) => [
-      ...prev,
-      { id, title: newChartTitle.trim(), type: newChartType, dimension: newChartDim },
-    ]);
-    setNewChartTitle("");
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    await onSave({
-      customColumns: columns,
-      customCharts: charts,
-    });
-    setSaving(false);
-    onOpenChange(false);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent closeOutside showCloseButton className="w-[min(680px,96vw)] max-w-none">
-        <div className="space-y-4 px-5 pt-4">
-          <div className="flex border-b border-[var(--border-default)]">
-            <button
-              type="button"
-              onClick={() => setActiveTab("columns")}
-              className={`pb-2.5 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
-                activeTab === "columns"
-                  ? "border-[var(--selected-navy)] text-[var(--text-primary)]"
-                  : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              }`}
-            >
-              Table Columns ({columns.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("charts")}
-              className={`pb-2.5 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
-                activeTab === "charts"
-                  ? "border-[var(--selected-navy)] text-[var(--text-primary)]"
-                  : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              }`}
-            >
-              Custom Charts ({charts.length})
-            </button>
-          </div>
-
-          {activeTab === "columns" ? (
-            <div className="space-y-4">
-              <div className="max-h-[280px] overflow-y-auto space-y-2 pr-1">
-                {columns.map((col) => (
-                  <div
-                    key={col.id}
-                    className="flex items-center justify-between gap-3 p-2 rounded-lg border border-[var(--border-default)] bg-[var(--surface-subtle)]"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
-                        {col.label}
-                      </p>
-                      <p className="text-[11px] text-[var(--text-secondary)] truncate">
-                        Field: <code className="font-mono text-[10px]">{col.field}</code>
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Button
-                        type="button"
-                        variant="portal-neutral"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => toggleCol(col.id)}
-                        title={col.visible ? "Hide Column" : "Show Column"}
-                      >
-                        {col.visible ? (
-                          <span className="flex items-center gap-1 text-emerald-600">
-                            <Eye className="size-3.5" /> Visible
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-[var(--text-secondary)]">
-                            <EyeOff className="size-3.5" /> Hidden
-                          </span>
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="portal-neutral"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-red-500 hover:text-red-600"
-                        onClick={() => removeCol(col.id)}
-                        title="Remove Column"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="rounded-lg border border-[var(--border-default)] p-3 space-y-3 bg-[var(--surface-card)]">
-                <p className="text-xs font-semibold text-[var(--text-primary)]">Add New Column</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[11px] text-[var(--text-secondary)] block mb-1">
-                      Column Label
-                    </label>
-                    <Input
-                      placeholder="e.g. Nationality Country"
-                      value={newColLabel}
-                      onChange={(e) => setNewColLabel(e.target.value)}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-[var(--text-secondary)] block mb-1">
-                      Data Field Name
-                    </label>
-                    <Input
-                      placeholder="e.g. nationalityCountry"
-                      value={newColField}
-                      onChange={(e) => setNewColField(e.target.value)}
-                      className="h-8 text-xs font-mono"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    variant="portal"
-                    size="sm"
-                    className="h-8 text-xs"
-                    disabled={!newColLabel.trim() || !newColField.trim()}
-                    onClick={addColumn}
-                  >
-                    <Plus className="size-3.5 mr-1" /> Add Column
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="max-h-[280px] overflow-y-auto space-y-2 pr-1">
-                {charts.length === 0 ? (
-                  <p className="text-xs text-center py-4 text-[var(--text-secondary)]">
-                    No custom charts added yet. Add one below.
-                  </p>
-                ) : (
-                  charts.map((ch) => (
-                    <div
-                      key={ch.id}
-                      className="flex items-center justify-between gap-3 p-2 rounded-lg border border-[var(--border-default)] bg-[var(--surface-subtle)]"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
-                          {ch.title}
-                        </p>
-                        <p className="text-[11px] text-[var(--text-secondary)]">
-                          Type: <span className="capitalize">{ch.type}</span> &bull; Dimension:{" "}
-                          <span className="capitalize">{ch.dimension}</span>
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="portal-neutral"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-red-500 hover:text-red-600"
-                        onClick={() => removeChart(ch.id)}
-                        title="Remove Chart"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="rounded-lg border border-[var(--border-default)] p-3 space-y-3 bg-[var(--surface-card)]">
-                <p className="text-xs font-semibold text-[var(--text-primary)]">Add New Chart</p>
-                <div>
-                  <label className="text-[11px] text-[var(--text-secondary)] block mb-1">
-                    Chart Title
-                  </label>
-                  <Input
-                    placeholder="e.g. Riders by Nationality Country"
-                    value={newChartTitle}
-                    onChange={(e) => setNewChartTitle(e.target.value)}
-                    className="h-8 text-xs"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[11px] text-[var(--text-secondary)] block mb-1">
-                      Chart Type
-                    </label>
-                    <Select
-                      items={[
-                        { value: "donut", label: "Donut / Progress Bars" },
-                        { value: "bar", label: "Horizontal Bar Chart" },
-                        { value: "pie", label: "Pie Chart" },
-                      ]}
-                      value={newChartType}
-                      onValueChange={(val) => setNewChartType(val as "bar" | "donut" | "pie")}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="donut">Donut / Progress Bars</SelectItem>
-                        <SelectItem value="bar">Horizontal Bar Chart</SelectItem>
-                        <SelectItem value="pie">Pie Chart</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-[var(--text-secondary)] block mb-1">
-                      Dimension
-                    </label>
-                    <Select
-                      items={[
-                        { value: "nationalityCategory", label: "Nationality Category" },
-                        { value: "nationalityCountry", label: "Nationality Country" },
-                        { value: "status", label: "Status" },
-                        { value: "project", label: "Project" },
-                        { value: "zone", label: "Zone" },
-                      ]}
-                      value={newChartDim}
-                      onValueChange={(val) =>
-                        setNewChartDim(
-                          val as "nationalityCategory" | "nationalityCountry" | "status" | "project" | "zone"
-                        )
-                      }
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="nationalityCategory">Nationality Category</SelectItem>
-                        <SelectItem value="nationalityCountry">Nationality Country</SelectItem>
-                        <SelectItem value="status">Status</SelectItem>
-                        <SelectItem value="project">Project</SelectItem>
-                        <SelectItem value="zone">Zone</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    variant="portal"
-                    size="sm"
-                    className="h-8 text-xs"
-                    disabled={!newChartTitle.trim()}
-                    onClick={addChart}
-                  >
-                    <Plus className="size-3.5 mr-1" /> Add Chart
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="px-5 pb-4">
-          <AppModalFooter
-            title="Operations Hub Configuration"
-            subtitle="Central control (Super Admin) — synchronized automatically across all pages."
-          >
-            <Button
-              variant="portal-neutral"
-              className="h-9 cursor-pointer"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="portal"
-              className="h-9 cursor-pointer"
-              disabled={saving}
-              onClick={() => void handleSave()}
-            >
-              {saving ? "Saving..." : "Save Central Configuration"}
-            </Button>
-          </AppModalFooter>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-

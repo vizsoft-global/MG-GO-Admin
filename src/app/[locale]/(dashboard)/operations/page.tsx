@@ -3,7 +3,6 @@ import {
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
-  FormInput,
   Handshake,
   Layers,
   ListTree,
@@ -28,10 +27,11 @@ import { OPERATIONS_HUB_PERMISSIONS } from "@/lib/menu/menu-registry";
  * page is gated on the same slug, so a tile can never be an advertisement for a
  * page that answers /unauthorized.
  *
- * The catalog doors that used to sit in a second group are now Employee
- * Settings, opened from the Employees header — **except custom columns**, which
- * the client review (5.1 / 5.2) asks for *directly in Operations Hub* and behind
- * a super-admin check. That one tile is the only Configure door left here.
+ * **Columns and slicers are configured on the table they change**, not here. The
+ * client review (5.1 / 5.2) asked for them "directly in Operations Hub"; the
+ * owner has since moved that decision to Rider Operations, where the operator can
+ * see the column they are adding while they add it. This page now has one group:
+ * the ledger tables.
  */
 type OpsTile = {
   key: string;
@@ -39,13 +39,6 @@ type OpsTile = {
   icon: typeof Handshake;
   tint: (typeof HUB_GLYPH_TINTS)[keyof typeof HUB_GLYPH_TINTS];
   permission: Permission;
-  /**
-   * 5.2: shared configuration, so the tile is not offered to a manager.
-   * `hasPermissionInSet` alone would show it to anyone holding `drivers.manage`
-   * and then send them to `/unauthorized` — a tile that promises a page it
-   * cannot open.
-   */
-  superAdminOnly?: boolean;
 };
 
 const MANAGE_TILES: OpsTile[] = [
@@ -116,26 +109,6 @@ const MANAGE_TILES: OpsTile[] = [
   },
 ];
 
-/**
- * Shared configuration, super admin only.
- *
- * Custom columns is the one door here that the client review names: 5.1 asks for
- * columns and slicers, 5.2 puts them in Operations Hub behind a super-admin
- * check. A definition is read by every staff member and filters their tables, so
- * it is configuration rather than a personal view — a manager's own column order
- * still lives in `admin_ui_preferences` and is untouched by this.
- */
-const CONFIGURE_TILES: OpsTile[] = [
-  {
-    key: "driverFields",
-    href: "/settings/driver-fields",
-    icon: FormInput,
-    tint: HUB_GLYPH_TINTS.navy,
-    permission: "drivers.manage",
-    superAdminOnly: true,
-  },
-];
-
 export default async function OperationsHubPage({
   params,
 }: {
@@ -147,7 +120,6 @@ export default async function OperationsHubPage({
   const t = await getTranslations("pages.operationsHub.hub");
 
   const visible = (tile: OpsTile): boolean =>
-    (!tile.superAdminOnly || session.isSuperAdmin) &&
     hasPermissionInSet(session.permissions, tile.permission, session.isSuperAdmin);
 
   const toTile = (tile: OpsTile) => ({
@@ -163,12 +135,6 @@ export default async function OperationsHubPage({
       heading: t("manageHeading"),
       hint: t("manageHint"),
       tiles: MANAGE_TILES.filter(visible).map(toTile),
-    },
-    {
-      id: "configure",
-      heading: t("configureHeading"),
-      hint: t("configureHint"),
-      tiles: CONFIGURE_TILES.filter(visible).map(toTile),
     },
   ].filter((group) => group.tiles.length > 0);
 
