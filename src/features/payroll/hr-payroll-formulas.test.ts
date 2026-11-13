@@ -190,7 +190,9 @@ describe("computeHrPayroll", () => {
     assert.equal(Number.isNaN(result.totalSalary), false);
   });
 
-  it("holds operations pay until approval and still pays sick reimbursement", () => {
+  it("computes the Calculated columns without an approval document", () => {
+    // The month is never "approved": payroll_hr_periods is empty in production
+    // and nothing in the panel writes it. The arithmetic must not wait for it.
     const result = computeHrPayroll({
       approved: false,
       monthDays: 30,
@@ -213,17 +215,19 @@ describe("computeHrPayroll", () => {
       allowances: 0,
       deductions: 0,
     });
-    assert.equal(result.hourlyRate, 0);
-    assert.equal(result.salaryAsPerHours, 0);
-    assert.equal(result.incentivesPaid, 0);
-    assert.equal(result.twoYearAmount, 0);
+    // Hourly = 300 / 336, salary = hourly x 40.
+    assert.equal(result.hourlyRate, 300 / 336);
+    assert.equal(result.salaryAsPerHours, (300 / 336) * 40);
+    assert.equal(result.incentivesPaid, 9);
+    assert.equal(result.twoYearAmount, (20 / 28) * 5);
     assert.equal(result.sickReimbursement, 1);
-    assert.equal(result.payment, 15 + 1 + 2);
+    assert.equal(result.payment, result.totalSalary);
+    assert.ok(result.totalSalary > 45);
   });
 });
 
 describe("buildHrPayrollRows", () => {
-  it("shows the payroll tab counts before approval and still dashes the pay cells", () => {
+  it("prints every derived cell regardless of the approval document", () => {
     const rows = buildHrPayrollRows({
       riders: [rider({ driverId: "d1", restaurantClientId: "STORE-9" })],
       bundle: bundle(false),
@@ -236,8 +240,10 @@ describe("buildHrPayrollRows", () => {
     assert.equal(rows[0]?.cells.client, "STORE-9");
     assert.equal(rows[0]?.cells.mg, "C-1");
     assert.equal(rows[0]?.identityEdit.clientId, "STORE-9");
-    assert.equal(rows[0]?.cells.hourly, "—");
-    assert.equal(rows[0]?.cells.incent, "—");
+    // Calculated: hourly 336/336 = 1, salary = 1 x 160.
+    assert.equal(rows[0]?.cells.hourly, "1.000");
+    assert.equal(rows[0]?.cells.salH, "160.000");
+    assert.equal(rows[0]?.cells.incent, "10.000");
     assert.equal(rows[0]?.cells.sickR, "2.000");
     assert.equal(rows[0]?.cells.fixed, "336.000");
     assert.equal(rows[0]?.cells.nationality, "India");
@@ -280,7 +286,7 @@ describe("buildHrPayrollRows", () => {
         "clientName", "zone", "rest", "nationality", "natCat", "status", "start",
         "endDate", "endDesc", "company", "sponsor", "position", "hiring", "section",
         "fixed", "wps", "rate", "vtype", "inc2", "inc4", "offs", "fwd", "fwh", "hourly", "orders",
-        "wd", "ah", "ahApp", "restDpd", "riderDpd", "eff", "salH", "inc2v", "inc4v", "incent",
+        "wd", "ah", "restDpd", "riderDpd", "eff", "salH", "inc2v", "inc4v", "incent",
         "food", "sick", "sickR", "pending", "traffic", "loan", "allow", "ded", "total",
       ],
     );

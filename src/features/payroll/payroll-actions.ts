@@ -1128,8 +1128,10 @@ export async function fetchHrPayrollBundle(monthKey: string, locale: string): Pr
 /**
  * App-open hours per rider for the month (Shift in → Shift out, unioned).
  *
- * Display only: it fills the "Worked hours (app)" column beside the attendance
- * clock and never enters a pay formula.
+ * **Unused by the sheet.** The client's 3.3 retires the "Worked hours (app)"
+ * column in favour of Actual Working Hours from Operations Payroll, so nothing
+ * renders it. Kept because the callable behind it still exists and a future
+ * reversal should not need a new action module.
  */
 export async function fetchHrAppHours(
   monthKey: string,

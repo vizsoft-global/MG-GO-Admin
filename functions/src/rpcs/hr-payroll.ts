@@ -735,6 +735,12 @@ function unionHours(spans: { start: number; end: number }[]): number {
  * sits beside the attendance-clock hours on the HR sheet and never replaces them:
  * whether a session hour prices a salary is a client decision (Q-A/Q-B), so this
  * callable deliberately touches no pay figure.
+ *
+ * **Retired from the sheet.** The client's 3.3 asks for Actual Working Hours from
+ * Operations Payroll and for the "Worked hours (app)" section to be removed, so
+ * no column reads this any more. The callable stays registered so an installed
+ * build or a saved link cannot 404 on it, and so the figure can come back if the
+ * client reverses the decision; nothing in the panel calls it.
  */
 export const adminHrAppHours = onCall(async (request) => {
   await requireStaffAny(request, ["payroll.hr_payroll", "payroll.manage"]);

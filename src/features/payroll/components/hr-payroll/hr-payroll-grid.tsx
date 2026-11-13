@@ -17,14 +17,7 @@ import {
 import type { PayrollCellStatus } from "../../use-payroll-cell-mutation";
 import type { HrNumericCell } from "../../hr-cell-validation";
 import { COLUMN_EDIT, money3 } from "./hr-payroll-ui";
-import {
-  HR_CATALOG_CELLS,
-  HR_DATE_CELLS,
-  type HrCatalogCellSpec as HrCatalogCellSpecShape,
-  type HrCatalogOptionsKey,
-} from "../../hr-inline-cells";
-import { HrAmountCell, HrDateCell, HrOptionCell, HrSelectCell, HrTextCell } from "./editable-cell";
-import type { HrIdentityPatch } from "../../payroll-actions";
+import { HrAmountCell, HrSelectCell } from "./editable-cell";
 import { PayrollIdentityCell, hrIdentityField } from "../../payroll-identity-cell";
 import { PayrollRowLink } from "../../payroll-row-link";
 import "./hr-payroll.css";
@@ -34,27 +27,6 @@ const FALLBACK_ROW_COUNT = 40;
 /** Matches the virtualiser's `estimateSize` so the first paint does not jump. */
 const FALLBACK_ROW_HEIGHT = 26;
 
-type HrOption = { value: string; label: string };
-
-/**
- * Every master the sheet's inline pickers read.
- *
- * One shape for all of them: the identity cells (bank / zone / client) and the
- * catalog cells differ only in which list they open, so a single prop keeps the
- * grid from growing a parameter per column.
- */
-export type HrIdentityOptions = Record<HrCatalogOptionsKey, HrOption[]> & {
-  banks: HrOption[];
-  zones: HrOption[];
-  clients: HrOption[];
-};
-
-/**
- * The inline cells backed by a master catalog.
- *
- * The table lives in `hr-inline-cells.ts` so a test can pin which column writes
- * which key; the grid only opens the list the row names.
- */
 function HrDataRow({
   row,
   index,
@@ -67,12 +39,6 @@ function HrDataRow({
   shortfallTitle,
   cellStates,
   cellError,
-  vehicleOptions,
-  noVehicle,
-  noIdentity,
-  onVehicleType,
-  identityOptions,
-  onIdentity,
   onSelect,
   onAmount,
 }: {
@@ -87,12 +53,6 @@ function HrDataRow({
   shortfallTitle: (gap: number) => string;
   cellStates: Readonly<Record<string, PayrollCellStatus>>;
   cellError: (reason: string | undefined) => string;
-  vehicleOptions: readonly { key: string; label: string }[];
-  identityOptions: HrIdentityOptions;
-  noVehicle: string;
-  noIdentity: string;
-  onVehicleType: (driverId: string, vehicleKey: string) => void;
-  onIdentity: (driverId: string, patch: HrIdentityPatch) => void;
   onSelect: (driverId: string, key: keyof HrEditState, value: number) => void;
   onAmount: (driverId: string, key: keyof HrEditState, value: number) => void;
 }) {
@@ -121,12 +81,6 @@ function HrDataRow({
               shortfallTitle,
               cellStates,
               cellError,
-              vehicleOptions,
-              noVehicle,
-              noIdentity,
-              onVehicleType,
-              identityOptions,
-              onIdentity,
             )}
           </td>
         );
@@ -398,25 +352,6 @@ function renderHrCell(
   shortfallTitle: (gap: number) => string,
   cellStates: Readonly<Record<string, PayrollCellStatus>>,
   cellError: (reason: string | undefined) => string,
-  vehicleOptions: readonly { key: string; label: string }[],
-  noVehicle: string,
-  noIdentity: string,
-  onVehicleType: (driverId: string, vehicleKey: string) => void,
-  identityOptions: {
-    banks: { value: string; label: string }[];
-    zones: { value: string; label: string }[];
-    clients: { value: string; label: string }[];
-    nationalities: { value: string; label: string }[];
-    nationalityCategories: { value: string; label: string }[];
-    restaurants: { value: string; label: string }[];
-    sponsorships: { value: string; label: string }[];
-    sections: { value: string; label: string }[];
-    positions: { value: string; label: string }[];
-    companies: { value: string; label: string }[];
-    hiringTypes: { value: string; label: string }[];
-    jobEndDescriptions: { value: string; label: string }[];
-  },
-  onIdentity: (driverId: string, patch: HrIdentityPatch) => void,
 ): JSX.Element | string | number {
   if (column.key === "i") return dataIndex;
   if (column.key === "status") {
@@ -427,117 +362,19 @@ function renderHrCell(
       </span>
     );
   }
-  if (column.key === "vtype" && canManage) {
-    // A rider on a type the catalog no longer lists keeps that string in the
-    // cell: deleting a type must never blank somebody's vehicle. The pick writes
-    // on `change`, so the row reprices the moment the type changes.
-    return (
-      <HrOptionCell
-        value={row.vehicleKey}
-        options={vehicleOptions.map((option) => ({ value: option.key, label: option.label }))}
-        emptyLabel={noVehicle}
-        ariaLabel={column.header}
-        status={cellStates[`${row.driverId}:vehicleType`] ?? { state: "idle" }}
-        errorText={cellError}
-        canEdit={canManage}
-        onCommit={(value) => onVehicleType(row.driverId, value)}
-      />
-    );
-  }
   /**
-   * The identity cells the client asked to correct from the sheet: bank number,
-   * bank, currency, zone and client. Each one writes through the audited callable
-   * and keeps the row's dependent figures in step.
-   */
-  if (canManage && (column.key === "bankNo" || column.key === "cur")) {
-    const field = column.key === "bankNo" ? "bankNumber" : "currency";
-    const raw = row.cells[column.key] ?? "";
-    return (
-      <HrTextCell
-        driverId={row.driverId}
-        field={field}
-        columnKey={column.key}
-        value={raw === "—" ? "" : raw}
-        status={cellStates[`${row.driverId}:${field}`] ?? { state: "idle" }}
-        errorText={cellError}
-        canEdit={canManage}
-        onCommit={(driverId, changed, value) => onIdentity(driverId, { [changed]: value })}
-      />
-    );
-  }
-  if (canManage && (column.key === "bank" || column.key === "zone" || column.key === "clientName")) {
-    const spec =
-      column.key === "bank"
-        ? { field: "bankCode" as const, value: row.bankCode, options: identityOptions.banks }
-        : column.key === "zone"
-          ? { field: "zoneId" as const, value: row.zoneId, options: identityOptions.zones }
-          : { field: "projectKey" as const, value: row.projectKey, options: identityOptions.clients };
-    return (
-      <HrOptionCell
-        value={spec.value}
-        options={spec.options}
-        emptyLabel={noIdentity}
-        ariaLabel={column.header}
-        status={cellStates[`${row.driverId}:${spec.field}`] ?? { state: "idle" }}
-        errorText={cellError}
-        canEdit={canManage}
-        onCommit={(value) => onIdentity(row.driverId, { [spec.field]: value })}
-      />
-    );
-  }
-  /**
-   * The profile columns, all edited in place.
+   * The "From employees" band and the Configuration columns are **read-only**.
    *
-   * `start` / `endDate` are date pickers; `endDesc` is prose; the four catalog
-   * columns (Sponsor, Hiring Type, Section, Job Position, Company) pick from the
-   * masters Employee Settings owns. Every one writes through the same audited
-   * callable as the identity cells, so there is no per-row save button.
+   * The client's review says these must reflect the Employee profile and must not
+   * be editable here: one master, one place to change it. That covers Nationality,
+   * Nationality Category, Status, Work Start, Job End Date, Job End Description,
+   * restaurant, sponsor, section, position, company, hiring type, bank details,
+   * zone, client, Fixed Salary, Work Permit Salary, Rate and Vehicle Type.
+   *
+   * Only the cells HR owns stay editable — the increment applicables, the food and
+   * sick selections, and the four import columns (pending, traffic, loan,
+   * allowances, deductions) — because no employee field carries those.
    */
-  if (canManage && HR_DATE_CELLS[column.key]) {
-    const field = HR_DATE_CELLS[column.key] === "workStartDate" ? "workStart" : "jobEnd";
-    return (
-      <HrDateCell
-        value={HR_DATE_CELLS[column.key] === "workStartDate" ? row.workStartDate : row.jobEndDate}
-        ariaLabel={column.header}
-        status={cellStates[`${row.driverId}:${HR_DATE_CELLS[column.key]}`] ?? { state: "idle" }}
-        errorText={cellError}
-        canEdit={canManage}
-        onCommit={(value) => onIdentity(row.driverId, { [field]: value })}
-      />
-    );
-  }
-  if (canManage && column.key === "endDesc") {
-    const raw = row.cells.endDesc ?? "";
-    return (
-      <HrTextCell
-        driverId={row.driverId}
-        field="jobEndDescription"
-        columnKey={column.key}
-        value={raw === "—" ? "" : raw}
-        status={cellStates[`${row.driverId}:jobEndDescription`] ?? { state: "idle" }}
-        errorText={cellError}
-        canEdit={canManage}
-        debounceMs={900}
-        ariaLabel={column.header}
-        onCommit={(driverId, changed, value) => onIdentity(driverId, { [changed]: value })}
-      />
-    );
-  }
-  if (canManage && HR_CATALOG_CELLS[column.key]) {
-    const spec = HR_CATALOG_CELLS[column.key];
-    return (
-      <HrOptionCell
-        value={spec.valueOf(row)}
-        options={identityOptions[spec.optionsKey]}
-        emptyLabel={noIdentity}
-        ariaLabel={column.header}
-        status={cellStates[`${row.driverId}:${spec.field}`] ?? { state: "idle" }}
-        errorText={cellError}
-        canEdit={canManage}
-        onCommit={(value) => onIdentity(row.driverId, { [spec.field]: value })}
-      />
-    );
-  }
   const editKey = COLUMN_EDIT[column.key];
   if (column.editable === "select" && canManage && editKey && column.select) {
     return (
@@ -593,9 +430,11 @@ function renderHrCell(
   const text = row.cells[column.key] ?? "";
   if (text === HR_AWAITING) return <span className="hrpay-await">{awaiting}</span>;
   if (column.key === "rate" && text === noRate) return <span className="hrpay-warn">{text}</span>;
-  if (column.key === "total") {
+  if (column.key === "total" || column.key === "payment") {
     // Req: a month that pays less than the work permit salary is flagged, not
     // silently printed. A permit figure of 0 is "not recorded", never "below".
+    // Payment equals Total Salary by definition, so both cells carry the flag —
+    // the client's screenshot names the payment column.
     const gap = hrSalaryShortfall(row.numbers.totalSalary, row.permitSalary);
     if (gap !== null) {
       return (
@@ -637,15 +476,6 @@ export function HrPayrollGrid(props: {
   cellStates: Readonly<Record<string, PayrollCellStatus>>;
   /** A refused value's reason as a sentence. */
   cellError: (reason: string | undefined) => string;
-  /** The live `vehicle_types` catalog, for the inline Vehicle Type cell. */
-  vehicleOptions: readonly { key: string; label: string }[];
-  /** Bank / Zone / Client catalogs for the identity cells. */
-  identityOptions: HrIdentityOptions;
-  /** Printed when a rider has no assignment. */
-  noVehicle: string;
-  noIdentity: string;
-  onVehicleType: (driverId: string, vehicleKey: string) => void;
-  onIdentity: (driverId: string, patch: HrIdentityPatch) => void;
   /** Pinned bar under the scroller (count + Download this table). */
   footer?: ReactNode;
   /** The rows exactly as painted, so the export can be the screen. */
@@ -733,12 +563,6 @@ export function HrPayrollGrid(props: {
       shortfallTitle={props.shortfallTitle}
       cellStates={props.cellStates}
       cellError={props.cellError}
-      vehicleOptions={props.vehicleOptions}
-      noVehicle={props.noVehicle}
-      noIdentity={props.noIdentity}
-      onVehicleType={props.onVehicleType}
-      identityOptions={props.identityOptions}
-      onIdentity={props.onIdentity}
       onSelect={props.onSelect}
       onAmount={props.onAmount}
     />

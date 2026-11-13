@@ -121,8 +121,6 @@ export type HrPayrollNumbers = {
   orders: number;
   revenue: number;
   contribution: number;
-  /** App-open hours (sessions, unioned). Display only — never in a pay formula. */
-  appHours: number;
 };
 
 export type HrPayrollRow = {
