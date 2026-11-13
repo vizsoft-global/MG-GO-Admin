@@ -1,12 +1,46 @@
 export const CATALOG_KEY_RE = /^[a-z0-9_]{1,40}$/;
 
+/**
+ * Kinds whose key is an ISO code rather than a slug.
+ *
+ * `drivers.nationality` stores `KW`, not `kw`, and `bank_details.currency`
+ * stores `KWD`, not `kwd`. A catalog that lowercased those keys would write a
+ * value no reader matches, so these two kinds keep their case and are validated
+ * against the code's own shape instead of the slug rule.
+ */
+export const ISO_KEY_KINDS = new Set<EmployeeCatalogKind>([
+  "nationalities",
+  "payment_currencies",
+]);
+
+export function catalogKeyReForKind(kind: EmployeeCatalogKind): RegExp {
+  if (kind === "nationalities") return /^[A-Z]{2}$/;
+  if (kind === "payment_currencies") return /^[A-Z]{3}$/;
+  return CATALOG_KEY_RE;
+}
+
+/** Trim and apply the kind's own case: ISO codes upper, everything else lower. */
+export function normalizeCatalogKey(kind: EmployeeCatalogKind, raw: string): string {
+  const trimmed = raw.trim();
+  return ISO_KEY_KINDS.has(kind) ? trimmed.toUpperCase() : trimmed.toLowerCase();
+}
+
 export type EmployeeCatalogKind =
   | "employee_statuses"
   | "employee_sections"
   | "nationality_categories"
   | "bank_codes"
   | "job_positions"
-  | "sponsorships";
+  | "sponsorships"
+  /**
+   * The four the client asked Employee Settings to own as editable catalogs.
+   * Each was a compiled enum or a fixed list in code; the seed is the previous
+   * value set, so an empty collection is byte-identical to the old behaviour.
+   */
+  | "hiring_types"
+  | "job_end_descriptions"
+  | "nationalities"
+  | "payment_currencies";
 
 export type EmployeeCatalogRow = {
   key: string;
@@ -243,6 +277,125 @@ export const DEFAULT_JOB_POSITIONS: readonly EmployeeCatalogRow[] = [
   { key: "head_office", label_en: "Head office", label_ar: "المكتب الرئيسي", is_active: true, is_system: true, sort_order: 60 },
 ];
 
+/**
+ * Hiring types. The seed is the four values `HIRING_TYPES` compiled, with the
+ * same keys, so a rider already carrying `overseas` keeps reading the same label
+ * and any stored value the catalog no longer lists still renders on its row.
+ */
+export const DEFAULT_HIRING_TYPES: readonly EmployeeCatalogRow[] = [
+  { key: "overseas", label_en: "Overseas", label_ar: "من الخارج", is_active: true, is_system: true, sort_order: 10 },
+  { key: "old_local", label_en: "Old Local", label_ar: "محلي قديم", is_active: true, is_system: true, sort_order: 20 },
+  { key: "new_local", label_en: "New Local", label_ar: "محلي جديد", is_active: true, is_system: true, sort_order: 30 },
+  {
+    key: "outsourcing_partner",
+    label_en: "Outsourcing Partner",
+    label_ar: "شريك توظيف",
+    is_active: true,
+    is_system: true,
+    sort_order: 40,
+  },
+];
+
+/** Job-end reasons. Same four keys `JOB_END_DESCRIPTIONS` compiled. */
+export const DEFAULT_JOB_END_DESCRIPTIONS: readonly EmployeeCatalogRow[] = [
+  {
+    key: "end_of_contract",
+    label_en: "End of Contract",
+    label_ar: "انتهاء العقد",
+    is_active: true,
+    is_system: true,
+    sort_order: 10,
+  },
+  { key: "issue_maker", label_en: "Issue Maker", label_ar: "مثير للمشاكل", is_active: true, is_system: true, sort_order: 20 },
+  {
+    key: "not_willing_to_continue",
+    label_en: "Not willing to continue",
+    label_ar: "غير راغب في الاستمرار",
+    is_active: true,
+    is_system: true,
+    sort_order: 30,
+  },
+  {
+    key: "travelled_not_returned",
+    label_en: "Travelled and didn't come back",
+    label_ar: "سافر ولم يعد",
+    is_active: true,
+    is_system: true,
+    sort_order: 40,
+  },
+];
+
+/**
+ * Nationality (country). The key is the ISO alpha-2 code, because that is what
+ * `drivers.nationality` stores — the catalog governs the *label* and which
+ * countries are offered, not the stored shape.
+ */
+const NATIONALITY_SEED: ReadonlyArray<[string, string, string]> = [
+  ["KW", "Kuwait", "الكويت"],
+  ["IN", "India", "الهند"],
+  ["BD", "Bangladesh", "بنغلاديش"],
+  ["PK", "Pakistan", "باكستان"],
+  ["NP", "Nepal", "نيبال"],
+  ["LK", "Sri Lanka", "سريلانكا"],
+  ["EG", "Egypt", "مصر"],
+  ["SY", "Syria", "سوريا"],
+  ["JO", "Jordan", "الأردن"],
+  ["LB", "Lebanon", "لبنان"],
+  ["PH", "Philippines", "الفلبين"],
+  ["ET", "Ethiopia", "إثيوبيا"],
+  ["UG", "Uganda", "أوغندا"],
+  ["KE", "Kenya", "كينيا"],
+  ["GH", "Ghana", "غانا"],
+  ["NG", "Nigeria", "نيجيريا"],
+  ["SD", "Sudan", "السودان"],
+  ["YE", "Yemen", "اليمن"],
+  ["IQ", "Iraq", "العراق"],
+  ["IR", "Iran", "إيران"],
+  ["TR", "Türkiye", "تركيا"],
+  ["GB", "United Kingdom", "المملكة المتحدة"],
+  ["US", "United States", "الولايات المتحدة"],
+];
+
+export const DEFAULT_NATIONALITIES: readonly EmployeeCatalogRow[] = NATIONALITY_SEED.map(
+  ([code, en, ar], index) => ({
+    key: code,
+    label_en: en,
+    label_ar: ar,
+    is_active: true,
+    is_system: true,
+    sort_order: (index + 1) * 10,
+  }),
+);
+
+/** Payment currency. The key is the ISO 4217 code `bank_details.currency` stores. */
+export const DEFAULT_PAYMENT_CURRENCIES: readonly EmployeeCatalogRow[] = [
+  ["KWD", "Kuwaiti Dinar", "دينار كويتي"],
+  ["USD", "US Dollar", "دولار أمريكي"],
+  ["EUR", "Euro", "يورو"],
+  ["GBP", "Pound Sterling", "جنيه إسترليني"],
+  ["SAR", "Saudi Riyal", "ريال سعودي"],
+  ["AED", "UAE Dirham", "درهم إماراتي"],
+  ["BHD", "Bahraini Dinar", "دينار بحريني"],
+  ["QAR", "Qatari Riyal", "ريال قطري"],
+  ["OMR", "Omani Rial", "ريال عماني"],
+  ["INR", "Indian Rupee", "روبية هندية"],
+  ["PKR", "Pakistani Rupee", "روبية باكستانية"],
+  ["BDT", "Bangladeshi Taka", "تاكا بنغلاديشية"],
+  ["EGP", "Egyptian Pound", "جنيه مصري"],
+  ["JOD", "Jordanian Dinar", "دينار أردني"],
+  ["LBP", "Lebanese Pound", "ليرة لبنانية"],
+  ["TRY", "Turkish Lira", "ليرة تركية"],
+  ["PHP", "Philippine Peso", "بيزو فلبيني"],
+  ["NPR", "Nepalese Rupee", "روبية نيبالية"],
+].map(([code, en, ar], index) => ({
+  key: code,
+  label_en: en,
+  label_ar: ar,
+  is_active: true,
+  is_system: true,
+  sort_order: index === 0 ? 0 : (index + 1) * 10,
+}));
+
 export function catalogKeyFromLabel(name: string): string {
   return name
     .trim()
@@ -296,6 +449,14 @@ export function seedsForKind(kind: EmployeeCatalogKind): readonly EmployeeCatalo
       return DEFAULT_JOB_POSITIONS;
     case "sponsorships":
       return DEFAULT_SPONSORSHIPS;
+    case "hiring_types":
+      return DEFAULT_HIRING_TYPES;
+    case "job_end_descriptions":
+      return DEFAULT_JOB_END_DESCRIPTIONS;
+    case "nationalities":
+      return DEFAULT_NATIONALITIES;
+    case "payment_currencies":
+      return DEFAULT_PAYMENT_CURRENCIES;
     default: {
       const _never: never = kind;
       return _never;
@@ -337,7 +498,9 @@ export function isNonOperationalOnly(
 
 export function parseCatalogRow(raw: Record<string, unknown>): EmployeeCatalogRow | null {
   const key = typeof raw.key === "string" ? raw.key : "";
-  if (!CATALOG_KEY_RE.test(key)) return null;
+  // ISO-key catalogs store `KW` / `KWD`; the slug rule would reject both.
+  const valid = /^[A-Z]{2}$/.test(key) || /^[A-Z]{3}$/.test(key) || CATALOG_KEY_RE.test(key);
+  if (!valid) return null;
   return {
     key,
     label_en: typeof raw.label_en === "string" ? raw.label_en : key,

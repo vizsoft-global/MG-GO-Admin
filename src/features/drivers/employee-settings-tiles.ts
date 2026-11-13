@@ -2,14 +2,18 @@ import type { LucideIcon } from "lucide-react";
 import {
   Bike,
   BriefcaseBusiness,
-  ClipboardCheck,
+  Building2,
+  CalendarClock,
   ClipboardList,
-  FormInput,
+  Coins,
   Globe,
   Landmark,
   Layers,
-  ListChecks,
+  LogOut,
+  MapPin,
+  Store,
   UsersRound,
+  UserRoundCheck,
 } from "lucide-react";
 import { hasPermissionInSet, type Permission } from "@/lib/auth/permissions";
 import type { EmployeeCatalogKind } from "@/features/employees/employee-catalogs";
@@ -21,6 +25,14 @@ import type { EmployeeCatalogKind } from "@/features/employees/employee-catalogs
  * the same thing. Each tile is gated on the permission its page already asks
  * for — no new slugs — and the dialog simply hides what the operator cannot
  * open.
+ *
+ * The client's review asked for three doors to go and eleven to arrive. The
+ * three that went — Employee fields, Service types and Attendance settings —
+ * configured a *module*, not an employee, and the Employees header was the wrong
+ * place to reach them. Of the eleven asked for, seven are masters that belong
+ * here; the other four (Beneficiary Civil ID, Off structure, Accommodation) are
+ * values on one rider's record, which are edited on that rider's profile and
+ * would have nothing to list in a catalog.
  */
 export type EmployeeSettingsTile = {
   key: string;
@@ -35,40 +47,78 @@ export type EmployeeSettingsTile = {
   superAdminOnly?: boolean;
   /**
    * Which editor the Employee Settings sheet renders in place. `catalog` uses
-   * the shared `EmployeeCatalogPanel`; the named ones are the module panels.
+   * the shared `EmployeeCatalogPanel`; the named ones are the module panels; a
+   * `link` door hands off to a page that is a map or a grid of its own rather
+   * than a list of labels, so it is better opened than embedded.
    */
   view:
     | { kind: "catalog"; catalog: EmployeeCatalogKind }
-    | { kind: "serviceTypes" }
-    | { kind: "attendance" }
     | { kind: "vehicleTypes" }
-    | { kind: "driverFields" }
-    | { kind: "clients" };
+    | { kind: "clients" }
+    | { kind: "link"; descriptionKey: string };
 };
 
 export const EMPLOYEE_SETTINGS_TILES: readonly EmployeeSettingsTile[] = [
+  // The four catalogs that used to be compiled enums or fixed lists in code.
   {
-    key: "driverFields",
-    href: "/settings/driver-fields",
-    icon: FormInput,
+    key: "nationalities",
+    href: "/settings/nationalities",
+    icon: Globe,
     permission: "drivers.manage",
-    superAdminOnly: true,
-    view: { kind: "driverFields" },
+    view: { kind: "catalog", catalog: "nationalities" },
   },
   {
-    key: "serviceTypes",
-    href: "/settings/service-types",
-    icon: ListChecks,
-    permission: "service.manage",
-    view: { kind: "serviceTypes" },
+    key: "hiringTypes",
+    href: "/settings/hiring-types",
+    icon: UserRoundCheck,
+    permission: "drivers.manage",
+    view: { kind: "catalog", catalog: "hiring_types" },
   },
   {
-    key: "attendanceSettings",
-    href: "/settings/attendance",
-    icon: ClipboardCheck,
-    permission: "attendance.manage",
-    view: { kind: "attendance" },
+    key: "jobEndDescriptions",
+    href: "/settings/job-end-descriptions",
+    icon: LogOut,
+    permission: "drivers.manage",
+    view: { kind: "catalog", catalog: "job_end_descriptions" },
   },
+  {
+    key: "paymentCurrencies",
+    href: "/settings/payment-currencies",
+    icon: Coins,
+    permission: "drivers.manage",
+    view: { kind: "catalog", catalog: "payment_currencies" },
+  },
+  {
+    key: "sponsorships",
+    href: "/settings/sponsorships",
+    icon: CalendarClock,
+    permission: "drivers.manage",
+    view: { kind: "catalog", catalog: "sponsorships" },
+  },
+  // Company, Zone and Restaurant are modules with their own editors, so the door
+  // hands off rather than re-implementing a grid or a map inside a dialog.
+  {
+    key: "companies",
+    href: "/settings/source-companies",
+    icon: Building2,
+    permission: "drivers.manage",
+    view: { kind: "link", descriptionKey: "companiesHint" },
+  },
+  {
+    key: "zones",
+    href: "/zones",
+    icon: MapPin,
+    permission: "zones.view",
+    view: { kind: "link", descriptionKey: "zonesHint" },
+  },
+  {
+    key: "restaurants",
+    href: "/restaurants",
+    icon: Store,
+    permission: "restaurants.view",
+    view: { kind: "link", descriptionKey: "restaurantsHint" },
+  },
+  // Kept, in the client's own order.
   {
     key: "vehicleTypes",
     href: "/settings/vehicle-types",
