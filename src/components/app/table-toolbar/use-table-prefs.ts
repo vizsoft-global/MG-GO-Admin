@@ -7,6 +7,7 @@ import {
   saveUserUiPreference,
 } from "@/features/settings/ui-preferences-actions";
 import type { ListColumnPreference } from "@/lib/ui-preferences/types";
+import { listSearchDelayMs } from "@/lib/search/list-search";
 import type { TableToolbarColumn, TableViewMode } from "./toolbar-config";
 
 const NONE = "none";
@@ -99,7 +100,11 @@ export function useTablePrefs(tableId: string, columns: TableToolbarColumn[]) {
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setAppliedQuery(draftQuery), 300);
+    // Clearing is an undo, not a query: `setQuery` below applies it on the
+    // click, so this timer is the typing path only. A whitespace-only box still
+    // answers 0 here, which keeps the two paths in step.
+    const delay = listSearchDelayMs(draftQuery);
+    const timer = window.setTimeout(() => setAppliedQuery(draftQuery), delay);
     return () => window.clearTimeout(timer);
   }, [draftQuery]);
 
@@ -203,10 +208,17 @@ export function useTablePrefs(tableId: string, columns: TableToolbarColumn[]) {
     persist(system);
   }, [persist, system]);
 
+  const setQuery = useCallback((value: string) => {
+    setDraftQuery(value);
+    // An empty box applies on the click: the × and "Clear all" restore the full
+    // table without waiting out the debounce. Typed text still waits for it.
+    if (listSearchDelayMs(value) === 0) setAppliedQuery(value);
+  }, []);
+
   return {
     query: draftQuery,
     appliedQuery,
-    setQuery: setDraftQuery,
+    setQuery,
     groupBy,
     setGroupBy,
     view,

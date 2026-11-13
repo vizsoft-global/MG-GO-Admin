@@ -3,9 +3,13 @@ export const SIDEBAR_MENU_STALE_MS = 5 * 60 * 1000;
 
 /**
  * Wait before a list search box refetches. Selects and submit buttons are not
- * debounced. Drivers, deliveries, and attendance already used this delay.
+ * debounced.
+ *
+ * Re-exported from `@/lib/search/list-search`, which is where every list reads
+ * it from now: the delay was written down here first and the number itself
+ * belongs with the search box, not with the sidebar query keys.
  */
-export const LIST_SEARCH_DEBOUNCE_MS = 300;
+export { LIST_SEARCH_DEBOUNCE_MS } from "../search/list-search";
 
 export type SidebarMenuEpochs = {
   /** Permission generation. Stage D supplies this; 0 lets this branch compile alone. */
