@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Download, Info, Redo2, Undo2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -146,6 +146,8 @@ export function PayrollAttendanceOrdersTab({
   const [fillPreview, setFillPreview] = useState<CellRect | null>(null);
   const [menu, setMenu] = useState<PayrollCellMenuState | null>(null);
   const parentRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const headBandRef = useRef<HTMLTableRowElement>(null);
   const drag = useRef<{
     mode: "select" | "fill";
     r0: number;
@@ -476,6 +478,25 @@ export function PayrollAttendanceOrdersTab({
     [],
   );
 
+  /* This sheet has a two-row header, so it pins at two heights: the date band at
+     the top of the viewport and the metric row directly beneath it. The offset is
+     measured from the band rather than hard-coded, so a renamed column or a wider
+     glyph cannot slide the second row over the first, and it is published as a
+     custom property so correcting it costs no render. */
+  useLayoutEffect(() => {
+    const table = tableRef.current;
+    const band = headBandRef.current;
+    if (!table || !band) return;
+    const apply = () => {
+      table.style.setProperty("--ao-head-band", `${Math.round(band.getBoundingClientRect().height)}px`);
+    };
+    apply();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(apply);
+    observer.observe(band);
+    return () => observer.disconnect();
+  }, [dates.length, config.dayColumns.length]);
+
   const bounds = rect ? normalizeRect(rect) : null;
   const fillBounds = fillPreview ? normalizeRect(fillPreview) : null;
   const isSelected = (r: number, c: number) =>
@@ -700,9 +721,19 @@ export function PayrollAttendanceOrdersTab({
             editable && "focus-visible:ring-2 focus-visible:ring-primary/40",
           )}
         >
-          <table className="w-max min-w-full border-collapse text-xs">
-            <thead className="sticky top-0 z-10 bg-card">
-              <tr className="border-b border-border">
+          <table
+            ref={tableRef}
+            className="w-max min-w-full border-separate border-spacing-0 text-xs"
+          >
+            {/* Two header rows, so they pin at two heights: the date band at the
+                top of the scroll box and the metric row directly beneath it. The
+                band's height is measured into `--ao-head-band` (see the layout
+                effect above) instead of hard-coded, so a renamed column or a wider
+                label cannot slide the second row over the first. Separated borders
+                because a collapsed table paints one shared edge per column, which
+                is what left the day columns without their own divider. */}
+            <thead>
+              <tr ref={headBandRef} className="border-b border-border">
                 {columns.map((column, index) => {
                   const sticky = stickyIdentityStyle(
                     column.id,
@@ -714,8 +745,12 @@ export function PayrollAttendanceOrdersTab({
                   <th
                     key={column.id}
                     rowSpan={2}
-                    className={cn(TABLE_HEAD_CLASS, "px-2 py-2 text-start align-bottom", sticky?.className)}
-                    style={sticky?.style}
+                    className={cn(
+                      TABLE_HEAD_CLASS,
+                      "border-e border-b border-border px-2 py-2 text-start align-bottom",
+                      sticky?.className ?? "sticky top-0 bg-card",
+                    )}
+                    style={sticky ? { ...sticky.style, zIndex: 50 } : { top: 0, zIndex: 40 }}
                   >
                     <PayrollColumnHeader
                       label={resolveColumnLabel(
@@ -748,7 +783,11 @@ export function PayrollAttendanceOrdersTab({
                   <th
                     key={date}
                     colSpan={dayColumnCount}
-                    className={cn(TABLE_HEAD_CLASS, "border-s border-border px-2 py-1.5 text-center text-xs")}
+                    className={cn(
+                      TABLE_HEAD_CLASS,
+                      "sticky top-0 border-e border-b border-border bg-card px-2 py-1.5 text-center text-xs",
+                    )}
+                    style={{ zIndex: 40 }}
                   >
                     {isoDayLabel(date)}
                   </th>
@@ -757,7 +796,7 @@ export function PayrollAttendanceOrdersTab({
               <tr className="border-b border-border">
                 {dates.map((date, i) => (
                   <Fragment key={date}>
-                    {config.dayColumns.map((dayColumn, position) => {
+                    {config.dayColumns.map((dayColumn) => {
                       const columnId =
                         dayColumn === "payroll"
                           ? dayColumnId(i)
@@ -769,9 +808,9 @@ export function PayrollAttendanceOrdersTab({
                           key={`${date}-${dayColumn}`}
                           className={cn(
                             TABLE_HEAD_CLASS,
-                            "px-1 py-1",
-                            position === 0 && "border-s border-border",
+                            "sticky border-e border-b border-border bg-card px-1 py-1",
                           )}
+                          style={{ top: "var(--ao-head-band, 0px)", zIndex: 30 }}
                         >
                           <PayrollColumnHeader
                             label={t(dayColumnLabelKey(dayColumn))}
@@ -791,10 +830,22 @@ export function PayrollAttendanceOrdersTab({
                 ))}
                 {/* The two row totals close every row, so they need a header of
                     their own — the project decides which pair they are. */}
-                <th className={cn(TABLE_HEAD_CLASS, "border-s border-border px-2 py-1 text-end")}>
+                <th
+                  className={cn(
+                    TABLE_HEAD_CLASS,
+                    "sticky border-e border-b border-border bg-card px-2 py-1 text-end",
+                  )}
+                  style={{ top: "var(--ao-head-band, 0px)", zIndex: 30 }}
+                >
                   {t("ao.workedDaysShort")}
                 </th>
-                <th className={cn(TABLE_HEAD_CLASS, "px-2 py-1 text-end")}>
+                <th
+                  className={cn(
+                    TABLE_HEAD_CLASS,
+                    "sticky border-e border-b border-border bg-card px-2 py-1 text-end",
+                  )}
+                  style={{ top: "var(--ao-head-band, 0px)", zIndex: 30 }}
+                >
                   {config.usesUploadedHours ? t("ao.totalHoursShort") : t("ao.totalOrdersShort")}
                 </th>
                 <th
@@ -802,7 +853,11 @@ export function PayrollAttendanceOrdersTab({
                   rowSpan={2}
                   scope="col"
                   aria-label={t("common.openEmployee")}
-                  className={cn(TABLE_HEAD_CLASS, "w-9 px-1 py-2 text-center align-bottom")}
+                  className={cn(
+                    TABLE_HEAD_CLASS,
+                    "sticky top-0 w-9 border-e border-b border-border bg-card px-1 py-2 text-center align-bottom",
+                  )}
+                  style={{ zIndex: 40 }}
                 />
               </tr>
             </thead>
@@ -826,7 +881,11 @@ export function PayrollAttendanceOrdersTab({
                       return (
                       <td
                         key={column.id}
-                        className={cn("whitespace-nowrap px-2 py-1.5", sticky?.className, column.id === "name" && "font-medium")}
+                        className={cn(
+                          "border-e border-b border-border/60 whitespace-nowrap px-2 py-1.5",
+                          sticky?.className,
+                          column.id === "name" && "font-medium",
+                        )}
                         style={sticky?.style}
                       >
                         {column.id === "serial" ? (
@@ -864,8 +923,7 @@ export function PayrollAttendanceOrdersTab({
                       const selected = isSelected(rowIndex, i);
                       return (
                         <Fragment key={`${row.driverId}-${date}`}>
-                          {config.dayColumns.map((dayColumn, position) => {
-                            const borderStart = position === 0 ? "border-s border-border/60" : undefined;
+                          {config.dayColumns.map((dayColumn) => {
                             if (dayColumn === "payroll") {
                               return (
                                 <td
@@ -873,7 +931,7 @@ export function PayrollAttendanceOrdersTab({
                                   data-r={rowIndex}
                                   data-c={i}
                                   className={cn(
-                                    "relative border-s border-border/60 px-1 py-1 text-center select-none",
+                                    "relative border-e border-b border-border/60 px-1 py-1 text-center select-none",
                                     selected && "ring-2 ring-inset ring-primary/60",
                                     isFillTarget(rowIndex, i) && "outline-dashed outline-1 outline-emerald-500",
                                   )}
@@ -954,7 +1012,10 @@ export function PayrollAttendanceOrdersTab({
                             }
                             if (dayColumn === "orders") {
                               return (
-                                <td key="orders" className="px-1 py-1 text-center tabular-nums">
+                                <td
+                                  key="orders"
+                                  className="border-e border-b border-border/60 px-1 py-1 text-center tabular-nums"
+                                >
                                   <PayrollOrderCell
                                     driverId={row.driverId}
                                     date={date}
@@ -972,7 +1033,7 @@ export function PayrollAttendanceOrdersTab({
                             return (
                               <td
                                 key={dayColumn}
-                                className={cn("px-1 py-1 text-center tabular-nums", borderStart)}
+                                className="border-e border-b border-border/60 px-1 py-1 text-center tabular-nums"
                               >
                                 <PayrollHoursCell
                                   info={info}
@@ -997,15 +1058,15 @@ export function PayrollAttendanceOrdersTab({
                       );
                     })}
                     {/* Row totals — the pair the project's SOP names. */}
-                    <td className="border-s border-border/60 px-2 py-1.5 text-end font-semibold tabular-nums">
+                    <td className="border-e border-b border-border/60 px-2 py-1.5 text-end font-semibold tabular-nums">
                       {rowTotals.get(row.driverId)?.workedDays ?? 0}
                     </td>
-                    <td className="px-2 py-1.5 text-end font-semibold tabular-nums">
+                    <td className="border-e border-b border-border/60 px-2 py-1.5 text-end font-semibold tabular-nums">
                       {config.usesUploadedHours
                         ? (rowTotals.get(row.driverId)?.totalHours ?? 0).toFixed(1)
                         : (rowTotals.get(row.driverId)?.totalOrders ?? 0)}
                     </td>
-                    <td className="w-9 px-1 py-1.5 text-center">
+                    <td className="w-9 border-e border-b border-border/60 px-1 py-1.5 text-center">
                       <PayrollRowLink driverId={row.driverId} />
                     </td>
                   </tr>
