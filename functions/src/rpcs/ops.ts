@@ -3,6 +3,7 @@ import { measureOnCall } from "../core/fs-metrics";
 import { getFirestore, type Query } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
+import { resolveWorkDay, scanUpperMs } from "../core/shift-day";
 import { parseId, parseIdList } from "../core/query";
 import { requireStaff, requireStaffFresh } from "../core/staff";
 import { overlayZoneMonthDocs } from "../core/rollups";
@@ -869,8 +870,18 @@ async function buildRoll(args: OpsArgs): Promise<{
         ? db
             .collection(COLLECTIONS.deliveries)
             .where(FIELDS.deliveries.deliveredAt, ">=", kuwaitDayStart(args.from))
-            .where(FIELDS.deliveries.deliveredAt, "<", kuwaitDayEnd(args.to))
-            .select("status", "driver_id", "delivered_at", "pickup_at", "restaurant_id", "started_to_restaurant_at")
+            // Past midnight of `to`, so an overnight shift's tail is read; the
+            // day filter below is what keeps it on the shift's own day.
+            .where(FIELDS.deliveries.deliveredAt, "<", new Date(scanUpperMs(args.to)))
+            .select(
+              "status",
+              "driver_id",
+              "delivered_at",
+              "pickup_at",
+              "restaurant_id",
+              "started_to_restaurant_at",
+              "shift_date",
+            )
             .get()
         : Promise.resolve(null),
       wantsOpen
@@ -919,7 +930,7 @@ async function buildRoll(args: OpsArgs): Promise<{
             .where(FIELDS.deliveries.deliveredAt, ">=", kuwaitDayStart(args.from))
             .where(FIELDS.deliveries.deliveredAt, "<", kuwaitDayEnd(args.to))
             .where("status", "==", "verified")
-            .select("status", "driver_id", "delivered_at", "pickup_at", "restaurant_id", "started_to_restaurant_at")
+            .select("status", "driver_id", "delivered_at", "pickup_at", "restaurant_id", "started_to_restaurant_at", "shift_date")
             .get(),
     ]);
 
@@ -939,6 +950,7 @@ async function buildRoll(args: OpsArgs): Promise<{
       pickup_at: row.pickup_at,
       restaurant_id: row.restaurant_id,
       started_to_restaurant_at: row.started_to_restaurant_at,
+      shift_date: row.shift_date,
       day: null,
       minutes: null,
     });
@@ -1034,12 +1046,20 @@ async function buildRoll(args: OpsArgs): Promise<{
       minutes: 0,
       timed: 0,
     };
-    entry.orders += 1;
     const deliveredAt = asDate(row.delivered_at);
     const pickupAt = asDate(row.pickup_at);
     const started = asDate(row.started_to_restaurant_at);
-    const day = deliveredAt ? kuwaitDayString(deliveredAt) : pickupAt ? kuwaitDayString(pickupAt) : null;
-    if (day) entry.days.add(day);
+    // Booked shift first, calendar day only as the fallback — the same rule the
+    // reconciliation report applies, so an order finished at 01:00 lands on the
+    // day its shift started in both places.
+    const day = deliveredAt
+      ? resolveWorkDay(deliveredAt.getTime(), row.shift_date)
+      : pickupAt
+        ? kuwaitDayString(pickupAt)
+        : null;
+    if (!day || day < args.from || day > args.to) continue;
+    entry.orders += 1;
+    entry.days.add(day);
     const minutes = deliveryMinutes(started ?? pickupAt, deliveredAt);
     row.day = day;
     row.minutes = minutes;
@@ -1127,11 +1147,19 @@ async function buildRoll(args: OpsArgs): Promise<{
       lastRestaurantId: null,
       lastAt: 0,
     };
-    entry.orders += 1;
     const deliveredAt = asDate(row.delivered_at);
     const pickupAt = asDate(row.pickup_at);
-    const day = deliveredAt ? kuwaitDayString(deliveredAt) : pickupAt ? kuwaitDayString(pickupAt) : null;
-    if (day) entry.days.add(day);
+    // Same day rule as reconciliation: the booked shift, not the clock. The
+    // scan reaches past midnight, so a row whose day falls outside the window
+    // is the next day's business and is dropped here.
+    const day = deliveredAt
+      ? resolveWorkDay(deliveredAt.getTime(), row.shift_date)
+      : pickupAt
+        ? kuwaitDayString(pickupAt)
+        : null;
+    if (!day || day < args.from || day > args.to) continue;
+    entry.orders += 1;
+    entry.days.add(day);
     const restaurantId = parseId(row.restaurant_id);
     const at = (deliveredAt ?? pickupAt)?.getTime() ?? 0;
     if (restaurantId) {

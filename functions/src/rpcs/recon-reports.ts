@@ -12,6 +12,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { getFirestore, FieldValue, Timestamp } from "../core/fs";
 import { COLLECTIONS, FIELDS } from "../core/collections";
 import { kuwaitDayEnd, kuwaitDayStart, kuwaitDayString } from "../core/kuwait";
+import { dedupeById, resolveWorkDay, scanUpperMs } from "../core/shift-day";
 import { requireStaff } from "../core/staff";
 import { haversineMeters, pointWithinZoneProximity, type ZoneFeature } from "../core/geo";
 import { deliveryMatchesRules as matchesDeliveryRules, type DeliveryRule, type RuleScope } from "../core/incentive";
@@ -120,8 +121,7 @@ function isRealDay(day: string): boolean {
  * what every report used before.
  */
 function resolveReconDay(deliveredAtMs: number, shiftDateRaw: unknown): string {
-  const shift = dayOf(shiftDateRaw);
-  return shift !== null && isRealDay(shift) ? shift : kuwaitDayString(deliveredAtMs);
+  return resolveWorkDay(deliveredAtMs, shiftDateRaw) ?? kuwaitDayString(deliveredAtMs);
 }
 
 /**
@@ -183,8 +183,9 @@ async function loadDeliveriesByDay(
   toDay: string,
   cap: number,
 ): Promise<Array<{ id: string; data: Dict }>> {
-  // Query through noon of the day after toDay so overnight shifts crossing midnight are included
-  const scanEnd = new Date(kuwaitDayEnd(toDay).getTime() + 12 * 60 * 60 * 1000);
+  // Reach past midnight of `toDay` so an overnight shift's tail is included;
+  // the bucket check in the caller is what keeps it out of a later day.
+  const scanEnd = new Date(scanUpperMs(toDay));
   const snap = await getFirestore()
     .collection(COLLECTIONS.deliveries)
     .where(FIELDS.deliveries.deliveredAt, ">=", kuwaitDayStart(fromDay))
@@ -233,9 +234,14 @@ async function loadDeliveriesByDayChunked(
       batch.map((slice) => loadDeliveriesByDay(slice.from, slice.to, cap)),
     );
     for (const rows of results) out.push(...rows);
-    if (out.length > cap) throw new HttpsError("out-of-range", "scan_cap_exceeded");
+    // The tail of one slice and the head of the next overlap by design, so the
+    // concatenated list has to be deduplicated before the cap is judged — and
+    // before anything counts it. Without this an order completed at 01:00 was
+    // read twice and, because it carries the previous day's `shift_date`, it
+    // doubled that day's cell instead of being filtered out.
+    if (dedupeById(out).length > cap) throw new HttpsError("out-of-range", "scan_cap_exceeded");
   }
-  return out;
+  return dedupeById(out);
 }
 
 /** `MIN(name)` over a driver's restaurants, optionally only published ones. */
@@ -367,10 +373,8 @@ export const adminOrderComparisonSnapshot = onCall(async (request) => {
     if (!LOGGED_STATUSES.has(String(d.status))) continue;
     const deliveredAt = millisOf(d.delivered_at);
     if (deliveredAt === null) continue;
-    const shiftDate = typeof d.shift_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.shift_date)
-      ? d.shift_date
-      : null;
-    const workDate = shiftDate ?? kuwaitDayString(deliveredAt);
+    const workDate = resolveWorkDay(deliveredAt, d.shift_date);
+    if (workDate === null) continue;
     if (workDate < from || workDate > to) continue;
     const driverId = str(d.driver_id);
     const driver = driverId ? deliveryDrivers.get(driverId) : undefined;
@@ -463,10 +467,8 @@ export const adminOrderReconCompare = onCall(async (request) => {
     if (!LOGGED_STATUSES.has(String(d.status))) continue;
     const deliveredAt = millisOf(d.delivered_at);
     if (deliveredAt === null) continue;
-    const shiftDate = typeof d.shift_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.shift_date)
-      ? d.shift_date
-      : null;
-    const workDate = shiftDate ?? kuwaitDayString(deliveredAt);
+    const workDate = resolveWorkDay(deliveredAt, d.shift_date);
+    if (workDate === null) continue;
     if (workDate < from || workDate > to) continue;
     const driverId = str(d.driver_id);
     const restaurantId = str(d.restaurant_id);
