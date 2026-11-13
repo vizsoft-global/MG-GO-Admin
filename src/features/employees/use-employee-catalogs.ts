@@ -38,3 +38,26 @@ export function useSponsorships() {
 export function useJobPositions() {
   return useEmployeeCatalog("job_positions");
 }
+
+/**
+ * The four catalogs the client asked Employee Settings to own.
+ *
+ * Each one was a compiled enum or a fixed list in code before this existed, so
+ * every reader keeps that compiled list as its fallback — an empty collection
+ * renders exactly what the app showed yesterday.
+ */
+export function useHiringTypes() {
+  return useEmployeeCatalog("hiring_types");
+}
+
+export function useJobEndDescriptions() {
+  return useEmployeeCatalog("job_end_descriptions");
+}
+
+export function useNationalities() {
+  return useEmployeeCatalog("nationalities");
+}
+
+export function usePaymentCurrencies() {
+  return useEmployeeCatalog("payment_currencies");
+}
