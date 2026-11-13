@@ -105,7 +105,7 @@ export function EmployeeSettingsDialog({
           )}
 
           <div
-            className={`min-h-0 flex-1 overflow-y-auto overflow-x-auto rounded-xl border border-border bg-card [&_h1]:hidden ${
+            className={`min-h-0 flex-1 overflow-y-auto overflow-x-auto rounded-xl border border-border bg-card [&_h1]:hidden [&_[data-app-back]]:hidden ${
               active ? "p-2 sm:p-3" : "p-4"
             }`}
           >
