@@ -149,6 +149,7 @@
     "payouts": "الدفعات",
     "earningsCalculation": "حساب الأرباح",
     "storage": "Cloudflare R2",
+    "usageMonitor": "مراقبة الاستخدام",
     "roles": "الأدوار والصلاحيات",
     "staffAccess": "صلاحيات الموظفين",
     "accessRequests": "طلبات الوصول",
@@ -9347,6 +9348,158 @@
           "load_failed": "تعذر تحميل النظرة العامة",
           "list_failed": "تعذر سرد كائنات الـ bucket",
           "connection_failed": "تعذر الاتصال بـ R2"
+        }
+      },
+      "usageMonitor": {
+        "title": "مراقبة الاستخدام",
+        "subtitle": "استخدام Firebase و Cloudflare مباشرةً، مع التكلفة الشهرية التي تشير إليها كل فترة حديثة",
+        "refresh": "تحديث",
+        "loading": "جارٍ قراءة الاستخدام من Google Cloud Monitoring…",
+        "dataTo": "البيانات حتى {time} · يتحدّث كل دقيقة",
+        "permissionHelp": "امنح الدور Monitoring Viewer للحساب {email} في Google Cloud IAM ثم حدّث الصفحة.",
+        "partial": "تعذّرت قراءة بعض المقاييس وتظهر بقيمة صفر: {list}",
+        "footer": "المشروع {project} · تمت القراءة في {time} (توقيت الكويت). تنشر Google هذه العدّادات بتأخير بضع دقائق.",
+        "errors": {
+          "not_authorized": "مراقبة الاستخدام متاحة للمشرف العام فقط.",
+          "not_configured": "حساب خدمة Firebase غير مهيّأ في هذا النشر.",
+          "token_failed": "تعذّر تسجيل الدخول إلى Google Cloud بحساب الخدمة.",
+          "permission_denied": "حساب الخدمة غير مصرّح له بقراءة Cloud Monitoring.",
+          "monitoring_failed": "لم يستجب Cloud Monitoring. حاول مرة أخرى بعد دقيقة."
+        },
+        "basis": {
+          "units": "قاعدة البيانات هذه تُبلّغ عن وحدات فوترة Enterprise، لذا تُسعَّر القراءات والكتابات بالوحدات المفوترة لا بعدد المستندات.",
+          "documents": "لا توجد وحدات فوترة Enterprise، لذا تُسعَّر القراءات والكتابات بعدد المستندات."
+        },
+        "usage": {
+          "title": "الاستخدام",
+          "metric": "المقياس",
+          "h1": "آخر ساعة",
+          "h5": "آخر 5 ساعات",
+          "h24": "آخر 24 ساعة",
+          "perDay": "في اليوم",
+          "perDayNote": "«في اليوم» هو معدّل الساعة الأخيرة مستمراً لمدة 24 ساعة."
+        },
+        "rows": {
+          "reads": "قراءات المستندات",
+          "writes": "كتابات المستندات",
+          "deletes": "حذف المستندات",
+          "ttlDeletes": "الحذف التلقائي (TTL)",
+          "billedReadUnits": "وحدات القراءة المفوترة",
+          "billedWriteUnits": "وحدات الكتابة المفوترة",
+          "invocations": "استدعاءات الدوال",
+          "vcpuSeconds": "الحوسبة (ثواني vCPU)",
+          "gibSeconds": "الحوسبة (ثواني GiB)"
+        },
+        "forecast": {
+          "title": "التكلفة الشهرية المتوقعة",
+          "line": "بند التكلفة",
+          "total": "الإجمالي",
+          "perMonth": "في الشهر، Firebase فقط",
+          "target": "الهدف الشهري",
+          "targetNote": "Firebase و Cloudflare معاً",
+          "under": "ضمن الهدف",
+          "over": "أعلى من الهدف",
+          "note": "يفترض كل عمود أن كل ساعة في الشهر تشبه تلك الفترة. الحصص المجانية مخصومة مسبقاً.",
+          "tile": {
+            "h1": "بمعدّل آخر ساعة",
+            "h5": "بمعدّل آخر 5 ساعات",
+            "h24": "بمعدّل آخر 24 ساعة"
+          },
+          "at": {
+            "h1": "معدّل ساعة",
+            "h5": "معدّل 5 ساعات",
+            "h24": "معدّل 24 ساعة"
+          },
+          "lines": {
+            "reads": "قراءات Firestore",
+            "writes": "كتابات Firestore",
+            "deletes": "حذف Firestore",
+            "invocations": "استدعاءات الدوال",
+            "compute": "حوسبة الدوال"
+          },
+          "split": "Firebase {firebase} · Cloudflare {cloudflare}",
+          "firebaseOnly": "Firebase فقط — أرقام Cloudflare غير متاحة"
+        },
+        "charts": {
+          "reads": "القراءات كل 15 دقيقة، آخر 24 ساعة",
+          "writes": "الكتابات كل 15 دقيقة، آخر 24 ساعة",
+          "peak": "الذروة",
+          "none": "لا يوجد نشاط في آخر 24 ساعة."
+        },
+        "functions": {
+          "title": "الدوال الأكثر نشاطاً",
+          "name": "الدالة",
+          "share": "الحصة من 24 ساعة",
+          "empty": "لا توجد حركة على الدوال في آخر 24 ساعة.",
+          "count": "{count} دالة عليها حركة"
+        },
+        "rates": {
+          "title": "افتراضات الأسعار",
+          "description": "هذه الأسعار تحدد التوقّع. استبدلها بالأسعار الواردة في فاتورة Google Cloud؛ تُحفظ في هذا المتصفح فقط.",
+          "reset": "إعادة ضبط",
+          "fields": {
+            "readsPer100k": "القراءات، $ لكل 100,000",
+            "writesPer100k": "الكتابات، $ لكل 100,000",
+            "deletesPer100k": "الحذف، $ لكل 100,000",
+            "freeReadsPerDay": "القراءات المجانية في اليوم",
+            "freeWritesPerDay": "الكتابات المجانية في اليوم",
+            "freeDeletesPerDay": "عمليات الحذف المجانية في اليوم",
+            "invocationsPerMillion": "استدعاءات الدوال، $ لكل مليون",
+            "freeInvocationsPerMonth": "الاستدعاءات المجانية في الشهر",
+            "vcpuSecond": "الحوسبة، $ لكل ثانية vCPU",
+            "gibSecond": "الحوسبة، $ لكل ثانية GiB",
+            "freeVcpuSecondsPerMonth": "ثواني vCPU المجانية في الشهر",
+            "freeGibSecondsPerMonth": "ثواني GiB المجانية في الشهر"
+          }
+        },
+        "headings": {
+          "firebase": "Firebase",
+          "cloudflare": "Cloudflare"
+        },
+        "cloudflare": {
+          "title": "استخدام Cloudflare",
+          "costTitle": "التكلفة الشهرية المتوقعة لـ Cloudflare",
+          "loading": "جارٍ قراءة الاستخدام من Cloudflare…",
+          "notAvailable": "غير متاح",
+          "accountNote": "أرقام Cloudflare تشمل الحساب كاملاً بكل المشاريع عليه. تغيير حجم الصور وسجلات Workers لا تظهر في تحليلات Cloudflare، لذا ليست ضمن هذا التوقّع.",
+          "unknown": "غير متاح في تحليلات Cloudflare ومستبعد من التوقّع: {list}",
+          "approximate": "يُقرأ باليوم الكامل فقط، لذا أرقام الساعة والخمس ساعات متوسطات لليوم: {list}",
+          "failed": "تعذّرت قراءة: {list}",
+          "storage": "تخزين R2: {size} في {objects} ملف",
+          "storageUnknown": "تعذّرت قراءة حجم تخزين R2.",
+          "costNote": "أسعار خطة Workers Paid المعلنة بعد خصم الحصص الشهرية. رسم الخطة يُحتسب مهما كان الاستخدام.",
+          "errors": {
+            "not_authorized": "قراءة استخدام Cloudflare متاحة للمشرف العام فقط.",
+            "missing_cloudflare_token": "المتغير CLOUDFLARE_API_TOKEN غير مضبوط في هذا النشر.",
+            "missing_cloudflare_account": "معرّف حساب Cloudflare (R2_ACCOUNT_ID) غير مضبوط في هذا النشر.",
+            "cloudflare_denied": "رمز Cloudflare API لا يستطيع قراءة التحليلات. يحتاج الصلاحية Account Analytics: Read.",
+            "cloudflare_failed": "لم تستجب تحليلات Cloudflare. حاول مرة أخرى بعد دقيقة."
+          },
+          "rows": {
+            "workerRequests": "طلبات Workers",
+            "workerCpuMs": "معالجة Workers (مللي ثانية)",
+            "doRequests": "طلبات Durable Objects",
+            "doWebsocketMessages": "رسائل WebSocket الواردة",
+            "doDurationGbs": "مدة Durable Objects (ثواني GB)",
+            "doRowsRead": "صفوف SQLite المقروءة",
+            "doRowsWritten": "صفوف SQLite المكتوبة",
+            "r2ClassA": "عمليات R2 من الفئة A (كتابة وسرد)",
+            "r2ClassB": "عمليات R2 من الفئة B (قراءة)"
+          },
+          "lines": {
+            "base": "خطة Workers Paid",
+            "workerRequests": "طلبات Workers",
+            "workerCpu": "زمن معالجة Workers",
+            "doRequests": "طلبات Durable Objects",
+            "doDuration": "مدة Durable Objects",
+            "doRows": "صفوف SQLite",
+            "r2Operations": "عمليات R2",
+            "r2Storage": "تخزين R2"
+          },
+          "scripts": {
+            "title": "أكثر Workers نشاطاً",
+            "name": "Worker"
+          }
         }
       },
       "adminTools": {

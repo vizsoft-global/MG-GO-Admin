@@ -98,6 +98,100 @@ const EVICT_AFTER_MS = 30 * 60_000;
  */
 const DRIVER_MISSING_TTL_MS = 5 * 60_000;
 const OPS_POLL_LIMIT = 200;
+/**
+ * The ops relay is a Cloud Function call plus a Firestore query. It used to run
+ * on every `pump()`, and `pump()` runs on every ingest message — so with one
+ * admin socket open the room made one call per GPS message from the whole
+ * fleet. An operation event reaching the map three seconds late is invisible;
+ * a hundred calls a second is not.
+ */
+export const OPS_RELAY_MIN_MS = 3_000;
+/**
+ * Above this many riders in one relay page the room falls back to the roster
+ * reload (itself held to one a minute) instead of a read per rider.
+ */
+export const OPS_DRIVER_REFRESH_MAX = 25;
+/**
+ * How often an R2-archived rider is sent to `adminIngestDriverPositions` when
+ * nothing about them changed.
+ *
+ * The function reads two documents per rider it is handed, then — for a rider
+ * whose history is in R2 — writes a pin only on a tracking / delivery / mock /
+ * zone change or a five-minute heartbeat. Every 10s flush used to hand it every
+ * reporting rider, so the reads were paid six times a minute to decide "nothing
+ * to write". The room now applies the same change test before sending; the
+ * interval is only there so the function still re-checks the zone, which it
+ * alone computes. The archive is unaffected: points are recorded every flush.
+ */
+export const DURABLE_SEND_MS = 60_000;
+
+/** The facts whose change makes the function write a pin for an R2-archived rider. */
+export function durableSignature(point: {
+  trackingStatus: string;
+  activeDeliveryId: string | null;
+  isMocked: boolean | null;
+}): string {
+  return `${point.trackingStatus}|${point.activeDeliveryId ?? ""}|${point.isMocked === true ? 1 : 0}`;
+}
+
+/** Whether this flush must hand the rider's batch to the durable (Firestore) path. */
+export function durableSendDue(input: {
+  nowMs: number;
+  lastSentAt: number;
+  lastSignature: string | null;
+  historyInR2: boolean;
+  batch: ReadonlyArray<{
+    trackingStatus: string;
+    activeDeliveryId: string | null;
+    isMocked: boolean | null;
+    deliveryId: string | null;
+    replay: boolean;
+  }>;
+}): boolean {
+  // Not archived (or the archive refused the batch): Firestore is the history.
+  if (!input.historyInR2) return true;
+  const last = input.batch[input.batch.length - 1];
+  if (!last) return false;
+  if (input.lastSentAt <= 0 || input.lastSignature == null) return true;
+  if (durableSignature(last) !== input.lastSignature) return true;
+  if (input.batch.some((point) => point.replay || point.deliveryId != null)) return true;
+  return input.nowMs - input.lastSentAt >= DURABLE_SEND_MS;
+}
+
+/** Whether the ops relay may run now. One call in flight, one per interval. */
+export function opsRelayDue(input: {
+  nowMs: number;
+  lastRelayAt: number;
+  inFlight: boolean;
+  socketCount: number;
+}): boolean {
+  if (input.socketCount === 0) return false;
+  if (input.inFlight) return false;
+  return input.nowMs - input.lastRelayAt >= OPS_RELAY_MIN_MS;
+}
+
+/**
+ * The riders a relay page says changed duty or delivery state — the only rows
+ * that alter a roster fact. Null means "too many to read one by one".
+ */
+export function opsDriversToRefresh(
+  rows: ReadonlyArray<{ driver_id: string | null; category: string; operation_key: string }>,
+): string[] | null {
+  const ids = new Set<string>();
+  let unattributed = false;
+  for (const row of rows) {
+    const relevant =
+      row.category === "duty" ||
+      row.category === "delivery" ||
+      row.operation_key.startsWith("duty.") ||
+      row.operation_key.startsWith("delivery.");
+    if (!relevant) continue;
+    if (row.driver_id) ids.add(row.driver_id);
+    else unattributed = true;
+  }
+  if (unattributed || ids.size > OPS_DRIVER_REFRESH_MAX) return null;
+  return [...ids];
+}
 const STATS_SYNC_MS = 60 * 60_000;
 const STATS_SYNC_PAGE = 400;
 const STATS_SYNC_PAGES = 10;
@@ -220,6 +314,9 @@ type Entity = {
   posVersion: number;
   metaVersion: number;
   pending: PendingPoint[];
+  /** When this rider's batch last went to the durable path, and what it said. */
+  durableSentAt: number;
+  durableSignature: string | null;
   /** Assigned-zone membership after hysteresis. */
   inAssignedZone: boolean | null;
   locationOff: boolean;
@@ -292,6 +389,8 @@ export class FleetRoom implements DurableObject {
 
   private pendingFleetEvents: Array<FleetEventDraft & { driverId: string }> = [];
   private opsCursor: { at: string; id: string } | null = null;
+  private lastOpsRelayAt = 0;
+  private opsRelayInFlight = false;
   private readonly archive: GpsArchive;
   private archiveSeeded = false;
   /**
@@ -715,6 +814,8 @@ export class FleetRoom implements DurableObject {
       posVersion: 1,
       metaVersion: 1,
       pending: [],
+      durableSentAt: 0,
+      durableSignature: null,
       inAssignedZone: null,
       locationOff: false,
       isOnDuty: row.is_on_duty === true,
@@ -1063,6 +1164,26 @@ export class FleetRoom implements DurableObject {
         // A failed read is not evidence the driver is gone; retry next batch.
         clear();
       });
+    return pending;
+  }
+
+  /**
+   * Re-read a rider the room may already hold, because an operation event says
+   * their duty or delivery state moved. Shares the in-flight map with
+   * `loadSingleDriver` so an ingest batch and an event cannot read the same
+   * rider twice at once; it skips the "missing" cache because an event is fresh
+   * evidence. A null row leaves the entity as it is — the roster reload retires
+   * riders who have gone quiet.
+   */
+  private refreshDriver(driverId: string): Promise<Entity | null> {
+    const existing = this.driverLoads.get(driverId);
+    if (existing) return existing;
+    const pending = this.fetchSingleDriver(driverId);
+    this.driverLoads.set(driverId, pending);
+    const clear = () => {
+      if (this.driverLoads.get(driverId) === pending) this.driverLoads.delete(driverId);
+    };
+    pending.then(clear, clear);
     return pending;
   }
 
@@ -1544,7 +1665,22 @@ export class FleetRoom implements DurableObject {
       }
     }
 
-    this.state.waitUntil(this.relayOps());
+    if (
+      opsRelayDue({
+        nowMs,
+        lastRelayAt: this.lastOpsRelayAt,
+        inFlight: this.opsRelayInFlight,
+        socketCount: this.sockets.size,
+      })
+    ) {
+      this.lastOpsRelayAt = nowMs;
+      this.opsRelayInFlight = true;
+      this.state.waitUntil(
+        this.relayOps().finally(() => {
+          this.opsRelayInFlight = false;
+        }),
+      );
+    }
   }
 
   private async writeFleetEvents(frames: FleetEventFrame[]): Promise<void> {
@@ -1614,6 +1750,7 @@ export class FleetRoom implements DurableObject {
    */
   private async flushPositions(): Promise<void> {
     const events: Array<Record<string, unknown>> = [];
+    const sent: Entity[] = [];
     const dualWrite = this.env.GPS_DUAL_WRITE === "1";
     const nowMs = Date.now();
 
@@ -1719,6 +1856,27 @@ export class FleetRoom implements DurableObject {
         }
       }
 
+      if (
+        !durableSendDue({
+          nowMs,
+          lastSentAt: entity.durableSentAt,
+          lastSignature: entity.durableSignature,
+          historyInR2,
+          batch,
+        })
+      ) {
+        // Already in the archive, and nothing the function would write a pin for.
+        entity.pending = [];
+        this.bufferCapDeferred.delete(entity.driverId);
+        continue;
+      }
+      const lastOfBatch = batch[batch.length - 1];
+      if (lastOfBatch) {
+        entity.durableSentAt = nowMs;
+        entity.durableSignature = durableSignature(lastOfBatch);
+        sent.push(entity);
+      }
+
       for (const point of batch) {
         events.push({
           history_in_r2: historyInR2,
@@ -1769,6 +1927,8 @@ export class FleetRoom implements DurableObject {
         }
       }
     } catch (error) {
+      // The function never saw these riders; do not make them wait out the interval.
+      for (const entity of sent) entity.durableSentAt = 0;
       console.error(
         JSON.stringify({ event: "position_flush_failed", failures: 1, error: String(error) }),
       );
@@ -1832,18 +1992,18 @@ export class FleetRoom implements DurableObject {
        *
        * Delivery operations join them because the open delivery is a roster fact read
        * from deliveries still in transit.
+       *
+       * Only the riders the events name are re-read (twelve reads each). This used to
+       * zero `rosterLoadedAt` and force a whole-fleet snapshot; when the one-a-minute
+       * throttle refused that reload the zero stayed, so the next ingest batch ran the
+       * full snapshot anyway — one 6,000-8,000 document read per pickup or clock-in
+       * for as long as an admin had the map open.
        */
-      if (
-        rows.some(
-          (row) =>
-            row.category === "duty" ||
-            row.category === "delivery" ||
-            row.operation_key.startsWith("duty.") ||
-            row.operation_key.startsWith("delivery."),
-        )
-      ) {
-        this.rosterLoadedAt = 0;
+      const changed = opsDriversToRefresh(rows);
+      if (changed == null) {
         await this.loadRoster(true);
+      } else if (changed.length > 0) {
+        await Promise.allSettled(changed.map((driverId) => this.refreshDriver(driverId)));
       }
     } catch (error) {
       console.error("ops_relay_failed", String(error));

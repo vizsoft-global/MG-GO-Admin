@@ -6,9 +6,12 @@
  *    a staff server action. Slow, but it depends on nothing beyond the database,
  *    so it is the rail that is available when the socket is not.
  *
- * A snapshot is always fetched first, whichever rail wins: it is the only source of
- * roster facts the delta stream lacks, and it means the map is populated before the
- * socket finishes its handshake.
+ * The room is the source while its socket is healthy. Its `hello` carries zones and
+ * settings and its `meta` frames carry every roster fact the snapshot does (names,
+ * shift, delivery counts, distance, open delivery), re-sent whenever one changes, so
+ * a healthy edge rail asks the database for nothing. The snapshot is the floor
+ * underneath it: it is read when the socket is slow to populate the map, silent,
+ * empty, or gone — never on a timer beside a rail that is delivering.
  */
 
 import { shouldRunBackgroundWork } from "@/lib/browser/visibility";
@@ -28,8 +31,17 @@ import type { FleetSocketTicket } from "./fleet-token";
  * map still repaints from socket deltas in between.
  */
 const SNAPSHOT_POLL_MS = 60_000;
-/** Warm-refresh cadence while a live rail is running: roster facts only. */
-const ROSTER_REFRESH_MS = 120_000;
+/**
+ * How long the page gives the edge to put the fleet on the map before it reads the
+ * database instead. The socket normally answers well inside this; the snapshot it
+ * replaces is a whole-fleet read that also took longer to arrive than the socket.
+ */
+const WARM_START_GRACE_MS = 4_000;
+/**
+ * A live socket that reports no fleet at all is checked against the database this
+ * often. It used to poll every minute for as long as the room stayed empty.
+ */
+const EMPTY_FLEET_CHECK_MS = 5 * 60_000;
 const PING_MS = 20_000;
 /** No frame for this long means the socket is open but dead. */
 const STALL_TIMEOUT_MS = 15_000;
@@ -107,7 +119,7 @@ export class FleetTransport {
 
   private socket: WebSocket | null = null;
   private pollHandle: ReturnType<typeof setInterval> | null = null;
-  private rosterHandle: ReturnType<typeof setInterval> | null = null;
+  private warmHandle: ReturnType<typeof setTimeout> | null = null;
   private pingHandle: ReturnType<typeof setInterval> | null = null;
   private flowHandle: ReturnType<typeof setInterval> | null = null;
   private statusClockHandle: ReturnType<typeof setInterval> | null = null;
@@ -121,6 +133,7 @@ export class FleetTransport {
   private lastLivePositionAt = 0;
   /** True while a live rail is connected but silent, and polling is covering for it. */
   private starved = false;
+  private lastEmptyCheckAt = 0;
   private room = "fleet-kw";
   /** Set by the map; narrows what the room sends us. */
   private bbox: [number, number, number, number] | null = null;
@@ -143,10 +156,36 @@ export class FleetTransport {
     this.store.onFiltersChanged = () => this.sendView();
     this.startStatusClock();
     this.bindVisibility();
-    // Warm start first: an operator should see the fleet while the socket connects,
-    // not an empty map with a spinner.
-    await this.loadSnapshot();
+    // Edge first. The room answers with the whole roster as soon as the socket
+    // opens, which is sooner than a database snapshot can be built; the snapshot is
+    // only fetched if the map is still empty when the grace period runs out.
+    this.armWarmStart();
     await this.connectEdge();
+  }
+
+  private armWarmStart(): void {
+    this.cancelWarmStart();
+    this.warmHandle = setTimeout(() => {
+      this.warmHandle = null;
+      if (this.stopped) return;
+      if (this.store.getSnapshot().totalDrivers > 0) return;
+      void this.loadSnapshot();
+    }, WARM_START_GRACE_MS);
+  }
+
+  private cancelWarmStart(): void {
+    if (this.warmHandle) clearTimeout(this.warmHandle);
+    this.warmHandle = null;
+  }
+
+  /** The socket is open and delivering; the database has nothing fresher to add. */
+  private edgeHealthy(): boolean {
+    return (
+      this.socket != null &&
+      this.socket.readyState === WebSocket.OPEN &&
+      !this.starved &&
+      this.pollHandle == null
+    );
   }
 
   stop(): void {
@@ -156,8 +195,7 @@ export class FleetTransport {
     this.stopPolling();
     this.stopFlowWatchdog();
     this.stopStatusClock();
-    if (this.rosterHandle) clearInterval(this.rosterHandle);
-    this.rosterHandle = null;
+    this.cancelWarmStart();
     if (this.reconnectHandle) clearTimeout(this.reconnectHandle);
     this.reconnectHandle = null;
     this.store.onFiltersChanged = null;
@@ -204,8 +242,9 @@ export class FleetTransport {
     if (this.stopped || this.backgrounded()) return;
     // Caught up on the way back in rather than on the next interval: the operator is
     // looking at this map now, and waiting out the poll cadence is what makes a
-    // returning tab read as a frozen one.
-    void this.loadSnapshot();
+    // returning tab read as a frozen one. A healthy socket never stopped delivering
+    // while the tab was hidden, so only the polled rails have anything to catch up.
+    if (!this.edgeHealthy()) void this.loadSnapshot();
     this.store.tickStatusDecay();
   };
 
@@ -233,7 +272,10 @@ export class FleetTransport {
       // the other end. Go straight to the rail that needs no edge.
       this.store.setConnection({ error: ticket.error });
       if (ticket.error === "fleet_edge_not_configured") {
+        // No edge to wait for: read the database now rather than after the grace.
+        this.cancelWarmStart();
         this.startPolling();
+        await this.loadSnapshot();
       } else {
         this.degradeFromEdge(ticket.error);
       }
@@ -267,12 +309,15 @@ export class FleetTransport {
       this.sendView();
       this.startPing();
       this.startFlowWatchdog();
-      // The socket replaces both fallbacks, but polling keeps running at a slow
-      // cadence for roster facts the delta stream never carries (delivery counts,
-      // distance today, shift changes).
+      // The socket replaces polling outright. Roster facts ride its `meta` frames,
+      // which the room re-sends whenever one changes, so nothing is refreshed from
+      // the database beside it. The warm-start grace covers a room that opens but
+      // has no roster to send.
       this.stopPolling();
-      this.startRosterRefresh();
-      if (this.store.getSnapshot().totalDrivers === 0) this.startPolling();
+      this.lastEmptyCheckAt = Date.now();
+      // The snapshot used to seed the feed; on this rail nothing else will until
+      // the first `ops` / `events` frame.
+      if (this.store.feedNeedsSeed()) void this.seedFeed();
     };
 
     socket.onmessage = (event) => {
@@ -430,7 +475,16 @@ export class FleetTransport {
     // Nobody on duty means nobody should be publishing. Silence is the correct state of
     // an empty fleet, and calling it degraded would train operators to ignore the pill.
     if (this.store.getSnapshot().kpis.onDuty === 0) {
-      if (this.store.getSnapshot().totalDrivers === 0) this.startPolling();
+      // An empty room is usually an empty fleet, and the room announces the first
+      // rider itself. The database is still asked now and then, in case the room is
+      // the thing that is wrong; a rider it turns up trips the starvation check below.
+      if (
+        this.store.getSnapshot().totalDrivers === 0 &&
+        Date.now() - this.lastEmptyCheckAt >= EMPTY_FLEET_CHECK_MS
+      ) {
+        this.lastEmptyCheckAt = Date.now();
+        void this.loadSnapshot();
+      }
       return;
     }
     if (Date.now() - this.lastLivePositionAt < POSITION_SILENCE_MS) return;
@@ -475,6 +529,10 @@ export class FleetTransport {
     // startPolling only switches the rail when it is still "offline".
     this.store.setRail("poll", "degraded");
     this.startPolling();
+    // The map was being fed by the socket alone; do not make it wait a full poll
+    // interval for its first database read.
+    this.cancelWarmStart();
+    void this.loadSnapshot();
   }
 
   // -------------------------------------------------------------------------
@@ -497,14 +555,6 @@ export class FleetTransport {
     this.pollHandle = null;
   }
 
-  private startRosterRefresh(): void {
-    if (this.rosterHandle) return;
-    this.rosterHandle = setInterval(() => {
-      if (this.backgrounded()) return;
-      void this.loadSnapshot();
-    }, ROSTER_REFRESH_MS);
-  }
-
   private async loadSnapshot(): Promise<void> {
     try {
       const [snapshot, zones] = await Promise.all([
@@ -523,9 +573,8 @@ export class FleetTransport {
         zones: zones ?? undefined,
       });
 
-      // Poll and warm-start have no socket, so the feed would stay empty without this.
-      // On the edge rail it fills the gap until the first `ops` / `events` frame.
-      // Re-seeding on every 120s roster snapshot is what made rows appear and vanish.
+      // The polled rails have no socket, so the feed would stay empty without this.
+      // The edge rail seeds it once, when the socket opens.
       if (this.store.feedNeedsSeed()) void this.seedFeed();
     } catch (error) {
       this.store.setConnection({ status: "error", error: String(error) });

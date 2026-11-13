@@ -26,8 +26,11 @@ export async function GET(request: Request): Promise<Response> {
       }
     },
     {
-      schedule: { type: "crontab", value: "*/2 * * * *" },
-      checkinMargin: 2,
+      // Hourly. This only removes the pins of archived or deleted drivers, which
+      // nothing waits on; every two minutes it re-read up to 500 kept pins and
+      // their driver documents 720 times a day to delete almost nothing.
+      schedule: { type: "crontab", value: "7 * * * *" },
+      checkinMargin: 10,
       maxRuntime: 3,
     },
   );

@@ -4,11 +4,18 @@ import { describe, it } from "node:test";
 import {
   alarmIntervalMs,
   downsampleForDurability,
+  DURABLE_SEND_MS,
+  durableSendDue,
+  durableSignature,
   FleetRoom,
   IDLE_ALARM_MS,
   INGEST_HOT_WINDOW_MS,
   isDriverAttachment,
   jwtExpiryMs,
+  OPS_DRIVER_REFRESH_MAX,
+  OPS_RELAY_MIN_MS,
+  opsDriversToRefresh,
+  opsRelayDue,
   type PendingPoint,
 } from "./fleet-room";
 
@@ -316,5 +323,95 @@ describe("flushPositions archive safety", () => {
     } finally {
       capture.restore();
     }
+  });
+});
+
+describe("ops relay cost guards", () => {
+  const base = { nowMs: 100_000, lastRelayAt: 0, inFlight: false, socketCount: 1 };
+
+  it("does not relay with no admin socket open", () => {
+    assert.equal(opsRelayDue({ ...base, socketCount: 0 }), false);
+  });
+
+  it("holds the relay to one call per interval, however often ingest pumps", () => {
+    assert.equal(opsRelayDue({ ...base, lastRelayAt: 100_000 - OPS_RELAY_MIN_MS + 1 }), false);
+    assert.equal(opsRelayDue({ ...base, lastRelayAt: 100_000 - OPS_RELAY_MIN_MS }), true);
+  });
+
+  it("never stacks a second call on one still in flight", () => {
+    assert.equal(opsRelayDue({ ...base, inFlight: true }), false);
+  });
+
+  it("names only the riders whose duty or delivery state moved", () => {
+    const ids = opsDriversToRefresh([
+      { driver_id: "a", category: "duty", operation_key: "duty.clock_in" },
+      { driver_id: "a", category: "delivery", operation_key: "delivery.pickup" },
+      { driver_id: "b", category: "ops", operation_key: "delivery.complete" },
+      { driver_id: "c", category: "location", operation_key: "location.report" },
+    ]);
+    assert.deepEqual(ids, ["a", "b"]);
+  });
+
+  it("reads nobody when no row changes a roster fact", () => {
+    assert.deepEqual(
+      opsDriversToRefresh([{ driver_id: "c", category: "telemetry", operation_key: "app.resume" }]),
+      [],
+    );
+  });
+
+  it("falls back to the roster reload for a burst or an unattributed event", () => {
+    const burst = Array.from({ length: OPS_DRIVER_REFRESH_MAX + 1 }, (_, i) => ({
+      driver_id: `d${i}`,
+      category: "duty",
+      operation_key: "duty.clock_out",
+    }));
+    assert.equal(opsDriversToRefresh(burst), null);
+    assert.equal(
+      opsDriversToRefresh([{ driver_id: null, category: "duty", operation_key: "duty.sweep" }]),
+      null,
+    );
+  });
+});
+
+describe("durable send throttle", () => {
+  const moving = {
+    trackingStatus: "moving",
+    activeDeliveryId: null,
+    isMocked: false,
+    deliveryId: null,
+    replay: false,
+  };
+  const sig = durableSignature(moving);
+  const base = { nowMs: 500_000, lastSentAt: 500_000 - 10_000, lastSignature: sig, historyInR2: true };
+
+  it("always sends a rider whose history is not in R2", () => {
+    assert.equal(durableSendDue({ ...base, historyInR2: false, batch: [moving] }), true);
+  });
+
+  it("sends a rider the function has never seen", () => {
+    assert.equal(durableSendDue({ ...base, lastSentAt: 0, lastSignature: null, batch: [moving] }), true);
+  });
+
+  it("holds an unchanged rider until the interval passes", () => {
+    assert.equal(durableSendDue({ ...base, batch: [moving, moving] }), false);
+    assert.equal(
+      durableSendDue({ ...base, lastSentAt: base.nowMs - DURABLE_SEND_MS, batch: [moving] }),
+      true,
+    );
+  });
+
+  it("sends at once when tracking status, open delivery or mock state changes", () => {
+    assert.equal(durableSendDue({ ...base, batch: [{ ...moving, trackingStatus: "idle" }] }), true);
+    assert.equal(durableSendDue({ ...base, batch: [{ ...moving, activeDeliveryId: "d1" }] }), true);
+    assert.equal(durableSendDue({ ...base, batch: [{ ...moving, isMocked: true }] }), true);
+  });
+
+  it("sends a batch carrying a delivery-stamped or replayed point", () => {
+    assert.equal(durableSendDue({ ...base, batch: [{ ...moving, deliveryId: "d9" }, moving] }), true);
+    assert.equal(durableSendDue({ ...base, batch: [{ ...moving, replay: true }, moving] }), true);
+  });
+
+  it("has nothing to send for an empty batch already in the archive", () => {
+    assert.equal(durableSendDue({ ...base, batch: [] }), false);
   });
 });
