@@ -393,6 +393,78 @@ export function OpsDonut({
   );
 }
 
+/**
+ * Vertical columns — the reference dashboard's chart for a small, ordered set
+ * (client, vehicle, distribution buckets).
+ *
+ * Value printed above each column and the category label below, which is what
+ * the reference does; a tooltip-only bar loses the number on a printed screen.
+ */
+export function OpsVBars({
+  rows,
+  format,
+  colors,
+  className,
+}: {
+  rows: ReadonlyArray<{ key: string; label: string; value: number }>;
+  format: (value: number) => string;
+  /** Explicit palette, for a chart where colour has its own meaning (RAG bands). */
+  colors?: readonly string[];
+  className?: string;
+}) {
+  const max = Math.max(...rows.map((row) => row.value), 0.0001);
+  return (
+    <div className={cn("flex items-end gap-2", className)} style={{ minHeight: 150 }}>
+      {rows.map((row, index) => (
+        <div key={`${row.key}-${index}`} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
+          <span className="mb-1 text-[10.5px] font-bold tabular-nums">{format(row.value)}</span>
+          <i
+            className="block w-full max-w-[52px] rounded-[2px]"
+            style={{
+              height: `${Math.max(3, (row.value / max) * 80)}%`,
+              background: colors
+                ? (colors[index] ?? colors[colors.length - 1] ?? "var(--ops-c3)")
+                : opsRampStepColor(index, rows.length),
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Category labels under an `OpsVBars` row, aligned to the same flex tracks. */
+export function OpsVBarsLabels({
+  rows,
+  className,
+}: {
+  rows: ReadonlyArray<{ key: string; label: string }>;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex gap-2", className)}>
+      {rows.map((row, index) => (
+        <span
+          key={`${row.key}-label-${index}`}
+          className="min-w-0 flex-1 truncate text-center text-[10px] leading-tight text-muted-foreground"
+          title={row.label}
+        >
+          {row.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Good → bad ramp, for a distribution chart where the band itself has a verdict. */
+export const OPS_BAND_COLORS = [
+  "#1e8449",
+  "#58d68d",
+  "#f1c40f",
+  "#e8713a",
+  "#e03127",
+] as const;
+
 export function OpsKpiDelta({
   text,
   tone,
