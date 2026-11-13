@@ -72,6 +72,20 @@ const DOCS = {
      */
     diagrams: true,
   },
+  architecture: {
+    src: path.join(ROOT, 'docs', 'SYSTEM_ARCHITECTURE_OVERVIEW.md'),
+    out: path.join(ROOT, 'docs', 'SYSTEM_ARCHITECTURE_OVERVIEW.pdf'),
+    title: 'MGHub',
+    subtitle: 'System Architecture & Technical Overview',
+    standfirst:
+      'The platform end to end — business modules, the Firestore data model, the payroll and synchronisation engines, every callable, route, cron and scheduled job, and the feature matrix that maps them to the screens operators use.',
+    chips: ['Next.js 16 · Firestore', 'Cloud Functions gen2 · me-central1', 'Cloudflare DO · R2'],
+    version: 'Version 1.0 · 13 Nov 2026',
+    readerNote: 'Client technical stakeholders, architects, onboarding engineers',
+    rebuildNote: 'npm run docs:architecture',
+    source: 'Read from the MG-GO-Admin and MG-GO source trees · No placeholders · English edition',
+    diagrams: true,
+  },
 };
 
 const DOC_KEY = process.argv[2] || 'user';
@@ -386,6 +400,281 @@ DIAGRAMS.regions = figure(
   'Regions and residency. Persistent data and the compute that touches it stay in the Middle East; Vercel is a stateless renderer in front of them.',
 );
 
+/* ------------------------------------------------------------------ *
+ * SYSTEM_ARCHITECTURE_OVERVIEW figures
+ * ------------------------------------------------------------------ */
+
+/** §1.2 — the whole platform in four layers. */
+DIAGRAMS['arch-platform'] = figure(
+  'd-arch-platform',
+  900,
+  474,
+  [
+    laneLabel(20, 18, 'Clients'),
+    box({
+      x: 20,
+      y: 28,
+      w: 268,
+      h: 74,
+      title: 'Staff browser',
+      lines: ['RSC pages · client islands', 'EN / AR, full RTL'],
+      titleSize: 13,
+      lineSize: 11,
+    }),
+    box({
+      x: 306,
+      y: 28,
+      w: 268,
+      h: 74,
+      title: 'Rider app — MG-GO',
+      lines: ['Flutter · Android', 'Offline queue · 1 Hz GPS'],
+      titleSize: 13,
+      lineSize: 11,
+    }),
+    box({
+      x: 592,
+      y: 28,
+      w: 288,
+      h: 74,
+      title: 'Partner login',
+      lines: ['client_portal.view only', 'Project-scoped, masked fields'],
+      titleSize: 13,
+      lineSize: 11,
+    }),
+
+    laneLabel(20, 128, 'Serve'),
+    box({
+      x: 20,
+      y: 138,
+      w: 860,
+      h: 72,
+      title: 'Vercel · bom1 — Next.js 16.2.6',
+      lines: [
+        'RSC render · server actions · 49 API routes · 13 cron routes · maxDuration 300 s on scan work',
+        'Stateless: holds no database, no session store, no queue',
+      ],
+      tone: 'accent',
+      titleSize: 13,
+      lineSize: 11,
+    }),
+
+    laneLabel(20, 236, 'Compute'),
+    box({
+      x: 20,
+      y: 246,
+      w: 268,
+      h: 78,
+      title: 'adminApi · light',
+      lines: ['2 GiB · conc 8 · 60 s', 'Default lane for every callable'],
+      tone: 'rust',
+      titleSize: 13,
+      lineSize: 11,
+    }),
+    box({
+      x: 306,
+      y: 246,
+      w: 268,
+      h: 78,
+      title: 'adminApiScan · scan',
+      lines: ['4 GiB · conc 2 · 180 s', '19 unbounded readers'],
+      tone: 'rust',
+      titleSize: 13,
+      lineSize: 11,
+    }),
+    box({
+      x: 592,
+      y: 246,
+      w: 288,
+      h: 78,
+      title: 'adminApiHeavy · heavy',
+      lines: ['4 GiB · conc 1 · 300 s', 'Purges · recalc · eSign compose'],
+      tone: 'rust',
+      titleSize: 13,
+      lineSize: 11,
+    }),
+
+    laneLabel(20, 350, 'Data and edge'),
+    box({
+      x: 20,
+      y: 360,
+      w: 268,
+      h: 80,
+      title: 'Firestore · default',
+      lines: ['142 collections', 'Deny-by-default rules'],
+      titleSize: 13,
+      lineSize: 11,
+    }),
+    box({
+      x: 306,
+      y: 360,
+      w: 268,
+      h: 80,
+      title: 'Firebase Auth · FCM',
+      lines: ['__session cookie · claims', 'Push per driver token'],
+      titleSize: 13,
+      lineSize: 11,
+    }),
+    box({
+      x: 592,
+      y: 360,
+      w: 288,
+      h: 80,
+      title: 'Cloudflare · dpd-live + R2',
+      lines: ['FleetRoom DO over WebSocket', 'dpd-private-prod · dpd-gps-prod'],
+      titleSize: 13,
+      lineSize: 11,
+    }),
+
+    arrow('d-arch-platform', 154, 102, 154, 136),
+    arrow('d-arch-platform', 440, 102, 440, 136),
+    arrow('d-arch-platform', 736, 102, 736, 136),
+    arrow('d-arch-platform', 154, 210, 154, 244),
+    arrow('d-arch-platform', 440, 210, 440, 244),
+    arrow('d-arch-platform', 736, 210, 736, 244),
+    arrow('d-arch-platform', 154, 324, 154, 358),
+    arrow('d-arch-platform', 440, 324, 440, 358),
+    arrow('d-arch-platform', 736, 324, 736, 358),
+
+    `<text x="20" y="466" font-size="10.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">The rider app never holds an admin credential; the Worker never holds the only copy of a position; the console never reads Firestore directly.</text>`,
+  ].join('\n'),
+  'The platform in four layers. Every arrow is a real network hop: an HTTPS callable, a WebSocket frame, or an Admin SDK write.',
+);
+
+/** §3.1 — how one request becomes a permission decision. */
+DIAGRAMS['arch-session'] = figure(
+  'd-arch-session',
+  900,
+  292,
+  [
+    laneLabel(20, 20, 'One page request'),
+    box({ x: 20, y: 30, w: 196, h: 96, title: '__session cookie', lines: ['Firebase session', 'verified in proxy.ts'], titleSize: 12.5, lineSize: 10.5 }),
+    box({ x: 234, y: 30, w: 196, h: 96, title: 'proxy.ts', lines: ['3 s probe', 'maintenance + claim', 'fails open on timeout'], titleSize: 12.5, lineSize: 10.5 }),
+    box({ x: 448, y: 30, w: 196, h: 96, title: 'resolvePanelAuth', lines: ['20 s verify,', 'one 25 s retry', 'SessionRecover on doubt'], titleSize: 12.5, lineSize: 10.5 }),
+    box({ x: 662, y: 30, w: 218, h: 96, title: 'loadReadSession', lines: ['profiles + auth_epochs', 'in one getAll', 'epoch keys the cache'], titleSize: 12.5, lineSize: 10.5 }),
+
+    arrow('d-arch-session', 216, 78, 232, 78),
+    arrow('d-arch-session', 430, 78, 446, 78),
+    arrow('d-arch-session', 644, 78, 660, 78),
+
+    laneLabel(20, 168, 'Permission resolution'),
+    box({
+      x: 20,
+      y: 178,
+      w: 276,
+      h: 84,
+      title: 'access_kind = manager',
+      lines: ['admin_permissions/catalog', 'union the code catalog', '→ full set'],
+      tone: 'soft',
+      titleSize: 12.5,
+      lineSize: 10.5,
+    }),
+    box({
+      x: 312,
+      y: 178,
+      w: 276,
+      h: 84,
+      title: 'access_kind = user',
+      lines: ['admin_user_permissions ticks', 'else role slugs', '→ narrowed set'],
+      tone: 'soft',
+      titleSize: 12.5,
+      lineSize: 10.5,
+    }),
+    box({
+      x: 604,
+      y: 178,
+      w: 276,
+      h: 84,
+      title: 'access_kind = partner',
+      lines: ['client_portal.view', 'operations_dashboard.view', 'callable allowlist of 6'],
+      tone: 'soft',
+      titleSize: 12.5,
+      lineSize: 10.5,
+    }),
+    arrow('d-arch-session', 771, 126, 771, 176),
+    arrow('d-arch-session', 158, 126, 158, 176),
+
+    `<text x="20" y="284" font-size="10.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">hasPermissionInSet(slugs, slug, isSuperAdmin) is the only gate a page or a callable consults. A role, tick or catalog write bumps auth_epochs, so the next request rebuilds rather than serving a stale set.</text>`,
+  ].join('\n'),
+  'Session to permission in one pass. A slow or unreachable Auth backend resolves to SessionRecover — an unproven session is never treated as a signed-out one.',
+);
+
+/** §3.3 — the two payroll engines, side by side. */
+DIAGRAMS['arch-payroll'] = figure(
+  'd-arch-payroll',
+  900,
+  412,
+  [
+    laneLabel(20, 18, 'Payroll Hub — month grid'),
+    box({ x: 20, y: 28, w: 424, h: 306, title: 'Day classification', lines: [], tone: 'soft', titleSize: 13 }),
+    box({ x: 36, y: 58, w: 180, h: 62, title: 'Inputs', lines: ['attendance_logs', 'leave plans · recon', 'payroll_day_hours'], titleSize: 11.5, lineSize: 10 }),
+    box({ x: 246, y: 58, w: 182, h: 62, title: 'evalDay()', lines: ['hand edit > cover >', 'client rule > default'], titleSize: 11.5, lineSize: 10 }),
+    box({ x: 36, y: 148, w: 180, h: 62, title: 'DayStatus', lines: ['12 / 6 / 3 hours', 'OFF · Sick · ABS · Cancel'], titleSize: 11.5, lineSize: 10 }),
+    box({ x: 246, y: 148, w: 182, h: 62, title: 'requiredHoursFor()', lines: ['(monthDays − offDays) × 12', 'prorated for a range'], titleSize: 11.5, lineSize: 10 }),
+    box({ x: 36, y: 238, w: 392, h: 76, title: 'Grid + Excel', lines: ['56 columns in screen order · palette fills', 'append-only undo, last 20 batches', 'Efficiency = actual ÷ required'], tone: 'accent', titleSize: 12.5, lineSize: 10.5 }),
+    arrow('d-arch-payroll', 226, 89, 244, 89),
+    arrow('d-arch-payroll', 126, 120, 126, 146),
+    arrow('d-arch-payroll', 337, 120, 337, 146),
+    arrow('d-arch-payroll', 126, 210, 126, 236),
+    arrow('d-arch-payroll', 337, 210, 337, 236),
+
+    laneLabel(476, 18, 'HR Payroll sheet'),
+    box({ x: 476, y: 28, w: 404, h: 306, title: 'Computed per rider-month', lines: [], tone: 'soft', titleSize: 13 }),
+    box({ x: 492, y: 58, w: 372, h: 62, title: 'computeHrPayroll()', lines: ['hourly = fixed ÷ F. working hours', 'efficiency = rider DPD ÷ restaurant DPD'], titleSize: 11.5, lineSize: 10 }),
+    box({ x: 492, y: 136, w: 372, h: 62, title: 'Earnings lines', lines: ['salary as per hours · 2 Y · 4 Y', 'food · incentives · sick reimbursement'], titleSize: 11.5, lineSize: 10 }),
+    box({ x: 492, y: 214, w: 372, h: 62, title: 'Deductions', lines: ['traffic violations · loan', 'other deductions'], titleSize: 11.5, lineSize: 10 }),
+    box({ x: 492, y: 292, w: 372, h: 30, title: 'Payment = Total Salary', lines: [], tone: 'accent', titleSize: 11.5 }),
+    arrow('d-arch-payroll', 678, 120, 678, 134),
+    arrow('d-arch-payroll', 678, 198, 678, 212),
+    arrow('d-arch-payroll', 678, 276, 678, 290),
+
+    `<text x="20" y="358" font-size="10.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">Unapproved month: calculated cells render the awaiting sentinel as — on screen and "Awaiting approval" in Excel. Read-only identity columns mirror drivers and are never computed here.</text>`,
+    `<text x="20" y="378" font-size="10.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">A stored vehicle / project / zone rate turns approved orders into revenue and contribution; a hand edit writes an append-only row and recomputes dependants immediately.</text>`,
+  ].join('\n'),
+  'Two engines, deliberately separate: the month grid decides what a day was, HR Payroll prices the month. Neither recalculates the other.',
+);
+
+/** §2 — the core entity graph, read as a hub. */
+DIAGRAMS['arch-entities'] = figure(
+  'd-arch-entities',
+  900,
+  440,
+  [
+    laneLabel(20, 16, 'Identity and organisation'),
+    box({ x: 30, y: 30, w: 230, h: 62, title: 'profiles', lines: ['role · access_kind · approval'], titleSize: 12, lineSize: 10 }),
+    box({ x: 335, y: 30, w: 230, h: 62, title: 'payroll_clients', lines: ['key · hour values · rules'], titleSize: 12, lineSize: 10 }),
+    box({ x: 640, y: 30, w: 232, h: 62, title: 'restaurants', lines: ['partner_id · zone_id'], titleSize: 12, lineSize: 10 }),
+
+    box({ x: 30, y: 158, w: 230, h: 62, title: 'vehicles', lines: ['plate · type · odometer'], titleSize: 12, lineSize: 10 }),
+    box({ x: 335, y: 158, w: 230, h: 80, title: 'drivers', lines: ['employee_id · status · zone_id', 'project_key · vehicle_id'], tone: 'accent', titleSize: 13, lineSize: 10.5 }),
+    box({ x: 640, y: 158, w: 232, h: 62, title: 'deliveries', lines: ['status · shift_date'], titleSize: 12, lineSize: 10 }),
+
+    box({ x: 100, y: 296, w: 220, h: 62, title: 'zones', lines: ['geometry · colour'], titleSize: 12, lineSize: 10 }),
+    box({ x: 340, y: 296, w: 220, h: 62, title: 'requests · esign_requests', lines: ['RCM-#### · SIG-####'], titleSize: 12, lineSize: 10 }),
+    box({ x: 580, y: 296, w: 220, h: 62, title: 'attendance_logs', lines: ['log_date · check in/out'], titleSize: 12, lineSize: 10 }),
+
+    `<line x1="145" y1="92" x2="145" y2="156" stroke="${C.line2}" stroke-width="1.3" marker-end="url(#d-arch-entities-arrow)"/>`,
+    `<line x1="260" y1="189" x2="333" y2="196" stroke="${C.line2}" stroke-width="1.3" marker-end="url(#d-arch-entities-arrow)"/>`,
+    `<line x1="565" y1="196" x2="638" y2="189" stroke="${C.line2}" stroke-width="1.3" marker-end="url(#d-arch-entities-arrow)"/>`,
+    `<line x1="450" y1="92" x2="450" y2="156" stroke="${C.line2}" stroke-width="1.3" marker-end="url(#d-arch-entities-arrow)"/>`,
+    `<line x1="450" y1="238" x2="450" y2="294" stroke="${C.line2}" stroke-width="1.3" marker-end="url(#d-arch-entities-arrow)"/>`,
+    `<line x1="210" y1="220" x2="210" y2="294" stroke="${C.line2}" stroke-width="1.3" marker-end="url(#d-arch-entities-arrow)"/>`,
+    `<line x1="565" y1="220" x2="690" y2="294" stroke="${C.line2}" stroke-width="1.3" marker-end="url(#d-arch-entities-arrow)"/>`,
+
+    `<text x="150" y="126" font-size="9.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">1:1</text>`,
+    `<text x="288" y="182" font-size="9.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">1:1 holder</text>`,
+    `<text x="580" y="182" font-size="9.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">1:N</text>`,
+    `<text x="456" y="128" font-size="9.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">1:N project</text>`,
+    `<text x="456" y="272" font-size="9.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">1:N</text>`,
+    `<text x="216" y="262" font-size="9.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">1:N</text>`,
+    `<text x="600" y="262" font-size="9.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">1:N</text>`,
+
+    `<rect x="100" y="382" width="700" height="46" rx="7" fill="${C.soft}" stroke="${C.line}" stroke-width="1"/>`,
+    `<text x="114" y="402" font-size="10.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">M:N junctions: driver_restaurants · driver_intake_restaurants · delivery_rule_scopes · esign_request_signers</text>`,
+    `<text x="114" y="419" font-size="10.5" fill="${C.mute}" font-family="Segoe UI, sans-serif">Derived and denormalised: rollups_driver_day · rollups_zone_month · driver_locations (one doc) · rider_signals</text>`,
+  ].join('\n'),
+  'The core graph. Everything the console lists hangs off drivers; everything the rider files hangs off drivers too, which is why one identity fix corrects a dozen screens.',
+);
+
 /** §1.3 — the admin console, high level: four layers and how they talk. */
 DIAGRAMS['admin-arch'] = figure(
   'd-admin-arch',
@@ -674,6 +963,14 @@ function renderMarkdown(md) {
         if (DOC.diagrams && lang === 'diagram') {
           const id = token.text.trim();
           if (DIAGRAMS[id]) return DIAGRAMS[id];
+        }
+        if (DOC.diagrams && lang === 'mermaid') {
+          // A Mermaid block may name a crafted figure on its first line:
+          //   %% diagram: arch-platform
+          // Mermaid treats `%%` as a comment, so GitHub renders the graph and the
+          // PDF renders the vector figure — one source, two correct outputs.
+          const key = /^%%\s*diagram:\s*([A-Za-z0-9_-]+)/.exec(token.text)?.[1];
+          if (key && DIAGRAMS[key]) return DIAGRAMS[key];
         }
         const body = token.text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
         return `<pre class="code"><code>${body}</code></pre>\n`;

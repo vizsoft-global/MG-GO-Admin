@@ -46,8 +46,8 @@ describe("sidebar menu query key", () => {
 });
 
 describe("list search debounce", () => {
-  it("waits 300ms", () => {
-    assert.equal(LIST_SEARCH_DEBOUNCE_MS, 300);
+  it("waits 150ms", () => {
+    assert.equal(LIST_SEARCH_DEBOUNCE_MS, 150);
   });
 
   it("keeps the sidebar menu fresh for five minutes", () => {
