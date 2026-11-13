@@ -15,12 +15,11 @@ export const PAYROLL_COLUMN_LABELS: Readonly<Record<string, string>> = {
   amId: "MG ID",
   mg: "MG ID",
   /**
-   * `mgId` is the rider's **Driver ID** (`drivers.driver_code`, e.g. 10782). It
-   * is NOT the same field as HR Payroll's "Client ID" (105913), which is the
-   * person-level `drivers.client_id` / the restaurant's client id — verified
-   * against production: one rider carries 3054 / 10043 / 105466 at once.
+   * `mgId` and `client` are the same figure on two sheets — the client's own id
+   * for the rider — so both read "Client ID". They were "Driver ID" and "Client
+   * ID", which made two names for one field depending on which tab was open.
    */
-  mgId: "Driver ID",
+  mgId: "Client ID",
   client: "Client ID",
   clientId: "Client ID",
   /**

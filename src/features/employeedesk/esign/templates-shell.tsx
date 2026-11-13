@@ -270,7 +270,7 @@ export function TemplatesShell() {
                           {exampleSheet.headers.map((header) => (
                             <th
                               key={header}
-                              className="px-2 py-1.5 text-start font-semibold text-muted-foreground"
+                              className="px-2 py-1.5 text-start font-bold text-muted-foreground"
                             >
                               {header}
                             </th>

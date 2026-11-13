@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppFormSection } from "@/components/app";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { LocaleSwitcher } from "@/components/layout/locale-switcher";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 
@@ -29,6 +30,7 @@ export function ProfileSettingsPanel({ profile }: { profile: ProfileData }) {
 
   return (
     <div className="space-y-3">
+      <AppBackButton fallbackHref="/dashboard" />
       <AppFormSection title={t("profile.title")} description={t("profile.subtitle")}>
           <form
             className="grid gap-3 sm:grid-cols-2"

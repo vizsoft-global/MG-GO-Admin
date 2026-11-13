@@ -27,9 +27,9 @@ describe("payroll column labels", () => {
   it("prints one wording for the shared fields", () => {
     assert.equal(payrollColumnLabel("amId", "MG ID"), PAYROLL_COLUMN_LABELS.amId);
     assert.equal(payrollColumnLabel("amId", "MG ID"), "MG ID");
-    // Driver ID stays Driver ID: HR's Client ID is a different field.
-    assert.equal(payrollColumnLabel("mgId", "Driver ID"), "Driver ID");
-    assert.equal(payrollColumnLabel("mgId", "Client ID"), "Driver ID");
+    // Client ID on both sheets: the client read Driver ID and Client ID as one field.
+    assert.equal(payrollColumnLabel("mgId", "Driver ID"), "Client ID");
+    assert.equal(payrollColumnLabel("mgId", "Client ID"), "Client ID");
     assert.equal(payrollColumnLabel("mg", "MG ID"), "MG ID");
     assert.equal(payrollColumnLabel("client", "Client"), "Client ID");
     assert.equal(payrollColumnLabel("name", "Name"), "Employee Name");
@@ -96,7 +96,7 @@ describe("payroll sheet order", () => {
       );
       assert.deepEqual(
         columns.slice(0, 3).map((column) => payrollColumnLabel(column.id, "")),
-        ["MG ID", "Driver ID", "Employee Name"],
+        ["MG ID", "Client ID", "Employee Name"],
       );
     }
   });

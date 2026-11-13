@@ -11,6 +11,7 @@ import { KpiCard } from "@/components/dashboard/kpi-card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -187,6 +188,7 @@ export function ClientsV2() {
 
   return (
     <div className="space-y-4">
+      <AppBackButton fallbackHref="/client-portal-v2" />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-[var(--status-working-fg)] text-white">

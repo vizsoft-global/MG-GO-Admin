@@ -2,6 +2,7 @@ export type StatusVariant = "success" | "warning" | "danger" | "neutral";
 
 const SUCCESS_STATUSES = new Set([
   "active",
+  "running",
   "approved",
   "completed",
   "delivered",

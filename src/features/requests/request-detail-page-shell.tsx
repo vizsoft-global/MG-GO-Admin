@@ -38,7 +38,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/auth-context";
-import { Link, usePathname } from "@/i18n/navigation";
+import { usePathname, useRouter } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import { attachmentDisplayName } from "./attachment-display-name";
 import { decidedTerms, overlayDecisionTerms } from "./decided-terms";
@@ -189,9 +189,17 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
   const tRcm = useTranslations("pages.rcmV2");
   const fleetT = useTranslations("pages.fleetFuelQueue");
   const pathname = usePathname();
+  const router = useRouter();
   const { can, userId, adminRoleSlug } = useAuth();
   const canDecide = can("requests.approve") || can("requests.manage");
   const fromEmployeeDesk = pathname.includes("/employeedesk");
+  function goBack(fallbackHref: string) {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push(fallbackHref);
+  }
   const { data, isLoading, refetch } = useAdminRequestDetail(requestId);
   const decide = useDecideRequest(requestId);
   const uploadAttachments = useUploadStaffRequestAttachments(requestId);
@@ -385,7 +393,11 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
     return (
       <AppPage>
         <AppPageHeader title={t("detail.notFound")} />
-        <Button variant="outline" className="h-9" render={<Link href="/requests/overview" />}>
+        <Button
+          variant="outline"
+          className="h-9"
+          onClick={() => goBack("/requests/overview")}
+        >
           <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
           {t("detail.back")}
         </Button>
@@ -440,7 +452,7 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
             variant="ghost"
             size="sm"
             className="h-9 px-0 text-muted-foreground hover:bg-transparent"
-            render={<Link href={listHref} />}
+            onClick={() => goBack(listHref)}
           >
             <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
             {fromEmployeeDesk ? tRcm("decision.backToIncoming") : t("detail.back")}
@@ -487,7 +499,12 @@ export function RequestDetailPageShell({ requestId }: { requestId: string }) {
                 {t(`status.${requestStatusLabelKey(request.status, request.payload)}` as "status.pending")}
               </StatusPill>
               <RequestTypedDrawer request={request} steps={steps} attachments={attachments} />
-              <Button variant="outline" size="sm" className="h-9" render={<Link href={listHref} />}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => goBack(listHref)}
+              >
                 <ArrowLeft className="me-1.5 h-3.5 w-3.5" />
                 {t("detail.back")}
               </Button>

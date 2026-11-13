@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppListCard, AppPage } from "@/components/app";
+import { AppBackButton } from "@/components/app/app-back-button";
 import {
   FlatListPager,
   GroupedSections,
@@ -257,8 +258,8 @@ function DriversPageContent() {
   const toolbarColumns = useMemo<TableToolbarColumn[]>(
     () => [
       { id: "select", label: t("selectAll"), locked: true },
-      { id: "clientId", label: t("colClientId"), locked: true },
       { id: "employeeId", label: t("colEmployeeId") },
+      { id: "clientId", label: t("colClientId"), locked: true },
       { id: "riderCategory", label: t("colRiderCategory") },
       { id: "companyClientId", label: t("colCompanyClientId") },
       { id: "companyName", label: t("colCompanyName") },
@@ -706,8 +707,8 @@ function DriversPageContent() {
         ),
         className: "w-10",
       },
-      fixed("clientId", t("colClientId")),
       fixed("employeeId", t("colEmployeeId")),
+      fixed("clientId", t("colClientId")),
       fixed("riderCategory", t("colRiderCategory")),
       fixed("companyClientId", t("colCompanyClientId")),
       fixed("companyName", t("colCompanyName")),
@@ -926,24 +927,45 @@ function DriversPageContent() {
       trailing={driverToolbarTrailing}
       filteredCount={filteredTotal}
       totalCount={tabTotal}
-      onExport={filteredTotal > 0 ? () => setExportOpen(true) : undefined}
-      onAdd={canCreate ? () => setAddOpen(true) : undefined}
-      addLabel={t("addDriver")}
     />
   );
 
   return (
     <AppPage className="space-y-4">
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          className="h-9 gap-1.5 rounded-lg px-2.5 text-xs"
-          onClick={() => setSettingsOpen(true)}
-        >
-          <Settings2 className="h-3.5 w-3.5" aria-hidden />
-          {t("employeeSettingsLink")}
-        </Button>
+      <div className="flex items-center justify-between gap-2">
+        <AppBackButton />
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 gap-1.5 rounded-lg px-2.5 text-xs"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings2 className="h-3.5 w-3.5" aria-hidden />
+            {t("employeeSettingsLink")}
+          </Button>
+          {filteredTotal > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 cursor-pointer rounded-lg"
+              onClick={() => setExportOpen(true)}
+            >
+              <Upload className="h-4 w-4" />
+              {t("export")}
+            </Button>
+          ) : null}
+          {canCreate ? (
+            <Button
+              type="button"
+              className="h-9 cursor-pointer rounded-lg"
+              onClick={() => setAddOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+              {t("addDriver")}
+            </Button>
+          ) : null}
+        </div>
       </div>
       <EmployeeSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       <DriversKpiStrip

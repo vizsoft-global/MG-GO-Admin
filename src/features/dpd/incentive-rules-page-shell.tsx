@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Trash2, Upload } from "lucide-react";
+import { Download, Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import {
@@ -319,6 +319,27 @@ export function IncentiveRulesPageShell() {
                 {t("incentivePreview")}
               </Button>
             ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 cursor-pointer rounded-lg"
+              onClick={exportRules}
+              disabled={filteredRules.length === 0}
+            >
+              <Download className="h-4 w-4" />
+              {tCommon("tableToolbar.export")}
+            </Button>
+            {canManage ? (
+              <Button
+                type="button"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => setSheet({ open: true, row: null })}
+              >
+                <Plus className="h-4 w-4" />
+                {t("addIncentiveRule")}
+              </Button>
+            ) : null}
           </div>
         }
       />
@@ -336,9 +357,6 @@ export function IncentiveRulesPageShell() {
                 entityList
                 filteredCount={filteredRules.length}
                 totalCount={incentiveRules?.length ?? 0}
-                onExport={exportRules}
-                onAdd={canManage ? () => setSheet({ open: true, row: null }) : undefined}
-                addLabel={t("addIncentiveRule")}
               />
               <div className="flex flex-wrap gap-2 px-4 pb-3">
                 <Select

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, Settings2 } from "lucide-react";
+import { Download, Loader2, Settings2 } from "lucide-react";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
 import { LAYOUT } from "@/components/app/layout-spacing";
 import { Link } from "@/i18n/navigation";
@@ -330,68 +330,41 @@ export function PerformancePageShell() {
             )}
           </div>
         ) : null}
-        <div className="flex min-w-0 flex-1 flex-col items-center justify-center border-e border-border/70 px-4 py-2">
-          <p className="truncate text-lg font-bold leading-tight text-[var(--ops-title,var(--text-primary))]">
-            {theme.key === "all" ? "MGHub" : theme.palette.shortLabel} |{" "}
-            {tab === "overview"
-              ? t("ops.tabOverview")
-              : tab === "dpd"
-                ? t("ops.tabDpd")
-                : tab === "riders"
-                  ? t("ops.tabRiders")
-                  : tab === "topbottom"
-                    ? t("ops.tabTopBottom")
-                    : t("ops.tabOutsource")}
-          </p>
-          <p className="truncate text-[11px] italic text-muted-foreground">{rangeLabel}</p>
-        </div>
-        <div className="flex items-center gap-1.5 px-2 py-2">
-          {(
-            [
-              { id: "overview", label: t("ops.tabOverview") },
-              { id: "dpd", label: t("ops.tabDpd") },
-              { id: "riders", label: t("ops.tabRiders") },
-              { id: "topbottom", label: t("ops.tabTopBottom") },
-              { id: "outsource", label: t("ops.tabOutsource") },
-            ] as const
-          ).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => {
-                const next = item.id as PerformanceHubTab;
-                setTab(next);
-                setMetric(resolveViewByMetric(next, metric));
-              }}
-              aria-current={tab === item.id ? "page" : undefined}
-              className={cn(
-                "cursor-pointer whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-bold transition-colors duration-150 motion-reduce:transition-none",
-                tab === item.id
-                  ? "border-[var(--ops-line,var(--border))] bg-[var(--ops-soft,var(--muted))] text-[var(--ops-title,var(--text-primary))] shadow-inner"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/50",
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 border-s border-border/70 px-3">
-          <button
-            type="button"
-            className="cursor-pointer text-xs font-semibold text-[var(--ops-ink,var(--text-primary))] hover:underline"
-            onClick={() => void onRefresh()}
-            disabled={refreshing}
-          >
-            {refreshing ? t("refreshing") : t("refresh")}
-          </button>
-          <Link
-            href="/performance/settings"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--ops-line,var(--border))] px-2.5 text-xs font-semibold text-[var(--ops-ink,var(--text-primary))] transition-colors hover:bg-[var(--ops-soft,var(--muted))]"
-          >
-            <Settings2 className="size-3.5" />
-            {t("settingsLink")}
-          </Link>
-        </div>
+        <AppPageHeader
+          title={t("title")}
+          description={t("ops.subtitle", {
+            status: t(`ops.slicer.orderStatusOpt.${slicers.orderStatus}`),
+          })}
+          className="min-w-0 flex-1 [&_h1]:!text-white [&_.text-muted-foreground]:!text-white/80"
+          actions={
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-white/30 px-2.5 text-sm text-white transition-colors hover:bg-white/10 disabled:pointer-events-none disabled:opacity-50"
+                onClick={exportTab}
+                disabled={!data}
+              >
+                <Download className="size-3.5" />
+                {t("ops.exportTab")}
+              </button>
+              <button
+                type="button"
+                className="text-xs text-white/90 hover:underline"
+                onClick={() => void onRefresh()}
+                disabled={refreshing}
+              >
+                {refreshing ? t("refreshing") : t("refresh")}
+              </button>
+              <Link
+                href="/performance/settings"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/30 px-2.5 text-sm text-white transition-colors hover:bg-white/10"
+              >
+                <Settings2 className="size-3.5" />
+                {t("settingsLink")}
+              </Link>
+            </div>
+          }
+        />
       </div>
       <span className="sr-only">
         <AppPageHeader title={t("title")} description={t("ops.subtitle", {
@@ -441,8 +414,6 @@ export function PerformancePageShell() {
             setSlicers(EMPTY_OPS_SLICERS);
             setFilterResetKey((k) => k + 1);
           }}
-          onExport={data ? exportTab : undefined}
-          exportLabel={t("ops.exportTab")}
         />
 
         <div className="flex flex-wrap items-center gap-2">

@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   Activity,
   CheckCircle2,
+  Download,
   FileText,
   Loader2,
   RefreshCw,
@@ -436,6 +437,17 @@ export function VisitsReportsShell() {
               />
               {t("refresh")}
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              disabled={reportRows.length === 0}
+              onClick={exportCsv}
+            >
+              <Download className="me-1.5 h-3.5 w-3.5" />
+              {t("reports.export")}
+            </Button>
           </div>
         }
       />
@@ -583,7 +595,6 @@ export function VisitsReportsShell() {
                   rowKind="aggregate"
                   filteredCount={reportRows.length}
                   totalCount={byDepartment.length}
-                  onExport={exportCsv}
                 />
               }
               columns={reportShown.map((column) => ({ id: column.id, label: column.label }))}

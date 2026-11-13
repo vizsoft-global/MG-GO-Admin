@@ -41,6 +41,8 @@ export function TableToolbar({
   leading,
   trailing,
   searchFirst,
+  searchWidthClass,
+  hideColumnsPicker,
 }: {
   prefs: ReturnType<typeof useTablePrefs>;
   entity: string;
@@ -66,6 +68,10 @@ export function TableToolbar({
   trailing?: ReactNode;
   /** Render the search box before `leading` instead of after it. */
   searchFirst?: boolean;
+  /** Override the search box width classes (defaults to a flexible min-w-[12rem] box). */
+  searchWidthClass?: string;
+  /** Hide the toolbar's own column picker when the page renders its own. */
+  hideColumnsPicker?: boolean;
 }) {
   const t = useTranslations("common.tableToolbar");
   const controls = resolveToolbarControls({
@@ -84,7 +90,7 @@ export function TableToolbar({
   const selectedView: TableViewMode = prefs.view;
 
   const searchSlot = controls.search ? (
-    <div className="relative min-w-[12rem] flex-1 shrink-0">
+    <div className={cn("relative", searchWidthClass ?? "min-w-[12rem] flex-1 shrink-0")}>
       <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
       <Input
         value={prefs.query}
@@ -164,7 +170,7 @@ export function TableToolbar({
         ) : null}
 
         <div className="ms-auto flex shrink-0 items-center gap-2">
-          {controls.columns ? (
+          {controls.columns && !hideColumnsPicker ? (
             <ColumnsPopover
               columns={prefs.orderedColumns}
               isVisible={prefs.isVisible}

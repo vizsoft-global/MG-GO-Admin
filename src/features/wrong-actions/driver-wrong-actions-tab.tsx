@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -17,6 +17,7 @@ import {
   type TableToolbarColumn,
 } from "@/components/app/table-toolbar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "@/i18n/navigation";
 import { WrongActionFormDialog } from "./wrong-action-form-dialog";
@@ -56,7 +57,18 @@ export function DriverWrongActionsTab({ driverId }: { driverId: string }) {
             </p>
           ) : null}
         </div>
-        {null}
+        {canManage ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 cursor-pointer rounded-lg"
+            onClick={() => setAddOpen(true)}
+          >
+            <Plus className="me-1.5 h-3.5 w-3.5" />
+            {t("addIncident")}
+          </Button>
+        ) : null}
       </div>
 
       {isLoading ? (
@@ -76,8 +88,6 @@ export function DriverWrongActionsTab({ driverId }: { driverId: string }) {
                 return !needle || `${row.action_type} ${row.severity} ${row.details ?? ""} ${row.source}`.toLowerCase().includes(needle);
               }).length}
               totalCount={rows.length}
-              onAdd={canManage ? () => setAddOpen(true) : undefined}
-              addLabel={t("addIncident")}
             />
           }
           columns={prefs.orderedColumns.filter((column) => prefs.isVisible(column.id)).map((column) => ({

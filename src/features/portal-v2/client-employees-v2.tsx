@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight, Download, Eye, FileText, Search, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -108,6 +109,7 @@ export function ClientEmployeesV2({ project }: { project: string }) {
 
   return (
     <div className="space-y-4">
+      <AppBackButton fallbackHref="/client-portal-v2" />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[var(--accent-rust)] text-sm font-semibold text-white">

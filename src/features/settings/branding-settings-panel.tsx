@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppFormSection } from "@/components/app";
+import { AppBackButton } from "@/components/app/app-back-button";
 export function BrandingSettingsPanel() {
   const t = useTranslations("pages.settings.branding");
   const locale = useLocale();
@@ -44,6 +45,7 @@ export function BrandingSettingsPanel() {
 
   return (
     <div className="space-y-6">
+    <AppBackButton fallbackHref="/settings" className="-mb-3" />
     <AppFormSection title={t("title")} description={t("subtitle")}>
       <div className="space-y-6">
         <form

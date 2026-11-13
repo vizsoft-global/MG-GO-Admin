@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { Download, ExternalLink, Loader2 } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
@@ -103,7 +103,25 @@ export function DriverShiftsPageShell() {
 
   return (
     <AppPage>
-      <AppPageHeader title={t("title")} description={t("subtitle")} />
+      <AppPageHeader
+        title={t("title")}
+        description={t("subtitle")}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9"
+            onClick={() =>
+              downloadCsv(`driver-shifts-${fromDate}-${toDate}.csv`, exportDriverShiftsCsv(filtered))
+            }
+            disabled={filtered.length === 0}
+          >
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            {t("export")}
+          </Button>
+        }
+      />
       <AppListCard>
         <TrackingTableToolbar
           search={search}
@@ -114,10 +132,6 @@ export function DriverShiftsPageShell() {
           sortItems={sortItems}
           onRefresh={() => void handleRefresh()}
           isRefreshing={isRefreshing}
-          onExport={() =>
-            downloadCsv(`driver-shifts-${fromDate}-${toDate}.csv`, exportDriverShiftsCsv(filtered))
-          }
-          exportDisabled={filtered.length === 0}
           dateSlot={
             <div className="flex flex-wrap items-center gap-2">
               <Input

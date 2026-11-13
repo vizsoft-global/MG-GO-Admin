@@ -51,8 +51,9 @@ html[data-theme="shopify"] {
   --gap-tight: 8px;
   --table-cell-y: 12px;
   --table-cell-x: 16px;
-  --font-display: "Montserrat", "Gotham", system-ui, sans-serif;
-  --font-body: "Inter", "Gotham", system-ui, sans-serif;
+  /* One brand face across the whole panel: Gotham for Latin, GE SS TWO for Arabic. */
+  --font-display: "Gotham", "GE SS TWO", system-ui, sans-serif;
+  --font-body: "Gotham", "GE SS TWO", system-ui, sans-serif;
 
   /* Light mode — page canvas, white cards, navy text */
   --background: var(--surface-page);

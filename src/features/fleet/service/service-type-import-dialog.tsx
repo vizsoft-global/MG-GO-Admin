@@ -170,11 +170,11 @@ export function ServiceTypeImportDialog({
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs text-muted-foreground">
-                      <th className="pb-1 text-start font-medium">{t("sheetRow")}</th>
-                      <th className="pb-1 text-start font-medium">{t("labelEn")}</th>
-                      <th className="pb-1 text-start font-medium">{t("labelAr")}</th>
-                      <th className="pb-1 text-start font-medium">{t("category")}</th>
-                      <th className="pb-1 text-start font-medium">{t("status")}</th>
+                      <th className="pb-1 text-start font-bold">{t("sheetRow")}</th>
+                      <th className="pb-1 text-start font-bold">{t("labelEn")}</th>
+                      <th className="pb-1 text-start font-bold">{t("labelAr")}</th>
+                      <th className="pb-1 text-start font-bold">{t("category")}</th>
+                      <th className="pb-1 text-start font-bold">{t("status")}</th>
                     </tr>
                   </thead>
                   <tbody>

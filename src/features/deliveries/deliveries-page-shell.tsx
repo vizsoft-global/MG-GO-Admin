@@ -17,6 +17,7 @@ import {
   TriangleAlert,
   Package,
   RefreshCw,
+  Download,
   X,
   XCircle,
 } from "lucide-react";
@@ -35,6 +36,7 @@ import {
 } from "@/components/app";
 import { TableCell } from "@/components/app/app-data-table";
 import { AppPage } from "@/components/app/app-page";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { AppEmptyState } from "@/components/app/app-empty-state";
 import { ClearAllModuleButton, useCanClearAll } from "@/features/settings/clear-all-module-button";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
@@ -702,6 +704,7 @@ function DeliveriesPageContent() {
 
   return (
     <AppPage>
+      <AppBackButton className="self-start" />
       <div className="flex flex-col gap-2">
         <KpiGrid items={kpis} />
         {kpiError ? (
@@ -835,6 +838,19 @@ function DeliveriesPageContent() {
                     <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
                     <span className="hidden sm:inline">{t("ordersReport.button")}</span>
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 cursor-pointer rounded-lg px-2.5"
+                    onClick={() => void handleExport()}
+                    disabled={isExporting || totalForFilter === 0}
+                    title={t("export")}
+                    aria-label={t("export")}
+                  >
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{t("export")}</span>
+                  </Button>
                   <ClearAllModuleButton
                     entity="deliveries"
                     compact
@@ -943,7 +959,6 @@ function DeliveriesPageContent() {
               entityList
               filteredCount={visible.length}
               totalCount={totalForFilter || deliveries.length}
-              onExport={!isExporting && totalForFilter > 0 ? () => void handleExport() : undefined}
             />
             <GroupedSections groups={groupedDeliveries}>
               {(rows) => (
@@ -989,7 +1004,6 @@ function DeliveriesPageContent() {
                   entityList
                   filteredCount={visible.length}
                   totalCount={totalForFilter || deliveries.length}
-                  onExport={!isExporting && totalForFilter > 0 ? () => void handleExport() : undefined}
                 />
               }
               columns={tableColumns}

@@ -314,8 +314,6 @@ export function CombinedPayrollTab({
               rows={rows}
               today={today}
               empty={t("emptyRiders")}
-              exportLabel={canExport ? t("downloadTable") : undefined}
-              onExport={canExport ? exportRows : undefined}
               visibleIds={columns.visibleIds}
               headingConfig={headingConfig}
               headingManage={canManage}

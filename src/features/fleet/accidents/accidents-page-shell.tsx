@@ -3,7 +3,7 @@
 import { Fragment, useMemo, type ReactNode } from "react";
 import { usePathname, useRouter as useNextRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, CheckCircle2, ClipboardList, Clock, UserRoundCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, Clock, Download, Plus, UserRoundCheck } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
@@ -24,6 +24,7 @@ import { VisibleTableCell } from "@/components/app/visible-table-cell";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -279,6 +280,45 @@ export function AccidentsPageShell({
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={[{ label: t("title") }]}
+        actions={
+          <>
+            {canExport ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                disabled={filtered.length === 0}
+                onClick={() => {
+                  void downloadAccidentsXlsx(filtered, {
+                    caseStatus: (status) => tCase(status),
+                    source: (source) => tSource(source),
+                    driverFault: (key) => tFault(key),
+                    vehicleCase: (key) =>
+                      tVehicleCase(key as (typeof VEHICLE_CASE_STATUSES)[number]),
+                    insuranceClaim: (key) => tClaim(key as (typeof INSURANCE_CLAIM_STATUSES)[number]),
+                    policeReport: (key) => tPolice(key as (typeof POLICE_REPORT_STATUSES)[number]),
+                  });
+                  void recordAccidentExport(filtered.length);
+                }}
+              >
+                <Download className="me-1.5 h-3.5 w-3.5" />
+                {t("actions.export")}
+              </Button>
+            ) : null}
+            {canManage ? (
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => router.push("/fleet/accident/new")}
+              >
+                <Plus className="me-1.5 h-3.5 w-3.5" />
+                {t("actions.add")}
+              </Button>
+            ) : null}
+          </>
+        }
       />
       <KpiGrid
         compact
@@ -430,26 +470,6 @@ export function AccidentsPageShell({
               rowKind="dynamic"
               filteredCount={filtered.length}
               totalCount={rows.length}
-              onExport={
-                canExport
-                  ? () => {
-                      void downloadAccidentsXlsx(filtered, {
-                        caseStatus: (status) => tCase(status),
-                        source: (source) => tSource(source),
-                        driverFault: (key) => tFault(key),
-                        vehicleCase: (key) =>
-                          tVehicleCase(key as (typeof VEHICLE_CASE_STATUSES)[number]),
-                        insuranceClaim: (key) =>
-                          tClaim(key as (typeof INSURANCE_CLAIM_STATUSES)[number]),
-                        policeReport: (key) =>
-                          tPolice(key as (typeof POLICE_REPORT_STATUSES)[number]),
-                      });
-                      void recordAccidentExport(filtered.length);
-                    }
-                  : undefined
-              }
-              onAdd={canManage ? () => router.push("/fleet/accident/new") : undefined}
-              addLabel={t("actions.add")}
             />
           }
           columns={shown.map((column) => ({ id: column.id, label: column.label }))}

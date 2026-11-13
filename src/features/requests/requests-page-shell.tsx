@@ -10,8 +10,10 @@ import {
   CalendarDays,
   Check,
   Clock,
+  Download,
   Eye,
   Loader2,
+  Plus,
   RefreshCw,
   Settings,
   Timer,
@@ -40,6 +42,7 @@ import {
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { ClearAllModuleButton, useCanClearAll } from "@/features/settings/clear-all-module-button";
 import { TabBar } from "@/components/dashboard/tab-bar";
 import {
@@ -502,6 +505,8 @@ export function RequestsPageShell({
     <AppPage className="space-y-3">
       {/* Figma leads with the breadcrumb only — the page title band is replaced by the
           queue tabs, so the KPI strip and the table both stay above the fold. */}
+      <div className="flex min-w-0 items-center gap-1">
+      <AppBackButton />
       <Breadcrumb>
         <BreadcrumbList>
           {fromEmployeeDesk ? (
@@ -537,6 +542,7 @@ export function RequestsPageShell({
           )}
         </BreadcrumbList>
       </Breadcrumb>
+      </div>
 
       <KpiGrid
         compact
@@ -618,6 +624,29 @@ export function RequestsPageShell({
             >
               <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() =>
+                exportRowsToCsv(visibleRows, `requests-${datePreset}-${Date.now()}.csv`)
+              }
+            >
+              <Download className="me-1.5 h-3.5 w-3.5" />
+              {t("export")}
+            </Button>
+            {canCreate ? (
+              <Button
+                type="button"
+                size="sm"
+                className="h-8"
+                onClick={() => setCreateOpen(true)}
+              >
+                <Plus className="me-1.5 h-3.5 w-3.5" />
+                {t("create.button")}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -800,9 +829,6 @@ export function RequestsPageShell({
             entityList
             filteredCount={visibleRows.length}
             totalCount={filteredTotal}
-            onExport={() => exportRowsToCsv(visibleRows, `requests-${datePreset}-${Date.now()}.csv`)}
-            onAdd={canCreate ? () => setCreateOpen(true) : undefined}
-            addLabel={t("create.button")}
           />
         ) : null}
 
@@ -867,9 +893,6 @@ export function RequestsPageShell({
                 entityList
                 filteredCount={visibleRows.length}
                 totalCount={filteredTotal}
-                onExport={() => exportRowsToCsv(visibleRows, `requests-${datePreset}-${Date.now()}.csv`)}
-                onAdd={canCreate ? () => setCreateOpen(true) : undefined}
-                addLabel={t("create.button")}
               />
             }
             columns={shownRequestColumns.map((column) => ({

@@ -215,8 +215,8 @@ export function HrImportDialog(props: {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-muted/80 backdrop-blur">
                     <tr>
-                      <th className="px-2 py-1 text-start font-semibold">{props.labels.idColumn}</th>
-                      <th className="px-2 py-1 text-start font-semibold">{props.labels.amountColumn}</th>
+                      <th className="px-2 py-1 text-start font-bold">{props.labels.idColumn}</th>
+                      <th className="px-2 py-1 text-start font-bold">{props.labels.amountColumn}</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -56,7 +56,7 @@ export function TrackingTableToolbar({
   onRefresh: () => void;
   isRefreshing?: boolean;
   refreshLabel?: string;
-  onExport: () => void;
+  onExport?: () => void;
   exportDisabled?: boolean;
   exportLabel?: string;
   showExportLabel?: boolean;
@@ -153,19 +153,21 @@ export function TrackingTableToolbar({
             <RefreshCw className="h-4 w-4" />
           )}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size={showExportLabel ? "sm" : "icon"}
-          className={showExportLabel ? "h-9 rounded-lg" : "h-9 w-9 shrink-0 rounded-lg"}
-          onClick={onExport}
-          disabled={exportDisabled}
-          aria-label={exportLabel}
-          title={exportLabel}
-        >
-          <Download className="h-4 w-4" />
-          {showExportLabel ? exportLabel : null}
-        </Button>
+        {onExport ? (
+          <Button
+            type="button"
+            variant="outline"
+            size={showExportLabel ? "sm" : "icon"}
+            className={showExportLabel ? "h-9 rounded-lg" : "h-9 w-9 shrink-0 rounded-lg"}
+            onClick={onExport}
+            disabled={exportDisabled}
+            aria-label={exportLabel}
+            title={exportLabel}
+          >
+            <Download className="h-4 w-4" />
+            {showExportLabel ? exportLabel : null}
+          </Button>
+        ) : null}
       </div>
     </div>
   );

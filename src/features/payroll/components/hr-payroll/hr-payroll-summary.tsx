@@ -334,9 +334,8 @@ export function HrPayrollSummary(props: {
   monthKey: string;
   monthLabel: string;
   onByChange?: (by: HrSummaryBy) => void;
-  onExport: (by: HrSummaryBy, lines: readonly HrSummaryLine[]) => void;
 }): JSX.Element {
-  const { rows, labels, onExport } = props;
+  const { rows, labels } = props;
   const copy = useTranslations("pages.payroll.hr.summary");
   const loadedYear = Number(props.monthKey.slice(0, 4));
   const loadedMonth = Number(props.monthKey.slice(5, 7));
@@ -621,7 +620,6 @@ export function HrPayrollSummary(props: {
         rowKind="aggregate"
         filteredCount={shownLines.length}
         totalCount={sortedLines.length}
-        onExport={() => onExport(by, shownLines)}
       />
       <div className="hrpay-scroll">
         <table className="hrpay-table">

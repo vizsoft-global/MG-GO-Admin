@@ -281,8 +281,6 @@ export function EsignBatchesShell() {
       entityList
       filteredCount={filtered.length}
       totalCount={tracker.length}
-      onAdd={() => router.push(newTemplateHref)}
-      addLabel={t("newFromTemplate")}
     />
   );
   const tableHasRows = !loading && !error && filtered.length > 0 && prefs.view === "list";
@@ -442,6 +440,17 @@ export function EsignBatchesShell() {
         title={t("title")}
         description={t("subtitle")}
         breadcrumbs={breadcrumbs}
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 cursor-pointer rounded-lg"
+            onClick={() => router.push(newTemplateHref)}
+          >
+            <Plus className="me-1.5 h-3.5 w-3.5" />
+            {t("newFromTemplate")}
+          </Button>
+        }
       />
 
       {scope === "individual" ? null : (

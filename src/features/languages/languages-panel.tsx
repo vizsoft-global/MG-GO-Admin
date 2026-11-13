@@ -7,6 +7,7 @@ import { Link } from "@/i18n/navigation";
 import { toast } from "sonner";
 import { Edit3, Loader2, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -72,7 +73,11 @@ export function LanguagesPanel() {
   };
 
   return (
-    <Card className="rounded-xl border-border shadow-sm">
+    <>
+      <div className="mb-2 flex items-center">
+        <AppBackButton fallbackHref="/settings" />
+      </div>
+      <Card className="rounded-xl border-border shadow-sm">
       <CardContent className="p-0">
         {loading ? (
           <div className="flex justify-center p-12">
@@ -82,25 +87,25 @@ export function LanguagesPanel() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30">
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   {t("colCode")}
                 </TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   {t("colLanguage")}
                 </TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   {t("colDirection")}
                 </TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <TableHead className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   {t("colTranslations")}
                 </TableHead>
-                <TableHead className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <TableHead className="text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   {t("colEnabled")}
                 </TableHead>
-                <TableHead className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <TableHead className="text-center text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   {t("colDefault")}
                 </TableHead>
-                <TableHead className="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <TableHead className="text-right text-xs font-bold uppercase tracking-wider text-muted-foreground">
                   {t("colActions")}
                 </TableHead>
               </TableRow>
@@ -181,5 +186,6 @@ export function LanguagesPanel() {
         )}
       </CardContent>
     </Card>
+    </>
   );
 }

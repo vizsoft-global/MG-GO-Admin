@@ -453,6 +453,90 @@ export function VehiclesPageShell({
 
   const isRefreshing = isFetching && !isLoading;
 
+  const vehicleToolbar = (
+    <TableToolbar
+      prefs={prefs}
+      entity={t("title")}
+      columns={toolbarColumns}
+      rowKind="dynamic"
+      entityList
+      searchFirst
+      searchWidthClass="w-48 min-w-0 shrink-0"
+      hideColumnsPicker
+      leading={
+        <>
+          <Select
+            items={tabSelectItems}
+            value={activeTab}
+            onValueChange={(value) => {
+              if (value) replaceQuery({ tab: parseVehicleListTab(value) });
+            }}
+          >
+            <SelectTrigger className="h-9 w-[148px] shrink-0 cursor-pointer rounded-lg text-xs">
+              <SelectValue placeholder={t("filterView")} />
+            </SelectTrigger>
+            <SelectContent>
+              {tabSelectItems.map((item) => (
+                <SelectItem key={item.value} value={item.value} className="cursor-pointer">
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {activeFilterCount > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={clearAll}
+            >
+              <FilterX className="h-3.5 w-3.5" aria-hidden />
+              {t("clearAllFilters")}
+              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-white tabular-nums">
+                {activeFilterCount}
+              </span>
+            </Button>
+          ) : null}
+          <AppTableColumnPicker
+            options={pickerOptions}
+            isVisible={isVisible}
+            onToggle={toggle}
+            onReset={reset}
+            hiddenCount={hiddenToggleableCount}
+          />
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
+                  onClick={() => {
+                    void queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all() });
+                    void refetch();
+                  }}
+                  disabled={isRefreshing}
+                  aria-label={t("refresh")}
+                >
+                  <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                </Button>
+              }
+            />
+            <TooltipContent>{t("refresh")}</TooltipContent>
+          </Tooltip>
+        </>
+      }
+      trailing={
+        prefs.view !== "grid" ? (
+          <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} inline />
+        ) : null
+      }
+      filteredCount={visible.length}
+      totalCount={vehicles.length}
+    />
+  );
+
   return (
     <AppPage>
       <AppPageHeader
@@ -460,14 +544,48 @@ export function VehiclesPageShell({
         title={t("title")}
         description={t("subtitle")}
         actions={
-          <ClearAllModuleButton
-            entity="vehicles"
-            selectedIds={selectedIds}
-            onSuccess={() => {
-              setSelectedIds(new Set());
-              void refetch();
-            }}
-          />
+          <div className="flex items-center gap-2">
+            <ClearAllModuleButton
+              entity="vehicles"
+              selectedIds={selectedIds}
+              onSuccess={() => {
+                setSelectedIds(new Set());
+                void refetch();
+              }}
+            />
+            {!isLoading && visible.length > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => downloadVehicleListXlsx(visible)}
+              >
+                <Upload className="h-4 w-4" />
+                {t("export")}
+              </Button>
+            ) : null}
+            {canManage ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload className="h-4 w-4" />
+                {t("bulkImport")}
+              </Button>
+            ) : null}
+            {canCreate ? (
+              <Button
+                type="button"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => replaceQuery({ add: true })}
+              >
+                <Plus className="h-4 w-4" />
+                {t("addVehicle")}
+              </Button>
+            ) : null}
+          </div>
         }
       />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
@@ -496,108 +614,7 @@ export function VehiclesPageShell({
         ))}
       </div>
 
-      <AppListCard
-        toolbar={
-          <>
-            <TableToolbar
-              prefs={prefs}
-              entity={t("title")}
-              columns={toolbarColumns}
-              rowKind="dynamic"
-              entityList
-              filteredCount={visible.length}
-              totalCount={vehicles.length}
-              onExport={
-                !isLoading && visible.length > 0 ? () => downloadVehicleListXlsx(visible) : undefined
-              }
-              onAdd={canCreate ? () => replaceQuery({ add: true }) : undefined}
-              addLabel={t("addVehicle")}
-            />
-            <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
-                <Select
-                  items={tabSelectItems}
-                  value={activeTab}
-                  onValueChange={(value) => {
-                    if (value) replaceQuery({ tab: parseVehicleListTab(value) });
-                  }}
-                >
-                  <SelectTrigger className="h-9 w-[148px] shrink-0 cursor-pointer rounded-lg text-xs">
-                    <SelectValue placeholder={t("filterView")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {tabSelectItems.map((item) => (
-                      <SelectItem key={item.value} value={item.value} className="cursor-pointer">
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {activeFilterCount > 0 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-9 shrink-0 cursor-pointer gap-1.5 rounded-lg px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={clearAll}
-                  >
-                    <FilterX className="h-3.5 w-3.5" aria-hidden />
-                    {t("clearAllFilters")}
-                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-xs font-semibold text-white tabular-nums">
-                      {activeFilterCount}
-                    </span>
-                  </Button>
-                ) : null}
-                <AppTableColumnPicker
-                  options={pickerOptions}
-                  isVisible={isVisible}
-                  onToggle={toggle}
-                  onReset={reset}
-                  hiddenCount={hiddenToggleableCount}
-                />
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 shrink-0 cursor-pointer rounded-lg"
-                      onClick={() => {
-                        void queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all() });
-                        void refetch();
-                      }}
-                      disabled={isRefreshing}
-                      aria-label={t("refresh")}
-                    >
-                      <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
-                    </Button>
-                  }
-                />
-                <TooltipContent>{t("refresh")}</TooltipContent>
-              </Tooltip>
-              {canManage ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9 shrink-0 cursor-pointer rounded-lg sm:w-auto sm:px-2.5"
-                        onClick={() => setImportOpen(true)}
-                        aria-label={t("bulkImport")}
-                      >
-                        <Upload className="h-4 w-4" />
-                        <span className="ms-1.5 hidden md:inline">{t("bulkImport")}</span>
-                      </Button>
-                    }
-                  />
-                  <TooltipContent>{t("bulkImport")}</TooltipContent>
-                </Tooltip>
-              ) : null}
-            </div>
-          </>
-        }
-      >
+      <AppListCard>
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -621,6 +638,7 @@ export function VehiclesPageShell({
         ) : (
           prefs.view === "grid" ? (
           <CardContent className="p-4">
+            {vehicleToolbar}
             {canManage && selectedRows.length > 0 ? (
               <VehicleBulkBar rows={selectedRows} onDone={() => setSelectedIds(new Set())} />
             ) : null}
@@ -652,8 +670,8 @@ export function VehiclesPageShell({
             {canManage && selectedRows.length > 0 ? (
               <VehicleBulkBar rows={selectedRows} onDone={() => setSelectedIds(new Set())} />
             ) : null}
-            <FlatListPager pager={listView.flatPager} onStep={listView.stepFlat} />
             <AppDataTable
+              toolbar={vehicleToolbar}
               columns={tableColumns}
               stickyHeader
               headerRowClassName="bg-primary/5 hover:bg-primary/5"

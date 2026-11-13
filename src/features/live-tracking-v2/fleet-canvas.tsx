@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { Input } from "@/components/ui/input";
 import { SearchSelect } from "@/components/ui/search-select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -423,6 +424,7 @@ export function FleetCanvas() {
           */}
           <div className="pointer-events-auto fleet-overlay flex min-h-9 min-w-0 max-w-[calc(100%-7rem)] flex-wrap items-center gap-2 rounded-lg border px-2 py-1 shadow-sm">
             <div className="flex shrink-0 items-center gap-2">
+              <AppBackButton fallbackHref="/dashboard" className="shrink-0" />
               <Satellite className="size-4 shrink-0 text-muted-foreground" aria-hidden />
               <span className="whitespace-nowrap text-sm font-semibold">{t("title")}</span>
               {/* Decoration, and it competes with the filters for the row now: at 1280 it

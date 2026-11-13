@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { Link } from "@/i18n/navigation";
+import { AppBackButton } from "@/components/app/app-back-button";
 
 /**
  * Shared module hub — Figma `7267:23538` (BajajCare, "03 · Visit bookings").
@@ -202,6 +203,7 @@ export function AppHubShell({
       <div className="relative mx-auto flex w-full max-w-[1128px] flex-col gap-7">
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div className="flex flex-col gap-[14px]">
+            <AppBackButton className="self-start text-white/70 hover:bg-white/10 hover:text-white" />
             <nav aria-label={breadcrumbHome} className="flex items-center gap-[6px]">
               <img src="/visit-hub/icon-home.svg" alt="" width={14} height={14} className="block" />
               <Link

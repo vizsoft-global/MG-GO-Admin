@@ -3,7 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { ExternalLink, Loader2, Trash2 } from "lucide-react";
+import { ExternalLink, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { groupRows } from "@/components/app/app-list-controls";
@@ -146,6 +146,15 @@ export function EsignDraftsShell() {
             >
               {t("back")}
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 cursor-pointer rounded-lg"
+              onClick={() => router.push(sendHref)}
+            >
+              <Plus className="me-1.5 h-3.5 w-3.5" />
+              {t("newDraft")}
+            </Button>
           </div>
         }
       />
@@ -159,8 +168,6 @@ export function EsignDraftsShell() {
           entityList
           filteredCount={visible.length}
           totalCount={drafts.length}
-          onAdd={() => router.push(sendHref)}
-          addLabel={t("newDraft")}
         />
         <div className="border-b border-border p-3">
           <TabBar items={tabs} activeId={kind} onSelect={(id) => setKind(id as EsignDraftKind | "all")} />

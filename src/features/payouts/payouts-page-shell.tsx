@@ -19,6 +19,8 @@ import {
 } from "@/components/app/table-toolbar";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusPill } from "@/components/dashboard/status-pill";
@@ -112,7 +114,23 @@ export function PayoutsPageShell() {
 
   return (
     <AppPage>
-      <AppPageHeader title={t("title")} description={t("subtitle")} />
+      <AppPageHeader
+        title={t("title")}
+        description={t("subtitle")}
+        actions={
+          canManage ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 cursor-pointer rounded-lg"
+              onClick={() => setNewRunOpen(true)}
+            >
+              <Plus className="me-2 h-3.5 w-3.5" />
+              {t("newRunTitle")}
+            </Button>
+          ) : undefined
+        }
+      />
 
       <KpiGrid
         items={[
@@ -136,8 +154,6 @@ export function PayoutsPageShell() {
               entityList
               filteredCount={filtered.length}
               totalCount={runs.length}
-              onAdd={canManage ? () => setNewRunOpen(true) : undefined}
-              addLabel={t("newRunTitle")}
             />
             <div className="flex flex-wrap gap-2 px-4 pb-3">
               <div className="space-y-1">

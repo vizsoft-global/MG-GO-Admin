@@ -2,9 +2,9 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Link } from "@/i18n/navigation";
-import { ArrowLeft, Loader2, Undo2 } from "lucide-react";
+import { Loader2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { AppPage } from "@/components/app/app-page";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
@@ -91,16 +91,7 @@ export function VerificationImportsPageShell() {
   return (
     <AppPage>
       <div className="mb-4 flex items-center gap-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="cursor-pointer"
-          nativeButton={false}
-          render={<Link href="/dpd-verification" />}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+        <AppBackButton fallbackHref="/dpd-verification" className="-ms-2" />
         <div>
           <h1 className="text-lg font-semibold tracking-tight">{t("title")}</h1>
           <p className="text-sm text-muted-foreground">{t("subtitle")}</p>

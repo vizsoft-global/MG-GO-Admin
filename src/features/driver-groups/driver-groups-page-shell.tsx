@@ -18,6 +18,8 @@ import {
   type TableToolbarColumn,
 } from "@/components/app/table-toolbar";
 import { AppEmptyState } from "@/components/app/app-empty-state";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import {
   Table,
@@ -68,8 +70,6 @@ export function DriverGroupsPageShell() {
       entityList
       filteredCount={visible.length}
       totalCount={groups.length}
-      onAdd={canManage ? () => router.push("/drivers/groups/new") : undefined}
-      addLabel={t("createGroup")}
     />
   );
 
@@ -78,6 +78,19 @@ export function DriverGroupsPageShell() {
       <AppPageHeader
         title={t("title")}
         description={t("subtitle")}
+        actions={
+          canManage ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 cursor-pointer rounded-lg"
+              onClick={() => router.push("/drivers/groups/new")}
+            >
+              <Plus className="me-1.5 h-3.5 w-3.5" />
+              {t("createGroup")}
+            </Button>
+          ) : undefined
+        }
       />
       <AppListCard title={t("listTitle")}>
         {isLoading ? (

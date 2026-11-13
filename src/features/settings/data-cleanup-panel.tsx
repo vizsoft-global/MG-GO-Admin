@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { AlertTriangle, ChevronLeft, ChevronRight, Eye, Filter, Loader2, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppPage } from "@/components/app/app-page";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -406,6 +407,9 @@ export function DataCleanupPanel({
 
   return (
     <AppPage>
+      <div className="flex items-center">
+        <AppBackButton fallbackHref="/settings" />
+      </div>
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>

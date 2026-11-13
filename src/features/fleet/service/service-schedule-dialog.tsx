@@ -292,14 +292,14 @@ export function ServiceScheduleDialog({
               <table className="w-full text-xs">
                 <thead className="bg-muted/60 text-muted-foreground">
                   <tr>
-                    <th className="px-2 py-1 text-start">{t("maintenance.cols.program")}</th>
-                    <th className="px-2 py-1 text-start">{t("maintenance.scopeLabel")}</th>
-                    <th className="px-2 py-1 text-start">{t("maintenance.applyTo")}</th>
-                    <th className="px-2 py-1 text-start">{t("maintenance.kmInterval")}</th>
-                    <th className="px-2 py-1 text-start">{t("maintenance.dayInterval")}</th>
-                    <th className="px-2 py-1 text-start">{t("maintenance.alertKm")}</th>
-                    <th className="px-2 py-1 text-start">{t("maintenance.alertDays")}</th>
-                    <th className="px-2 py-1 text-start">{t("maintenance.cols.status")}</th>
+                    <th className="px-2 py-1 text-start font-bold">{t("maintenance.cols.program")}</th>
+                    <th className="px-2 py-1 text-start font-bold">{t("maintenance.scopeLabel")}</th>
+                    <th className="px-2 py-1 text-start font-bold">{t("maintenance.applyTo")}</th>
+                    <th className="px-2 py-1 text-start font-bold">{t("maintenance.kmInterval")}</th>
+                    <th className="px-2 py-1 text-start font-bold">{t("maintenance.dayInterval")}</th>
+                    <th className="px-2 py-1 text-start font-bold">{t("maintenance.alertKm")}</th>
+                    <th className="px-2 py-1 text-start font-bold">{t("maintenance.alertDays")}</th>
+                    <th className="px-2 py-1 text-start font-bold">{t("maintenance.cols.status")}</th>
                     <th className="px-2 py-1" />
                   </tr>
                 </thead>

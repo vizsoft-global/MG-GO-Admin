@@ -224,9 +224,9 @@ function UploadForm({
                 <table className="w-full border-collapse text-xs">
                   <thead className="bg-destructive/5 text-start">
                     <tr>
-                      <th className="px-2 py-1 text-start">{t("colLine")}</th>
-                      <th className="px-2 py-1 text-start">{t("colId")}</th>
-                      <th className="px-2 py-1 text-start">{t("colReason")}</th>
+                      <th className="px-2 py-1 text-start font-bold">{t("colLine")}</th>
+                      <th className="px-2 py-1 text-start font-bold">{t("colId")}</th>
+                      <th className="px-2 py-1 text-start font-bold">{t("colReason")}</th>
                     </tr>
                   </thead>
                   <tbody>

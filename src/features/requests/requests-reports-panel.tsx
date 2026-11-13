@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, Clock, FileText, Loader2, Signature } from "lucide-react";
+import { CheckCircle2, Clock, Download, FileText, Loader2, Signature } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { AppListCard, AppPage, AppPageHeader } from "@/components/app";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { buildCsv, downloadCsv } from "@/features/driver-tracking/csv-export";
 import { useEsignStatusCounts } from "@/features/esign/use-esign";
 import { formatPct } from "@/lib/format/percent";
@@ -102,6 +103,7 @@ export function RequestsReportsPanel() {
   const tRoot = useTranslations("pages.requests");
   const tTypes = useTranslations("pages.requests.types");
   const tStatus = useTranslations("pages.requests.status");
+  const tToolbar = useTranslations("common.tableToolbar");
   const [datePreset, setDatePreset] = useState<RequestDatePreset>("this_month");
   const [groupBy, setGroupBy] = useState<GroupBy>("department");
 
@@ -316,6 +318,16 @@ export function RequestsReportsPanel() {
                 })}
               </p>
             ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 cursor-pointer rounded-lg"
+              onClick={exportCsv}
+            >
+              <Download className="me-1.5 h-3.5 w-3.5" />
+              {tToolbar("export")}
+            </Button>
           </div>
         }
       />
@@ -465,7 +477,6 @@ export function RequestsReportsPanel() {
                     rowKind="aggregate"
                     filteredCount={deptFiltered.length}
                     totalCount={departmentRows.length}
-                    onExport={exportCsv}
                   />
                 }
                 columns={deptShown.map((column) => ({ id: column.id, label: column.label }))}
@@ -518,7 +529,6 @@ export function RequestsReportsPanel() {
                       tTypes(type).toLowerCase().includes(typePrefs.appliedQuery.trim().toLowerCase()),
                     ).length}
                     totalCount={REQUEST_TYPES.length}
-                    onExport={exportCsv}
                   />
                 }
                 columns={typeShown.map((column) => ({ id: column.id, label: column.label }))}
@@ -566,7 +576,6 @@ export function RequestsReportsPanel() {
                       tStatus(status).toLowerCase().includes(statusPrefs.appliedQuery.trim().toLowerCase()),
                     ).length}
                     totalCount={REQUEST_STATUSES.length}
-                    onExport={exportCsv}
                   />
                 }
                 columns={statusShown.map((column) => ({ id: column.id, label: column.label }))}

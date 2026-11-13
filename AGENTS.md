@@ -6,11 +6,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## Language
 
-Respond to the user in **English**.
+Always respond to the user in **English**.
 
-## Model Delegation (mandatory)
+Keep code, file paths, commands, identifiers, and error messages in their original form. Explanations, summaries, and UI-facing guidance go in English.
 
-Use **DeepSeek** (`deepseek-flash` via `deepseek_chat` MCP tool) as the default engine for all code implementation, bug fixing, architecture, and reasoning tasks.
+Applies to every agent and subagent working in this repo — this file is the global ruleset.
 
 ## Stack — production only
 

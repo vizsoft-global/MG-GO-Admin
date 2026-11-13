@@ -100,8 +100,6 @@ export function EsignTemplatesShell() {
       entityList
       filteredCount={filteredRows.length}
       totalCount={rows.length}
-      onAdd={() => setOpen(true)}
-      addLabel={t("add")}
     />
   );
 
@@ -147,7 +145,17 @@ export function EsignTemplatesShell() {
           { label: tHub("title"), href: "/requests/esign" },
           { label: t("title") },
         ]}
-        actions={null}
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 cursor-pointer rounded-lg"
+            onClick={() => setOpen(true)}
+          >
+            <Plus className="me-1.5 h-3.5 w-3.5" />
+            {t("add")}
+          </Button>
+        }
       />
 
       <AppListCard className="p-0">

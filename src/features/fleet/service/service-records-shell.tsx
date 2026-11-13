@@ -3,8 +3,9 @@
 import { Fragment, useMemo, type ReactNode } from "react";
 import { usePathname, useRouter as useNextRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, CheckCircle2, ClipboardList, Hash, Wallet } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, Download, Hash, Plus, Wallet } from "lucide-react";
 import { AppListCard } from "@/components/app/app-list-card";
+import { Button } from "@/components/ui/button";
 import {
   AppDataTable,
   AppDataTableEmpty,
@@ -372,6 +373,36 @@ export function ServiceRecordsShell({
                 {t("filters.any")}
               </button>
             ) : null}
+            <div className="ms-auto flex items-center gap-2">
+              {canExport ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-lg"
+                  disabled={filtered.length === 0}
+                  onClick={() =>
+                    void downloadServiceRecordsXlsx(filtered, {
+                      labelForStage: (stage) => tStage(stage),
+                    })
+                  }
+                >
+                  <Download className="me-1.5 h-3.5 w-3.5" />
+                  {t("actions.export")}
+                </Button>
+              ) : null}
+              {canManage ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 cursor-pointer rounded-lg"
+                  onClick={() => router.push("/fleet/service/records/new")}
+                >
+                  <Plus className="me-1.5 h-3.5 w-3.5" />
+                  {t("actions.add")}
+                </Button>
+              ) : null}
+            </div>
           </div>
           <TabBar
             items={stageItems}
@@ -389,16 +420,6 @@ export function ServiceRecordsShell({
               rowKind="dynamic"
               filteredCount={filtered.length}
               totalCount={rows.length}
-              onExport={
-                canExport
-                  ? () =>
-                      void downloadServiceRecordsXlsx(filtered, {
-                        labelForStage: (stage) => tStage(stage),
-                      })
-                  : undefined
-              }
-              onAdd={canManage ? () => router.push("/fleet/service/records/new") : undefined}
-              addLabel={t("actions.add")}
             />
           }
           columns={shown.map((column) => ({ id: column.id, label: column.label }))}

@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { Loader2, ShieldOff } from "lucide-react";
+import { Loader2, Plus, ShieldOff } from "lucide-react";
 import { TABLE_HEAD_CLASS } from "@/components/app/constants";
 import {
   EmptyCell,
@@ -18,6 +18,7 @@ import { AppListCard } from "@/components/app/app-list-card";
 import { AppPage } from "@/components/app/app-page";
 import { AppPageHeader } from "@/components/app/app-page-header";
 import { AppEmptyState } from "@/components/app/app-empty-state";
+import { Button } from "@/components/ui/button";
 import { CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -59,8 +60,6 @@ export function TemplatesListPageShell() {
       entityList
       filteredCount={rows.length}
       totalCount={(data ?? []).length}
-      onAdd={canManage ? () => router.push(`/${locale}/notifications/templates/new`) : undefined}
-      addLabel={t("templateCreate")}
     />
   );
 
@@ -73,6 +72,21 @@ export function TemplatesListPageShell() {
           { label: t("title"), href: "/notifications" },
           { label: t("navTemplates") },
         ]}
+        actions={
+          canManage ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => router.push(`/${locale}/notifications/templates/new`)}
+              >
+                <Plus className="me-2 h-3.5 w-3.5" />
+                {t("templateCreate")}
+              </Button>
+            </div>
+          ) : null
+        }
       />
       <NotificationsTabBar />
       <AppListCard title={t("navTemplates")}>

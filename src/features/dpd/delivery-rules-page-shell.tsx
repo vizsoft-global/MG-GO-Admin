@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Trash2, Upload } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import {
@@ -237,6 +237,16 @@ export function DeliveryRulesPageShell() {
                 {t("bulkDpd")}
               </Button>
             ) : null}
+            {canManage ? (
+              <Button
+                type="button"
+                className="h-9 cursor-pointer rounded-lg"
+                onClick={() => setSheet({ open: true, row: null })}
+              >
+                <Plus className="h-4 w-4" />
+                {t("addDeliveryRule")}
+              </Button>
+            ) : null}
           </div>
         }
       />
@@ -250,8 +260,6 @@ export function DeliveryRulesPageShell() {
             entityList
             filteredCount={filteredRules.length}
             totalCount={deliveryRules?.length ?? 0}
-            onAdd={canManage ? () => setSheet({ open: true, row: null }) : undefined}
-            addLabel={t("addDeliveryRule")}
           />
         }
       >

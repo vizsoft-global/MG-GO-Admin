@@ -379,7 +379,7 @@ function RateHistoryRows({
         <thead>
           <tr>
             {ids.map((id) => (
-              <th key={id}>{columns.find((column) => column.id === id)?.label}</th>
+              <th key={id} className="font-bold">{columns.find((column) => column.id === id)?.label}</th>
             ))}
           </tr>
         </thead>

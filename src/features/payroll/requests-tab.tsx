@@ -30,7 +30,6 @@ import {
 import { ApprovalWorkflowPanel } from "./approval-workflow-panel";
 import { PayrollRowLink } from "./payroll-row-link";
 import { PayrollRiderCards } from "./payroll-rider-cards";
-import { exportRequestsCsv } from "./payroll-csv";
 import type { PayrollRequestRow } from "./payroll-types";
 
 const TILES: Array<{
@@ -78,13 +77,12 @@ export function RequestsTab({
   kpis,
   requests,
   workflow,
-  canExport,
 }: {
   month: PayrollMonthMeta;
   kpis: RequestKpis;
   requests: readonly PayrollRequestRow[];
   workflow: { awaitingAction: number; requestsPerRider: number };
-  canExport: boolean;
+  canExport?: boolean;
 }) {
   const t = useTranslations("pages.payroll");
   const [tile, setTile] = useState<PayrollTileKey | "all">("all");
@@ -200,17 +198,6 @@ export function RequestsTab({
             entityList
             filteredCount={list.length}
             totalCount={requests.length}
-            onExport={
-              canExport
-                ? () =>
-                    exportRequestsCsv(
-                      month.key,
-                      list,
-                      (key) => t(`tiles.${key}`),
-                      (s) => t(`status.${s}`),
-                    )
-                : undefined
-            }
           />
           {requestPrefs.view === "grid" ? (
             <div className="overflow-hidden rounded-xl border border-border bg-card">

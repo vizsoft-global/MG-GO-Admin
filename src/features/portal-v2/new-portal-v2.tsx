@@ -131,6 +131,13 @@ export function NewPortalV2({ initial, initialProject }: { initial: PortalConfig
   const t = useTranslations("pages.clientPortalV2");
   const tOps = useTranslations("pages.operationsDashboardV2");
   const router = useRouter();
+  const goBackToClients = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/client-portal-v2/clients");
+  };
   const [config, setConfig] = useState<PortalConfig>(
     () =>
       initial ??
@@ -277,13 +284,14 @@ export function NewPortalV2({ initial, initialProject }: { initial: PortalConfig
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start gap-3">
-        <Link
-          href="/client-portal-v2/clients"
+        <button
+          type="button"
+          onClick={goBackToClients}
           aria-label={t("backToClients")}
-          className="grid size-9 shrink-0 place-items-center rounded-lg border border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-secondary)]"
+          className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg border border-[var(--border-default)] bg-[var(--surface-card)] text-[var(--text-secondary)]"
         >
           <ArrowLeft className="size-4" aria-hidden />
-        </Link>
+        </button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-[var(--text-muted)]">
             <span>{t("breadcrumbApps")}</span>

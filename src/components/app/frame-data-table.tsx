@@ -33,7 +33,7 @@ export function FrameDataTable<T>({
               <th
                 key={column.id}
                 className={cn(
-                  "px-[var(--table-cell-x)] py-[var(--table-cell-y)] text-start text-xs font-semibold text-[var(--text-secondary)]",
+                  "px-[var(--table-cell-x)] py-[var(--table-cell-y)] text-start text-xs font-bold text-[var(--text-secondary)]",
                   column.align === "end" && "text-end",
                 )}
               >

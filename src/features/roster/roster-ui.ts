@@ -13,5 +13,5 @@ export const rosterChipOn =
   "inline-flex h-9 shrink-0 items-center rounded-full bg-[#1D1B1A] px-3 text-sm font-semibold text-white";
 export const rosterChipOff =
   "inline-flex h-9 shrink-0 items-center rounded-full bg-white px-3 text-sm text-[#3D3734]";
-export const rosterTh = "px-2 py-2 text-start text-[11px] font-semibold uppercase tracking-wide text-[#5E5754]";
+export const rosterTh = "px-2 py-2 text-start text-[11px] font-bold uppercase tracking-wide text-[#5E5754]";
 export const rosterTd = "px-2 py-2 text-sm text-[#1D1B1A]";

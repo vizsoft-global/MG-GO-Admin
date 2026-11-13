@@ -6,7 +6,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import {
   Check,
-  ChevronLeft,
   Download,
   MailCheck,
   FileSignature,
@@ -18,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppEmptyState, AppListCard, AppPage } from "@/components/app";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { groupRows } from "@/components/app/app-list-controls";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import {
@@ -350,13 +350,10 @@ export function EsignBatchDetailShell({ batchId }: { batchId: string }) {
   return (
     <AppPage>
       <div className="space-y-3">
-        <Link
-          href={paths.batchesHref}
-          className="inline-flex h-9 items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="size-3.5 rtl:rotate-180" />
-          {t("backToSent")}
-        </Link>
+        <AppBackButton
+          fallbackHref={paths.batchesHref}
+          className="-ms-2 h-9 text-xs font-medium text-muted-foreground hover:text-foreground"
+        />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40 text-foreground">

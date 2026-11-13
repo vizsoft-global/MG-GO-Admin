@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { FileText, Loader2, Trash2, UserRound } from "lucide-react";
+import { FileText, Loader2, Plus, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { groupRows } from "@/components/app/app-list-controls";
 import { AppEmptyState, AppListCard, AppPage, AppPageHeader } from "@/components/app";
@@ -359,10 +359,19 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
       </AppListCard>
 
       <AppListCard className="p-0">
-        <div className="p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 p-4">
           <SectionHeading icon={FileText} accent="warning">
             {t("fields")}
           </SectionHeading>
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 cursor-pointer rounded-lg"
+            onClick={() => setFieldOpen(true)}
+          >
+            <Plus className="me-1.5 h-3.5 w-3.5" />
+            {t("addField")}
+          </Button>
         </div>
         <TableToolbar
           prefs={fieldPrefs}
@@ -371,8 +380,6 @@ export function EsignTemplateBuilderShell({ templateId }: { templateId: string }
           rowKind="dynamic"
           filteredCount={filteredFields.length}
           totalCount={template.fields.length}
-          onAdd={() => setFieldOpen(true)}
-          addLabel={t("addField")}
         />
         {template.fields.length === 0 ? (
           <div className="px-4 pb-4 text-xs text-muted-foreground">{t("noFields")}</div>

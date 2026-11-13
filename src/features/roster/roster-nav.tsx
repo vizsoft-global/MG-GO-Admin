@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Bell, CalendarClock, FileBarChart, MapPinned, SlidersHorizontal, Upload, type LucideIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { kuwaitToday } from "@/features/driver-tracking/kuwait-time";
 import { cn } from "@/lib/utils";
 import { fetchRosterAlertsRange, fetchRosterChanges } from "./roster-actions";
@@ -37,6 +38,7 @@ export function RosterNav() {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] border border-[#E2DCD8] bg-white px-2.5 py-1.5">
       <div className="flex min-w-0 flex-wrap items-center gap-1">
+        <AppBackButton />
         <span className="px-2 text-sm font-semibold text-[#1D1B1A]">{t("hub")}</span>
         {LINKS.map((link) => {
           const active = link.href === "/operations/roster" ? path === link.href : path === link.href || path.startsWith(`${link.href}/`);
