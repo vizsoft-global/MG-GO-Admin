@@ -23,11 +23,6 @@ import {
   type ProofOcrMode,
 } from "../core/delivery-flags";
 import { driverRestaurantIds } from "./deliveries-shared";
-import {
-  deliveryContextRestaurants,
-  isDeliveryContextStale,
-  readDeliveryContextSnapshot,
-} from "./delivery-context";
 import { findActiveShift } from "./driver-shift";
 import { invalidateDriverHomeDailySafe } from "./driver-home";
 import { syncBitesOrderMilestone, type BitesPartnerStamp } from "./bites-order-sync";
@@ -1136,42 +1131,22 @@ function restaurantPayloads(
 /**
  * The proximity gate's inputs.
  *
- * `deliveryProximitySweep` rebuilds one shared document every ten minutes with
- * the fleet settings, the zone shapes and every restaurant with its geofences,
- * so a call reads that document instead of a dozen rows. Anything the snapshot
- * cannot cover — no document yet, stale, a store added since the last build, a
- * zone newer than the build — takes the live path, so the gate never answers
- * from a context it does not actually have.
+ * Assembled live on every call: the fleet settings, the rider's zone shape and
+ * the rider's stores with their geofences. The callable never answers from a
+ * context it does not actually have, so a zone or store edit is in effect on the
+ * next poll.
  */
 export const driverGetDeliveryProximityContext = onCall(async (request) => {
   const ctx = await requireRider(request);
   const zoneId = asString(ctx.driver["zone_id"]);
 
-  const snapshot = await readDeliveryContextSnapshot();
-  const current = snapshot && !isDeliveryContextStale(snapshot) ? snapshot : null;
-  const cachedZone = current && zoneId ? (current.zones[zoneId] ?? null) : null;
-  const cachedRestaurants = current
-    ? await deliveryContextRestaurants(ctx.uid, ctx.driver, current)
-    : null;
-
-  let settings: Pick<DeliveryProximitySettings, "proximityMeters" | "earlyDropMeters" | "proofOcrMode">;
-  let zoneData: Dict | null;
-  let restaurants: Dict[];
-
-  if (current && cachedRestaurants && (zoneId === null || cachedZone)) {
-    settings = current.settings;
-    zoneData = cachedZone;
-    restaurants = cachedRestaurants;
-  } else {
-    settings = await loadProximitySettings();
-    const [zoneSnap, assigned] = await Promise.all([
-      zoneId ? getFirestore().collection(COLLECTIONS.zones).doc(zoneId).get() : Promise.resolve(null),
-      loadAssignedRestaurantContext(ctx.uid, ctx.driver),
-    ]);
-    zoneData = zoneSnap?.exists ? ((zoneSnap.data() ?? {}) as Dict) : null;
-    restaurants = restaurantPayloads(assigned);
-  }
-
+  const settings = await loadProximitySettings();
+  const [zoneSnap, assigned] = await Promise.all([
+    zoneId ? getFirestore().collection(COLLECTIONS.zones).doc(zoneId).get() : Promise.resolve(null),
+    loadAssignedRestaurantContext(ctx.uid, ctx.driver),
+  ]);
+  const zoneData: Dict | null = zoneSnap?.exists ? ((zoneSnap.data() ?? {}) as Dict) : null;
+  const restaurants: Dict[] = restaurantPayloads(assigned);
   // A zone that holds none of the rider's stores cannot describe their shift.
   // Sending it made every installed build read "you are outside your delivery
   // area" at the counter. Withholding it here fixes the phone without a Play
