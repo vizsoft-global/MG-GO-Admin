@@ -231,7 +231,16 @@ export function DriverFormSheet({
       setEmployeeStatusKey(activeDriver.employee_status_key ?? DEFAULT_EMPLOYEE_STATUS_KEY);
       setSectionKeys(activeDriver.section_keys ?? []);
       setNationalityCategoryKeys(activeDriver.nationality_category_keys ?? []);
-      setBankDetails(activeDriver.bank_details ?? EMPTY_BANK_DETAILS);
+      // A rider recorded before the mirror existed has no beneficiary stored, so
+      // the Civil ID fills it and the next save writes that value.
+      const storedBank = activeDriver.bank_details ?? EMPTY_BANK_DETAILS;
+      setBankDetails({
+        ...storedBank,
+        beneficiary_civil_id:
+          storedBank.beneficiary_civil_id ||
+          restrictDigits(activeDriver.civil_id, CIVIL_ID_DIGIT_COUNT) ||
+          null,
+      });
       setEmployeeId(activeDriver.employee_id ?? "");
       setRiderCategory(activeDriver.rider_category ?? "in_house");
       setSourceCompany(activeDriver.source_company ?? "");
@@ -676,6 +685,14 @@ export function DriverFormSheet({
               civilId={civilId}
               onCivilIdChange={(next) => {
                 setCivilId(next);
+                // The Beneficiary Civil ID mirrors the Civil ID as it is typed,
+                // unless the operator already entered a beneficiary of their own.
+                setBankDetails((current) => {
+                  const beneficiary = current.beneficiary_civil_id ?? "";
+                  return !beneficiary || beneficiary === civilId
+                    ? { ...current, beneficiary_civil_id: next || null }
+                    : current;
+                });
                 clearFieldError("civilId");
               }}
               passportNumber={passportNumber}
