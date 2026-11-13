@@ -5,6 +5,7 @@ import { EXPIRE_AT_FIELD, expireAtFor } from "../core/event-expiry";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireRider, riderError } from "../core/rider";
 import { haversineMeters } from "../core/geo";
+import { FUNCTIONS_REGION } from "../core/init";
 import { memoGeo } from "../core/geo-memo";
 import {
   isoTimestamp,
@@ -197,7 +198,30 @@ function geoEventOf(prevStatus: string | null, nextStatus: string): "entry" | "e
   return null;
 }
 
-export const driverReportLocation = onCall(async (request) => {
+/**
+ * Its own runtime shape, like the tracking server's doors.
+ *
+ * This callable is two thirds of all backend traffic. On the global shape (one
+ * request per instance, two instances) about half of the reports were refused
+ * with "no available instance", so those positions were lost. A report waits on
+ * the database, not on the processor, so one instance can carry many at once:
+ * concurrency needs a full CPU, and three instances of forty leave room for the
+ * evening peak. Sharing an instance also means sharing its one-minute memory of
+ * zones, restaurants and settings, so the reads per report fall as well.
+ *
+ * Two reports from the same rider can now overlap on one instance. They could
+ * already overlap across the two instances, and each writes the rider's whole
+ * pin, so the later write wins as before.
+ */
+export const LOCATION_REPORT_CAPACITY = {
+  region: FUNCTIONS_REGION,
+  cpu: 1,
+  memory: "512MiB",
+  concurrency: 40,
+  maxInstances: 3,
+} as const;
+
+export const driverReportLocation = onCall(LOCATION_REPORT_CAPACITY, async (request) => {
   const ctx = await requireRider(request);
   const data = (request.data ?? {}) as Dict;
   const now = new Date();
