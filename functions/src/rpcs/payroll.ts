@@ -12,6 +12,7 @@ import {
   parseMonthKey,
 } from "../core/kuwait";
 import { parseIdList } from "../core/query";
+import { recordedOrdersOf } from "../core/order-count";
 import { loadAppSettings } from "../core/settings";
 import { requireStaff, type StaffContext } from "../core/staff";
 import { logPhases, timedPhase, type PhaseMarks } from "../perf/phase-log";
@@ -415,7 +416,7 @@ async function loadPayrollContext(input: {
   const [recon, verifiedByDriverDay] = await timedPhase(phases, "reconMs", () =>
     Promise.all([
       loadReconOrders(firstDay, lastDay),
-      loadVerifiedByDriverDay(firstDay, lastDay, monthKeysInclusive(firstDay, lastDay)),
+      loadOrderCountsByDriverDay(firstDay, lastDay, monthKeysInclusive(firstDay, lastDay)),
     ]),
   );
 
@@ -695,7 +696,21 @@ function reconOrdersFor(
   return null;
 }
 
-async function loadVerifiedByDriverDay(
+/**
+ * Completed orders per rider-day, from the `rollups_driver_day` counters.
+ *
+ * The cell prints **every** order the rider completed — `pending`, `under_review`
+ * and `verified` — because the client's rule is that Payroll reflects the orders
+ * recorded in the application. `under_review` used to be omitted, so a day whose
+ * deliveries all sat in that state read 0 here while the Deliveries list showed
+ * them; and the verified alias is read with `max` rather than a sum because
+ * `orders` and `verified` are two names for one counter.
+ *
+ * The rollup document is keyed by `shift_date`, so the day is already the
+ * rider's booked shift — an order finished at 01:00 belongs to the day the shift
+ * started, which is what Reconciliation and Performance also use.
+ */
+async function loadOrderCountsByDriverDay(
   firstDay: string,
   lastDay: string,
   months: readonly string[],
@@ -707,7 +722,7 @@ async function loadVerifiedByDriverDay(
         db
           .collection(COLLECTIONS.rollupsDriverDay)
           .where("month", "==", month)
-          .select("driver_id", "day", "verified", "pending", "orders")
+          .select("driver_id", "day", "verified", "pending", "under_review", "orders")
           .limit(SCAN_CAP)
           .get(),
       ),
@@ -718,11 +733,15 @@ async function loadVerifiedByDriverDay(
         const driverId = asString(doc.get("driver_id"));
         const day = asString(doc.get("day"));
         if (!driverId || !day || day < firstDay || day > lastDay) continue;
-        const verified = asNumber(doc.get("verified"));
-        const orders = asNumber(doc.get("orders"));
-        const pending = asNumber(doc.get("pending"));
-        const totalRecorded = Math.max(verified, orders) + pending;
-        map.set(`${driverId}|${day}`, totalRecorded);
+        map.set(
+          `${driverId}|${day}`,
+          recordedOrdersOf({
+            verified: asNumber(doc.get("verified")),
+            orders: asNumber(doc.get("orders")),
+            pending: asNumber(doc.get("pending")),
+            under_review: asNumber(doc.get("under_review")),
+          }),
+        );
       }
     }
     return map;

@@ -15,6 +15,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { createPartner, deletePartner, updatePartner } from "./partners-actions";
+import { CustomFieldInputs } from "@/features/custom-fields/custom-field-inputs";
+import {
+  useEntityCustomFields,
+} from "@/features/custom-fields/use-entity-custom-fields";
+import { useSaveEntityCustomFields } from "@/features/custom-fields/use-custom-fields";
+import { parseCustomFieldsJson } from "@/lib/custom-fields/validate";
+import type { CustomFieldValues } from "@/lib/custom-fields/types";
 import { isPartnerErrorKey } from "./partner-errors";
 import type { PartnerRow } from "./types";
 
@@ -55,6 +62,21 @@ function PartnerFormBody({
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
 
+  /**
+   * Custom columns defined for Clients.
+   *
+   * Saved **after** the partner itself, so a custom value can never land on a
+   * record whose own save was refused — and so a create can write them against
+   * the id the server just returned.
+   */
+  const customFields = useEntityCustomFields("partner");
+  const saveCustomFields = useSaveEntityCustomFields("partner");
+  const [customValues, setCustomValues] = useState<CustomFieldValues>(() =>
+    parseCustomFieldsJson(
+      (partner as unknown as { custom_fields?: unknown } | null)?.custom_fields,
+    ),
+  );
+
   useEffect(() => {
     return () => {
       if (logoPreview?.startsWith("blob:")) {
@@ -90,6 +112,18 @@ function PartnerFormBody({
 
       if (result.logoWarning && isPartnerErrorKey(result.logoWarning)) {
         toast.warning(t(`errors.${result.logoWarning}`));
+      }
+
+      // The partner exists now; write the custom columns against its id.
+      const savedId = result.id ?? partner?.id ?? "";
+      if (savedId && customFields.definitions.length > 0) {
+        const customResult = await saveCustomFields.mutateAsync({
+          entityId: savedId,
+          values: customValues,
+        });
+        if (customResult.error) {
+          toast.warning(t("customFieldSaveFailed"));
+        }
       }
 
       toast.success(isEdit ? t("updated") : t("created"));
@@ -136,6 +170,21 @@ function PartnerFormBody({
           />
           <p className="text-xs text-muted-foreground">{t("descriptionHint")}</p>
         </div>
+
+        {customFields.definitions.length > 0 ? (
+          <div className="space-y-2 border-t border-border pt-3">
+            <p className="text-xs font-semibold text-muted-foreground">
+              {t("customFieldsTitle")}
+            </p>
+            <CustomFieldInputs
+              definitions={customFields.definitions}
+              values={customValues}
+              onChange={setCustomValues}
+              disabled={isPending}
+              requiredLabel={t("requiredField")}
+            />
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           <Label>{t("fieldLogo")}</Label>

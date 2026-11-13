@@ -1,7 +1,7 @@
 import { formatUnitPct } from "@/lib/format/percent";
 import { countryLabel } from "@/lib/geo/countries";
 import type { PayrollRiderRow } from "./payroll-types";
-import { HR_COLUMNS, HR_FOOTER_KEYS, HR_OPS_KEYS } from "./hr-payroll-columns";
+import { HR_COLUMNS, HR_FOOTER_KEYS } from "./hr-payroll-columns";
 import { hrRateLabel, hrRateRevenue, hrVehicleLabel, matchHrRates, type HrRateLine } from "./hr-rate";
 import { isHrActive } from "./hr-payroll-status";
 import type {
@@ -57,18 +57,33 @@ export type HrComputeResult = {
   payment: number;
 };
 
+/**
+ * The eight Calculated columns.
+ *
+ * Every one of these is arithmetic over inputs the sheet already holds, so none
+ * of them is gated on a month being "approved". It used to be: an absent
+ * `payroll_hr_periods` document zeroed hourly rate, salary-as-per-hours, both
+ * increments and incentives, and the cells printed `—`. There is no approve
+ * action anywhere in the panel — production holds **zero** period documents — so
+ * the whole Calculated section was permanently blank, which is exactly what the
+ * client reported as "every column is not working". An arithmetic result is not
+ * a decision, and holding it hostage to a decision that cannot be taken is how
+ * the section came to look broken.
+ *
+ * `approved` stays on the input for callers that still pass it; it no longer
+ * changes a figure.
+ */
 export function computeHrPayroll(input: HrComputeInput): HrComputeResult {
   const fwd = input.monthDays - input.offs;
   const fwh = fwd * input.requiredHoursPerDay;
-  const ok = input.approved;
-  const hourly = ok && fwh ? input.fixedSalary / fwh : 0;
+  const hourly = fwh ? input.fixedSalary / fwh : 0;
   const riderDpd = input.workingDays ? input.orders / input.workingDays : 0;
-  const efficiency = ok && input.restaurantDpd ? riderDpd / input.restaurantDpd : 0;
-  const salH = hourly * (ok ? input.actualHours : 0);
-  const inc2v = ok && fwd ? (input.twoYear / fwd) * input.workingDays : 0;
-  const inc4v = ok && fwd ? (input.fourYear / fwd) * input.workingDays : 0;
+  const efficiency = input.restaurantDpd ? riderDpd / input.restaurantDpd : 0;
+  const salH = hourly * input.actualHours;
+  const inc2v = fwd ? (input.twoYear / fwd) * input.workingDays : 0;
+  const inc4v = fwd ? (input.fourYear / fwd) * input.workingDays : 0;
   const sickR = (input.workPermitSalary / 26) * input.sick;
-  const incentivesPaid = ok ? input.incentives : 0;
+  const incentivesPaid = input.incentives;
   const total =
     salH +
     inc2v +
@@ -196,18 +211,23 @@ function restaurantDpds(riders: readonly PayrollRiderRow[]): Map<string, number>
   return out;
 }
 
-/** Figures the Payroll tab already shows. They stay on this sheet before Operations approval. */
-const PAYROLL_TAB_KEYS = new Set(["offs", "fwd", "fwh", "orders", "wd", "ah", "restDpd", "riderDpd"]);
-
 function shownIdentity(value: string | null | undefined): string {
   const trimmed = value?.trim() ?? "";
   if (!trimmed || trimmed === "—" || trimmed === DASH) return "";
   return trimmed;
 }
 
-function opsText(approved: boolean, key: string, text: string): string {
-  if (approved || PAYROLL_TAB_KEYS.has(key) || !HR_OPS_KEYS.has(key)) return text;
-  return DASH;
+/**
+ * A sheet cell's text.
+ *
+ * This used to blank a set of Operations figures (`incentives`, `hourly`,
+ * `salaryAsPerHours`, both increments and the efficiency ratio) whenever the
+ * month had no `payroll_hr_periods` document. Nothing in the panel ever writes
+ * that document, so the section was dead: the client's "calculated section is not
+ * working". Every value here is derived from stored inputs, so it prints.
+ */
+function sheetText(_approved: boolean, _key: string, text: string): string {
+  return text;
 }
 
 export function buildHrPayrollRows(args: {
@@ -220,8 +240,6 @@ export function buildHrPayrollRows(args: {
   noRateLabel?: string;
   /** The `vehicle_types` catalog, so the Vehicle Type cell prints the real label. */
   vehicleTypes?: readonly { key: string; label: string }[];
-  /** App-open hours per driver for the month (display only). */
-  appHours?: Readonly<Record<string, number>>;
   /** Optimistic identity edits (bank, zone, client) layered over the bundle. */
   identityOverrides?: Readonly<
     Record<
@@ -345,21 +363,20 @@ export function buildHrPayrollRows(args: {
       vtype: vehicleLabelOf(rider.vehicleKey ?? "") || hrVehicleLabel(rateHits),
       inc2: selectText(edit.twoYear, " KWD", false),
       inc4: selectText(edit.fourYear, " KWD", false),
-      offs: opsText(approved, "offs", plain(rider.offStructureDays)),
-      fwd: opsText(approved, "fwd", plain(computed.fWorkingDays)),
-      fwh: opsText(approved, "fwh", plain(computed.fWorkingHours)),
-      hourly: opsText(approved, "hourly", money(computed.hourlyRate)),
-      orders: opsText(approved, "orders", plain(rider.finalOrders)),
-      wd: opsText(approved, "wd", plain(rider.workDays)),
-      ah: opsText(approved, "ah", dec2(rider.actualHours)),
-      ahApp: opsText(approved, "ahApp", dec2(args.appHours?.[rider.driverId] ?? 0)),
-      restDpd: opsText(approved, "restDpd", dec2(dpds.get(restaurant) ?? 0)),
-      riderDpd: opsText(approved, "riderDpd", dec2(computed.riderDpd)),
-      eff: opsText(approved, "eff", formatHrEfficiency(computed.efficiency)),
-      salH: opsText(approved, "salH", money(computed.salaryAsPerHours)),
-      inc2v: opsText(approved, "inc2v", money(computed.twoYearAmount)),
-      inc4v: opsText(approved, "inc4v", money(computed.fourYearAmount)),
-      incent: opsText(approved, "incent", money(identity?.incentives ?? 0)),
+      offs: sheetText(approved, "offs", plain(rider.offStructureDays)),
+      fwd: sheetText(approved, "fwd", plain(computed.fWorkingDays)),
+      fwh: sheetText(approved, "fwh", plain(computed.fWorkingHours)),
+      hourly: sheetText(approved, "hourly", money(computed.hourlyRate)),
+      orders: sheetText(approved, "orders", plain(rider.finalOrders)),
+      wd: sheetText(approved, "wd", plain(rider.workDays)),
+      ah: sheetText(approved, "ah", dec2(rider.actualHours)),
+      restDpd: sheetText(approved, "restDpd", dec2(dpds.get(restaurant) ?? 0)),
+      riderDpd: sheetText(approved, "riderDpd", dec2(computed.riderDpd)),
+      eff: sheetText(approved, "eff", formatHrEfficiency(computed.efficiency)),
+      salH: sheetText(approved, "salH", money(computed.salaryAsPerHours)),
+      inc2v: sheetText(approved, "inc2v", money(computed.twoYearAmount)),
+      inc4v: sheetText(approved, "inc4v", money(computed.fourYearAmount)),
+      incent: sheetText(approved, "incent", money(identity?.incentives ?? 0)),
       food: selectText(edit.food, " KWD", false),
       sick: selectText(edit.sick, "", true),
       sickR: money(computed.sickReimbursement),
@@ -413,7 +430,6 @@ export function buildHrPayrollRows(args: {
       orders: orderCount,
       revenue,
       contribution: revenue - computed.payment,
-      appHours: args.appHours?.[rider.driverId] ?? 0,
     };
     return {
       driverId: rider.driverId,

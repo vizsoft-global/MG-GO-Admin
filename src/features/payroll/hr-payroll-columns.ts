@@ -101,11 +101,6 @@ export const HR_COLUMNS_RAW: readonly HrColumn[] = [
   { key: "orders", header: "Count of Orders", group: "ops", kind: "int", width: 140, filter: "contains" },
   { key: "wd", header: "Count of Working Days", group: "ops", kind: "int", width: 180, filter: "contains" },
   { key: "ah", header: "Actual Working Hours", group: "ops", kind: "dec2", width: 170, filter: "contains" },
-  /**
-   * Shift in → Shift out, unioned per day. Sits **beside** the attendance clock
-   * and never prices a salary until the client says which figure is paid.
-   */
-  { key: "ahApp", header: "Worked hours (app)", group: "ops", kind: "dec2", width: 170, filter: "contains" },
   { key: "restDpd", header: "Restaurant DPD", group: "ops", kind: "dec2", width: 140, filter: "contains" },
   { key: "riderDpd", header: "Rider DPD", group: "ops", kind: "dec2", width: 110, filter: "contains" },
   { key: "eff", header: "Efficiency", group: "calc", kind: "pct", width: 110, filter: "contains" },
@@ -139,7 +134,6 @@ export const HR_OPS_KEYS = new Set([
   "orders",
   "wd",
   "ah",
-  "ahApp",
   "restDpd",
   "riderDpd",
   "incent",

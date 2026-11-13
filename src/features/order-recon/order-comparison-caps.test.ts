@@ -95,3 +95,44 @@ test("the delivery scan reaches past midnight for an overnight shift", () => {
     );
   }
 });
+
+test("the sliced delivery scan cannot count an overnight order twice", () => {
+  /*
+   * Slices extend past their last day so a shift's after-midnight tail is read,
+   * which makes the tail of one slice and the head of the next overlap. An order
+   * completed at 01:00 carries the *previous* day's `shift_date`, so a duplicate
+   * passed the bucket check both times and doubled that day's cell instead of
+   * being filtered — the "duplicated orders" half of the client's report.
+   */
+  assert.match(
+    source,
+    /import \{[^}]*dedupeById[^}]*\} from "\.\.\/core\/shift-day"/,
+    "recon-reports.ts no longer deduplicates the sliced scan",
+  );
+  const start = source.indexOf("async function loadDeliveriesByDayChunked");
+  assert.ok(start > 0, "loadDeliveriesByDayChunked is missing");
+  const body = source.slice(start, start + 2000);
+  assert.match(
+    body,
+    /return dedupeById\(out\);/,
+    "the chunked scan returns the concatenated slices without deduplicating them",
+  );
+  assert.ok(
+    !/if \(out\.length > cap\)/.test(body),
+    "the cap is judged on duplicated rows, so a legal window can answer scan_cap_exceeded",
+  );
+});
+
+test("every recon surface reads the same shift-day rule", () => {
+  // Three places used to inline `typeof shift_date === "string" && /^\d{4}-\d{2}-\d{2}$/`
+  // next to a calendar fallback. One helper, so they cannot drift.
+  assert.match(
+    source,
+    /import \{[^}]*resolveWorkDay[^}]*\} from "\.\.\/core\/shift-day"/,
+    "recon-reports.ts no longer imports resolveWorkDay",
+  );
+  assert.ok(
+    !/const workDate = shiftDate \?\? kuwaitDayString\(deliveredAt\);/.test(source),
+    "an inline shift-date resolution is back, and can disagree with the helper",
+  );
+});

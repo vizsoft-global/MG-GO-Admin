@@ -2158,7 +2158,11 @@
         "invalid_type": "Use PNG, JPG, WebP or SVG",
         "upload_failed": "Logo upload failed",
         "save_failed": "Could not save the partner. Please try again."
-      }
+      },
+      "filterAllValues": "All values",
+      "customFieldsTitle": "Custom columns",
+      "requiredField": "required",
+      "customFieldSaveFailed": "The partner was saved, but its custom columns were not."
     },
     "assets": {
       "title": "Assets inventory",
@@ -5044,8 +5048,8 @@
       "weightsOpenItem": "Open item: final weighting needs product/client approval."
     },
     "driverFieldsSettings": {
-      "title": "Driver fields",
-      "subtitle": "Add custom fields to driver profiles.",
+      "title": "Custom columns",
+      "subtitle": "Add custom columns to a table. A select, checkbox or date field also becomes a slicer on that table list.",
       "fieldsTitle": "Custom fields",
       "fieldsHint": "Used in driver forms, lists and exports.",
       "addField": "Add field",
@@ -5102,6 +5106,13 @@
         "invalid_entity": "Unsupported entity type",
         "key_exists": "This key already exists",
         "save_failed": "Could not save"
+      },
+      "entities": {
+        "drivers": "Employees",
+        "partners": "Clients",
+        "restaurants": "Restaurants",
+        "zones": "Zones",
+        "vehicles": "Vehicles"
       }
     },
     "driverShifts": {
@@ -12908,8 +12919,8 @@
             "body": "Tiers, rewards and the periods they apply to."
           },
           "driverFields": {
-            "title": "Driver fields",
-            "body": "Extra fields captured on a rider profile."
+            "title": "Custom columns",
+            "body": "Add a column and a slicer to Employees, Clients and the other tables."
           },
           "attendanceSettings": {
             "title": "Attendance thresholds",
@@ -12960,7 +12971,7 @@
         "manageHeading": "Manage",
         "manageHint": "The ledgers and their rules",
         "configureHeading": "Configure",
-        "configureHint": "The catalogs that feed them"
+        "configureHint": "Shared configuration"
       }
     },
     "roster": {

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppFormSection, AppPage, AppPageHeader } from "@/components/app";
+import { ToggleChip } from "@/components/app/toggle-chip";
 import { AppModalFooter } from "@/components/app/app-modal-footer";
 import { SimpleConfirmDialog } from "@/components/simple-confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,9 @@ import {
 } from "@/components/ui/select";
 import { SearchSelect } from "@/components/ui/search-select";
 import {
+  CUSTOM_FIELD_ENTITIES,
+  isCustomFieldEntity,
+} from "@/lib/custom-fields/entities";import {
   CUSTOM_FIELD_TYPES,
   DRIVER_ENTITY_TYPE,
   type CustomFieldDefinition,
@@ -94,9 +98,20 @@ function emptyDraft(): {
   };
 }
 
-export function DriverFieldsSettingsPanel() {
+export function DriverFieldsSettingsPanel({ initialEntity }: { initialEntity?: string } = {}) {
   const t = useTranslations("pages.driverFieldsSettings");
-  const { data: defs = [], isLoading } = useCustomFieldDefinitions({
+  /**
+   * Which entity's columns are being edited.
+   *
+   * One catalog, several tables: the same definition store backs Employees,
+   * Clients, Restaurants, Zones and Vehicles, and a `select` field added here
+   * becomes a column **and** a slicer on that entity's list. Super admin only —
+   * a definition is shared configuration, not a personal view.
+   */
+  const [entityType, setEntityType] = useState(
+    isCustomFieldEntity(initialEntity) ? initialEntity : DRIVER_ENTITY_TYPE,
+  );
+  const { data: defs = [], isLoading } = useCustomFieldDefinitions(entityType, {
     includeInactive: true,
   });
   const upsert = useUpsertCustomFieldDefinition();
@@ -197,7 +212,7 @@ export function DriverFieldsSettingsPanel() {
       }
       const result = await upsert.mutateAsync({
         id: draft.id,
-        entity_type: DRIVER_ENTITY_TYPE,
+        entity_type: entityType,
         key,
         label: draft.label.trim(),
         field_type: draft.field_type,
@@ -224,7 +239,7 @@ export function DriverFieldsSettingsPanel() {
     next[index] = next[target]!;
     next[target] = tmp;
     startTransition(async () => {
-      const result = await reorder.mutateAsync(next.map((d) => d.id));
+      const result = await reorder.mutateAsync({ ids: next.map((d) => d.id), entityType });
       if (result.error) toast.error(t("errors.save_failed"));
     });
   }
@@ -266,6 +281,27 @@ export function DriverFieldsSettingsPanel() {
           </Button>
         }
       />
+
+      {/*
+        Entity switch. A definition belongs to one table, so the catalog cannot be
+        a single flat list — Clients needs its own set of extra columns.
+      */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {CUSTOM_FIELD_ENTITIES.filter((entity) => entity.hasListColumns).map((entity) => (
+          <ToggleChip
+            key={entity.key}
+            selected={entityType === entity.key}
+            className="h-9"
+            onClick={() => {
+              setEntityType(entity.key);
+              setOpen(false);
+              setArchiveTarget(null);
+            }}
+          >
+            {t(`entities.${entity.labelKey}` as "entities.drivers")}
+          </ToggleChip>
+        ))}
+      </div>
 
       <AppFormSection title="">
         <div className="space-y-2">
@@ -325,6 +361,7 @@ export function DriverFieldsSettingsPanel() {
                       await setActive.mutateAsync({
                         id: def.id,
                         active: !def.is_active,
+                        entityType,
                       });
                     })
                   }
@@ -594,7 +631,7 @@ export function DriverFieldsSettingsPanel() {
         isPending={archive.isPending}
         onConfirm={async () => {
           if (!archiveTarget) return;
-          const result = await archive.mutateAsync(archiveTarget.id);
+          const result = await archive.mutateAsync({ id: archiveTarget.id, entityType });
           if (result.error) toast.error(t("errors.save_failed"));
           else toast.success(t("archived"));
           setArchiveTarget(null);

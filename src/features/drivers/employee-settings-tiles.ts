@@ -28,6 +28,12 @@ export type EmployeeSettingsTile = {
   icon: LucideIcon;
   permission: Permission;
   /**
+   * A tile whose page is super-admin only. Without this the sheet would offer a
+   * manager a door that answers /unauthorized — the same rule the OperationsHub
+   * tile and the sidebar row follow.
+   */
+  superAdminOnly?: boolean;
+  /**
    * Which editor the Employee Settings sheet renders in place. `catalog` uses
    * the shared `EmployeeCatalogPanel`; the named ones are the module panels.
    */
@@ -46,6 +52,7 @@ export const EMPLOYEE_SETTINGS_TILES: readonly EmployeeSettingsTile[] = [
     href: "/settings/driver-fields",
     icon: FormInput,
     permission: "drivers.manage",
+    superAdminOnly: true,
     view: { kind: "driverFields" },
   },
   {
@@ -120,7 +127,9 @@ export function visibleEmployeeSettingsTiles(
   isSuperAdmin: boolean,
 ): EmployeeSettingsTile[] {
   const ticks = permissions instanceof Set ? permissions : new Set(permissions);
-  return EMPLOYEE_SETTINGS_TILES.filter((tile) =>
-    hasPermissionInSet(ticks, tile.permission, isSuperAdmin),
+  return EMPLOYEE_SETTINGS_TILES.filter(
+    (tile) =>
+      (!tile.superAdminOnly || isSuperAdmin) &&
+      hasPermissionInSet(ticks, tile.permission, isSuperAdmin),
   );
 }
