@@ -33,7 +33,6 @@ import {
   type FleetStatusKey,
 } from "./tracking-status";
 import { TrackingGlassCard } from "./tracking-shell";
-import { useReverseGeocode } from "./use-reverse-geocode";
 import type { LiveDriverMeta } from "./live-tracking-types";
 import type { TrackingMapLayerPrefs } from "./tracking-map-layer-prefs";
 import { TrackingMapLayersPopover } from "./tracking-map-layers-popover";
@@ -238,9 +237,6 @@ export function TrackingSelectedDriverPopup({
   onClose?: () => void;
 }) {
   const t = useTranslations("pages.liveTracking");
-  // QA #47: the readable street for this fix, or nothing — the line below falls back to
-  // coordinates rather than blanking when Google has no street for the position.
-  const address = useReverseGeocode(driver.latitude, driver.longitude);
   const gpsLive = isGpsLive(driver.lastSeenAt);
   const fleetStatus = fleetStatusFromLocation({
     pinStatus: driver.pinStatus,
@@ -265,7 +261,8 @@ export function TrackingSelectedDriverPopup({
     Number.isFinite(driver.latitude) && Number.isFinite(driver.longitude)
       ? `${driver.latitude.toFixed(5)}, ${driver.longitude.toFixed(5)}`
       : null;
-  const locationLine = address ?? coords;
+  // Coordinates only: the panel shows no street address.
+  const locationLine = coords;
   const gpsQuality = gpsQualityFromAccuracy(driver.accuracyMeters);
   const dutyLabel = driver.isBlocked
     ? t("chipBlocked")
@@ -356,10 +353,7 @@ export function TrackingSelectedDriverPopup({
         {meta?.zoneName ?? "—"}
       </p>
       {locationLine ? (
-        <p
-          className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-300"
-          title={address ? `${t("streetAddress")}: ${address}` : undefined}
-        >
+        <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-300">
           {locationLine}
         </p>
       ) : null}

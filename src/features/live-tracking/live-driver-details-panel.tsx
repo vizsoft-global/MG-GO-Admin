@@ -9,7 +9,6 @@ import { avatarTintFromName } from "@/features/drivers/form/driver-form-primitiv
 import type { DriverLiveLocation } from "@/features/locations/types";
 import { isGpsLive, liveMotion } from "@/features/locations/location-status";
 import { formatDistanceMeters } from "@/features/locations/location-status";
-import { useReverseGeocode } from "./use-reverse-geocode";
 import {
   formatAccuracyMeters,
   formatBatteryLevel,
@@ -51,12 +50,8 @@ export function LiveDriverDetailsPanel({
   onViewAllActivity?: () => void;
 }) {
   const t = useTranslations("pages.liveTracking");
-  /*
-    Both of these are resolved before the `!driver` early return below, because hooks may not
-    be skipped: the address belongs to the rider's coordinates (QA #47) and the motion half of
-    an On Delivery status belongs to the fix, not to this component instance (QA #48).
-  */
-  const address = useReverseGeocode(driver?.latitude, driver?.longitude);
+  // Resolved before the `!driver` early return below: the motion half of an On Delivery
+  // status belongs to the fix, not to this component instance (QA #48).
   const deliveryMotion = driver ? deliveryMotionText(t, driver) : null;
 
   if (!driver) {
@@ -136,14 +131,6 @@ export function LiveDriverDetailsPanel({
               {deliveryMotion ? (
                 <p className="truncate text-xs font-medium text-slate-600 dark:text-slate-300">
                   {t("statusDeliverySubmit")} · {deliveryMotion}
-                </p>
-              ) : null}
-              {address ? (
-                <p
-                  className="truncate text-xs text-slate-500 dark:text-slate-300"
-                  title={`${t("streetAddress")}: ${address}`}
-                >
-                  {address}
                 </p>
               ) : null}
             </div>
@@ -266,14 +253,6 @@ export function LiveDriverDetailsPanel({
               {deliveryMotion ? (
                 <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
                   {t("statusDeliverySubmit")} · {deliveryMotion}
-                </p>
-              ) : null}
-              {address ? (
-                <p
-                  className="truncate text-xs text-slate-500 dark:text-slate-300"
-                  title={`${t("streetAddress")}: ${address}`}
-                >
-                  {address}
                 </p>
               ) : null}
               <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
+import { useMemo, type WheelEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import {
@@ -9,7 +9,6 @@ import {
   ChevronRight,
   MapPin,
   Navigation,
-  RefreshCw,
   UserRound,
 } from "lucide-react";
 
@@ -51,9 +50,6 @@ function formatCoords(lat: number, lng: number): string {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
-/** Google refused the Geocoding API for this key; asking again only repeats the refusal. */
-let geocodingRefused = false;
-
 export function FleetDriverDetails({
   driverId,
   collapsed,
@@ -89,63 +85,10 @@ export function FleetDriverDetails({
         })),
     [snapshot.feed, driverId],
   );
-  const [address, setAddress] = useState<string | null>(null);
-  const [addressState, setAddressState] = useState<"idle" | "loading" | "done">("idle");
-  const [refreshSeq, setRefreshSeq] = useState(0);
-
   const live = driver ? hasLiveTelemetry(driver.status) : false;
   const lat = driver?.lat ?? null;
   const lng = driver?.lng ?? null;
   const hasFix = lat != null && lng != null;
-
-  /*
-   * The address is looked up when a rider is opened and when the refresh button
-   * is pressed, not on every fix. It used to depend on the coordinates, so a
-   * moving rider started a geocode request several times a second; the key has
-   * no Geocoding API, so each one failed and the console filled with refusals.
-   * Once Google has refused, the page stops asking and shows the coordinates.
-   */
-  const fixRef = useRef<{ lat: number; lng: number } | null>(null);
-  useEffect(() => {
-    fixRef.current = hasFix && lat != null && lng != null ? { lat, lng } : null;
-  }, [hasFix, lat, lng]);
-
-  const lookupAddress = useCallback(() => {
-    const fix = fixRef.current;
-    const geocoder =
-      fix && !geocodingRefused && window.google?.maps?.Geocoder
-        ? new window.google.maps.Geocoder()
-        : null;
-    if (!fix || !geocoder) {
-      setAddress(null);
-      setAddressState("done");
-      return;
-    }
-    setAddressState("loading");
-    geocoder
-      .geocode({ location: fix }, (results, status) => {
-        if (status === "OK" && results?.[0]?.formatted_address) {
-          setAddress(results[0].formatted_address);
-        } else {
-          if (status === "REQUEST_DENIED") geocodingRefused = true;
-          setAddress(null);
-        }
-        setAddressState("done");
-      })
-      .catch(() => {
-        geocodingRefused = true;
-        setAddress(null);
-        setAddressState("done");
-      });
-  }, []);
-
-  useEffect(() => {
-    setAddress(null);
-    setAddressState("idle");
-    // After the coordinates effect above, so the first fix of a newly opened rider is in the ref.
-    const id = window.setTimeout(lookupAddress, 0);
-    return () => window.clearTimeout(id);
-  }, [driverId, hasFix, lookupAddress, refreshSeq]);
 
   const { data: restaurantPins = [] } = useQuery({
     queryKey: queryKeys.liveTracking.restaurantPins(driverId),
@@ -202,11 +145,8 @@ export function FleetDriverDetails({
   const accuracyLabel = live ? formatAccuracyMeters(meta.accuracyMeters) : "—";
   const lastGps =
     driver.fixAtMs > 0 ? formatDurationSince(new Date(driver.fixAtMs).toISOString()) : "—";
-  const locationLabel = address
-    ? address
-    : hasFix
-      ? formatCoords(lat, lng)
-      : "—";
+  // Coordinates only: the panel shows no street address, so nothing is sent to a geocoder.
+  const locationLabel = hasFix ? formatCoords(lat, lng) : "—";
   const restaurantNames =
     restaurantPins.length > 0
       ? restaurantPins
@@ -285,21 +225,9 @@ export function FleetDriverDetails({
         </div>
 
         <section className="space-y-1.5 border-b border-border/60 px-2 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {t("details.location")}
-            </p>
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-8 w-8 px-0"
-              aria-label={t("details.refreshLocation")}
-              disabled={!hasFix || addressState === "loading"}
-              onClick={() => setRefreshSeq((n) => n + 1)}
-            >
-              <RefreshCw className="size-3.5" aria-hidden />
-            </Button>
-          </div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("details.location")}
+          </p>
           <p className="text-xs leading-snug">{locationLabel}</p>
           <p className="text-xs text-muted-foreground">
             {t("rail.zone")}: {meta.currentZoneName ?? meta.zoneName ?? t("rail.noZone")}
