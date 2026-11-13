@@ -192,7 +192,17 @@ function buildForm(driver: DriverDetailModel) {
     jobEndDate: info.job_end_date ?? "",
     jobEndDescription: info.job_end_description ?? "",
     residencyExpiryDate: info.residency_expiry_date ?? "",
-    beneficiaryCivilId: bank?.beneficiary_civil_id ?? "",
+    /**
+     * The beneficiary Civil ID mirrors the rider's own until someone overrides
+     * it. The stored value wins; when nothing is stored — every rider created
+     * before this field existed — the rider's Civil ID fills it, so the field is
+     * never blank on a record that already has a Civil ID. Saving the profile
+     * then writes that value, which is what makes the mirror physical rather
+     * than a placeholder the operator has to trigger by retyping.
+     */
+    beneficiaryCivilId:
+      bank?.beneficiary_civil_id ||
+      (driver.civil_id === "—" ? "" : (driver.civil_id ?? "")),
     bankCode: bank?.bank_code ?? "",
     accountNumber: bank?.account_number ?? "",
     iban: bank?.iban ?? "",

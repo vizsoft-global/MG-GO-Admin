@@ -35,6 +35,7 @@ export function AppBackButton({
     <button
       type="button"
       onClick={goBack}
+      data-app-back
       title={t("back")}
       aria-label={t("back")}
       className={cn(
