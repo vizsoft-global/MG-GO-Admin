@@ -75,6 +75,20 @@ export function PerformancePageShell() {
   const overCap = Boolean(boundsQuery.data?.over_cap);
   const viewMetric = resolveViewByMetric(tab, metric);
 
+  const tabItems = useMemo(
+    () =>
+      [
+        { id: "overview", label: t("ops.tabOverview") },
+        { id: "dpd", label: t("ops.tabDpd") },
+        { id: "riders", label: t("ops.tabRiders") },
+        { id: "topbottom", label: t("ops.tabTopBottom") },
+        { id: "outsource", label: t("ops.tabOutsource") },
+      ] as const,
+    [t],
+  );
+  const activeTabLabel =
+    tabItems.find((item) => item.id === tab)?.label ?? tabItems[0].label;
+
   const range = useMemo(() => {
     try {
       return resolveOpsRange(
@@ -331,16 +345,14 @@ export function PerformancePageShell() {
           </div>
         ) : null}
         <AppPageHeader
-          title={t("title")}
-          description={t("ops.subtitle", {
-            status: t(`ops.slicer.orderStatusOpt.${slicers.orderStatus}`),
-          })}
-          className="min-w-0 flex-1 [&_h1]:!text-white [&_.text-muted-foreground]:!text-white/80"
+          title={`${theme.key === "all" ? "MGHub" : theme.shortLabel} | ${activeTabLabel}`}
+          description={rangeLabel}
+          className="min-w-0 flex-1 px-4 py-2"
           actions={
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-white/30 px-2.5 text-sm text-white transition-colors hover:bg-white/10 disabled:pointer-events-none disabled:opacity-50"
+                className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--ops-line,var(--border))] px-2.5 text-sm font-semibold text-[var(--ops-ink,var(--text-primary))] transition-colors hover:bg-[var(--ops-soft,var(--muted))] disabled:pointer-events-none disabled:opacity-50"
                 onClick={exportTab}
                 disabled={!data}
               >
@@ -349,7 +361,7 @@ export function PerformancePageShell() {
               </button>
               <button
                 type="button"
-                className="text-xs text-white/90 hover:underline"
+                className="cursor-pointer text-xs font-semibold text-[var(--ops-ink,var(--text-primary))] hover:underline disabled:pointer-events-none disabled:opacity-50"
                 onClick={() => void onRefresh()}
                 disabled={refreshing}
               >
@@ -357,11 +369,35 @@ export function PerformancePageShell() {
               </button>
               <Link
                 href="/performance/settings"
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/30 px-2.5 text-sm text-white transition-colors hover:bg-white/10"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--ops-line,var(--border))] px-2.5 text-sm font-semibold text-[var(--ops-ink,var(--text-primary))] transition-colors hover:bg-[var(--ops-soft,var(--muted))]"
               >
                 <Settings2 className="size-3.5" />
                 {t("settingsLink")}
               </Link>
+            </div>
+          }
+          tabs={
+            <div className="flex flex-wrap items-center gap-1.5">
+              {tabItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    const next = item.id as PerformanceHubTab;
+                    setTab(next);
+                    setMetric(resolveViewByMetric(next, metric));
+                  }}
+                  aria-current={tab === item.id ? "page" : undefined}
+                  className={cn(
+                    "cursor-pointer whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-bold transition-colors duration-150 motion-reduce:transition-none",
+                    tab === item.id
+                      ? "border-[var(--ops-line,var(--border))] bg-[var(--ops-soft,var(--muted))] text-[var(--ops-title,var(--text-primary))] shadow-inner"
+                      : "border-border bg-card text-muted-foreground hover:bg-muted/50",
+                  )}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
           }
         />
