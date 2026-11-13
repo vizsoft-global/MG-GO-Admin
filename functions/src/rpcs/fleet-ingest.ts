@@ -27,27 +27,14 @@ import {
   type IngestPoint,
 } from "./fleet-ingest-rules";
 
+import { memoGeo } from "../core/geo-memo";
+
 const GEOFENCE_EVENTS = "geofence_events";
 const LIVENESS_MS = 60_000;
 const WRITE_CHUNK = 400;
 const READ_CHUNK = 100;
 const DRIVER_POOL = 8;
 
-/** Restaurant assignments, zones and range settings change a few times a day; a flush runs every 10s. */
-const GEO_MEMO_MS = 60_000;
-const GEO_MEMO_MAX = 2000;
-const geoMemo = new Map<string, { at: number; value: Promise<unknown> }>();
-
-function memoGeo<T>(key: string, load: () => Promise<T>): Promise<T> {
-  const nowMs = Date.now();
-  const hit = geoMemo.get(key);
-  if (hit && nowMs - hit.at < GEO_MEMO_MS) return hit.value as Promise<T>;
-  if (geoMemo.size >= GEO_MEMO_MAX) geoMemo.clear();
-  const value = load();
-  geoMemo.set(key, { at: nowMs, value });
-  value.catch(() => geoMemo.delete(key));
-  return value;
-}
 
 type Put = { collection: string; id: string; data: Dict };
 
