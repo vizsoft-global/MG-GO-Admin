@@ -1,10 +1,13 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import type { OrderReconTableRow } from "./order-recon-types";
 import { buildReconViews, comparedStoreRows, inUpload } from "./order-recon-views";
 
 export async function buildOrderReconWorkbook(rows: OrderReconTableRow[]) {
   const views = buildReconViews(rows);
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
 
   const daily = wb.addWorksheet("Daily");
   daily.addRow(["Rider", "Date", "Excel Order Count", "App Logged Order Count", "Difference"]);

@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import type { DeliveryOrdersReportData } from "./orders-report-utils";
 
 const HEADER_FILL: ExcelJS.Fill = {
@@ -44,7 +47,7 @@ function styleDataCell(cell: ExcelJS.Cell, isZero: boolean) {
 export async function buildDeliveryOrdersReportXlsx(
   report: DeliveryOrdersReportData,
 ): Promise<ArrayBuffer> {
-  const workbook = new ExcelJS.Workbook();
+  const workbook = new (await loadExcelJS()).Workbook();
   const sheet = workbook.addWorksheet("Delivery Orders", {
     views: [{ state: "frozen", xSplit: 5, ySplit: 1 }],
   });

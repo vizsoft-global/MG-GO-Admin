@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import { kuwaitTodayYmd } from "@/lib/date/kuwait-dates";
 
 export const RECON_FIXED_HEADERS = ["ID", "Driver Name", "Store Name", "Position"] as const;
@@ -89,7 +92,7 @@ export async function buildOrderReconTemplateBuffer(
   today = kuwaitTodayYmd(),
 ): Promise<ArrayBuffer> {
   const dates = reconSampleDates(today);
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
   const data = wb.addWorksheet("Data");
   for (const row of reconSampleDataRows(dates)) data.addRow(row);
   const guide = wb.addWorksheet("Guide");

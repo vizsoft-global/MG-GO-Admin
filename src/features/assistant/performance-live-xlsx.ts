@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import type { DpdLiveSnapshot } from "@/features/performance/performance-types";
 
 const HEADER_FILL: ExcelJS.Fill = {
@@ -16,7 +19,7 @@ const HEADER_FONT: Partial<ExcelJS.Font> = {
 export async function buildPerformanceLiveWorkbook(
   snapshot: Pick<DpdLiveSnapshot, "date" | "deliveries" | "roster" | "alerts">,
 ): Promise<ArrayBuffer> {
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
   wb.creator = "DPD Admin";
   const sheet = wb.addWorksheet("Live snapshot");
   sheet.addRow(["Metric", "Value"]);

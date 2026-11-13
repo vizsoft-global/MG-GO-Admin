@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import { scoreToStars } from "./performance-types";
 import { componentPct } from "./performance-formulas";
 import type {
@@ -159,7 +162,7 @@ function styleHeaderCell(cell: ExcelJS.Cell) {
 export async function buildPerformanceReportXlsx(
   report: PerformanceReport,
 ): Promise<ArrayBuffer> {
-  const workbook = new ExcelJS.Workbook();
+  const workbook = new (await loadExcelJS()).Workbook();
   const sheet = workbook.addWorksheet("DPD Ranking", {
     views: [{ state: "frozen", xSplit: 4, ySplit: 1 }],
   });

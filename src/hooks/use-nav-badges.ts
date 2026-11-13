@@ -2,9 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth-context";
-import { fetchRequestTypeCounts } from "@/features/requests/requests-actions";
-import { fetchPendingVerificationCount } from "@/features/verifications/verifications-actions";
+import { panelGet } from "@/lib/browser/panel-get";
 import { queryKeys } from "@/lib/query/query-keys";
+
+type RequestTypeCounts = { counts: Record<string, { total: number; pending: number }>; error?: string };
 
 /**
  * Sidebar counters shown next to nav items (Figma `4149:24182` sidebar).
@@ -16,7 +17,8 @@ export function useNavBadges(): Record<string, number> {
 
   const { data } = useQuery({
     queryKey: queryKeys.requests.typeCounts(),
-    queryFn: () => fetchRequestTypeCounts(),
+    // A GET, not a server action: see `panelGet`. Same answer, same cache key.
+    queryFn: () => panelGet<RequestTypeCounts>("/api/nav/badges?kind=requests"),
     enabled: canViewRequests,
     staleTime: 60_000,
   });
@@ -30,7 +32,7 @@ export function useNavBadges(): Record<string, number> {
 
   const { data: pendingVerifications } = useQuery({
     queryKey: queryKeys.verifications.pendingCount(),
-    queryFn: () => fetchPendingVerificationCount(),
+    queryFn: async () => (await panelGet<{ count: number }>("/api/nav/badges?kind=verifications")).count,
     enabled: canViewVerifications,
     staleTime: 60_000,
     refetchInterval: 120_000,

@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import {
   formatAndroid,
   formatBuild,
@@ -128,7 +131,7 @@ export async function buildDriverDevicesXlsx(
   rows: DriverDeviceListRow[],
   meta: DriverDevicesReportMeta,
 ): Promise<ArrayBuffer> {
-  const workbook = new ExcelJS.Workbook();
+  const workbook = new (await loadExcelJS()).Workbook();
   const sheet = workbook.addWorksheet("Driver devices", {
     views: [{ state: "frozen", xSplit: 4, ySplit: 1 }],
   });

@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import { downloadBuffer, styleHeader } from "./service-records-xlsx";
 import type { MaintenanceProgramRow, MaintenanceStatus } from "./types";
 
@@ -40,7 +43,7 @@ export async function buildServiceMaintenanceWorkbook(
   rows: readonly MaintenanceProgramRow[],
   options: MaintenanceXlsxOptions,
 ): Promise<ArrayBuffer> {
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
   const ws = wb.addWorksheet("Preventive maintenance");
   ws.columns = [...HEADERS.map((column) => ({ width: column.width })), { width: 22 }];
   ws.getRow(1).values = [

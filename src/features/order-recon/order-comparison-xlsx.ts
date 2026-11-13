@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import {
   colLetter,
   fileMonthStamp,
@@ -53,7 +56,7 @@ export async function buildComparisonWorkbook(
   year: number,
   month: number,
 ): Promise<ArrayBuffer> {
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
   const monthName = monthLabelEn(year, month);
   const lastCol = lastDayCol(days.length);
   const lastAmRow = riders.length + 1;
@@ -263,7 +266,7 @@ export async function buildUnusedWorkbook(
   month: number,
 ): Promise<ArrayBuffer> {
   const unused = ridersNotUsingApp(riders);
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
   const ws = wb.addWorksheet("Not Using the App");
   ws.columns = [
     { width: 10 },

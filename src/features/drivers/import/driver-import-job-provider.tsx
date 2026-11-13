@@ -15,8 +15,8 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
 import { invalidateDriverCaches } from "../invalidate-driver-caches";
+import { panelGet } from "@/lib/browser/panel-get";
 import {
-  listDriverImportJobs,
   processDriverImportChunk,
   setDriverImportJobStatus,
   startDriverImportJob,
@@ -73,11 +73,9 @@ export function DriverImportJobProvider({ children }: { children: ReactNode }) {
 
   const jobsQuery = useQuery({
     queryKey: queryKeys.drivers.importJobs(),
-    queryFn: async () => {
-      const result = await listDriverImportJobs();
-      if ("error" in result) throw new Error(result.error);
-      return result.jobs;
-    },
+    // A GET, not a server action, so the poll never queues ahead of the page's own data.
+    queryFn: async () =>
+      (await panelGet<{ jobs: DriverImportJobSummary[] }>("/api/drivers/import-jobs")).jobs,
     enabled: canManage,
     staleTime: 2_000,
     refetchInterval: (query) =>

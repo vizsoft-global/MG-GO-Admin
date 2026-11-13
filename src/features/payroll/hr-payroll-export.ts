@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import { HR_AWAITING } from "./hr-payroll-formulas";
 
 export async function downloadHrWorkbook(args: {
@@ -12,7 +15,7 @@ export async function downloadHrWorkbook(args: {
    */
   shortfall?: { column: number; gaps: readonly (number | null)[] };
 }): Promise<void> {
-  const workbook = new ExcelJS.Workbook();
+  const workbook = new (await loadExcelJS()).Workbook();
   const sheet = workbook.addWorksheet("HR Payroll");
   const header = sheet.addRow([...args.headers]);
   header.font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -49,7 +52,7 @@ export function hrExportCell(value: string, awaitingLabel: string): string {
 export async function textFromImportFile(file: File): Promise<string> {
   const name = file.name.toLowerCase();
   if (name.endsWith(".xlsx")) {
-    const workbook = new ExcelJS.Workbook();
+    const workbook = new (await loadExcelJS()).Workbook();
     await workbook.xlsx.load(await file.arrayBuffer());
     const sheet = workbook.worksheets[0];
     const lines: string[] = [];

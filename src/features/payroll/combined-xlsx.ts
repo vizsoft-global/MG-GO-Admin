@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import {
   combinedColumn,
   combinedDayCellText,
@@ -73,7 +76,7 @@ const INTEGER_FORMAT = new Set(["wd", "ord", "h3", "hd", "ad", "o", "sk", "ac", 
  * day cells, and an Efficiency that is a real percentage so a reader can sort it.
  */
 export async function buildCombinedPayrollWorkbook(input: CombinedXlsxInput): Promise<ArrayBuffer> {
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
   const ws = wb.addWorksheet(input.fileKey, {
     views: [{ state: "frozen", xSplit: 3, ySplit: 1, topLeftCell: "D2" }],
   });

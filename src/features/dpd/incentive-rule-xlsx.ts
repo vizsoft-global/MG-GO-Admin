@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import { INCENTIVE_IMPORT_COLUMNS } from "./incentive-rule-import";
 import type { IncentiveRuleRow } from "./types";
 
@@ -68,7 +71,7 @@ function incentiveRuleExportCells(rule: IncentiveRuleRow): (string | number)[] {
 export async function buildIncentiveRulesWorkbook(
   rules: IncentiveRuleRow[],
 ): Promise<ArrayBuffer> {
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
   wb.creator = "DPD Admin";
 
   const sheet = wb.addWorksheet("Incentive rules");

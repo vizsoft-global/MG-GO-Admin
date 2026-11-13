@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import type { ServiceReport } from "./service-reports-model";
 import { downloadBuffer, styleHeader } from "./service-records-xlsx";
 import type { ServiceCategoryKey } from "./service-types";
@@ -24,7 +27,7 @@ export async function buildServiceReportWorkbook(
     labelOwnership: (ownership: "contract" | "service") => string;
   },
 ): Promise<ArrayBuffer> {
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
 
   const monthly = sheet(wb, "Monthly", [12, 16, 16, 16, 10]);
   header(monthly, [

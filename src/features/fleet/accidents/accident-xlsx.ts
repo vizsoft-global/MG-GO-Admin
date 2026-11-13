@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import { accidentCaseStatusOf, accidentDayOf, accidentDescriptionOf, accidentAttachmentCount } from "./accident-model";
 import { downloadBuffer, styleHeader } from "../service/service-records-xlsx";
 import { ACCIDENT_CASE_STATUSES, type AccidentCaseStatus, type AccidentRow } from "./accident-types";
@@ -30,7 +33,7 @@ export async function buildAccidentWorkbook(
   rows: readonly AccidentRow[],
   labels: AccidentExportLabels,
 ): Promise<ArrayBuffer> {
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
   const ws = wb.addWorksheet("Accidents");
   ws.columns = [
     { width: 12 },

@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import type { DeliveryCountsByFilters } from "@/features/deliveries/deliveries-actions";
 
 const HEADER_FILL: ExcelJS.Fill = {
@@ -28,7 +31,7 @@ export async function buildDeliveryCountsWorkbook(
   counts: DeliveryCountsByFilters,
   labels?: { zoneName?: string; partnerName?: string; from?: string; to?: string },
 ): Promise<ArrayBuffer> {
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
   wb.creator = "DPD Admin";
   const sheet = wb.addWorksheet("Delivery counts");
 

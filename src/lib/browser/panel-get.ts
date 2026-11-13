@@ -1,0 +1,23 @@
+/**
+ * A read the page shell makes for itself, as a plain GET.
+ *
+ * Next sends one tab's server actions one at a time. The shell (sidebar badges,
+ * the import banner) mounts before the page, so when its reads were server
+ * actions the page's own data queued behind them on every page load. A fetch is
+ * not in that queue. The session cookie goes with it, and each route checks the
+ * caller itself.
+ */
+export async function panelGet<T>(url: string): Promise<T> {
+  const response = await fetch(url, {
+    method: "GET",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { accept: "application/json" },
+  });
+  const body = (await response.json().catch(() => null)) as T | { error?: string } | null;
+  if (!response.ok || body == null) {
+    const code = body && typeof body === "object" && "error" in body ? String(body.error) : `http_${response.status}`;
+    throw new Error(code);
+  }
+  return body as T;
+}

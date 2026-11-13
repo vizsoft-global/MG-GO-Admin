@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 import { formatUncappedPct } from "./performance-dpd-formulas";
 import type { DpdEfficiencySnapshot } from "./performance-types";
 
@@ -48,7 +51,7 @@ const GROUP_HEADERS = [
 export async function buildDpdEfficiencyWorkbook(
   snapshot: DpdEfficiencySnapshot,
 ): Promise<ArrayBuffer> {
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
   wb.creator = "DPD Admin";
 
   const riders = wb.addWorksheet("Riders");

@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import type { DriverImportCredential } from "../types";
 
 const CREDENTIAL_HEADERS = [
@@ -19,10 +18,16 @@ const CREDENTIAL_HEADERS = [
   "Client Name",
 ] as const;
 
-export function downloadWorkbookXlsx(
+/**
+ * The spreadsheet library is fetched when a file is written, not with the
+ * Employees page: the page imports this module for its bulk-import dialog and
+ * most visits never download a workbook.
+ */
+export async function downloadWorkbookXlsx(
   filename: string,
   sheets: Array<{ name: string; aoa: Array<Array<string | number>> }>,
-) {
+): Promise<void> {
+  const XLSX = await import("xlsx");
   const wb = XLSX.utils.book_new();
   for (const sheet of sheets) {
     const ws = XLSX.utils.aoa_to_sheet(sheet.aoa);
@@ -44,8 +49,8 @@ export function downloadAoaXlsx(
   filename: string,
   sheetName: string,
   aoa: Array<Array<string | number>>,
-) {
-  downloadWorkbookXlsx(filename, [{ name: sheetName, aoa }]);
+): Promise<void> {
+  return downloadWorkbookXlsx(filename, [{ name: sheetName, aoa }]);
 }
 
 export function buildImportErrorAoa(

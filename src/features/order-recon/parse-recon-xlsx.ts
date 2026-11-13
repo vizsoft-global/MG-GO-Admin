@@ -1,4 +1,7 @@
-import ExcelJS from "exceljs";
+import type ExcelJS from "exceljs";
+
+/** The spreadsheet library is large; it is fetched when a workbook is built, not with the page. */
+const loadExcelJS = async () => (await import("exceljs")).default;
 
 const MAX_SPAN_DAYS = 93;
 
@@ -121,7 +124,7 @@ export function parseReconWorksheet(ws: ExcelJS.Worksheet): ParseReconResult {
 }
 
 export async function parseReconXlsx(buffer: ArrayBuffer | Uint8Array): Promise<ParseReconResult> {
-  const wb = new ExcelJS.Workbook();
+  const wb = new (await loadExcelJS()).Workbook();
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   await wb.xlsx.load(bytes as never);
   const ws = wb.worksheets[0];
