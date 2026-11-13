@@ -31,9 +31,17 @@ describe("employee settings tiles", () => {
     assert.ok(driversOnly.every((tile) => tile.permission === "drivers.manage"));
     assert.ok(driversOnly.some((tile) => tile.key === "clients"));
     assert.ok(!driversOnly.some((tile) => tile.key === "vehicleTypes"));
+    // Custom columns is shared configuration: holding `drivers.manage` is not
+    // enough, because the page itself answers /unauthorized for a non-super-admin.
+    assert.ok(!driversOnly.some((tile) => tile.key === "driverFields"));
   });
 
   it("gives a super admin every tile", () => {
     assert.equal(visibleEmployeeSettingsTiles([], true).length, EMPLOYEE_SETTINGS_TILES.length);
+  });
+
+  it("keeps custom columns for a super admin holding the tick", () => {
+    const tiles = visibleEmployeeSettingsTiles(["drivers.manage"], true);
+    assert.ok(tiles.some((tile) => tile.key === "driverFields"));
   });
 });

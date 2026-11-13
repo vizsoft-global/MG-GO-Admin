@@ -12914,8 +12914,8 @@
             "body": "Tiers, rewards and the periods they apply to."
           },
           "driverFields": {
-            "title": "Driver fields",
-            "body": "Extra fields captured on a rider profile."
+            "title": "Custom columns",
+            "body": "Add a column and a slicer to Employees, Clients and the other tables."
           },
           "attendanceSettings": {
             "title": "Attendance thresholds",
@@ -12966,7 +12966,7 @@
         "manageHeading": "Manage",
         "manageHint": "The ledgers and their rules",
         "configureHeading": "Configure",
-        "configureHint": "The catalogs that feed them"
+        "configureHint": "Shared configuration"
       }
     },
     "roster": {

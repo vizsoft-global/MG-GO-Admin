@@ -848,12 +848,18 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   },
   {
     id: "driver-fields",
-    defaultLabel: "Driver custom fields",
+    defaultLabel: "Custom columns",
     defaultIcon: "FormInput",
     href: "/settings/driver-fields",
     defaultGroup: OPERATIONS_HUB_GROUP,
     defaultOrder: 6,
     permission: "drivers.manage",
+    /**
+     * Definitions are shared configuration (client review 5.2), and the page
+     * itself calls `requireSuperAdmin`. Without this the sidebar would offer a
+     * manager a row that redirects to /unauthorized.
+     */
+    superAdminOnly: true,
     hidden: true,
   },
   {
