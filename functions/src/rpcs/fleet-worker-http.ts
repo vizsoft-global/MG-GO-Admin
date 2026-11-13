@@ -1,9 +1,14 @@
 /**
  * HTTPS doors for the dpd-live Worker.
  *
- * The Worker cannot mint a staff ID token. These three functions are public
+ * The Worker cannot mint a staff ID token. These functions are public
  * invokers gated by `WORKER_SHARED_SECRET` (`X-Worker-Secret`), the same value
  * stored as a Wrangler secret.
+ *
+ * `workerApi` is the door the Worker uses: one function, one warm instance,
+ * serving all three jobs by the last segment of the path
+ * (`/workerApi/adminIngestDriverPositions`). The three single-purpose doors
+ * are the same handlers under their old addresses, kept as a standby.
  *
  * These doors carry the fleet's GPS burst. They intentionally override the
  * global `cpu: 0.08 / concurrency: 1 / maxInstances: 2` shape: a single-flight
@@ -19,7 +24,7 @@ import { Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
 import { buildDriverSnapshot, buildLiveFleetSnapshot, num, type Dict } from "./fleet";
 import { runIngestDriverPositions, runRecordFleetEvents, runRecordRiderDayStats } from "./fleet-ingest";
-import { WORKER_HTTP_CAPACITY } from "./worker-http-capacity";
+import { WORKER_HTTP_CAPACITY, WORKER_HTTP_STANDBY_CAPACITY } from "./worker-http-capacity";
 
 export const workerSharedSecret = defineSecret("WORKER_SHARED_SECRET");
 
@@ -27,6 +32,12 @@ const workerHttp = {
   secrets: [workerSharedSecret],
   invoker: "public" as const,
   ...WORKER_HTTP_CAPACITY,
+};
+
+const workerHttpStandby = {
+  secrets: [workerSharedSecret],
+  invoker: "public" as const,
+  ...WORKER_HTTP_STANDBY_CAPACITY,
 };
 
 type OpsEvent = {
@@ -160,10 +171,11 @@ async function listDriverOps(body: Dict): Promise<{
   };
 }
 
-function guarded(
-  handler: (body: Dict, res: { status: (code: number) => { json: (payload: unknown) => void } }) => Promise<void>,
-) {
-  return onRequest(workerHttp, async (req, res) => {
+type WorkerResponse = { status: (code: number) => { json: (payload: unknown) => void } };
+type WorkerHandler = (body: Dict, res: WorkerResponse) => Promise<void>;
+
+function guarded(handler: WorkerHandler) {
+  return onRequest(workerHttpStandby, async (req, res) => {
     if (req.method !== "POST") {
       res.status(405).json({ ok: false, error: "method_not_allowed" });
       return;
@@ -177,7 +189,7 @@ function guarded(
   });
 }
 
-export const workerFleetRead = guarded(async (body, res) => {
+const fleetRead: WorkerHandler = async (body, res) => {
   const op = parseOp(body.op);
   if (!op) {
     res.status(400).json({ ok: false, error: "unknown_op" });
@@ -219,15 +231,51 @@ export const workerFleetRead = guarded(async (body, res) => {
       res.status(400).json({ ok: false, error: "unknown_op", op: neverOp });
     }
   }
-});
+};
 
-export const adminIngestDriverPositions = guarded(async (body, res) => {
+const ingestPositions: WorkerHandler = async (body, res) => {
   const dayStats = await runRecordRiderDayStats(body.p_day_stats);
   const result = await runIngestDriverPositions(body.p_events ?? body.events);
   res.status(result.ok ? 200 : 400).json({ ...result, day_stats: dayStats });
-});
+};
 
-export const adminRecordFleetEvents = guarded(async (body, res) => {
+const recordFleetEvents: WorkerHandler = async (body, res) => {
   const result = await runRecordFleetEvents(body.p_events ?? body.events);
   res.status(result.ok ? 200 : 400).json(result);
+};
+
+/** The jobs `workerApi` serves, under the names the Worker has always called. */
+export const WORKER_API_HANDLERS: Readonly<Record<string, WorkerHandler>> = {
+  workerFleetRead: fleetRead,
+  adminIngestDriverPositions: ingestPositions,
+  adminRecordFleetEvents: recordFleetEvents,
+};
+
+/** `/workerApi/adminIngestDriverPositions` → `adminIngestDriverPositions`. */
+export function workerApiTarget(path: string | undefined): string | null {
+  const segments = String(path ?? "").split("?")[0].split("/").filter(Boolean);
+  const last = segments[segments.length - 1];
+  return last && Object.prototype.hasOwnProperty.call(WORKER_API_HANDLERS, last) ? last : null;
+}
+
+export const workerApi = onRequest(workerHttp, async (req, res) => {
+  if (req.method !== "POST") {
+    res.status(405).json({ ok: false, error: "method_not_allowed" });
+    return;
+  }
+  const header = req.header("x-worker-secret") ?? undefined;
+  if (!workerAuthorized(header)) {
+    res.status(401).json({ ok: false, error: "unauthorized" });
+    return;
+  }
+  const target = workerApiTarget(req.path);
+  if (!target) {
+    res.status(404).json({ ok: false, error: "unknown_fn" });
+    return;
+  }
+  await WORKER_API_HANDLERS[target](readBody(req.body), res);
 });
+
+export const workerFleetRead = guarded(fleetRead);
+export const adminIngestDriverPositions = guarded(ingestPositions);
+export const adminRecordFleetEvents = guarded(recordFleetEvents);

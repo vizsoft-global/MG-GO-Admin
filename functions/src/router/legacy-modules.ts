@@ -68,6 +68,7 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   "./rpcs/fleet-worker-http": [
     "adminIngestDriverPositions",
     "adminRecordFleetEvents",
+    "workerApi",
     "workerFleetRead"
   ],
   "./rpcs/delivery-context-sweep": [

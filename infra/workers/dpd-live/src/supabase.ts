@@ -9,29 +9,57 @@
 export type WorkerCallerEnv = {
   FIREBASE_FUNCTIONS_BASE_URL: string;
   WORKER_SHARED_SECRET: string;
+  /**
+   * The one Cloud Function that serves every job below (`workerApi`). Unset or
+   * empty sends each job to its own function, as before; that is the switch back.
+   */
+  FIREBASE_WORKER_API?: string;
 };
 
 /** Identifies this hub on outbound fetches. Workers' `fetch` sends no User-Agent at all. */
 export const WORKER_USER_AGENT = "dpd-live/fleet-room";
+
+/**
+ * Where a job is sent.
+ *
+ * `workerFleetRead`, `adminIngestDriverPositions` and `adminRecordFleetEvents`
+ * were three functions, and each kept a whole-CPU instance running day and
+ * night for a handful of requests a second. With `FIREBASE_WORKER_API` set they
+ * all go to that one function, which reads the job from the path, so one warm
+ * instance carries the lot. The second address is the job's own function.
+ */
+export function workerFunctionUrls(env: WorkerCallerEnv, name: string): string[] {
+  const base = env.FIREBASE_FUNCTIONS_BASE_URL?.replace(/\/$/, "");
+  if (!base) throw new Error("firebase_functions_base_missing");
+  const direct = `${base}/${name}`;
+  const api = env.FIREBASE_WORKER_API?.trim().replace(/^\/+|\/+$/g, "");
+  return api ? [`${base}/${api}/${name}`, direct] : [direct];
+}
 
 export async function callWorkerFunction<T>(
   env: WorkerCallerEnv,
   name: string,
   body: Record<string, unknown>,
 ): Promise<T> {
-  const base = env.FIREBASE_FUNCTIONS_BASE_URL?.replace(/\/$/, "");
-  if (!base) throw new Error("firebase_functions_base_missing");
-  const response = await fetch(`${base}/${name}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Worker-Secret": env.WORKER_SHARED_SECRET ?? "",
-      "User-Agent": WORKER_USER_AGENT,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    throw new Error(`worker_${name}_failed_${response.status}: ${await response.text()}`);
+  const urls = workerFunctionUrls(env, name);
+  const payload = JSON.stringify(body);
+  let response: Response | null = null;
+  for (const url of urls) {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Worker-Secret": env.WORKER_SHARED_SECRET ?? "",
+        "User-Agent": WORKER_USER_AGENT,
+      },
+      body: payload,
+    });
+    // Only a missing door is retried on the job's own function: the shared one is
+    // not deployed, or does not know this job. Any other answer is the job's answer.
+    if (response.status !== 404) break;
+  }
+  if (!response || !response.ok) {
+    throw new Error(`worker_${name}_failed_${response?.status ?? 0}: ${response ? await response.text() : ""}`);
   }
   return (await response.json()) as T;
 }

@@ -20,8 +20,8 @@
  *   cpu 1, 1GiB, and 120s, and it declares no secret, service account, App
  *   Check, or CORS of its own. The superset test drops it if a built endpoint
  *   disagrees.
- * - workerFleetRead, adminIngestDriverPositions, and adminRecordFleetEvents stay
- *   off every lane (onRequest + WORKER_SHARED_SECRET).
+ * - workerApi, workerFleetRead, adminIngestDriverPositions, and
+ *   adminRecordFleetEvents stay off every lane (onRequest + WORKER_SHARED_SECRET).
  * - onSchedule functions are off every lane as well (see SCHEDULED_FUNCTIONS).
  * - Firestore triggers are not callables at all, so `assertPartition` here does not
  *   see them. There are none left: see the note in `index.ts`.
@@ -55,6 +55,7 @@ export type LaneRuntimeOptions = {
 };
 
 export const WORKER_HTTP_FUNCTIONS = [
+  "workerApi",
   "workerFleetRead",
   "adminIngestDriverPositions",
   "adminRecordFleetEvents",

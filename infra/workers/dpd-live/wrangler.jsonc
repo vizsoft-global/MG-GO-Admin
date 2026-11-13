@@ -31,6 +31,9 @@
     "TICK_MS": "2000",
     "FIREBASE_PROJECT_ID": "musallam-delivery-prod",
     "FIREBASE_FUNCTIONS_BASE_URL": "https://me-central1-musallam-delivery-prod.cloudfunctions.net",
+    // One Cloud Function for the room's three backend jobs, so one warm instance
+    // serves them instead of three. Set to "" to send each job to its own function.
+    "FIREBASE_WORKER_API": "workerApi",
     // GPS history sink. "r2" + a percent routes that share of riders' history into
     // R2 (FleetRoom SQLite -> minute files -> hourly per-rider objects) instead of
     // driver_location_events. "off" keeps every rider on Firestore.

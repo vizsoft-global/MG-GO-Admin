@@ -23,6 +23,8 @@ export type Env = {
   SUPABASE_ANON_KEY: string;
   /** `https://me-central1-musallam-delivery-prod.cloudfunctions.net` */
   FIREBASE_FUNCTIONS_BASE_URL: string;
+  /** The one function that serves the room's three backend jobs (`workerApi`); empty sends each to its own. */
+  FIREBASE_WORKER_API?: string;
   /** Must match the Functions secret `WORKER_SHARED_SECRET`. Never a wrangler var. */
   WORKER_SHARED_SECRET: string;
   /** Firebase project that issues rider ID tokens (`musallam-delivery-prod`). */

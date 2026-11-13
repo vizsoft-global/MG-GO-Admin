@@ -9,3 +9,17 @@ export const WORKER_HTTP_CAPACITY = {
   maxInstances: 20,
   minInstances: 1,
 } as const;
+
+/**
+ * The three single-purpose doors once `workerApi` carries their traffic.
+ *
+ * Each of them kept one whole-CPU instance alive day and night
+ * (`minInstances: 1`): three always-on instances for about two requests a
+ * second between them, more than half of the project's compute. They stay
+ * deployed so the tracking server can be pointed back at them, and they still
+ * take a burst, but with no traffic they now cost nothing.
+ */
+export const WORKER_HTTP_STANDBY_CAPACITY = {
+  ...WORKER_HTTP_CAPACITY,
+  minInstances: 0,
+} as const;
