@@ -27,6 +27,7 @@ export function MetricTile({
   trendDirection = "up",
   hint,
   compact = false,
+  dense = false,
   className,
   onClick,
   href,
@@ -42,6 +43,12 @@ export function MetricTile({
   trendDirection?: "up" | "down";
   hint?: string;
   compact?: boolean;
+  /**
+   * One short row: icon, then the label over the number. For a KPI strip that sits
+   * above a table, where a tall tile pushes the rows the operator came for off the
+   * first screen. Trend and hint are not drawn in this form.
+   */
+  dense?: boolean;
   className?: string;
   onClick?: () => void;
   /** Locale-relative path; the whole tile becomes a real link to the filtered view. */
@@ -63,7 +70,35 @@ export function MetricTile({
     onClick();
   };
 
-  const content = (
+  const content = dense ? (
+    <div className="flex items-center gap-2">
+      {Icon ? (
+        <span
+          className={cn("inline-flex size-7 shrink-0 items-center justify-center rounded-lg", toneStyle.iconChip)}
+          aria-hidden
+        >
+          <Icon className="size-3.5" />
+        </span>
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <p
+          title={label}
+          className={cn(
+            "truncate text-[11px] font-semibold uppercase leading-tight tracking-wide text-muted-foreground",
+            selected && "text-orange-600",
+          )}
+        >
+          {label}
+        </p>
+        <p className="text-lg font-semibold leading-tight tabular-nums tracking-tight text-foreground">{value}</p>
+      </div>
+      {selected ? (
+        <span className="inline-flex shrink-0 items-center justify-center rounded-full bg-orange-500 text-white">
+          <Check className="size-3" aria-hidden />
+        </span>
+      ) : null}
+    </div>
+  ) : (
     <>
       <div className="flex items-start justify-between gap-1.5">
         <p
@@ -123,7 +158,7 @@ export function MetricTile({
 
   const shellClass = cn(
     "min-w-0 overflow-hidden rounded-xl",
-    compact ? "p-2.5" : "p-3",
+    dense ? "px-2.5 py-1.5" : compact ? "p-2.5" : "p-3",
     NEUTRAL_TILE,
     toneStyle.accentBar,
     interactive && INTERACTIVE_TILE,

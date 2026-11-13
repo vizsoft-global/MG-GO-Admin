@@ -103,7 +103,7 @@ export function DriversKpiStrip({
           value={item.value.toLocaleString()}
           icon={item.icon}
           tone={item.tone}
-          className="p-2.5"
+          dense
           selected={activeKey === item.id}
           onClick={() => onSelectKey?.(item.id)}
           ariaLabel={`${item.label}: ${item.value.toLocaleString()}`}

@@ -90,7 +90,7 @@ export function TableToolbar({
   const selectedView: TableViewMode = prefs.view;
 
   const searchSlot = controls.search ? (
-    <div className={cn("relative", searchWidthClass ?? "min-w-[12rem] flex-1 shrink-0")}>
+    <div className={cn("relative", searchWidthClass ?? "min-w-[12rem] max-w-[22rem] flex-1 shrink-0")}>
       <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
       <Input
         value={prefs.query}
@@ -130,10 +130,11 @@ export function TableToolbar({
               if (value) prefs.setGroupBy(value);
             }}
           >
-            <SelectTrigger className={cn(controlClass, "w-auto min-w-[9rem] shrink-0")} aria-label={t("groupBy")}>
+            <SelectTrigger className={cn(controlClass, "w-auto min-w-[11rem] max-w-[18rem] shrink-0")} aria-label={t("groupBy")}>
               <SelectValue placeholder={t("groupBy")} />
             </SelectTrigger>
-            <SelectContent>
+            {/* As wide as its longest choice, not as narrow as the trigger: the choices used to be cut to "Group by: Zo…". */}
+            <SelectContent className="w-auto min-w-[15rem]">
               <SelectItem value="none">{`${t("groupBy")}: ${t("groupNone")}`}</SelectItem>
               {groups.map((column) => (
                 <SelectItem key={column.id} value={column.id}>
