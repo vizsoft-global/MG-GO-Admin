@@ -5,6 +5,7 @@ import { EXPIRE_AT_FIELD, expireAtFor } from "../core/event-expiry";
 import { kuwaitDayString } from "../core/kuwait";
 import { requireRider, riderError } from "../core/rider";
 import { haversineMeters } from "../core/geo";
+import { memoGeo } from "../core/geo-memo";
 import {
   isoTimestamp,
   logDriverOperation,
@@ -168,11 +169,25 @@ async function lastHistoryEvent(driverId: string): Promise<Dict | null> {
   return (snap.docs[0]?.data() as Dict | undefined) ?? null;
 }
 
+/**
+ * A report during a delivery names that delivery every few seconds. Once it has
+ * been seen to exist it is not looked up again for a minute; a missing one is
+ * asked for every time, because it may be about to be created.
+ */
 async function deliveryExists(id: string | null): Promise<string | null> {
   if (!id) return null;
-  const snap = await getFirestore().collection(COLLECTIONS.deliveries).doc(id).get();
-  return snap.exists ? id : null;
+  try {
+    return await memoGeo(`delivery:${id}`, async () => {
+      const snap = await getFirestore().collection(COLLECTIONS.deliveries).doc(id).get();
+      if (!snap.exists) throw new Error("delivery_missing");
+      return id;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "delivery_missing") return null;
+    throw error;
+  }
 }
+
 
 function geoEventOf(prevStatus: string | null, nextStatus: string): "entry" | "exit" | null {
   if (prevStatus === nextStatus) return null;
@@ -231,7 +246,7 @@ export const driverReportLocation = onCall(async (request) => {
   const prevLat = prev ? latOf(prev) : null;
   const prevLng = prev ? lngOf(prev) : null;
   const prevSeen = prev ? asDate(prev["last_seen_at"]) ?? asDate(prev[FIELDS.driverLocations.at]) : null;
-  const settings = await loadProximitySettings();
+  const settings = await memoGeo("settings", () => loadProximitySettings());
 
   if (
     shouldCoalesceLocation({
@@ -277,9 +292,10 @@ export const driverReportLocation = onCall(async (request) => {
     };
   }
 
+  const zoneId = asString(ctx.driver["zone_id"]);
   const [assigned, zone] = await Promise.all([
-    loadAssignedRestaurantContext(ctx.uid, ctx.driver),
-    loadDriverZone(asString(ctx.driver["zone_id"])),
+    memoGeo(`assigned:${ctx.uid}`, () => loadAssignedRestaurantContext(ctx.uid, ctx.driver)),
+    memoGeo(`zone:${zoneId ?? ""}`, () => loadDriverZone(zoneId)),
   ]);
   const inRange =
     settings.proximityMeters <= 0
