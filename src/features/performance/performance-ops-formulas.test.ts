@@ -202,11 +202,18 @@ describe("efficiency", () => {
   });
 
   it("utrBucket bands", () => {
+    // The reference dashboard's own thresholds: >1.60 / 1.40–1.59 / 1.20–1.39 /
+    // 1.00–1.19 / <1.00.
     assert.equal(utrBucket(2), "well_above");
-    assert.equal(utrBucket(1.5), "above");
-    assert.equal(utrBucket(1), "near");
-    assert.equal(utrBucket(0.5), "below");
-    assert.equal(utrBucket(0.49), "well_below");
+    assert.equal(utrBucket(1.61), "well_above");
+    assert.equal(utrBucket(1.6), "above");
+    assert.equal(utrBucket(1.4), "above");
+    assert.equal(utrBucket(1.39), "near");
+    assert.equal(utrBucket(1.2), "near");
+    assert.equal(utrBucket(1.19), "below");
+    assert.equal(utrBucket(1.0), "below");
+    assert.equal(utrBucket(0.99), "well_below");
+    assert.equal(utrBucket(0.5), "well_below");
     assert.equal(utrBucket(null), null);
   });
 });

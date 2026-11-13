@@ -22,6 +22,7 @@ import {
   formatDpd,
   formatInt,
   formatMinutes,
+  formatMinutesCard,
   formatPct,
   formatUtr,
 } from "../performance-ops-format";
@@ -190,12 +191,12 @@ export function OpsRidersTab({
         items={[
           { label: t("kpi.orders"), value: formatInt(data.kpis.orders) },
           { label: t("kpi.workingDays"), value: formatInt(data.kpis.working_days) },
+          { label: t("kpi.workingHours"), value: formatDpd(data.kpis.working_hours) },
           { label: t("kpi.overallDpd"), value: formatDpd(data.kpis.overall_dpd), accent: "primary" },
+          { label: t("kpi.utr"), value: formatUtr(data.kpis.utr) },
+          { label: t("kpi.avgDelivery"), value: formatMinutesCard(data.kpis.avg_delivery_min) },
           { label: t("kpi.dpdEff"), value: formatPct(data.kpis.avg_dpd_eff) },
           { label: t("kpi.tgtEff"), value: formatPct(data.kpis.avg_tgt_eff), accent: "success" },
-          { label: t("kpi.workingHours"), value: formatDpd(data.kpis.working_hours) },
-          { label: t("kpi.utr"), value: formatUtr(data.kpis.utr) },
-          { label: t("kpi.avgDelivery"), value: formatMinutes(data.kpis.avg_delivery_min) },
         ]}
       />
       <p className="text-xs text-muted-foreground">{t("tableFiltersHint")}</p>

@@ -67,6 +67,7 @@ import {
   EMPTY_NOTIFICATION_FILTERS,
   isMetricCardSelected,
   listFiltersForState,
+  mergeNotificationFilterParams,
   notificationFiltersToQuery,
   parseNotificationFilters,
   toggleMetricCard,
@@ -187,11 +188,34 @@ export function NotificationsPageShell() {
     setFilters((current) => ({ ...current, [key]: value }));
   };
   const clearFilters = () => setFilters(EMPTY_NOTIFICATION_FILTERS);
+  /**
+   * The filters live in the URL, so a Back/Forward step, or arriving from a link on
+   * another page, has to be reflected here. State used to be read at mount only,
+   * which left the address bar and the screen disagreeing after any navigation
+   * that was not a click on this page — the second half of "filters do not update
+   * the page".
+   *
+   * Comparing signatures rather than object identity keeps this from firing on
+   * our own writes: when this page changes the URL, the incoming signature equals
+   * the one already in `filters`, so nothing is adopted and no loop starts.
+   */
+  const urlFilters = parseNotificationFilters(searchParams);
+  const urlFilterSignature = notificationFiltersToQuery(urlFilters);
+  const [seenUrlSignature, setSeenUrlSignature] = useState(urlFilterSignature);
+  if (urlFilterSignature !== seenUrlSignature) {
+    setSeenUrlSignature(urlFilterSignature);
+    if (urlFilterSignature !== notificationFiltersToQuery(filters)) setFilters(urlFilters);
+  }
   useEffect(() => {
-    const nextQuery = notificationFiltersToQuery(filters).replace(/^\?/, "");
+    /**
+     * Merge, do not rebuild: this write used to drop the table's own `q` / `group`
+     * / `view` params, which `useTablePrefs` then wrote back — one RSC round trip
+     * per click, with the search box clearing itself mid-type.
+     */
+    const nextQuery = mergeNotificationFilterParams(searchParams, filters).replace(/^\?/, "");
     if (nextQuery === currentQuery) return;
     router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
-  }, [currentQuery, filters, pathname, router]);
+  }, [currentQuery, filters, pathname, router, searchParams]);
   const listFilters = useMemo(
     (): NotificationListFilters => listFiltersForState(filters, tablePrefs.appliedQuery),
     [filters, tablePrefs.appliedQuery],
@@ -372,18 +396,27 @@ export function NotificationsPageShell() {
             label: t("kpiSent"),
             value: kpisLoading ? "…" : String(kpis?.sentToday ?? 0),
             selected: sentTodaySelected,
+            /*
+             * `empty: false` on every clickable card. A zero used to render the
+             * dashed, muted "empty widget" shell, which reads as a disabled
+             * control — the client filed these as "cards are not clickable" when
+             * they were perfectly clickable, just painted unavailable.
+             */
+            empty: false,
             onClick: () => toggleMetric("sentToday"),
           },
           {
             label: t("kpiScheduled"),
             value: kpisLoading ? "…" : String(kpis?.scheduled ?? 0),
             selected: isMetricCardSelected(filters, "scheduled", todayString),
+            empty: false,
             onClick: () => toggleMetric("scheduled"),
           },
           {
             label: t("kpiDrafts"),
             value: kpisLoading ? "…" : String(kpis?.drafts ?? 0),
             selected: isMetricCardSelected(filters, "drafts", todayString),
+            empty: false,
             onClick: () => toggleMetric("drafts"),
           },
           {
@@ -398,6 +431,7 @@ export function NotificationsPageShell() {
             label: t("kpiFailed"),
             value: kpisLoading ? "…" : String(kpis?.failedCampaigns ?? 0),
             selected: isMetricCardSelected(filters, "failed", todayString),
+            empty: false,
             onClick: () => toggleMetric("failed"),
           },
           {
