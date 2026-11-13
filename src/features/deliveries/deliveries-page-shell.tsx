@@ -265,6 +265,16 @@ function DeliveriesPageContent() {
     data,
     isLoading,
     isError,
+    /**
+     * True while a **new** filter is being fetched over the previous page.
+     *
+     * `placeholderData: keepPreviousData` keeps the old rows on screen so the
+     * table does not blink, but without reading this the operator saw the previous
+     * filter's rows with no indication they were stale — which is exactly the
+     * reported "In transit still shows Pending rows" and "Photo mismatch looks the
+     * same as All flags". The table dims and a spinner names the wait instead.
+     */
+    isPlaceholderData,
     refetch,
     fetchNextPage,
     hasNextPage,
@@ -638,6 +648,14 @@ function DeliveriesPageContent() {
     tabFilter !== "all" ||
     zoneFilter !== "all" ||
     partnerFilter !== "all" ||
+    /**
+     * A flag and a cancel reason narrow the list exactly like the other controls,
+     * so they belong here. Without them an empty flag result fell through to the
+     * "no deliveries yet" copy — telling the operator the fleet had never
+     * delivered anything, when the filter simply matched nothing.
+     */
+    flagsFilter !== "all" ||
+    (cancelReasonFilter !== "all") ||
     dateRange.preset !== "all" ||
     debouncedSearch.length > 0;
 
@@ -929,7 +947,21 @@ function DeliveriesPageContent() {
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : isError ? (
+        ) : isPlaceholderData && visible.length > 0 ? (
+          /**
+           * A new filter is being fetched and the previous page is still on screen.
+           *
+           * The rows stay so the table does not blink, but they are dimmed and a
+           * strip names the wait — otherwise the old filter's rows read as the new
+           * filter's answer, which is the reported "In transit shows Pending".
+           */
+          <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-4 py-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            {t("filterLoading")}
+          </div>
+        ) : null}
+        <div className={cn(isPlaceholderData && visible.length > 0 && "pointer-events-none opacity-50")}>
+        {isLoading ? null : isError ? (
           <div className="px-6 py-12 text-center">
             <p className="text-sm font-medium text-foreground">{t("listErrorTitle")}</p>
             <p className="mt-1 text-sm text-muted-foreground">{t("listErrorHint")}</p>
@@ -1228,6 +1260,7 @@ function DeliveriesPageContent() {
             ) : null}
           </CardContent>
         )}
+        </div>
       </AppListCard>
 
       <DeliveryDetailSheet

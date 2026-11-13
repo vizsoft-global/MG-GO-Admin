@@ -54,6 +54,32 @@ const REFRESH_FULL_MAX_DAYS = 31;
 /** The slice a wide window refreshes instead of rebuilding. */
 const REFRESH_TAIL_MINUTES = 30;
 
+/**
+ * The message suffix for a tab id.
+ *
+ * Used only by the header title, which prints "<client> | <tab>" — the tab
+ * buttons below it keep their own labels, so a renamed tab cannot make the title
+ * and the button disagree about the same screen.
+ */
+function tabLabelOf(tab: PerformanceHubTab): string {
+  switch (tab) {
+    case "overview":
+      return "Overview";
+    case "dpd":
+      return "Dpd";
+    case "riders":
+      return "Riders";
+    case "topbottom":
+      return "TopBottom";
+    case "outsource":
+      return "Outsource";
+    default: {
+      const unreachable: never = tab;
+      return unreachable;
+    }
+  }
+}
+
 export function PerformancePageShell() {
   const t = useTranslations("pages.performance");
   const todayFallback = kuwaitToday();
@@ -74,20 +100,6 @@ export function PerformancePageShell() {
   const firstDelivery = boundsQuery.data?.first_delivery_date ?? null;
   const overCap = Boolean(boundsQuery.data?.over_cap);
   const viewMetric = resolveViewByMetric(tab, metric);
-
-  const tabItems = useMemo(
-    () =>
-      [
-        { id: "overview", label: t("ops.tabOverview") },
-        { id: "dpd", label: t("ops.tabDpd") },
-        { id: "riders", label: t("ops.tabRiders") },
-        { id: "topbottom", label: t("ops.tabTopBottom") },
-        { id: "outsource", label: t("ops.tabOutsource") },
-      ] as const,
-    [t],
-  );
-  const activeTabLabel =
-    tabItems.find((item) => item.id === tab)?.label ?? tabItems[0].label;
 
   const range = useMemo(() => {
     try {
@@ -317,15 +329,18 @@ export function PerformancePageShell() {
         }
       >
       {/*
-        Power BI header card: client logo, wordmark, then the page title and
-        period, then the tab buttons on the end edge. The reference dashboard
-        puts the five tabs *into* this band rather than under it, which is what
-        makes the whole page read as one dashboard instead of a page with a
-        banner on top.
+        Power BI header card: group mark, client logo, the page title with the
+        period, the five tabs, then refresh / export / settings on the end edge.
+
+        Every colour here reads from the theme tokens rather than a hardcoded
+        white: the card is `bg-card`, so white text would be invisible in light
+        mode — which is exactly what happened when this band was first drawn.
+        `--ops-*` falls back to the design-system tokens, so the header is
+        legible even if the palette fails to resolve.
       */}
-      <div className="mb-2 flex items-stretch overflow-hidden rounded-lg border border-[var(--ops-line,var(--border))] bg-card shadow-sm">
-        <div className="hidden items-center justify-center border-e border-border/70 bg-[var(--ops-soft,var(--muted))] px-3 @[900px]:flex">
-          <span className="text-xs font-extrabold tracking-wide text-[var(--ops-title,var(--text-primary))]">
+      <div className="flex flex-wrap items-stretch overflow-hidden rounded-lg border border-[var(--ops-line,var(--border))] bg-card shadow-sm">
+        <div className="hidden items-center justify-center border-e border-border/70 bg-[var(--ops-soft,var(--muted))] px-3 sm:flex">
+          <span className="text-xs font-extrabold tracking-wide text-[var(--ops-title,var(--foreground))]">
             MG GROUP
           </span>
         </div>
@@ -338,69 +353,77 @@ export function PerformancePageShell() {
                 className="h-8 w-auto max-w-[110px] object-contain"
               />
             ) : (
-              <span className="text-xs font-extrabold tracking-wide text-[var(--ops-title,var(--text-primary))]">
+              <span className="text-xs font-extrabold tracking-wide text-[var(--ops-title,var(--foreground))]">
                 {theme.shortLabel}
               </span>
             )}
           </div>
         ) : null}
-        <AppPageHeader
-          title={`${theme.key === "all" ? "MGHub" : theme.shortLabel} | ${activeTabLabel}`}
-          description={rangeLabel}
-          className="min-w-0 flex-1 px-4 py-2"
-          actions={
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--ops-line,var(--border))] px-2.5 text-sm font-semibold text-[var(--ops-ink,var(--text-primary))] transition-colors hover:bg-[var(--ops-soft,var(--muted))] disabled:pointer-events-none disabled:opacity-50"
-                onClick={exportTab}
-                disabled={!data}
-              >
-                <Download className="size-3.5" />
-                {t("ops.exportTab")}
-              </button>
-              <button
-                type="button"
-                className="cursor-pointer text-xs font-semibold text-[var(--ops-ink,var(--text-primary))] hover:underline disabled:pointer-events-none disabled:opacity-50"
-                onClick={() => void onRefresh()}
-                disabled={refreshing}
-              >
-                {refreshing ? t("refreshing") : t("refresh")}
-              </button>
-              <Link
-                href="/performance/settings"
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--ops-line,var(--border))] px-2.5 text-sm font-semibold text-[var(--ops-ink,var(--text-primary))] transition-colors hover:bg-[var(--ops-soft,var(--muted))]"
-              >
-                <Settings2 className="size-3.5" />
-                {t("settingsLink")}
-              </Link>
-            </div>
-          }
-          tabs={
-            <div className="flex flex-wrap items-center gap-1.5">
-              {tabItems.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    const next = item.id as PerformanceHubTab;
-                    setTab(next);
-                    setMetric(resolveViewByMetric(next, metric));
-                  }}
-                  aria-current={tab === item.id ? "page" : undefined}
-                  className={cn(
-                    "cursor-pointer whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-bold transition-colors duration-150 motion-reduce:transition-none",
-                    tab === item.id
-                      ? "border-[var(--ops-line,var(--border))] bg-[var(--ops-soft,var(--muted))] text-[var(--ops-title,var(--text-primary))] shadow-inner"
-                      : "border-border bg-card text-muted-foreground hover:bg-muted/50",
-                  )}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          }
-        />
+        <div className="flex min-w-0 flex-1 flex-col justify-center border-e border-border/70 px-4 py-2">
+          <p className="truncate text-base font-bold leading-tight text-[var(--ops-title,var(--foreground))]">
+            {theme.key === "all" ? "MGHub" : theme.palette.shortLabel} |{" "}
+            {t(`ops.tab${tabLabelOf(tab)}`)}
+          </p>
+          <p className="truncate text-[11px] italic text-muted-foreground">
+            {t(`ops.slicer.orderStatusOpt.${slicers.orderStatus}`)} · {rangeLabel}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 px-2 py-2">
+          {(
+            [
+              { id: "overview", label: t("ops.tabOverview") },
+              { id: "dpd", label: t("ops.tabDpd") },
+              { id: "riders", label: t("ops.tabRiders") },
+              { id: "topbottom", label: t("ops.tabTopBottom") },
+              { id: "outsource", label: t("ops.tabOutsource") },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-current={tab === item.id ? "page" : undefined}
+              onClick={() => {
+                const next = item.id as PerformanceHubTab;
+                setTab(next);
+                setMetric(resolveViewByMetric(next, metric));
+              }}
+              className={cn(
+                "cursor-pointer whitespace-nowrap rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors duration-150 motion-reduce:transition-none",
+                tab === item.id
+                  ? "border-[var(--ops-ink,var(--primary))] bg-[var(--ops-ink,var(--primary))] text-white shadow-sm"
+                  : "border-border bg-card text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 border-s border-border/70 px-3">
+          <button
+            type="button"
+            className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-[var(--ops-line,var(--border))] px-2.5 text-sm font-semibold text-[var(--ops-ink,var(--primary))] transition-colors hover:bg-[var(--ops-soft,var(--muted))] disabled:pointer-events-none disabled:opacity-50"
+            onClick={exportTab}
+            disabled={!data}
+          >
+            <Download className="size-3.5" />
+            {t("ops.exportTab")}
+          </button>
+          <button
+            type="button"
+            className="cursor-pointer text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline disabled:opacity-50"
+            onClick={() => void onRefresh()}
+            disabled={refreshing}
+          >
+            {refreshing ? t("refreshing") : t("refresh")}
+          </button>
+          <Link
+            href="/performance/settings"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--ops-line,var(--border))] px-2.5 text-sm font-semibold text-[var(--ops-ink,var(--primary))] transition-colors hover:bg-[var(--ops-soft,var(--muted))]"
+          >
+            <Settings2 className="size-3.5" />
+            {t("settingsLink")}
+          </Link>
+        </div>
       </div>
       <span className="sr-only">
         <AppPageHeader title={t("title")} description={t("ops.subtitle", {
@@ -483,7 +506,7 @@ export function PerformancePageShell() {
         ) : tab === "topbottom" ? (
           <OpsTopBottomTab data={data} metric={viewMetric} show={topBottomShow} />
         ) : (
-          <OpsOutsourceTab data={data} metric={viewMetric} granularity={granularity} />
+          <OpsOutsourceTab data={data} metric={viewMetric} />
         )}
       </div>
       </div>

@@ -52,6 +52,51 @@ export function notificationFiltersToQuery(state: NotificationFilterState): stri
 }
 
 /**
+ * Merge the filter params into an existing query string.
+ *
+ * The page used to write the URL with `notificationFiltersToQuery` alone, which
+ * rebuilds the query from the five filter keys — so every filter click silently
+ * dropped the table's own `q` / `group` / `view` params. `useTablePrefs` then wrote
+ * them back, and the two writers overwrote each other: one RSC round trip per
+ * click, and the search box cleared itself at random. That is the reported "the
+ * clickable filters do not update the page".
+ *
+ * Preserving every key we do not own means the two writers can no longer fight.
+ */
+export function mergeNotificationFilterParams(
+  existing: SearchParamsLike,
+  state: NotificationFilterState,
+): string {
+  const next = new URLSearchParams();
+  // `SearchParamsLike` is read-only by design; `forEach` is not on the interface,
+  // so the caller's full param string is rebuilt from the keys we know plus any
+  // other key it iterates. See `readAllParams` for the concrete adapter.
+  const kept = readAllParams(existing);
+  for (const [key, value] of kept) {
+    if (FILTER_KEYS.has(key)) continue;
+    next.set(key, value);
+  }
+  const own = notificationFiltersToSearchParams(state);
+  own.forEach((value, key) => next.set(key, value));
+  const query = next.toString();
+  return query ? `?${query}` : "";
+}
+
+/** The five keys this module owns; everything else belongs to the table toolbar. */
+export const FILTER_KEYS = new Set(["bucket", "category", "from", "to", "createdBy"]);
+
+/** Reads every param a `URLSearchParams`-like object holds. */
+export function readAllParams(source: SearchParamsLike): Array<[string, string]> {
+  const maybe = source as unknown as { forEach?: (cb: (value: string, key: string) => void) => void };
+  if (typeof maybe.forEach === "function") {
+    const out: Array<[string, string]> = [];
+    maybe.forEach((value, key) => out.push([key, value]));
+    return out;
+  }
+  return [];
+}
+
+/**
  * The filter snapshot a metric card stands for. "Sent today" is the one card whose metric is
  * scoped to a day, so it carries that day and replaces any other period. Every other card only
  * swaps the bucket and keeps the rest of the scope, so the number on the card is exactly the

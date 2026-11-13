@@ -305,12 +305,19 @@ export function efficiencyBucket(
   return "well_below";
 }
 
+/**
+ * UTR bands.
+ *
+ * Thresholds are the reference dashboard's own: >1.60, 1.40–1.59, 1.20–1.39,
+ * 1.00–1.19, <1.00. They were 2.0 / 1.5 / 1.0 / 0.5, which put almost the whole
+ * fleet in one band on a screen whose UTR sits around 1.3.
+ */
 export function utrBucket(utr: number | null): EfficiencyBucket | null {
   if (utr == null || !Number.isFinite(utr)) return null;
-  if (utr >= 2) return "well_above";
-  if (utr >= 1.5) return "above";
-  if (utr >= 1) return "near";
-  if (utr >= 0.5) return "below";
+  if (utr > 1.6) return "well_above";
+  if (utr >= 1.4) return "above";
+  if (utr >= 1.2) return "near";
+  if (utr >= 1.0) return "below";
   return "well_below";
 }
 

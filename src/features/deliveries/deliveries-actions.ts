@@ -23,7 +23,8 @@ import { stampedPatch } from "@/lib/search/prefix";
 import type { DocumentData, Firestore, Query, QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { earningsRecalcDateFromDeliveredAt } from "./delivery-earn-date";
 import { trailPathFromEvents } from "./delivery-gps-audit";
-import { listTotalFromStatusCounts, parseDeliveriesStatusCounts } from "./delivery-kpi-counts";
+import { parseDeliveriesStatusCounts } from "./delivery-kpi-counts";
+import { flagFilterOf as flagEqualityOf, needsMemoryFilter as needsMemoryScan } from "./delivery-flag-filter";
 import { mergeProofKeys } from "./delivery-proof-keys";
 import { IN_PROGRESS_DELIVERY_STATUSES, normalizeDeliveryStatusFilter } from "./delivery-status-filter";
 import { collectExportPages } from "./export-pagination";
@@ -439,11 +440,27 @@ function matchesCancel(row: Row, code: string): boolean {
 }
 
 function needsMemoryFilter(params: DeliveriesQueryFilter): boolean {
-  return Boolean(
-    params.search?.trim() ||
-      (params.cancelReason && params.cancelReason !== "all") ||
-      (params.flags && params.flags !== "all"),
-  );
+  /*
+   * Delegated so the rule has one definition: a flag is NOT a reason to scan
+   * (it is an indexed equality); free-text search and the cancel-reason list are,
+   * because neither is a stored field.
+   */
+  return needsMemoryScan(params);
+}
+
+/**
+ * The delivery flag as a queryable field and the value that means "flagged".
+ *
+ * See `delivery-flag-filter.ts` — the rule lives in its own module so it can be
+ * tested without loading this `"use server"` file. Reading a flag through a
+ * `where` is the whole point: the previous version selected the flag and then
+ * filtered 20,000 documents in memory (measured 89.5 s), so the page timed out
+ * before it could paint.
+ */
+function flagFilterOf(
+  flags: DeliveryFlagFilter | undefined,
+): { field: string; value: boolean } | null {
+  return flagEqualityOf(flags);
 }
 
 function rowMatchesFlag(row: Row, flags: DeliveryFlagFilter | undefined): boolean {
@@ -461,6 +478,12 @@ function rowMatchesFlag(row: Row, flags: DeliveryFlagFilter | undefined): boolea
 function indexedQuery(db: Firestore, params: DeliveriesQueryFilter): Query {
   let query: Query = db.collection(COLLECTIONS.deliveries);
   const hasDateWindow = Boolean(params.dateFrom || params.dateTo);
+  /*
+   * A flag is an equality on a boolean column, so it rides the indexed query with
+   * every other filter instead of forcing the in-memory scan below.
+   */
+  const flag = flagFilterOf(params.flags);
+  if (flag) query = query.where(flag.field, "==", flag.value);
   if (params.status && params.status !== "all") {
     if (params.status === "in_progress") {
       query = query.where("status", "in", [...IN_PROGRESS_DELIVERY_STATUSES]);
@@ -494,7 +517,28 @@ function rowMatches(row: Row, params: DeliveriesQueryFilter, driverIds: string[]
   return true;
 }
 
-async function pageDeliveryRows(
+/**
+ * Firestore's "this query needs an index" failure.
+ *
+ * A composite index is created by a deploy and then **builds in the background**;
+ * for a collection this size that is tens of minutes. Until it flips to READY, a
+ * filtered query throws 9/FAILED_PRECONDITION instead of returning rows. Reading
+ * that as a hard error would turn "slow and wrong" into "the list does not load",
+ * so the caller falls back to the in-memory path it used before the index existed.
+ */
+function isMissingIndexError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  const message = String((error as { message?: unknown }).message ?? "").toLowerCase();
+  return (
+    code === 9 ||
+    code === "failed-precondition" ||
+    message.includes("requires an index") ||
+    message.includes("index") && message.includes("create")
+  );
+}
+
+async function scanDeliveryRows(
   db: Firestore,
   params: DeliveriesQueryFilter,
   driverIds: string[],
@@ -502,10 +546,6 @@ async function pageDeliveryRows(
   limit: number,
 ): Promise<{ rows: Row[]; hitCap: boolean }> {
   const query = indexedQuery(db, params);
-  if (!needsMemoryFilter(params)) {
-    const snap = await query.offset(offset).limit(limit).get();
-    return { rows: snap.docs.map((doc) => asRow(doc.id, doc.data())), hitCap: false };
-  }
   const matches: Row[] = [];
   let skipped = 0;
   let cursor: QueryDocumentSnapshot | undefined;
@@ -536,6 +576,31 @@ async function pageDeliveryRows(
   }
   if (scanned >= DELIVERY_SEARCH_CAP && matches.length < limit) hitCap = true;
   return { rows: matches, hitCap };
+}
+
+async function pageDeliveryRows(
+  db: Firestore,
+  params: DeliveriesQueryFilter,
+  driverIds: string[],
+  offset: number,
+  limit: number,
+): Promise<{ rows: Row[]; hitCap: boolean }> {
+  const query = indexedQuery(db, params);
+  if (!needsMemoryFilter(params)) {
+    try {
+      const snap = await query.offset(offset).limit(limit).get();
+      return { rows: snap.docs.map((doc) => asRow(doc.id, doc.data())), hitCap: false };
+    } catch (error) {
+      /**
+       * The flag composites build in the background after deploy. Serving the
+       * filtered list from the scan until they are READY is slower, but it is a
+       * right answer rather than an error page.
+       */
+      if (!isMissingIndexError(error)) throw error;
+      return scanDeliveryRows(db, params, driverIds, offset, limit);
+    }
+  }
+  return scanDeliveryRows(db, params, driverIds, offset, limit);
 }
 
 async function hydrateListRows(db: Firestore, rows: Row[]): Promise<DeliveryDbRowForList[]> {
@@ -870,9 +935,11 @@ function deliveryRoute(
   offset: number,
   limit: number,
 ): DeliveryListRoute {
-  if (params.flags && params.flags !== "all") {
-    return { kind: "scan", reasons: ["integrity_flags"] };
-  }
+  /*
+   * No flag special-case. A flag used to short-circuit here to a 20,000-document
+   * memory scan; it is an indexed equality now, so it takes the same path as the
+   * status and date filters.
+   */
   return routeDeliveryList({
     search: params.search,
     searchShape: params.searchShape,
@@ -969,17 +1036,28 @@ async function pageByPrefix(
   }
 }
 
-async function indexedStatusTotal(params: DeliveriesQueryFilter): Promise<number | null> {
-  const hasDateWindow = Boolean(params.dateFrom || params.dateTo);
-  const { data: rawCounts, error: countError } = await callAdminFunction("admin_deliveries_status_counts", {
-    p_from: params.dateFrom ?? undefined,
-    p_to: params.dateTo ? inclusiveUpperBound(params.dateTo, params.dateToExclusive) : undefined,
-    p_zone_id: params.zoneId && params.zoneId !== "all" ? params.zoneId : undefined,
-    p_partner_id: params.partnerId && params.partnerId !== "all" ? params.partnerId : undefined,
-    p_date_basis: hasDateWindow ? "delivered" : undefined,
-  });
-  if (countError) return null;
-  return listTotalFromStatusCounts(parseDeliveriesStatusCounts(rawCounts), params.status);
+/**
+ * How many rows the current filter matches.
+ *
+ * A `count()` aggregation on the **same query** the page reads, so the number and
+ * the rows cannot disagree — and it costs index entries rather than document
+ * reads. The previous version called `admin_deliveries_status_counts`, which runs
+ * eight whole-collection `count()` aggregations per request, in the same
+ * `Promise.all` as the page: the list could not paint until all eight finished,
+ * which is the reported "results take too long". It was also **wrong** under a
+ * filter the buckets do not know about: a flag or cancel-reason filter narrowed
+ * the rows but not the count, so the toolbar read "Showing 1–50 of 175,000".
+ *
+ * Returns null when the count cannot be read, and the toolbar then omits the
+ * total rather than printing a number it cannot stand behind.
+ */
+async function filteredTotal(db: Firestore, params: DeliveriesQueryFilter): Promise<number | null> {
+  try {
+    const snapshot = await indexedQuery(db, params).count().get();
+    return snapshot.data().count;
+  } catch {
+    return null;
+  }
 }
 
 type LoadedSlice = {
@@ -1005,7 +1083,7 @@ async function loadDeliverySlice(
     case "indexed": {
       const [page, total] = await Promise.all([
         pageDeliveryRows(db, params, [], offset, limit),
-        indexedStatusTotal(params),
+        filteredTotal(db, params),
       ]);
       return { rows: page.rows, total, reasons, resolvedDriverIds: null, searchTruncated: false };
     }
