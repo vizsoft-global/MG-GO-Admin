@@ -63,14 +63,13 @@ export const WORKER_HTTP_FUNCTIONS = [
 /**
  * Exports that are neither callables nor HTTP handlers.
  *
- * `bitesMirrorSweep`, `deliveryProximitySweep`, `serviceOdometerSync` and
+ * `deliveryProximitySweep`, `serviceOdometerSync` and
  * `serviceVehicleDistanceSweep` are `onSchedule` functions: Cloud Scheduler
  * invokes them, so they must not be reachable through a lane and must not carry
  * callable options. They are listed in `LEGACY_MODULES` only so `index.ts`
  * publishes them — every other module there is a callable the light lane serves.
  */
 export const SCHEDULED_FUNCTIONS = [
-  "bitesMirrorSweep",
   "homeSnapshotRepair",
   "deliveryProximitySweep",
   "serviceOdometerSync",

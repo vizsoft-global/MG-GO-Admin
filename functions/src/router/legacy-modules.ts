@@ -73,15 +73,6 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   "./rpcs/delivery-context-sweep": [
     "deliveryProximitySweep"
   ],
-  "./rpcs/bites-live-ticket": [
-    "bitesFleetSocketTicket"
-  ],
-  "./rpcs/bites-backfill": [
-    "adminBackfillBitesMirror"
-  ],
-  "./rpcs/bites-reconcile": [
-    "bitesMirrorSweep"
-  ],
   "./rpcs/service-odometer-sync": [
     "serviceOdometerSync"
   ],
