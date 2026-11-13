@@ -86,10 +86,11 @@ const STATUS_TABS = [
   "due_soon",
   "due",
   "overdue",
-  "needs_baseline",
-  "no_rule",
+  "needs_setup",
   "not_tracked",
 ] as const;
+
+type StatusTab = (typeof STATUS_TABS)[number];
 
 export function ServiceMaintenanceTab({
   canManage,
@@ -103,7 +104,7 @@ export function ServiceMaintenanceTab({
   const router = useRouter();
   // The cars tab never draws a bike row: `car` scopes the read by vehicle type.
   const data = useServiceMaintenance("car");
-  const [tab, setTab] = useState<(typeof STATUS_TABS)[number]>("all");
+  const [tab, setTab] = useState<StatusTab>("all");
   const [program, setProgram] = useState("all");
   const [zone, setZone] = useState("all");
   const [model, setModel] = useState("all");
@@ -168,19 +169,18 @@ export function ServiceMaintenanceTab({
     [programs],
   );
 
-  function selectStatus(next: (typeof STATUS_TABS)[number] | "needs_setup") {
-    const current = tab === "needs_baseline" || tab === "no_rule" ? "needs_setup" : tab;
-    if (current === next) {
-      setTab("all");
-      return;
-    }
-    setTab(next === "needs_setup" ? "needs_baseline" : next);
+  function selectStatus(next: StatusTab) {
+    setTab(tab === next ? "all" : next);
   }
 
   const filtered = useMemo(
     () =>
       rows.filter((row) => {
-        if (tab !== "all" && row.status !== tab) return false;
+        if (tab === "needs_setup") {
+          // The card counts both worklists; the table must show both, or the
+          // rows under a card printed 7 would number 3.
+          if (row.status !== "needs_baseline" && row.status !== "no_rule") return false;
+        } else if (tab !== "all" && row.status !== tab) return false;
         if (program !== "all" && row.programKey !== program) return false;
         if (zone !== "all" && (row.zoneName ?? "") !== zone) return false;
         if (model !== "all" && (row.model ?? "") !== model) return false;
@@ -248,11 +248,19 @@ export function ServiceMaintenanceTab({
     actions: "",
   };
 
+  const statusCounts: Record<StatusTab, number> = {
+    all: rows.length,
+    normal: counts.normal,
+    due_soon: counts.due_soon,
+    due: counts.due,
+    overdue: counts.overdue,
+    needs_setup: counts.needs_baseline + counts.no_rule,
+    not_tracked: counts.not_tracked,
+  };
+
   const statusItems = STATUS_TABS.map((id) => ({
     id,
-    label: `${id === "all" ? t("stages.all") : tStatus(id)} (${
-      id === "all" ? rows.length : counts[id]
-    })`,
+    label: `${id === "all" ? t("stages.all") : id === "needs_setup" ? tStatus("needs_baseline") : tStatus(id)} (${statusCounts[id]})`,
   }));
 
 
@@ -304,7 +312,7 @@ export function ServiceMaintenanceTab({
             label: tStatus("needs_baseline"),
             value: counts.needs_baseline + counts.no_rule,
             icon: Wrench,
-            selected: tab === "needs_baseline" || tab === "no_rule",
+            selected: tab === "needs_setup",
             onClick: () => selectStatus("needs_setup"),
           },
         ]}
