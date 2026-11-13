@@ -12,13 +12,17 @@ import {
   type CustomFieldDefinitionInput,
   type CustomFieldOption,
   type CustomFieldValue,
+  type CustomFieldValues,
 } from "@/lib/custom-fields/types";
+import { customFieldEntity, isCustomFieldEntity } from "@/lib/custom-fields/entities";
 import {
   isCustomFieldType,
   normalizeFieldKey,
   parseOptions,
   validateDefinitionInput,
+  validateCustomFieldValues,
 } from "@/lib/custom-fields/validate";
+import { staffDb } from "@/lib/firebase/staff-db";
 import type { Json } from "@/types/database";
 
 function mapRow(row: {
@@ -70,22 +74,28 @@ function mapRow(row: {
   };
 }
 
-async function requireDriversManage() {
+/**
+ * Definitions are **Super Admin only**.
+ *
+ * A definition adds a column to a table every staff member reads and a slicer
+ * they all filter by, so it is shared configuration, not a personal view — 5.2
+ * of the client review asks for exactly that split. A manager's own column
+ * order and hidden columns still live in `admin_ui_preferences`, per user.
+ */
+async function requireDefinitionAdmin() {
   const session = await getSessionUser();
-  if (
-    !session ||
-    !hasPermissionInSet(session.permissions, "drivers.manage", session.isSuperAdmin)
-  ) {
-    return null;
-  }
+  if (!session || !session.isSuperAdmin) return null;
   return session;
 }
 
-async function requireDriversView() {
+/** Reading definitions follows the entity's own list permission. */
+async function requireEntityView(entityType: string) {
+  const entry = customFieldEntity(entityType);
+  if (!entry) return null;
   const session = await getSessionUser();
   if (
     !session ||
-    !hasPermissionInSet(session.permissions, "drivers.view", session.isSuperAdmin)
+    !hasPermissionInSet(session.permissions, entry.viewPermission, session.isSuperAdmin)
   ) {
     return null;
   }
@@ -96,7 +106,8 @@ export async function listCustomFieldDefinitions(
   entityType: string = DRIVER_ENTITY_TYPE,
   opts?: { includeInactive?: boolean },
 ): Promise<CustomFieldDefinition[]> {
-  const session = await requireDriversView();
+  if (!isCustomFieldEntity(entityType)) return [];
+  const session = await requireEntityView(entityType);
   if (!session) return [];
 
   const db = await staffClient();
@@ -122,11 +133,11 @@ export async function upsertCustomFieldDefinition(
 ): Promise<{ success?: boolean; error?: string; id?: string }> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
-  const session = await requireDriversManage();
+  const session = await requireDefinitionAdmin();
   if (!session) return { error: "not_authorized" };
 
   const entityType = (input.entity_type || DRIVER_ENTITY_TYPE).trim();
-  if (entityType !== DRIVER_ENTITY_TYPE) return { error: "invalid_entity" };
+  if (!isCustomFieldEntity(entityType)) return { error: "invalid_entity" };
 
   const key = normalizeFieldKey(input.key);
   if (!key) return { error: "invalid_key" };
@@ -219,10 +230,12 @@ export async function upsertCustomFieldDefinition(
 export async function setCustomFieldActive(
   id: string,
   active: boolean,
+  entityType: string = DRIVER_ENTITY_TYPE,
 ): Promise<{ success?: boolean; error?: string }> {
+  if (!isCustomFieldEntity(entityType)) return { error: "invalid_entity" };
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
-  const session = await requireDriversManage();
+  const session = await requireDefinitionAdmin();
   if (!session) return { error: "not_authorized" };
 
   const db = await staffClient();
@@ -230,7 +243,7 @@ export async function setCustomFieldActive(
     .from("custom_field_definitions")
     .update({ is_active: active, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("entity_type", DRIVER_ENTITY_TYPE);
+    .eq("entity_type", entityType);
 
   if (error) return { error: "save_failed" };
   void logAdminMutation({
@@ -238,17 +251,19 @@ export async function setCustomFieldActive(
     entityType: "custom_field_definition",
     entityId: id,
     routeName: "setCustomFieldActive",
-    after: { is_active: active },
+    after: { is_active: active, entity_type: entityType },
   });
   return { success: true };
 }
 
 export async function archiveCustomFieldDefinition(
   id: string,
+  entityType: string = DRIVER_ENTITY_TYPE,
 ): Promise<{ success?: boolean; error?: string }> {
+  if (!isCustomFieldEntity(entityType)) return { error: "invalid_entity" };
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
-  const session = await requireDriversManage();
+  const session = await requireDefinitionAdmin();
   if (!session) return { error: "not_authorized" };
 
   const db = await staffClient();
@@ -260,7 +275,7 @@ export async function archiveCustomFieldDefinition(
       updated_at: new Date().toISOString(),
     })
     .eq("id", id)
-    .eq("entity_type", DRIVER_ENTITY_TYPE);
+    .eq("entity_type", entityType);
 
   if (error) return { error: "save_failed" };
   void logAdminMutation({
@@ -268,16 +283,19 @@ export async function archiveCustomFieldDefinition(
     entityType: "custom_field_definition",
     entityId: id,
     routeName: "archiveCustomFieldDefinition",
+    after: { entity_type: entityType },
   });
   return { success: true };
 }
 
 export async function reorderCustomFieldDefinitions(
   ids: string[],
+  entityType: string = DRIVER_ENTITY_TYPE,
 ): Promise<{ success?: boolean; error?: string }> {
+  if (!isCustomFieldEntity(entityType)) return { error: "invalid_entity" };
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
-  const session = await requireDriversManage();
+  const session = await requireDefinitionAdmin();
   if (!session) return { error: "not_authorized" };
   if (ids.length === 0) return { success: true };
 
@@ -289,15 +307,72 @@ export async function reorderCustomFieldDefinitions(
         .from("custom_field_definitions")
         .update({ sort_order: index, updated_at: now })
         .eq("id", id)
-        .eq("entity_type", DRIVER_ENTITY_TYPE),
+        .eq("entity_type", entityType),
     ),
   );
   if (results.some((r) => r.error)) return { error: "save_failed" };
   return { success: true };
 }
 
-export async function listAdminRoleOptions(): Promise<Array<{ id: string; name: string; slug: string }>> {
+/**
+ * Write a record's custom values onto its own document.
+ *
+ * Deliberately one small action rather than a change to each entity's save path:
+ * the page saves its own fields, then hands the `cf:` values here. Validation
+ * runs against the live definitions, so a value for an archived field is carried
+ * through rather than refused (an operator cannot correct what the form no longer
+ * renders — see `allowLegacyKeys`).
+ */
+export async function saveEntityCustomFields(
+  entityType: string,
+  entityId: string,
+  values: CustomFieldValues,
+): Promise<{ success?: boolean; error?: string }> {
+  const entry = customFieldEntity(entityType);
+  if (!entry) return { error: "invalid_entity" };
+  if (!entityId) return { error: "invalid_entity" };
+
+  const mutationAuth = await requireMutationAuth();
+  if ("error" in mutationAuth) return { error: mutationAuth.error };
+
   const session = await getSessionUser();
+  if (
+    !session ||
+    !hasPermissionInSet(session.permissions, entry.managePermission, session.isSuperAdmin)
+  ) {
+    return { error: "not_authorized" };
+  }
+
+  const defs = await listCustomFieldDefinitions(entityType, { includeInactive: true });
+  const { values: clean, errors } = validateCustomFieldValues(defs, values, {
+    allowLegacyKeys: true,
+  });
+  if (errors.length > 0) {
+    return { error: errors[0]?.code === "required" ? "required" : "invalid_definition" };
+  }
+
+  const db = await staffDb();
+  if (!db) return { error: "save_failed" };
+  try {
+    await db
+      .collection(entry.collection)
+      .doc(entityId)
+      .set({ custom_fields: clean, updated_at: new Date() }, { merge: true });
+  } catch {
+    return { error: "save_failed" };
+  }
+
+  void logAdminMutation({
+    action: "update",
+    entityType: `${entityType}_custom_fields`,
+    entityId,
+    routeName: "saveEntityCustomFields",
+    after: { keys: Object.keys(clean) },
+  });
+  return { success: true };
+}
+
+export async function listAdminRoleOptions(): Promise<Array<{ id: string; name: string; slug: string }>> {  const session = await getSessionUser();
   if (!session) return [];
   const db = await staffClient();
   const { data, error } = await db.from("admin_roles").select("id, name, slug").order("name");

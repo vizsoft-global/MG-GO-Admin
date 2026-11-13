@@ -56,7 +56,11 @@ import {
   defaultsFromDefinitions,
   validateCustomFieldValues,
 } from "@/lib/custom-fields/validate";
-import type { CustomFieldDefinition, CustomFieldValues } from "@/lib/custom-fields/types";
+import {
+  DRIVER_ENTITY_TYPE,
+  type CustomFieldDefinition,
+  type CustomFieldValues,
+} from "@/lib/custom-fields/types";
 import type { DriverFormCatalogItem } from "@/features/assets/types";
 import { customFieldsToFormEntries } from "@/lib/custom-fields/serialize";
 import { DEFAULT_EMPLOYEE_STATUS_KEY } from "@/features/employees/employee-catalogs";
@@ -145,7 +149,7 @@ export function DriverFormSheet({
     open,
   );
   const assetCatalog = assetCatalogData ?? NO_CATALOG_ITEMS;
-  const { data: customFieldDefsData } = useCustomFieldDefinitions({
+  const { data: customFieldDefsData } = useCustomFieldDefinitions(DRIVER_ENTITY_TYPE, {
     includeInactive: false,
   });
   const customFieldDefs = customFieldDefsData ?? NO_CUSTOM_FIELD_DEFS;

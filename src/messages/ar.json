@@ -2156,7 +2156,11 @@
         "invalid_type": "استخدم PNG أو JPG أو WebP أو SVG",
         "upload_failed": "فشل رفع الشعار",
         "save_failed": "تعذر حفظ الشريك. حاول مرة أخرى."
-      }
+      },
+      "filterAllValues": "كل القيم",
+      "customFieldsTitle": "أعمدة مخصصة",
+      "requiredField": "مطلوب",
+      "customFieldSaveFailed": "تم حفظ العميل، لكن الأعمدة المخصصة لم تُحفظ."
     },
     "assets": {
       "title": "مخزون الأصول",
@@ -5042,8 +5046,8 @@
       "weightsOpenItem": "بند مفتوح: الأوزان النهائية تحتاج موافقة المنتج/العميل."
     },
     "driverFieldsSettings": {
-      "title": "حقول السائق",
-      "subtitle": "أضف حقولًا مخصصة لملفات السائقين.",
+      "title": "أعمدة مخصصة",
+      "subtitle": "أضف أعمدة مخصصة إلى جدول. حقل القائمة أو مربع الاختيار أو التاريخ يعمل أيضاً كمرشّح في قائمة ذلك الجدول.",
       "fieldsTitle": "الحقول المخصصة",
       "fieldsHint": "تُستخدم في النماذج والقوائم والتصدير.",
       "addField": "إضافة حقل",
@@ -5100,6 +5104,13 @@
         "invalid_entity": "كيان غير مدعوم",
         "key_exists": "المفتاح موجود",
         "save_failed": "تعذر الحفظ"
+      },
+      "entities": {
+        "drivers": "الموظفون",
+        "partners": "العملاء",
+        "restaurants": "المطاعم",
+        "zones": "المناطق",
+        "vehicles": "المركبات"
       }
     },
     "driverShifts": {

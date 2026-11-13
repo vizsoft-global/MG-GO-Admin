@@ -36,8 +36,10 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuLabel,
@@ -50,6 +52,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { queryKeys } from "@/lib/query/query-keys";
 import { cn } from "@/lib/utils";
 import { PartnerFormSheet } from "./partner-form-sheet";
+import { useEntityCustomFields } from "@/features/custom-fields/use-entity-custom-fields";
 import { usePartnersList } from "./use-partners";
 import type { PartnerRow } from "./types";
 
@@ -118,6 +121,17 @@ function PartnersPageContent() {
   const queryClient = useQueryClient();
 
   const { data: partners = [], isLoading, refetch } = usePartnersList();
+  /**
+   * Custom columns + slicers for this table.
+   *
+   * A definition added in Settings becomes a column here, a filter chip below and
+   * an Excel column — no code change on this page. `select` / `checkbox` / `date`
+   * fields also get a slicer, which is the client's "add a column and a slicer" in
+   * one step.
+   */
+  const customFields = useEntityCustomFields("partner");
+  const customFieldFilters = useState<Record<string, unknown>>({});
+  const [customFilters, setCustomFilters] = customFieldFilters;
   const toolbarColumns = useMemo((): TableToolbarColumn[] => {
     const cols: TableToolbarColumn[] = [
       { id: "logo", label: t("colLogo") },
@@ -125,10 +139,11 @@ function PartnersPageContent() {
       { id: "description", label: t("colDescription") },
       { id: "drivers", label: t("colDrivers") },
       { id: "created", label: t("colCreated") },
+      ...customFields.columns.map((column) => ({ id: column.id, label: column.label })),
     ];
     if (canManage) cols.push({ id: "actions", label: t("colActions") });
     return cols;
-  }, [canManage, t]);
+  }, [canManage, t, customFields.columns]);
   const tablePrefs = useTablePrefs("partners", toolbarColumns);
   const [driversFilter, setDriversFilter] = useState<DriversFilter>("all");
   const [logoFilter, setLogoFilter] = useState<LogoFilter>("all");
@@ -137,7 +152,16 @@ function PartnersPageContent() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const hasActiveFilters = driversFilter !== "all" || logoFilter !== "all";
+  const hasActiveFilters =
+    driversFilter !== "all" ||
+    logoFilter !== "all" ||
+    customFields.filters.some((filter) => {
+      const query = customFilters[filter.id];
+      if (filter.kind === "list") return Array.isArray(query) && query.length > 0;
+      return typeof query === "string" && query.trim() !== "";
+    });
+
+  const customFilterKey = JSON.stringify(customFilters);
 
   const visible = useMemo(() => {
     return partners.filter((p) => {
@@ -154,9 +178,23 @@ function PartnersPageContent() {
       if (driversFilter === "noDrivers" && p.driver_count > 0) return false;
       if (logoFilter === "withLogo" && !p.logo_url) return false;
       if (logoFilter === "noLogo" && p.logo_url) return false;
+      // Custom slicers, applied from the same rows the columns print from.
+      for (const filter of customFields.filters) {
+        if (
+          !customFields.matches(
+            p as unknown as { custom_fields?: unknown },
+            filter,
+            customFilters[filter.id],
+          )
+        ) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [partners, tablePrefs.appliedQuery, driversFilter, logoFilter]);
+    // `customFilterKey` stands in for the record, so a filter change re-runs this
+    // without the object identity forcing it on every render.
+  }, [partners, tablePrefs.appliedQuery, driversFilter, logoFilter, customFields, customFilterKey]);
   const grouped = useMemo(
     () => groupRows(visible, "none", {}, {}, "—"),
     [visible],
@@ -197,6 +235,7 @@ function PartnersPageContent() {
   const clearAllFilters = () => {
     setDriversFilter("all");
     setLogoFilter("all");
+    setCustomFilters({});
   };
 
   const driversFilterLabel = (value: DriversFilter) => {
@@ -260,6 +299,19 @@ function PartnersPageContent() {
     ...(logoFilter !== "all"
       ? [{ id: "logo", label: `${t("filterLogo")}: ${logoFilterLabel(logoFilter)}` }]
       : []),
+    // A custom slicer that is narrowing the list says so, beside the built-in ones.
+    ...customFields.filters.flatMap((filter) => {
+      const query = customFilters[filter.id];
+      if (filter.kind === "list") {
+        if (!Array.isArray(query) || query.length === 0) return [];
+        const label = query
+          .map((value) => filter.labels[String(value)] ?? String(value))
+          .join(", ");
+        return [{ id: filter.id, label: `${filter.label}: ${label}` }];
+      }
+      if (typeof query !== "string" || !query.trim()) return [];
+      return [{ id: filter.id, label: `${filter.label}: ${query}` }];
+    }),
   ];
 
   const toolbar = (
@@ -338,6 +390,68 @@ function PartnersPageContent() {
             </DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
+        {/* Custom slicers: one group per definition, drawn from the same store
+            that renders the column. Nothing here is hard-coded per page. */}
+        {customFields.filters.length > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            {customFields.filters.map((filter) => {
+              if (filter.kind === "list") {
+                const selected = Array.isArray(customFilters[filter.id])
+                  ? (customFilters[filter.id] as unknown[]).map(String)
+                  : [];
+                return (
+                  <DropdownMenuGroup key={filter.id}>
+                    <DropdownMenuLabel>{filter.label}</DropdownMenuLabel>
+                    <DropdownMenuCheckboxItem
+                      checked={selected.length === 0}
+                      onCheckedChange={() =>
+                        setCustomFilters((current) => ({ ...current, [filter.id]: [] }))
+                      }
+                    >
+                      {t("filterAllValues")}
+                    </DropdownMenuCheckboxItem>
+                    {filter.values.map((value) => (
+                      <DropdownMenuCheckboxItem
+                        key={value}
+                        checked={selected.includes(value)}
+                        onCheckedChange={(next: boolean) => {
+                          const base = selected.filter((item) => item !== value);
+                          const updated = next ? [...base, value] : base;
+                          setCustomFilters((current) => ({ ...current, [filter.id]: updated }));
+                        }}
+                      >
+                        {filter.labels[value] ?? value}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuGroup>
+                );
+              }
+              return (
+                <DropdownMenuGroup key={filter.id}>
+                  <DropdownMenuLabel>{filter.label}</DropdownMenuLabel>
+                  <div className="px-2 pb-2">
+                    <Input
+                      className="h-8"
+                      type={filter.kind === "date" ? "date" : "text"}
+                      value={
+                        typeof customFilters[filter.id] === "string"
+                          ? (customFilters[filter.id] as string)
+                          : ""
+                      }
+                      onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                        setCustomFilters((current) => ({
+                          ...current,
+                          [filter.id]: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </DropdownMenuGroup>
+              );
+            })}
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -558,8 +672,21 @@ function PartnersPageContent() {
                                 </Button>
                               </TableCell>
                             );
-                          default:
-                            return null;
+                          default: {
+                            // A `cf:<key>` column: the value the operator saved on
+                            // this partner, printed through its definition.
+                            const custom = customFields.columns.find((item) => item.id === column.id);
+                            if (!custom) return null;
+                            const text = customFields.display(
+                              partner as unknown as { custom_fields?: unknown },
+                              custom.key,
+                            );
+                            return (
+                              <TableCell key={column.id} className="text-sm text-muted-foreground">
+                                {text || "—"}
+                              </TableCell>
+                            );
+                          }
                         }
                       })}
                     </AppDataTableRow>
