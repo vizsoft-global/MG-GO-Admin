@@ -4,6 +4,7 @@ import { useMemo, useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 import { Download, Loader2, Settings2 } from "lucide-react";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
+import { AppBackButton } from "@/components/app/app-back-button";
 import { LAYOUT } from "@/components/app/layout-spacing";
 import { Link } from "@/i18n/navigation";
 import { kuwaitToday } from "./performance-formulas";
@@ -330,7 +331,8 @@ export function PerformancePageShell() {
       >
       {/*
         Power BI header card: group mark, client logo, the page title with the
-        period, the five tabs, then refresh / export / settings on the end edge.
+        period, the five tabs, then refresh / export on the end edge. Settings
+        sits in the row above, on the end edge, beside the back button.
 
         Every colour here reads from the theme tokens rather than a hardcoded
         white: the card is `bg-card`, so white text would be invisible in light
@@ -338,6 +340,16 @@ export function PerformancePageShell() {
         `--ops-*` falls back to the design-system tokens, so the header is
         legible even if the palette fails to resolve.
       */}
+      <div className="flex items-center justify-between gap-2">
+        <AppBackButton />
+        <Link
+          href="/performance/settings"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--ops-line,var(--border))] px-2.5 text-sm font-semibold text-[var(--ops-ink,var(--primary))] transition-colors hover:bg-[var(--ops-soft,var(--muted))]"
+        >
+          <Settings2 className="size-3.5" />
+          {t("settingsLink")}
+        </Link>
+      </div>
       <div className="flex flex-wrap items-stretch overflow-hidden rounded-lg border border-[var(--ops-line,var(--border))] bg-card shadow-sm">
         <div className="hidden items-center justify-center border-e border-border/70 bg-[var(--ops-soft,var(--muted))] px-3 sm:flex">
           <span className="text-xs font-extrabold tracking-wide text-[var(--ops-title,var(--foreground))]">
@@ -416,13 +428,6 @@ export function PerformancePageShell() {
           >
             {refreshing ? t("refreshing") : t("refresh")}
           </button>
-          <Link
-            href="/performance/settings"
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--ops-line,var(--border))] px-2.5 text-sm font-semibold text-[var(--ops-ink,var(--primary))] transition-colors hover:bg-[var(--ops-soft,var(--muted))]"
-          >
-            <Settings2 className="size-3.5" />
-            {t("settingsLink")}
-          </Link>
         </div>
       </div>
       <span className="sr-only">
