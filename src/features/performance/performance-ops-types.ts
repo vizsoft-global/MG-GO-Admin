@@ -57,6 +57,8 @@ export type OpsKpis = {
   active_prev: number;
   working_days: number;
   working_hours: number;
+  /** Hours logged by matched riders with no counted delivery — outside the UTR denominator. */
+  working_hours_excluded: number;
   utr: number | null;
   avg_delivery_min: number | null;
   stores_above: number;

@@ -183,10 +183,12 @@ async function loadDeliveriesByDay(
   toDay: string,
   cap: number,
 ): Promise<Array<{ id: string; data: Dict }>> {
+  // Query through noon of the day after toDay so overnight shifts crossing midnight are included
+  const scanEnd = new Date(kuwaitDayEnd(toDay).getTime() + 12 * 60 * 60 * 1000);
   const snap = await getFirestore()
     .collection(COLLECTIONS.deliveries)
     .where(FIELDS.deliveries.deliveredAt, ">=", kuwaitDayStart(fromDay))
-    .where(FIELDS.deliveries.deliveredAt, "<", kuwaitDayEnd(toDay))
+    .where(FIELDS.deliveries.deliveredAt, "<", scanEnd)
     .select(
       FIELDS.deliveries.driverId,
       FIELDS.deliveries.restaurantId,
@@ -365,7 +367,10 @@ export const adminOrderComparisonSnapshot = onCall(async (request) => {
     if (!LOGGED_STATUSES.has(String(d.status))) continue;
     const deliveredAt = millisOf(d.delivered_at);
     if (deliveredAt === null) continue;
-    const workDate = resolveReconDay(deliveredAt, d.shift_date);
+    const shiftDate = typeof d.shift_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.shift_date)
+      ? d.shift_date
+      : null;
+    const workDate = shiftDate ?? kuwaitDayString(deliveredAt);
     if (workDate < from || workDate > to) continue;
     const driverId = str(d.driver_id);
     const driver = driverId ? deliveryDrivers.get(driverId) : undefined;
@@ -458,7 +463,10 @@ export const adminOrderReconCompare = onCall(async (request) => {
     if (!LOGGED_STATUSES.has(String(d.status))) continue;
     const deliveredAt = millisOf(d.delivered_at);
     if (deliveredAt === null) continue;
-    const workDate = resolveReconDay(deliveredAt, d.shift_date);
+    const shiftDate = typeof d.shift_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d.shift_date)
+      ? d.shift_date
+      : null;
+    const workDate = shiftDate ?? kuwaitDayString(deliveredAt);
     if (workDate < from || workDate > to) continue;
     const driverId = str(d.driver_id);
     const restaurantId = str(d.restaurant_id);

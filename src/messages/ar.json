@@ -8986,6 +8986,9 @@
           "previewFailed": "تعذرت المعاينة.",
           "purgeFailed": "فشل الحذف."
         },
+        "common": {
+          "cancel": "إلغاء"
+        },
         "clearAll": {
           "tab": "مسح كل البيانات",
           "bannerTitle": "هذا يُفرغ الوحدة بالكامل، وليس الصفوف المحددة",
@@ -11306,7 +11309,9 @@
           "workingHours": "إجمالي ساعات العمل",
           "utr": "UTR الإجمالي",
           "avgDelivery": "متوسط وقت التوصيل",
-          "ridersInView": "السائقون في العرض"
+          "ridersInView": "السائقون في العرض",
+          "restaurants": "عدد المطاعم",
+          "hoursExcluded": "ساعات خارج UTR"
         },
         "chart": {
           "trend": "الاتجاه",

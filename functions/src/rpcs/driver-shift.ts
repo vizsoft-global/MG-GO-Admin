@@ -340,17 +340,36 @@ async function loadShiftOnDate(driverId: string, shiftDate: string): Promise<Shi
 }
 
 /**
- * `_driver_find_active_shift`: Kuwait today, else yesterday if still unexpired.
+ * `_driver_find_active_shift`:
+ * Checks yesterday's shift first if it extends past midnight and has not ended yet.
+ * Orders completed after midnight remain assigned to the previous day's shift until that shift ends.
+ * Otherwise, checks today's shift.
  */
 export async function findActiveShift(driverId: string, now: Date): Promise<ShiftRow | null> {
   const today = kuwaitDayString(now);
   const yesterday = addKuwaitDays(today, -1);
-  for (const day of [today, yesterday]) {
-    const row = await loadShiftOnDate(driverId, day);
-    if (!row) continue;
-    const end = shiftEndAt(row);
-    if (end && now.getTime() < end.getTime()) return row;
+
+  // 1. Check yesterday's shift first: if it was an overnight shift that has not ended yet, it wins.
+  const yesterdayRow = await loadShiftOnDate(driverId, yesterday);
+  if (yesterdayRow) {
+    const yStart = shiftStartAt(yesterdayRow);
+    const yEnd = shiftEndAt(yesterdayRow);
+    if (yStart && yEnd && now.getTime() >= yStart.getTime() && now.getTime() < yEnd.getTime()) {
+      return yesterdayRow;
+    }
   }
+
+  // 2. Check today's shift.
+  const todayRow = await loadShiftOnDate(driverId, today);
+  if (todayRow) {
+    const tStart = shiftStartAt(todayRow);
+    const tEnd = shiftEndAt(todayRow);
+    const earlyArrivalBufferMs = 30 * 60 * 1000;
+    if (tEnd && now.getTime() < tEnd.getTime() && (!tStart || now.getTime() >= tStart.getTime() - earlyArrivalBufferMs)) {
+      return todayRow;
+    }
+  }
+
   return null;
 }
 

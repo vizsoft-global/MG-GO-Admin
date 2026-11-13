@@ -290,43 +290,43 @@ function AttendancePageContent() {
 
   const kpiItems = kpis
     ? [
-        {
-          label: t("kpiScheduled"),
-          value: kpis.scheduled,
-          accent: "default" as const,
-          filterKey: "scheduled",
-        },
-        {
-          label: t("kpiCheckedIn"),
-          value: kpis.checked_in,
-          accent: "success" as const,
-          filterKey: "checked_in",
-        },
-        {
-          label: t("kpiLate"),
-          value: kpis.late,
-          accent: "warning" as const,
-          filterKey: "late",
-        },
-        {
-          label: t("kpiAbsent"),
-          value: kpis.absent,
-          accent: "danger" as const,
-          filterKey: "absent",
-        },
-        {
-          label: t("kpiOnline"),
-          value: kpis.online,
-          accent: "primary" as const,
-          filterKey: "online",
-        },
-        {
-          label: t("kpiProblems"),
-          value: kpis.problems,
-          accent: "warning" as const,
-          filterKey: "problems",
-        },
-      ]
+      {
+        label: t("kpiScheduled"),
+        value: kpis.scheduled,
+        accent: "default" as const,
+        filterKey: "scheduled",
+      },
+      {
+        label: t("kpiCheckedIn"),
+        value: kpis.checked_in,
+        accent: "success" as const,
+        filterKey: "checked_in",
+      },
+      {
+        label: t("kpiLate"),
+        value: kpis.late,
+        accent: "warning" as const,
+        filterKey: "late",
+      },
+      {
+        label: t("kpiAbsent"),
+        value: kpis.absent,
+        accent: "danger" as const,
+        filterKey: "absent",
+      },
+      {
+        label: t("kpiOnline"),
+        value: kpis.online,
+        accent: "primary" as const,
+        filterKey: "online",
+      },
+      {
+        label: t("kpiProblems"),
+        value: kpis.problems,
+        accent: "warning" as const,
+        filterKey: "problems",
+      },
+    ]
     : [];
 
   async function handleRefresh() {
@@ -346,10 +346,10 @@ function AttendancePageContent() {
       const csv =
         tab === "problems"
           ? await exportAttendanceDailyCsv({
-              ...dailyFilters,
-              status: "problems",
-              liveOnly: true,
-            })
+            ...dailyFilters,
+            status: "problems",
+            liveOnly: true,
+          })
           : await exportAttendanceDailyCsv(dailyFilters);
       downloadCsv(`attendance-${tab}-${today}.csv`, csv);
     } catch {
@@ -551,7 +551,9 @@ function AttendancePageContent() {
     return sorted.filter((row) =>
       fieldSearchMatch(row, debouncedSearch, {
         name: (item) => item.driver_name,
-        employee_id: (item) => item.employee_id ?? item.driver_code,
+        employee_id: (item) => item.employee_id,
+        driver_code: (item) => item.driver_code,
+        driver_id: (item) => item.driver_id,
         phone: (item) => item.driver_phone,
         zone: (item) => item.zone_name,
         status: (item) => item.live_status,
@@ -585,36 +587,36 @@ function AttendancePageContent() {
   const dailyColumns = (
     tab === "history"
       ? [
-          { id: "driver", label: sortColumnHeader("driver", t("colDriver")) },
-          { id: "date", label: sortColumnHeader("date", t("colDate")) },
-          { id: "status", label: sortColumnHeader("status", t("colStatus")) },
-          { id: "partner", label: labels.group.partner.label },
-          { id: "checkIn", label: sortColumnHeader("check_in", t("colCheckIn")) },
-          { id: "checkInPhoto", label: t("colCheckInPhoto") },
-          { id: "checkOut", label: sortColumnHeader("check_out", t("colCheckOut")) },
-          {
-            id: "workingHours",
-            label: sortColumnHeader("duty_seconds", t("colWorkingHours")),
-          },
-          { id: "onDuty", label: sortColumnHeader("on_duty", t("colOnDuty")) },
-          { id: "lastSeen", label: sortColumnHeader("last_seen", t("colLastSeen")) },
-          { id: "actions", label: t("colActions") },
-        ]
+        { id: "driver", label: sortColumnHeader("driver", t("colDriver")) },
+        { id: "date", label: sortColumnHeader("date", t("colDate")) },
+        { id: "status", label: sortColumnHeader("status", t("colStatus")) },
+        { id: "partner", label: labels.group.partner.label },
+        { id: "checkIn", label: sortColumnHeader("check_in", t("colCheckIn")) },
+        { id: "checkInPhoto", label: t("colCheckInPhoto") },
+        { id: "checkOut", label: sortColumnHeader("check_out", t("colCheckOut")) },
+        {
+          id: "workingHours",
+          label: sortColumnHeader("duty_seconds", t("colWorkingHours")),
+        },
+        { id: "onDuty", label: sortColumnHeader("on_duty", t("colOnDuty")) },
+        { id: "lastSeen", label: sortColumnHeader("last_seen", t("colLastSeen")) },
+        { id: "actions", label: t("colActions") },
+      ]
       : [
-          { id: "driver", label: sortColumnHeader("driver", t("colDriver")) },
-          { id: "status", label: sortColumnHeader("status", t("colStatus")) },
-          { id: "partner", label: labels.group.partner.label },
-          { id: "checkIn", label: sortColumnHeader("check_in", t("colCheckIn")) },
-          { id: "checkInPhoto", label: t("colCheckInPhoto") },
-          { id: "checkOut", label: sortColumnHeader("check_out", t("colCheckOut")) },
-          {
-            id: "workingHours",
-            label: sortColumnHeader("duty_seconds", t("colWorkingHours")),
-          },
-          { id: "onDuty", label: sortColumnHeader("on_duty", t("colOnDuty")) },
-          { id: "lastSeen", label: sortColumnHeader("last_seen", t("colLastSeen")) },
-          { id: "actions", label: t("colActions") },
-        ]
+        { id: "driver", label: sortColumnHeader("driver", t("colDriver")) },
+        { id: "status", label: sortColumnHeader("status", t("colStatus")) },
+        { id: "partner", label: labels.group.partner.label },
+        { id: "checkIn", label: sortColumnHeader("check_in", t("colCheckIn")) },
+        { id: "checkInPhoto", label: t("colCheckInPhoto") },
+        { id: "checkOut", label: sortColumnHeader("check_out", t("colCheckOut")) },
+        {
+          id: "workingHours",
+          label: sortColumnHeader("duty_seconds", t("colWorkingHours")),
+        },
+        { id: "onDuty", label: sortColumnHeader("on_duty", t("colOnDuty")) },
+        { id: "lastSeen", label: sortColumnHeader("last_seen", t("colLastSeen")) },
+        { id: "actions", label: t("colActions") },
+      ]
   ).filter((column) => isColumnVisible(column.id));
 
   const problemsColumns = [
@@ -891,25 +893,25 @@ function AttendancePageContent() {
                     />
                   ) : null}
                   {section.open || !section.showHeader ? (
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                    {section.visibleRows.map((row) => (
-                      <div
-                        key={`${row.driver_id}-${row.log_date}`}
-                        className="rounded-xl border border-border bg-card p-4 shadow-sm"
-                      >
-                        <p className="truncate text-sm font-semibold">{row.driver_name}</p>
-                        <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                          {row.employee_id ?? row.driver_code}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">{row.log_date}</p>
-                        <div className="mt-2">
-                          <StatusPill variant={resolveStatusVariant(row.live_status)}>
-                            {t((LIVE_STATUS_LABEL_KEYS[row.live_status] ?? "livePresent") as "livePresent")}
-                          </StatusPill>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {section.visibleRows.map((row) => (
+                        <div
+                          key={`${row.driver_id}-${row.log_date}`}
+                          className="rounded-xl border border-border bg-card p-4 shadow-sm"
+                        >
+                          <p className="truncate text-sm font-semibold">{row.driver_name}</p>
+                          <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                            {row.employee_id ?? row.driver_code}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">{row.log_date}</p>
+                          <div className="mt-2">
+                            <StatusPill variant={resolveStatusVariant(row.live_status)}>
+                              {t((LIVE_STATUS_LABEL_KEYS[row.live_status] ?? "livePresent") as "livePresent")}
+                            </StatusPill>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
                   ) : null}
                 </div>
               ))
@@ -930,9 +932,9 @@ function AttendancePageContent() {
                     </div>
                   ) : null}
                   {section.open || !section.showHeader ? (
-                  <AppDataTable columns={dailyColumns}>
-                    {section.visibleRows.map((row) => renderDailyRow(row))}
-                  </AppDataTable>
+                    <AppDataTable columns={dailyColumns}>
+                      {section.visibleRows.map((row) => renderDailyRow(row))}
+                    </AppDataTable>
                   ) : null}
                 </div>
               ))

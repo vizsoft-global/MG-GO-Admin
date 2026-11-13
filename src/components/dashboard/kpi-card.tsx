@@ -70,6 +70,13 @@ export function KpiCard({
         : "p-4",
     layout === "default" && NEUTRAL_TILE,
     layout === "default" && !isEmpty && toneStyle.accentBar,
+    /**
+     * The Performance dashboard asks for the reference's centred KPI card, so the
+     * card carries a marker instead of a second layout: the shell's own CSS
+     * (`globals.css` → `.ops-surface`) centres it and drops the icon chip there.
+     * Every other screen keeps the row layout.
+     */
+    layout === "default" && "data-ops-kpi",
     interactive && "cursor-pointer",
     interactive &&
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
@@ -116,6 +123,7 @@ export function KpiCard({
           {compact ? (
             <p className="flex min-w-0 items-baseline gap-1.5">
               <span
+                data-kpi-value
                 className={cn(
                   "text-xl font-semibold tabular-nums tracking-tight",
                   isEmpty ? "text-muted-foreground" : "text-foreground",
@@ -130,6 +138,7 @@ export function KpiCard({
           ) : (
             <>
               <p
+                data-kpi-value
                 className={cn(
                   "mt-1 text-2xl font-semibold tabular-nums tracking-tight",
                   isEmpty ? "text-muted-foreground" : "text-foreground",

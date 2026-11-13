@@ -707,7 +707,7 @@ async function loadVerifiedByDriverDay(
         db
           .collection(COLLECTIONS.rollupsDriverDay)
           .where("month", "==", month)
-          .select("driver_id", "day", "verified")
+          .select("driver_id", "day", "verified", "pending", "orders")
           .limit(SCAN_CAP)
           .get(),
       ),
@@ -718,7 +718,11 @@ async function loadVerifiedByDriverDay(
         const driverId = asString(doc.get("driver_id"));
         const day = asString(doc.get("day"));
         if (!driverId || !day || day < firstDay || day > lastDay) continue;
-        map.set(`${driverId}|${day}`, asNumber(doc.get("verified")));
+        const verified = asNumber(doc.get("verified"));
+        const orders = asNumber(doc.get("orders"));
+        const pending = asNumber(doc.get("pending"));
+        const totalRecorded = Math.max(verified, orders) + pending;
+        map.set(`${driverId}|${day}`, totalRecorded);
       }
     }
     return map;

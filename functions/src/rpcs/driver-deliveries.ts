@@ -860,11 +860,12 @@ export const driverCompleteDelivery = onCall(async (request) => {
   const proofKeys = parseProofKeys(
     pick(data, "p_delivery_proof_url", "delivery_proof_url", "deliveryProofUrl"),
   );
-  const [shiftDate, mocked, settings] = await Promise.all([
-    resolveShiftDate(ctx.uid, now),
+  const [resolvedShiftDate, mocked, settings] = await Promise.all([
+    asString(current["shift_date"]) ? Promise.resolve(asString(current["shift_date"])!) : resolveShiftDate(ctx.uid, now),
     pinIsMocked(ctx.uid),
     loadProximitySettings(),
   ]);
+  const shiftDate = asString(current["shift_date"]) ?? resolvedShiftDate;
 
   const pickupLat = numberOrNull(current["pickup_lat"]);
   const pickupLng = numberOrNull(current["pickup_lng"]);

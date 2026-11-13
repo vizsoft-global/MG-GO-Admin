@@ -9039,6 +9039,9 @@
           "previewFailed": "Could not load preview.",
           "purgeFailed": "Purge failed."
         },
+        "common": {
+          "cancel": "Cancel"
+        },
         "clearAll": {
           "tab": "Clear all data",
           "bannerTitle": "This empties the module, not the selected rows",
@@ -11306,7 +11309,9 @@
           "workingHours": "Total Working Hours",
           "utr": "Overall UTR",
           "avgDelivery": "Avg Delivery Time",
-          "ridersInView": "Riders in view"
+          "ridersInView": "Riders in view",
+          "restaurants": "Restaurants Count",
+          "hoursExcluded": "Hours outside UTR"
         },
         "chart": {
           "trend": "Trend",

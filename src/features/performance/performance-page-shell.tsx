@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { Download, Loader2, Settings2 } from "lucide-react";
 import { AppEmptyState, AppPage, AppPageHeader } from "@/components/app";
 import { LAYOUT } from "@/components/app/layout-spacing";
-import { TabBar } from "@/components/dashboard/tab-bar";
 import { Link } from "@/i18n/navigation";
 import { kuwaitToday } from "./performance-formulas";
 import {
@@ -24,7 +23,7 @@ import {
   type OpsRangePreset,
   type TopBottomShowSelection,
 } from "./performance-ops-formulas";
-import { resolveOpsClientTheme } from "./ops-client-theme";
+import { opsThemeStyleVars, resolveOpsClientTheme } from "./ops-client-theme";
 import { downloadCsv, toCsv } from "./performance-ops-table";
 import {
   EMPTY_OPS_SLICERS,
@@ -91,6 +90,10 @@ export function PerformancePageShell() {
     }
   }, [preset, today, firstDelivery, customFrom, customTo]);
 
+  const rangeLabel = useMemo(
+    () => `${range.from} — ${range.to}`,
+    [range.from, range.to],
+  );
   const rangeError = useMemo(() => {
     try {
       if (preset === "custom") {
@@ -292,21 +295,40 @@ export function PerformancePageShell() {
   return (
     <AppPage>
       <div
-        className="contents"
+        className="ops-surface flex flex-col gap-2"
         style={
           {
-            "--ops-header": theme.header,
-            "--ops-accent": theme.accent,
+            ...opsThemeStyleVars(theme.palette),
           } as CSSProperties
         }
       >
-      <div className="flex items-center gap-3 rounded-xl bg-[var(--ops-header,var(--text-primary))] px-4 py-3">
-        {theme.logoUrl ? (
-          <img
-            src={theme.logoUrl}
-            alt=""
-            className="h-9 w-auto max-w-[120px] object-contain"
-          />
+      {/*
+        Power BI header card: client logo, wordmark, then the page title and
+        period, then the tab buttons on the end edge. The reference dashboard
+        puts the five tabs *into* this band rather than under it, which is what
+        makes the whole page read as one dashboard instead of a page with a
+        banner on top.
+      */}
+      <div className="mb-2 flex items-stretch overflow-hidden rounded-lg border border-[var(--ops-line,var(--border))] bg-card shadow-sm">
+        <div className="hidden items-center justify-center border-e border-border/70 bg-[var(--ops-soft,var(--muted))] px-3 @[900px]:flex">
+          <span className="text-xs font-extrabold tracking-wide text-[var(--ops-title,var(--text-primary))]">
+            MG GROUP
+          </span>
+        </div>
+        {theme.key !== "all" ? (
+          <div className="flex items-center justify-center border-e border-border/70 bg-[var(--ops-soft,var(--muted))] px-3">
+            {theme.logoUrl ? (
+              <img
+                src={theme.logoUrl}
+                alt={theme.shortLabel}
+                className="h-8 w-auto max-w-[110px] object-contain"
+              />
+            ) : (
+              <span className="text-xs font-extrabold tracking-wide text-[var(--ops-title,var(--text-primary))]">
+                {theme.shortLabel}
+              </span>
+            )}
+          </div>
         ) : null}
         <AppPageHeader
           title={t("title")}
@@ -344,24 +366,11 @@ export function PerformancePageShell() {
           }
         />
       </div>
-
-      <TabBar
-        items={[
-          { id: "overview", label: t("ops.tabOverview") },
-          { id: "dpd", label: t("ops.tabDpd") },
-          { id: "riders", label: t("ops.tabRiders") },
-          { id: "topbottom", label: t("ops.tabTopBottom") },
-          { id: "outsource", label: t("ops.tabOutsource") },
-        ]}
-        activeId={tab}
-        onSelect={(id) => {
-          const next = id as PerformanceHubTab;
-          setTab(next);
-          setMetric(resolveViewByMetric(next, metric));
-        }}
-        className="mb-2"
-        markerClassName="bg-[var(--ops-accent,var(--accent-rust))]"
-      />
+      <span className="sr-only">
+        <AppPageHeader title={t("title")} description={t("ops.subtitle", {
+          status: t(`ops.slicer.orderStatusOpt.${slicers.orderStatus}`),
+        })} />
+      </span>
 
       <div className={cn("flex flex-col", LAYOUT.stackGap)}>
         <div className="flex flex-wrap items-center justify-between gap-2">
