@@ -22,10 +22,7 @@
  *   disagrees.
  * - workerFleetRead, adminIngestDriverPositions, and adminRecordFleetEvents stay
  *   off every lane (onRequest + WORKER_SHARED_SECRET).
- * - bitesFleetSocketTicket stays off every lane too (onRequest + BITES_BRIDGE_SECRET,
- *   called server-to-server by the Bites Cloud Functions).
- * - bitesMirrorSweep is an onSchedule function, so it is off every lane as well
- *   (see SCHEDULED_FUNCTIONS).
+ * - onSchedule functions are off every lane as well (see SCHEDULED_FUNCTIONS).
  * - Firestore triggers are not callables at all, so `assertPartition` here does not
  *   see them. There are none left: see the note in `index.ts`.
  * - Names that start with `driver` are the rider app's legacy callables, except
@@ -61,21 +58,18 @@ export const WORKER_HTTP_FUNCTIONS = [
   "workerFleetRead",
   "adminIngestDriverPositions",
   "adminRecordFleetEvents",
-  /** onRequest + BITES_BRIDGE_SECRET, so it gets no lane runtime options. */
-  "bitesFleetSocketTicket",
 ] as const;
 
 /**
  * Exports that are neither callables nor HTTP handlers.
  *
- * `bitesMirrorSweep`, `deliveryProximitySweep`, `serviceOdometerSync` and
+ * `deliveryProximitySweep`, `serviceOdometerSync` and
  * `serviceVehicleDistanceSweep` are `onSchedule` functions: Cloud Scheduler
  * invokes them, so they must not be reachable through a lane and must not carry
  * callable options. They are listed in `LEGACY_MODULES` only so `index.ts`
  * publishes them — every other module there is a callable the light lane serves.
  */
 export const SCHEDULED_FUNCTIONS = [
-  "bitesMirrorSweep",
   "homeSnapshotRepair",
   "deliveryProximitySweep",
   "serviceOdometerSync",

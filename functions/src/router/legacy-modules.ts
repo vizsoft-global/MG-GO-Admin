@@ -70,15 +70,6 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
     "adminRecordFleetEvents",
     "workerFleetRead"
   ],
-  "./rpcs/bites-live-ticket": [
-    "bitesFleetSocketTicket"
-  ],
-  "./rpcs/bites-backfill": [
-    "adminBackfillBitesMirror"
-  ],
-  "./rpcs/bites-reconcile": [
-    "bitesMirrorSweep"
-  ],
   "./rpcs/delivery-context-sweep": [
     "deliveryProximitySweep"
   ],
@@ -93,9 +84,6 @@ export const LEGACY_MODULES: Readonly<Record<string, readonly string[]>> = {
   ],
   "./rpcs/home-snapshot-repair": [
     "homeSnapshotRepair"
-  ],
-  "./rpcs/bites-push": [
-    "adminSyncBitesMirror"
   ],
   "./rpcs/performance-extra": [
     "adminListPerformanceComponents",

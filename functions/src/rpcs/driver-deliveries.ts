@@ -30,8 +30,6 @@ import {
 } from "./delivery-context";
 import { findActiveShift } from "./driver-shift";
 import { invalidateDriverHomeDailySafe } from "./driver-home";
-import { syncBitesOrderMilestone, type BitesPartnerStamp } from "./bites-order-sync";
-import { BITES_DELIVERY_FIELDS, BITES_ORDER_STATUS } from "../core/bites";
 import {
   IN_FILTER_LIMIT,
   chunk,
@@ -65,30 +63,6 @@ function deliveryIdentityStamp(
     driver_code: driver.driver_code,
     employee_id: driver.employee_id,
   });
-}
-
-/**
- * The rider identity the Bites order carries.
- *
- * The customer app runs on the Bites project and cannot resolve a delivery-side
- * `users` reference, so the order stores the name and phone inline.
- */
-function bitesPartnerStamp(
-  uid: string,
-  driver: Record<string, unknown>,
-  profile: Record<string, unknown>,
-): BitesPartnerStamp {
-  return {
-    uid,
-    name:
-      asString(profile["full_name"]) ??
-      asString(driver["full_name"]) ??
-      asString(driver["name"]),
-    phone:
-      asString(profile["phone"]) ??
-      asString(driver["phone"]) ??
-      asString(driver["driver_phone"]),
-  };
 }
 
 async function touchDeliveryStatusRollup(input: {
@@ -776,12 +750,6 @@ export const driverCreatePickup = onCall(async (request) => {
     day: shiftDate,
     status: "in_transit",
   });
-  const bites = await syncBitesOrderMilestone(orderId, {
-    status: BITES_ORDER_STATUS.picked,
-    timeField: BITES_DELIVERY_FIELDS.pickupTime,
-    at: now,
-    partner: bitesPartnerStamp(ctx.uid, ctx.driver, ctx.profile),
-  });
   await logDriverOperation({
     driverId: ctx.uid,
     module: "delivery",
@@ -795,8 +763,6 @@ export const driverCreatePickup = onCall(async (request) => {
       restaurant_id: restaurantId,
       partner_id: row["partner_id"],
       proof_count: proofKeys.length,
-      bites_synced: bites.synced,
-      bites_sync_reason: bites.reason,
     },
   });
   // A pickup moves the week's delivery count, so the snapshot is invalidated the
@@ -1001,12 +967,6 @@ export const driverCompleteDelivery = onCall(async (request) => {
     day: shiftDate,
     status: "pending",
   });
-  const bites = await syncBitesOrderMilestone(asString(current["external_order_id"]), {
-    status: BITES_ORDER_STATUS.delivered,
-    timeField: BITES_DELIVERY_FIELDS.deliveredTime,
-    at: now,
-    partner: bitesPartnerStamp(ctx.uid, ctx.driver, ctx.profile),
-  });
   await logDriverOperation({
     driverId: ctx.uid,
     module: "delivery",
@@ -1025,8 +985,6 @@ export const driverCompleteDelivery = onCall(async (request) => {
       zone_distance_m: zoneEvaluation?.distanceM ?? null,
       ocr_matched: ocrMatched,
       ocr_order_id: ocrOrderId,
-      bites_synced: bites.synced,
-      bites_sync_reason: bites.reason,
     },
   });
   await invalidateDriverHomeDailySafe(ctx.uid, "complete", { signal: false });
