@@ -23,8 +23,12 @@ import {
   DEFAULT_BANK_CODES,
   DEFAULT_EMPLOYEE_SECTIONS,
   DEFAULT_EMPLOYEE_STATUSES,
+  DEFAULT_HIRING_TYPES,
+  DEFAULT_JOB_END_DESCRIPTIONS,
   DEFAULT_JOB_POSITIONS,
+  DEFAULT_NATIONALITIES,
   DEFAULT_NATIONALITY_CATEGORIES,
+  DEFAULT_PAYMENT_CURRENCIES,
   DEFAULT_SPONSORSHIPS,
   isNbkBank,
   type EmployeeCatalogRow,
@@ -35,14 +39,16 @@ import {
   useBankCodes,
   useEmployeeSections,
   useEmployeeStatuses,
+  useHiringTypes,
+  useJobEndDescriptions,
   useJobPositions,
+  useNationalities,
   useNationalityCategories,
+  usePaymentCurrencies,
   useSponsorships,
 } from "@/features/employees/use-employee-catalogs";
 import { setDriverOffStructure } from "@/features/payroll/payroll-actions";
 import {
-  HIRING_TYPES,
-  JOB_END_DESCRIPTIONS,
   OFFS_STRUCTURE_DAYS,
 } from "../driver-private-fields";
 import { saveDriverPrivateInformation } from "../drivers-actions";
@@ -223,6 +229,10 @@ export function PrivateInformationTab({
   const sponsorships = useSponsorships();
   const companies = useSourceCompanies();
   const jobPositions = useJobPositions();
+  const hiringTypes = useHiringTypes();
+  const jobEndDescriptions = useJobEndDescriptions();
+  const nationalities = useNationalities();
+  const paymentCurrencies = usePaymentCurrencies();
 
   const readonly = !canManage || !driver.intake_id;
   const bank = driver.bank_details;
@@ -277,6 +287,40 @@ export function PrivateInformationTab({
   const nationRows = catalogRows(nationalityCategories.data, DEFAULT_NATIONALITY_CATEGORIES);
   const bankRows = catalogRows(banks.data, DEFAULT_BANK_CODES);
   const sponsorRows = catalogRows(sponsorships.data, DEFAULT_SPONSORSHIPS);
+  /**
+   * The four catalogs Employee Settings owns. Each keeps its compiled seed as the
+   * fallback, so a catalog that has never been opened still offers the values the
+   * app shipped with.
+   */
+  const hiringRows = catalogRows(hiringTypes.data, DEFAULT_HIRING_TYPES);
+  const jobEndRows = catalogRows(jobEndDescriptions.data, DEFAULT_JOB_END_DESCRIPTIONS);
+  const nationalityRows = catalogRows(nationalities.data, DEFAULT_NATIONALITIES);
+  const currencyRows = catalogRows(paymentCurrencies.data, DEFAULT_PAYMENT_CURRENCIES);
+  const hiringItems = hiringRows
+    .filter((row) => row.is_active || row.key === form.hiringType)
+    .map((row) => ({
+      value: row.key,
+      label: locale.startsWith("ar") ? row.label_ar || row.label_en : row.label_en,
+    }));
+  const jobEndItems = jobEndRows
+    .filter((row) => row.is_active || row.key === form.jobEndDescription)
+    .map((row) => ({
+      value: row.key,
+      label: locale.startsWith("ar") ? row.label_ar || row.label_en : row.label_en,
+    }));
+  const nationalityItems = nationalityRows
+    .filter((row) => row.is_active || row.key === form.nationality)
+    .map((row) => ({
+      value: row.key,
+      label: locale.startsWith("ar") ? row.label_ar || row.label_en : row.label_en,
+      keywords: [row.key],
+    }));
+  const currencyItems = currencyRows
+    .filter((row) => row.is_active || row.key === form.currency)
+    .map((row) => ({
+      value: row.key,
+      label: `${row.key} — ${locale.startsWith("ar") ? row.label_ar || row.label_en : row.label_en}`,
+    }));
   const companyOptions = listedCompanies(companies, form.sourceCompany || null);
   const companyItems = [
     { value: "none", label: t("fields.company") },
@@ -615,7 +659,7 @@ export function PrivateInformationTab({
             <SearchableSelect
               value={form.nationality}
               onValueChange={(value) => set("nationality", value)}
-              items={countrySearchSelectItems()}
+              items={nationalityItems.length > 0 ? nationalityItems : countrySearchSelectItems()}
               placeholder={t("fields.selectCountry")}
               searchPlaceholder={t("fields.searchCountry")}
               recentsKey="driver-nationality-country"
@@ -726,7 +770,7 @@ export function PrivateInformationTab({
           <FieldBlock>
             <FieldLabel className={LABEL}>{t("fields.hiringType")}</FieldLabel>
             <Select
-              items={[{ value: "none", label: t("fields.selectHiring") }, ...HIRING_TYPES.map((value) => ({ value, label: t(`options.hiringType.${value}`) }))]}
+              items={[{ value: "none", label: t("fields.selectHiring") }, ...hiringItems]}
               value={form.hiringType || "none"}
               onValueChange={(value) => set("hiringType", !value || value === "none" ? "" : value)}
             >
@@ -735,8 +779,8 @@ export function PrivateInformationTab({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">{t("fields.selectHiring")}</SelectItem>
-                {HIRING_TYPES.map((value) => (
-                  <SelectItem key={value} value={value}>{t(`options.hiringType.${value}`)}</SelectItem>
+                {hiringItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -828,10 +872,7 @@ export function PrivateInformationTab({
             <Select
               items={[
                 { value: "none", label: t("options.jobEndDescription.none") },
-                ...JOB_END_DESCRIPTIONS.map((value) => ({
-                  value,
-                  label: t(`options.jobEndDescription.${value}`),
-                })),
+                ...jobEndItems,
               ]}
               value={form.jobEndDescription || "none"}
               onValueChange={(value) =>
@@ -843,9 +884,9 @@ export function PrivateInformationTab({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">{t("options.jobEndDescription.none")}</SelectItem>
-                {JOB_END_DESCRIPTIONS.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {t(`options.jobEndDescription.${value}`)}
+                {jobEndItems.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -941,10 +982,14 @@ export function PrivateInformationTab({
           <FieldBlock>
             <FieldLabel htmlFor="p-currency">{t("fields.currency")}</FieldLabel>
             <Select
-              items={PAYMENT_CURRENCIES.map((currency) => ({
-                value: currency.code,
-                label: `${currency.code} · ${currency.name}`,
-              }))}
+              items={
+                currencyItems.length > 0
+                  ? currencyItems
+                  : PAYMENT_CURRENCIES.map((currency) => ({
+                      value: currency.code,
+                      label: `${currency.code} · ${currency.name}`,
+                    }))
+              }
               value={form.currency}
               onValueChange={(value) => {
                 if (!value) return;
@@ -955,9 +1000,15 @@ export function PrivateInformationTab({
                 <SelectValue placeholder={t("fields.currency")} />
               </SelectTrigger>
               <SelectContent>
-                {PAYMENT_CURRENCIES.map((currency) => (
-                  <SelectItem key={currency.code} value={currency.code}>
-                    {currency.code} · {currency.name}
+                {(currencyItems.length > 0
+                  ? currencyItems
+                  : PAYMENT_CURRENCIES.map((currency) => ({
+                      value: currency.code,
+                      label: `${currency.code} · ${currency.name}`,
+                    }))
+                ).map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -1648,10 +1648,19 @@
         "backToSettings": "Back to Employee settings",
         "embeddedHint": "Edits save immediately and refresh the Employees list.",
         "empty": "You do not have permission to edit any employee catalog.",
+        "openPage": "Open page",
+        "companiesHint": "Companies are managed on the Source companies page, where each company carries its own DPD target and incentive scheme.",
+        "zonesHint": "Zones are drawn on the Zones map. An employee's zone decides their delivery area and their payroll zone category.",
+        "restaurantsHint": "Restaurants are managed on the Restaurants page, including their geofence, partner and assigned riders.",
         "tiles": {
-          "driverFields": "Employee fields",
-          "serviceTypes": "Service types",
-          "attendanceSettings": "Attendance settings",
+          "nationalities": "Nationality (country)",
+          "hiringTypes": "Hiring type",
+          "jobEndDescriptions": "Job end description",
+          "paymentCurrencies": "Payment currency",
+          "sponsorships": "Sponsorship",
+          "companies": "Company",
+          "zones": "Zone",
+          "restaurants": "Restaurant",
           "vehicleTypes": "Vehicle types",
           "employeeStatuses": "Employee statuses",
           "employeeSections": "Employee sections",
@@ -8609,6 +8618,14 @@
         "sectionsSubtitle": "Departments or sections assigned to employees.",
         "nationalityTitle": "Nationality Category",
         "nationalitySubtitle": "Nationality Category values used on Employees and the dashboard — the nationalities plus the Arab / African / Asian groups.",
+        "nationalitiesTitle": "Nationality (country)",
+        "nationalitiesSubtitle": "The countries an employee's nationality can be set to. The key is the ISO country code, which is what the record stores.",
+        "hiringTypesTitle": "Hiring type",
+        "hiringTypesSubtitle": "How the employee was hired. Used on the employee profile and in HR Payroll.",
+        "jobEndTitle": "Job end description",
+        "jobEndSubtitle": "The reason an employee's job ended. Used on the employee profile and on the Job End Date.",
+        "currenciesTitle": "Payment currency",
+        "currenciesSubtitle": "The currencies an employee's bank details can be paid in. The key is the ISO 4217 code the record stores.",
         "banksTitle": "Bank codes",
         "banksSubtitle": "Kuwait banks used for employee payment details.",
         "jobPositionsTitle": "Job positions",
@@ -13072,6 +13089,10 @@
           "incentiveRules": {
             "title": "Incentive rules",
             "body": "Tiers, rewards and the periods they apply to."
+          },
+          "clients": {
+            "title": "Clients",
+            "body": "The client catalog every employee form reads. A client added here is offered on the Employee Client field at once."
           },
           "driverFields": {
             "title": "Custom columns",

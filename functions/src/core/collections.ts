@@ -185,6 +185,11 @@ export const COLLECTIONS = {
   bankCodes: "bank_codes",
   jobPositions: "job_positions",
   sponsorships: "sponsorships",
+  /** Catalogs that were compiled enums or fixed lists before Employee Settings owned them. */
+  hiringTypes: "hiring_types",
+  jobEndDescriptions: "job_end_descriptions",
+  nationalities: "nationalities",
+  paymentCurrencies: "payment_currencies",
   payrollHrPeriods: "payroll_hr_periods",
   driverHrPayroll: "driver_hr_payroll",
   adminActivityLogs: "admin_activity_logs",

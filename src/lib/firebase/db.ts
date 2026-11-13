@@ -131,6 +131,17 @@ export const COLLECTIONS = {
   bankCodes: "bank_codes",
   jobPositions: "job_positions",
   sponsorships: "sponsorships",
+  /**
+   * Employee Settings catalogs that were compiled enums before the client asked
+   * for them to be editable (`hiring_type`, `job_end_description`) or were a
+   * fixed list in code (`nationalities`, `payment_currencies`). Every reader
+   * falls back to the compiled seed, so an empty collection behaves exactly as
+   * it did before.
+   */
+  hiringTypes: "hiring_types",
+  jobEndDescriptions: "job_end_descriptions",
+  nationalities: "nationalities",
+  paymentCurrencies: "payment_currencies",
   vehicleTypes: "vehicle_types",
   /** Workshop ledger. Additive fields live beside the legacy ones; nothing renamed. */
   vehicleServices: "vehicle_services",

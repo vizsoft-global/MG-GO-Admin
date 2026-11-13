@@ -9,11 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/auth-context";
 import { EmployeeCatalogPanel } from "@/features/employees/employee-catalog-panel";
-import { DriverFieldsSettingsPanel } from "@/features/custom-fields/driver-fields-settings-panel";
-import { AttendanceSettingsPanel } from "@/features/attendance/attendance-settings-panel";
-import { ServiceTypesPanel } from "@/features/fleet/service/service-types-panel";
 import { VehicleTypesPanel } from "@/features/vehicles/vehicle-types-panel";
 import { PayrollClientsPanel } from "@/features/payroll/payroll-clients-panel";
+import { Link } from "@/i18n/navigation";
+import { ExternalLink } from "lucide-react";
 import {
   visibleEmployeeSettingsTiles,
   type EmployeeSettingsTile,
@@ -111,7 +110,10 @@ export function EmployeeSettingsDialog({
             }`}
           >
             {active ? (
-              <EmployeeSettingsEditor tile={active} />
+              <EmployeeSettingsEditor
+                tile={active}
+                onNavigateAway={() => handleOpenChange(false)}
+              />
             ) : tiles.length === 0 ? (
               <p className="rounded-lg border border-border bg-muted/30 px-3 py-6 text-center text-sm text-muted-foreground">
                 {t("empty")}
@@ -167,7 +169,13 @@ export function EmployeeSettingsDialog({
   );
 }
 
-function EmployeeSettingsEditor({ tile }: { tile: EmployeeSettingsTile }) {
+function EmployeeSettingsEditor({
+  tile,
+  onNavigateAway,
+}: {
+  tile: EmployeeSettingsTile;
+  onNavigateAway: () => void;
+}) {
   const t = useTranslations("pages.drivers.employeeSettings");
   const label = t(`tiles.${tile.key}`);
 
@@ -180,14 +188,24 @@ function EmployeeSettingsEditor({ tile }: { tile: EmployeeSettingsTile }) {
           subtitle={t("embeddedHint")}
         />
       );
-    case "serviceTypes":
-      return <ServiceTypesPanel />;
-    case "attendance":
-      return <AttendanceSettingsPanel />;
     case "vehicleTypes":
       return <VehicleTypesPanel />;
-    case "driverFields":
-      return <DriverFieldsSettingsPanel />;
+    case "link":
+      return (
+        <div className="flex flex-col items-start gap-3 rounded-xl border border-border bg-muted/20 p-4">
+          <p className="max-w-prose text-sm text-muted-foreground">
+            {t(tile.view.descriptionKey)}
+          </p>
+          <Link
+            href={tile.href}
+            onClick={() => onNavigateAway()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/15"
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden />
+            {t("openPage")}
+          </Link>
+        </div>
+      );
     case "clients":
       return <PayrollClientsPanel title={label} subtitle={t("embeddedHint")} showActions={false} />;
     default: {

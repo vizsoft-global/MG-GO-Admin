@@ -777,7 +777,12 @@ const EMPLOYEE_CATALOG: Record<string, string> = {
   employee_sections: COLLECTIONS.employeeSections,
   nationality_categories: COLLECTIONS.nationalityCategories,
   bank_codes: COLLECTIONS.bankCodes,
+  job_positions: COLLECTIONS.jobPositions,
   sponsorships: COLLECTIONS.sponsorships,
+  hiring_types: COLLECTIONS.hiringTypes,
+  job_end_descriptions: COLLECTIONS.jobEndDescriptions,
+  nationalities: COLLECTIONS.nationalities,
+  payment_currencies: COLLECTIONS.paymentCurrencies,
 };
 
 /** `admin_upsert_employee_catalog` — HR catalogs. Gate is `drivers.manage`. */
@@ -789,8 +794,22 @@ export const adminUpsertEmployeeCatalog = onCall(async (request) => {
   const collection = EMPLOYEE_CATALOG[kind];
   if (!collection) throw new HttpsError("invalid-argument", "invalid_kind");
 
-  const key = readString(data, "key").toLowerCase();
-  if (!key || !SLUG_KEY_RE.test(key)) throw new HttpsError("invalid-argument", "invalid_key");
+  /**
+   * Two of these catalogs key on an ISO code, not a slug: `drivers.nationality`
+   * stores `KW` and `bank_details.currency` stores `KWD`. Lowercasing those would
+   * write a key no reader matches, so the ISO kinds keep their case and are
+   * validated against the code's own shape.
+   */
+  const isoKind = kind === "nationalities" || kind === "payment_currencies";
+  const key = isoKind
+    ? (readString(data, "key") || "").trim().toUpperCase()
+    : (readString(data, "key") || "").trim().toLowerCase();
+  const keyPattern = isoKind
+    ? kind === "nationalities"
+      ? /^[A-Z]{2}$/
+      : /^[A-Z]{3}$/
+    : SLUG_KEY_RE;
+  if (!key || !keyPattern.test(key)) throw new HttpsError("invalid-argument", "invalid_key");
   const labelEn = readString(data, "labelEn") || readString(data, "label");
   if (!labelEn) throw new HttpsError("invalid-argument", "missing_fields");
 

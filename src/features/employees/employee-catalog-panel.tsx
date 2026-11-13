@@ -23,7 +23,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { catalogKeyFromLabel, CATALOG_KEY_RE, type EmployeeCatalogKind, type EmployeeCatalogRow } from "./employee-catalogs";
+import {
+  ISO_KEY_KINDS,
+  catalogKeyFromLabel,
+  catalogKeyReForKind,
+  normalizeCatalogKey,
+  type EmployeeCatalogKind,
+  type EmployeeCatalogRow,
+} from "./employee-catalogs";
 import { deleteEmployeeCatalog, upsertEmployeeCatalog } from "./employee-catalogs-actions";
 import { useEmployeeCatalog } from "./use-employee-catalogs";
 import { SponsorshipImportDialog } from "./sponsorship-import-dialog";
@@ -111,8 +118,8 @@ export function EmployeeCatalogPanel({
   };
 
   const save = async () => {
-    const resolvedKey = editing?.key || catalogKeyFromLabel(labelEn) || key;
-    if (!CATALOG_KEY_RE.test(resolvedKey) || !labelEn.trim()) {
+    const resolvedKey = editing?.key || normalizeCatalogKey(kind, key || labelEn);
+    if (!catalogKeyReForKind(kind).test(resolvedKey) || !labelEn.trim()) {
       toast.error(t("invalid"));
       return;
     }
@@ -257,7 +264,11 @@ export function EmployeeCatalogPanel({
                 value={labelEn}
                 onChange={(event) => {
                   setLabelEn(event.target.value);
-                  if (!editing) setKey(catalogKeyFromLabel(event.target.value));
+                  // An ISO-key catalog cannot derive `KW` from "Kuwait", so the
+                  // operator types the code and the label never fills it.
+                  if (!editing && !ISO_KEY_KINDS.has(kind)) {
+                    setKey(catalogKeyFromLabel(event.target.value));
+                  }
                 }}
               />
             </div>
@@ -277,7 +288,7 @@ export function EmployeeCatalogPanel({
                 className="h-9 font-mono"
                 value={key}
                 disabled={Boolean(editing)}
-                onChange={(event) => setKey(event.target.value.toLowerCase())}
+                onChange={(event) => setKey(normalizeCatalogKey(kind, event.target.value))}
               />
             </div>
             {isSponsorships ? (

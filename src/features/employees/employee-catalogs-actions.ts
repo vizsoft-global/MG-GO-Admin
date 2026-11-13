@@ -19,8 +19,9 @@ import {
   type SponsorshipLogoError,
 } from "./sponsorship-logo";
 import {
-  CATALOG_KEY_RE,
+  catalogKeyReForKind,
   mergeCatalogRows,
+  normalizeCatalogKey,
   parseCatalogRow,
   seedsForKind,
   type EmployeeCatalogKind,
@@ -34,6 +35,10 @@ const KIND_COLLECTION: Record<EmployeeCatalogKind, string> = {
   bank_codes: COLLECTIONS.bankCodes,
   job_positions: COLLECTIONS.jobPositions,
   sponsorships: COLLECTIONS.sponsorships,
+  hiring_types: COLLECTIONS.hiringTypes,
+  job_end_descriptions: COLLECTIONS.jobEndDescriptions,
+  nationalities: COLLECTIONS.nationalities,
+  payment_currencies: COLLECTIONS.paymentCurrencies,
 };
 
 export type EmployeeCatalogError =
@@ -104,10 +109,9 @@ export async function upsertEmployeeCatalog(input: {
   } catch {
     return { error: "not_authorized" };
   }
-  const key = input.key.trim().toLowerCase();
+    const key = normalizeCatalogKey(input.kind, input.key);
   const labelEn = input.labelEn.trim();
-  if (!CATALOG_KEY_RE.test(key)) return { error: "invalid_key" };
-  if (!labelEn) return { error: "missing_fields" };
+  if (!catalogKeyReForKind(input.kind).test(key)) return { error: "invalid_key" };  if (!labelEn) return { error: "missing_fields" };
 
   const { error } = await callAdminFunction("admin_upsert_employee_catalog", {
     kind: input.kind,
@@ -163,7 +167,7 @@ export async function deleteEmployeeCatalog(input: {
   const db = await staffDb();
   if (!db) return { error: "not_configured" };
 
-  const key = input.key.trim().toLowerCase();
+  const key = normalizeCatalogKey(input.kind, input.key);
   const ref = db.collection(KIND_COLLECTION[input.kind]).doc(key);
   const snap = await ref.get();
   if (!snap.exists) {
@@ -198,6 +202,10 @@ function revalidateCatalogPages(): void {
   revalidatePath("/settings/bank-codes");
   revalidatePath("/settings/job-positions");
   revalidatePath("/settings/sponsorships");
+  revalidatePath("/settings/hiring-types");
+  revalidatePath("/settings/job-end-descriptions");
+  revalidatePath("/settings/nationalities");
+  revalidatePath("/settings/payment-currencies");
   revalidatePath("/payroll");
   revalidatePath("/payroll/hr");
   revalidatePath("/payroll-hub");

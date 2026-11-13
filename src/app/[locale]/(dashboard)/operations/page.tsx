@@ -100,6 +100,20 @@ const MANAGE_TILES: OpsTile[] = [
     tint: HUB_GLYPH_TINTS.gold,
     permission: "earnings.view",
   },
+  /**
+   * The client catalog. The client review asks that a client added in Operations
+   * Hub appears on the Employee Client field without further action, and this is
+   * the one surface that can add one: the Employee Client dropdown is an open
+   * list over `payroll_clients`, and its read is `staleTime: 0` with a refetch on
+   * mount, so a row created here is in the dropdown on the next open.
+   */
+  {
+    key: "clients",
+    href: "/settings/payroll-clients",
+    icon: UsersRound,
+    tint: HUB_GLYPH_TINTS.rose,
+    permission: "drivers.manage",
+  },
 ];
 
 /**
