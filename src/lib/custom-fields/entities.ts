@@ -28,6 +28,7 @@ export type CustomFieldEntity = {
   hasListColumns: boolean;
 };
 
+
 export const CUSTOM_FIELD_ENTITIES: readonly CustomFieldEntity[] = [
   {
     key: DRIVER_ENTITY_TYPE,
@@ -43,7 +44,7 @@ export const CUSTOM_FIELD_ENTITIES: readonly CustomFieldEntity[] = [
     collection: "partners",
     viewPermission: "partners.view",
     managePermission: "partners.manage",
-    hasListColumns: false,
+    hasListColumns: true,
   },
   {
     key: "restaurant",

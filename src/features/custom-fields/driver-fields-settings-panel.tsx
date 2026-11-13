@@ -33,8 +33,7 @@ import { SearchSelect } from "@/components/ui/search-select";
 import {
   CUSTOM_FIELD_ENTITIES,
   isCustomFieldEntity,
-} from "@/lib/custom-fields/entities";
-import {
+} from "@/lib/custom-fields/entities";import {
   CUSTOM_FIELD_TYPES,
   DRIVER_ENTITY_TYPE,
   type CustomFieldDefinition,
@@ -288,7 +287,7 @@ export function DriverFieldsSettingsPanel({ initialEntity }: { initialEntity?: s
         a single flat list — Clients needs its own set of extra columns.
       */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        {CUSTOM_FIELD_ENTITIES.map((entity) => (
+        {CUSTOM_FIELD_ENTITIES.filter((entity) => entity.hasListColumns).map((entity) => (
           <ToggleChip
             key={entity.key}
             selected={entityType === entity.key}
