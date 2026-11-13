@@ -149,7 +149,9 @@ export function FleetDriverDetails({
       }
     },
     enabled: Boolean(driverId),
-    refetchInterval: 10_000,
+    // A rider finishes an order every several minutes; asking every ten seconds
+    // was six server actions a minute for a list that had almost never changed.
+    refetchInterval: 30_000,
   });
 
   if (collapsed) {

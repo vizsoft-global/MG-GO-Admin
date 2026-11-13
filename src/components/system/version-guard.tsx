@@ -8,7 +8,13 @@ import { queryKeys } from "@/lib/query/query-keys";
 /** Inlined at build time — must differ from /api/build-id after a new deploy. */
 const CLIENT_BUILD_ID = process.env.NEXT_PUBLIC_BUILD_ID ?? DEV_BUILD_ID;
 
-const POLL_MS = 15_000;
+/**
+ * A deploy happens a few times a day and the tab asks again the moment it is
+ * looked at (`refetchOnWindowFocus`), so once a minute is enough. Every poll is
+ * an uncacheable function run: at 15 seconds this one question was the third
+ * busiest thing the panel's servers did.
+ */
+const POLL_MS = 60_000;
 
 async function fetchBuildId(): Promise<{ buildId: string }> {
   const res = await fetch(`/api/build-id?t=${Date.now()}`, {
