@@ -17,7 +17,7 @@ import {
   turnoverRate,
 } from "../core/operations-dashboard-math";
 import { requireStaff, scopedProjectKey } from "../core/staff";
-import { dataOf, pickText, type Dict } from "./_shared";
+import { dataOf, pickObject, pickText, type Dict } from "./_shared";
 
 type DriverRow = {
   id: string;
@@ -36,6 +36,12 @@ type DriverRow = {
   designation: string;
   nationalityCountry: string;
   nationalityCategory: string;
+  /**
+   * `drivers.custom_fields`, unfiltered. A custom column on Rider Operations is a
+   * heading over one of these keys, so the roster has to carry them or the
+   * column would print `—` in every cell with nothing to explain why.
+   */
+  customFields: Dict;
 };
 
 type LeaveRow = {
@@ -190,6 +196,7 @@ function parseDriver(id: string, data: Dict): DriverRow {
     designation: text(data["job_position"]),
     nationalityCountry: rawCountry || "unassigned",
     nationalityCategory: rawCategory || "unassigned",
+    customFields: pickObject(data, "custom_fields") ?? {},
   };
 }
 
@@ -748,6 +755,7 @@ function rosterRows(
       nationalityCategory: driver.nationalityCategory,
     };
     if (includePhone) row.phone = driver.phone;
+    if (Object.keys(driver.customFields).length > 0) row.customFields = driver.customFields;
     rows.push(row);
   }
   rows.sort((left, right) => String(left.employeeId).localeCompare(String(right.employeeId)) || String(left.name).localeCompare(String(right.name)));
@@ -773,6 +781,7 @@ async function loadDashboard(from: string, to = from) {
         "job_position",
         "nationality",
         "nationality_category_keys",
+        "custom_fields",
       ).get(),
     ),
     readOrFail("leave_plans_read_failed", () =>

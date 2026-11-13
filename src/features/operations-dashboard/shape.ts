@@ -106,6 +106,8 @@ export type RosterRow = {
   employeeStatus?: string;
   nationalityCountry?: string;
   nationalityCategory?: string;
+  /** `drivers.custom_fields`; the source of a custom column. */
+  customFields?: Record<string, unknown>;
 };
 
 export const DASHBOARD_PERIODS = ["today", "yesterday", "thisWeek", "last7", "thisMonth", "lastMonth", "custom"] as const;
@@ -168,6 +170,13 @@ export type CustomColumnDef = {
   label: string;
   field: string;
   visible: boolean;
+  /**
+   * A base field's operator-chosen heading. Kept apart from `label` because
+   * `label` on a base field holds the English default (older documents), and
+   * honouring it would print an English heading on the Arabic panel. Empty means
+   * "use the app's translated label".
+   */
+  customLabel?: string;
 };
 
 export type CustomChartDef = {
