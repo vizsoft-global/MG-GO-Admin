@@ -122,8 +122,9 @@ export function TableToolbar({
         {controls.groupBy ? (
           <Select
             items={[
-              { value: "none", label: t("groupNone") },
-              ...groups.map((column) => ({ value: column.id, label: column.label })),
+              // The closed control reads "Group by: Zone", not a bare "Zone" or "None".
+              { value: "none", label: `${t("groupBy")}: ${t("groupNone")}` },
+              ...groups.map((column) => ({ value: column.id, label: `${t("groupBy")}: ${column.label}` })),
             ]}
             value={prefs.groupBy || "none"}
             onValueChange={(value) => {

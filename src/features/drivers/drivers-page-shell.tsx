@@ -1287,19 +1287,20 @@ function DriversPageContent() {
                           <CompanyNameCell row={driver} unassigned={t("companyUnassigned")} />
                         </VisibleTableCell>
                         <VisibleTableCell columnId="name" isVisible={isColumnVisible}>
-                          <div className="min-w-0">
-                            <span className="inline-flex min-w-0 items-center gap-1.5">
-                              <TableNameCell name={driver.full_name} />
-                              <DriverLevelBadge level={levelIndex.data?.get(driver.id)?.level} />
-                            </span>
+                          {/* The name is the link. A "View details" line under every name
+                              made each row half as tall again for a link the row click
+                              already is; one line per rider, the full name on hover. */}
+                          <span className="inline-flex max-w-[16rem] min-w-0 items-center gap-1.5">
                             <Link
                               href={driverDetailHref(driver.id, tabFilter)}
-                              className="mt-0.5 block text-xs text-primary hover:underline"
+                              aria-label={`${t("viewDriver")}: ${driver.full_name ?? ""}`}
+                              className="min-w-0 truncate rounded-sm hover:underline [&_span]:truncate [&_span]:whitespace-nowrap"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              {t("viewDriver")}
+                              <TableNameCell name={driver.full_name} />
                             </Link>
-                          </div>
+                            <DriverLevelBadge level={levelIndex.data?.get(driver.id)?.level} />
+                          </span>
                         </VisibleTableCell>
                         <VisibleTableCell
                           columnId="phone"
