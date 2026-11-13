@@ -78,9 +78,25 @@ const COMPACT_ROWS_PER_FLUSH = 200;
 /**
  * SQLite buffer safety caps. A capped buffer stops accepting new lines instead of
  * deleting old ones; the caller sends the affected batch to Firestore instead.
+ *
+ * The buffer holds the hour in progress for the whole fleet: a finished hour
+ * moves to R2 within minutes, and a rider who moves all hour leaves about 100 KB.
+ * The byte cap used to be 8 MB, which a busy fleet reached about half way through
+ * every hour. From then until the hour ended, every fix of every rider was
+ * refused here and written to Firestore as a history document instead: a write
+ * burst from half past to the hour, day and night, about a third of all the
+ * database's writes. The cap is a guard against a runaway, not a budget. 256 MB
+ * is the fleet several times over, and a small corner of the 10 GB a
+ * SQLite-backed Durable Object may hold.
  */
-export const BUFFER_MAX_BYTES = 8_000_000;
+export const BUFFER_MAX_BYTES = 256_000_000;
 export const BUFFER_MAX_ROWS = 50_000;
+/**
+ * One rider-hour is one row, and SQLite in a Durable Object refuses a row or a
+ * string above 2 MB. A row that reaches this stops growing (its rider falls back
+ * to Firestore until the hour is compacted) instead of failing the insert.
+ */
+export const BUFFER_ROW_MAX_BYTES = 1_500_000;
 
 /** An uncompacted hour older than this means compaction is not keeping up. */
 export const BUFFER_STALE_MS = 7_200_000;
@@ -117,7 +133,7 @@ export type BufferStatus = {
   ageMs: number;
 };
 
-export type BufferLimits = { maxBytes: number; maxRows: number };
+export type BufferLimits = { maxBytes: number; maxRows: number; maxRowBytes: number };
 
 function byteLength(text: string): number {
   return new TextEncoder().encode(text).byteLength;
@@ -238,6 +254,7 @@ export class GpsArchive {
     this.limits = {
       maxBytes: limits.maxBytes ?? BUFFER_MAX_BYTES,
       maxRows: limits.maxRows ?? BUFFER_MAX_ROWS,
+      maxRowBytes: limits.maxRowBytes ?? BUFFER_ROW_MAX_BYTES,
     };
   }
 
@@ -643,18 +660,20 @@ export class GpsArchive {
           const text = lines.join("\n") + "\n";
           const bytes = byteLength(text);
           const key = `${driverId}|${bucketKey}`;
-          const exists =
-            this.sql
-              .exec(
-                "SELECT 1 FROM buffer WHERE driver_id = ? AND day = ? AND hour = ? LIMIT 1",
-                driverId,
-                day,
-                hour,
-              )
-              .toArray().length > 0;
+          const existing = this.sql
+            .exec(
+              "SELECT LENGTH(CAST(points AS BLOB)) AS bytes FROM buffer WHERE driver_id = ? AND day = ? AND hour = ? LIMIT 1",
+              driverId,
+              day,
+              hour,
+            )
+            .toArray()[0];
+          const exists = existing !== undefined;
+          const rowBytes = Number(existing?.bytes ?? 0);
           if (
             (!exists && usage.rows + 1 > this.limits.maxRows) ||
-            usage.bytes + bytes > this.limits.maxBytes
+            usage.bytes + bytes > this.limits.maxBytes ||
+            rowBytes + bytes > this.limits.maxRowBytes
           ) {
             capped = true;
             continue;
@@ -755,9 +774,11 @@ export class GpsArchive {
     if (!this.bucket) return 0;
     const { day, hour } = kuwaitParts(nowMs);
     const current = `${day}T${hour}`;
-    const rows = this.sql
+    // Keys first, then one rider-hour's points at a time: with the larger buffer
+    // a single pass of whole rows could be tens of megabytes held at once.
+    const due = this.sql
       .exec(
-        `SELECT driver_id, day, hour, points, n FROM buffer
+        `SELECT driver_id, day, hour FROM buffer
          WHERE (day || 'T' || hour) < ? ORDER BY day, hour LIMIT ?`,
         current,
         COMPACT_ROWS_PER_FLUSH,
@@ -765,10 +786,19 @@ export class GpsArchive {
       .toArray();
 
     let written = 0;
-    for (const row of rows) {
-      const driverId = String(row.driver_id);
-      const rowDay = String(row.day);
-      const rowHour = String(row.hour);
+    for (const dueRow of due) {
+      const driverId = String(dueRow.driver_id);
+      const rowDay = String(dueRow.day);
+      const rowHour = String(dueRow.hour);
+      const row = this.sql
+        .exec(
+          "SELECT points, n FROM buffer WHERE driver_id = ? AND day = ? AND hour = ? LIMIT 1",
+          driverId,
+          rowDay,
+          rowHour,
+        )
+        .toArray()[0];
+      if (!row) continue;
       const key = riderHourKey(driverId, rowDay, rowHour);
       const index = this.sql
         .exec("SELECT * FROM day_index WHERE driver_id = ? AND day = ?", driverId, rowDay)

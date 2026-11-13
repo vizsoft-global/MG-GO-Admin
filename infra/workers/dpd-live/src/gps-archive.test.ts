@@ -317,3 +317,67 @@ test("bufferStatus reports an old uncompacted hour as stale", () => {
   assert.ok(status.bytes > 0);
   assert.ok(status.ageMs > BUFFER_STALE_MS, `age ${status.ageMs}`);
 });
+
+/** One hour of a busy evening: every rider moving, one fix every five seconds. */
+function busyHour(archive: GpsArchive, riders: number, fixes: number): { refused: number; capped: boolean } {
+  let refused = 0;
+  let capped = false;
+  for (let rider = 0; rider < riders; rider += 1) {
+    const points = Array.from({ length: fixes }, (_, i) =>
+      point(BASE + i * 5_000, 29.37 + rider * 0.0001 + i * 0.00001, 47.97 + i * 0.00001),
+    );
+    const result = archive.record(`rider-${rider}`, points, true);
+    if (!result.accepted) refused += 1;
+    else if (archive.persistBuffers().capped) capped = true;
+  }
+  return { refused, capped };
+}
+
+test("the default byte cap holds a busy fleet's whole hour", () => {
+  // 300 riders moving for an hour is about 25 MB of lines.
+  const archive = new GpsArchive(memorySql(), memoryBucket());
+  const hour = busyHour(archive, 300, 700);
+  assert.deepEqual(hour, { refused: 0, capped: false });
+  assert.equal(archive.bufferStatus(BASE + 3_500_000).capped, false);
+  assert.equal(archive.bufferedPoints("rider-299", DAY).length, 700);
+});
+
+test("the old 8 MB cap turned that same hour over to Firestore part way through", () => {
+  const archive = new GpsArchive(memorySql(), memoryBucket(), { maxBytes: 8_000_000 });
+  const hour = busyHour(archive, 300, 700);
+  assert.ok(hour.refused > 150, `only ${hour.refused} riders refused`);
+});
+
+test("a rider-hour stops growing at the row cap instead of failing the insert", () => {
+  const first = [point(BASE, 29.37, 47.97)];
+  const size = JSON.stringify(first[0]).length + 1;
+  const archive = new GpsArchive(memorySql(), memoryBucket(), { maxRowBytes: size * 2 });
+  archive.record("r1", first, true);
+  assert.equal(archive.persistBuffers().capped, false);
+  // Same coordinates, so every line is the same length as the first.
+  archive.record("r1", [point(BASE + 5_000, 29.37, 47.97)], true);
+  assert.equal(archive.persistBuffers().capped, false);
+  archive.record("r1", [point(BASE + 10_000, 29.37, 47.97)], true);
+  assert.equal(archive.persistBuffers().capped, true, "the third line would pass the row cap");
+  // Another rider is not affected by r1's full row.
+  archive.record("r2", [point(BASE, 29.3, 47.9)], true);
+  assert.equal(archive.persistBuffers().capped, true, "r1's refused line is still waiting");
+  assert.equal(archive.bufferedPoints("r2", DAY).length, 1);
+});
+
+test("compaction moves every finished rider-hour, a pass at a time", async () => {
+  const bucket = memoryBucket();
+  const archive = new GpsArchive(memorySql(), bucket);
+  for (let rider = 0; rider < 450; rider += 1) {
+    archive.record(`rider-${rider}`, [point(BASE, 29.37, 47.97), point(BASE + 5_000, 29.3701, 47.97)], true);
+  }
+  archive.persistBuffers();
+  const after = BASE + 3_600_000 + 1_000;
+  assert.equal(await archive.compact(after), 200);
+  assert.equal(await archive.compact(after), 200);
+  assert.equal(await archive.compact(after), 50);
+  assert.equal(await archive.compact(after), 0);
+  assert.equal(archive.bufferStatus(after).rows, 0);
+  const stored = await readObject(bucket, riderHourKey("rider-449", DAY, "09"));
+  assert.deepEqual(stored.map((p) => p.t), [BASE, BASE + 5_000]);
+});
