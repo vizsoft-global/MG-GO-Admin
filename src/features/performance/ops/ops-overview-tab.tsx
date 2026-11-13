@@ -5,14 +5,13 @@ import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { LAYOUT } from "@/components/app/layout-spacing";
 import { downloadCsv, toCsv } from "../performance-ops-table";
 import {
-  companyLabel,
   formatDelta,
   formatDpd,
   formatInt,
   formatMinutesCard,
+  formatOpsMetricValue,
   formatPct,
   formatUtr,
-  formatOpsMetricValue,
   partnerLabel,
   vehicleLabel,
 } from "../performance-ops-format";
@@ -22,11 +21,21 @@ import {
   formatOpsTrendLabel,
   isChartableDimKey,
   OPS_METRIC_COLOR,
+  storeChartValue,
   type OpsChartMetric,
   type OpsGranularity,
 } from "../performance-ops-formulas";
 import type { OpsDimRow, OpsSnapshot } from "../performance-ops-types";
-import { OpsChartCard, OpsDonut, OpsKpiDelta, OpsLineChart, OpsRankedBars, opsChartTitle } from "./ops-charts";
+import {
+  OpsChartCard,
+  OpsDonut,
+  OpsKpiDelta,
+  OpsLineChart,
+  OpsRankedBars,
+  OpsVBars,
+  OpsVBarsLabels,
+  opsChartTitle,
+} from "./ops-charts";
 import { cn } from "@/lib/utils";
 
 /**
@@ -69,39 +78,20 @@ export function OpsOverviewTab({
   const seriesName = t(`viewBy.${metric}`);
   const color = OPS_METRIC_COLOR[metric];
   const series = [{ key: "value", name: seriesName, color }];
+  const fmt = (value: number) => formatOpsMetricValue(metric, value);
 
+  /**
+   * The reference Overview strip, in its own order. Previously eleven cards: the
+   * working-hours pair and Target Efficiency belong to the Riders and DPD tabs,
+   * and a strip that grows per tab makes the same screen look different every
+   * time a tab is pressed.
+   */
   const items = [
     {
       label: t("kpi.orders"),
       value: formatInt(k.orders),
       caption: <OpsKpiDelta {...formatDelta(k.orders, k.orders_prev)} />,
     },
-    {
-      label: t("kpi.overallDpd"),
-      value: formatDpd(k.overall_dpd),
-      caption: <OpsKpiDelta {...formatDelta(k.overall_dpd, k.overall_dpd_prev)} />,
-      accent: "primary" as const,
-    },
-    {
-      label: t("kpi.avgDpdEff"),
-      value: formatPct(k.avg_dpd_eff),
-      caption: <OpsKpiDelta {...formatDelta(k.avg_dpd_eff, k.avg_dpd_eff_prev)} />,
-    },
-    {
-      label: t("kpi.avgTgtEff"),
-      value: formatPct(k.avg_tgt_eff),
-      caption: <OpsKpiDelta {...formatDelta(k.avg_tgt_eff, k.avg_tgt_eff_prev)} />,
-      accent: "success" as const,
-    },
-    { label: t("kpi.utr"), value: formatUtr(k.utr), accent: "primary" as const },
-    { label: t("kpi.workingHours"), value: formatDpd(k.working_hours) },
-    /**
-     * The hours the ratio excludes. Shown, not hidden: this is the difference
-     * between the KPI and a fleet-wide total, and it is exactly the number the
-     * client asked us to account for.
-     */
-    { label: t("kpi.hoursExcluded"), value: formatDpd(k.working_hours_excluded) },
-    { label: t("kpi.avgDelivery"), value: formatMinutesCard(k.avg_delivery_min) },
     {
       label: t("kpi.riders"),
       value: formatInt(k.riders),
@@ -112,14 +102,18 @@ export function OpsOverviewTab({
       value: formatInt(k.active),
       caption: <OpsKpiDelta {...formatDelta(k.active, k.active_prev)} />,
     },
-    /**
-     * The reference dashboard's eighth card. "Restaurants Count" is the number of
-     * stores the scoped riders actually delivered for, which is what an operator
-     * reads it as — not the size of the restaurant catalogue.
-     */
+    { label: t("kpi.restaurants"), value: formatInt(data.stores.length) },
     {
-      label: t("kpi.restaurants"),
-      value: formatInt(data.stores.length),
+      label: t("kpi.overallDpd"),
+      value: formatDpd(k.overall_dpd),
+      caption: <OpsKpiDelta {...formatDelta(k.overall_dpd, k.overall_dpd_prev)} />,
+    },
+    { label: t("kpi.utr"), value: formatUtr(k.utr), accent: "primary" as const },
+    { label: t("kpi.avgDelivery"), value: formatMinutesCard(k.avg_delivery_min) },
+    {
+      label: t("kpi.avgDpdEff"),
+      value: formatPct(k.avg_dpd_eff),
+      caption: <OpsKpiDelta {...formatDelta(k.avg_dpd_eff, k.avg_dpd_eff_prev)} />,
     },
   ];
 
@@ -127,6 +121,41 @@ export function OpsOverviewTab({
     bucket: formatOpsTrendLabel(p.bucket, granularity),
     value: dimMetricValue(p, metric),
   }));
+
+  const nationality = rankedRows(data.by_nationality, (r) => countryLabel(r.key), metric);
+  const zones = rankedRows(data.by_zone, (r) => r.label || r.key, metric);
+  const vehicles = rankedRows(data.by_vehicle, (r) => vehicleLabel(r.key), metric);
+  const clients = rankedRows(
+    data.by_partner,
+    (r) => r.label || (partnerLabel(r.key) === "—" ? r.key : partnerLabel(r.key)),
+    metric,
+  );
+
+  /**
+   * Top / Bottom row.
+   *
+   * The reference ranks restaurants when there are at least three to rank, and
+   * falls back to zones otherwise — a Keeta-only scope has one pool store, so a
+   * "top restaurants" list would be a single row.
+   */
+  const storeRows = data.stores
+    .filter((s) => Boolean(s.store_name) && s.working_days > 0)
+    .map((s) => ({
+      key: s.store_id ?? s.store_name ?? "—",
+      label: s.store_name ?? "—",
+      value: storeChartValue(s, metric, data.kpis.overall_dpd, data.target_dpd),
+    }))
+    .filter((row): row is { key: string; label: string; value: number } =>
+      typeof row.value === "number" && Number.isFinite(row.value),
+    )
+    .sort((left, right) => right.value - left.value);
+  const ranked =
+    storeRows.length >= 3
+      ? { unit: "stores" as const, rows: storeRows }
+      : { unit: "zones" as const, rows: zones };
+
+  const topRows = ranked.rows.slice(0, 8);
+  const bottomRows = ranked.rows.slice(-8).reverse();
 
   return (
     <div className={cn("flex flex-col", LAYOUT.stackGap)}>
@@ -136,7 +165,9 @@ export function OpsOverviewTab({
         </p>
       ) : null}
       <KpiGrid items={items} compact />
-      <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
+
+      {/* Trend and nationality share a row, wider on the trend — the reference's 1.25fr / 1fr. */}
+      <div className="grid gap-2 lg:grid-cols-[1.25fr_1fr] lg:items-stretch">
         <OpsChartCard
           title={opsChartTitle(t, "trend", seriesName)}
           onExport={() =>
@@ -154,106 +185,95 @@ export function OpsOverviewTab({
           <OpsLineChart data={trend} xKey="bucket" series={series} metric={metric} />
         </OpsChartCard>
         <OpsChartCard
+          title={opsChartTitle(t, "nationality", seriesName)}
+          onExport={() =>
+            downloadCsv(
+              "ops-nationality",
+              toCsv(["nationality", metric], nationality.map((r) => [r.label, r.value])),
+            )
+          }
+          empty={nationality.length === 0}
+          emptyTitle={t("emptyChart")}
+        >
+          <OpsRankedBars rows={nationality} format={fmt} />
+        </OpsChartCard>
+      </div>
+
+      <div className="grid gap-2 lg:grid-cols-3 lg:items-stretch">
+        <OpsChartCard
+          title={opsChartTitle(t, "zone", seriesName)}
+          onExport={() =>
+            downloadCsv("ops-zone", toCsv(["zone", metric], zones.map((r) => [r.label, r.value])))
+          }
+          empty={zones.length === 0}
+          emptyTitle={t("emptyChart")}
+        >
+          <OpsRankedBars rows={zones} format={fmt} />
+        </OpsChartCard>
+        <OpsChartCard
           title={opsChartTitle(t, "vehicle", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-vehicle",
-              toCsv(
-                ["vehicle", metric],
-                data.by_vehicle.map((r) => [vehicleLabel(r.key), dimMetricValue(r, metric)]),
-              ),
+              toCsv(["vehicle", metric], vehicles.map((r) => [r.label, r.value])),
             )
           }
-          empty={data.by_vehicle.length === 0}
+          empty={vehicles.length === 0}
           emptyTitle={t("emptyVehicle")}
         >
-          <OpsDonut
-            rows={rankedRows(data.by_vehicle, (r) => vehicleLabel(r.key), metric)}
-            format={(value) => formatOpsMetricValue(metric, value)}
-          />
-        </OpsChartCard>
-        <OpsChartCard
-          title={opsChartTitle(t, "zone", seriesName)}
-          onExport={() =>
-            downloadCsv(
-              "ops-zone",
-              toCsv(
-                ["zone", metric],
-                data.by_zone.filter((r) => isChartableDimKey(r.key)).map((r) => [r.label || r.key, dimMetricValue(r, metric)]),
-              ),
-            )
-          }
-          empty={data.by_zone.length === 0}
-          emptyTitle={t("emptyChart")}
-        >
-          <OpsRankedBars
-            rows={rankedRows(data.by_zone, (r) => r.label || r.key, metric)}
-            format={(value) => formatOpsMetricValue(metric, value)}
-          />
+          <OpsDonut rows={vehicles} format={fmt} />
         </OpsChartCard>
         <OpsChartCard
           title={opsChartTitle(t, "partner", seriesName)}
           onExport={() =>
             downloadCsv(
               "ops-partner",
-              toCsv(
-                ["partner", metric],
-                data.by_partner.map((r) => [
-                  r.label || (partnerLabel(r.key) === "—" ? r.key : partnerLabel(r.key)),
-                  dimMetricValue(r, metric),
-                ]),
-              ),
+              toCsv(["client", metric], clients.map((r) => [r.label, r.value])),
             )
           }
-          empty={data.by_partner.length === 0}
+          empty={clients.length === 0}
           emptyTitle={t("emptyChart")}
         >
-          <OpsRankedBars
-            rows={rankedRows(
-              data.by_partner,
-              (r) => r.label || (partnerLabel(r.key) === "—" ? r.key : partnerLabel(r.key)),
-              metric,
-            )}
-            format={(value) => formatOpsMetricValue(metric, value)}
-          />
+          <div className="flex flex-col gap-1">
+            <OpsVBars rows={clients} format={fmt} />
+            <OpsVBarsLabels rows={clients} />
+          </div>
         </OpsChartCard>
+      </div>
+
+      {/* Top / bottom restaurants (or zones), green vs red — a verdict, not a client tint. */}
+      <div className="grid gap-2 lg:grid-cols-2 lg:items-stretch">
         <OpsChartCard
-          title={opsChartTitle(t, "nationality", seriesName)}
+          title={t(`chart.top${ranked.unit === "stores" ? "Stores" : "Zones"}`, {
+            n: topRows.length,
+            metric: seriesName,
+          })}
           onExport={() =>
             downloadCsv(
-              "ops-nationality",
-              toCsv(
-                ["nationality", metric],
-                data.by_nationality.map((r) => [countryLabel(r.key), dimMetricValue(r, metric)]),
-              ),
+              `ops-top-${ranked.unit}`,
+              toCsv([ranked.unit === "stores" ? "Restaurant" : "Zone", metric], topRows.map((r) => [r.label, r.value])),
             )
           }
-          empty={data.by_nationality.length === 0}
+          empty={topRows.length === 0}
           emptyTitle={t("emptyChart")}
         >
-          <OpsRankedBars
-            rows={rankedRows(data.by_nationality, (r) => countryLabel(r.key), metric)}
-            format={(value) => formatOpsMetricValue(metric, value)}
-          />
+          <OpsRankedBars rows={topRows} format={fmt} />
         </OpsChartCard>
         <OpsChartCard
-          title={opsChartTitle(t, "company", seriesName)}
+          title={t(`chart.bottom${ranked.unit === "stores" ? "Stores" : "Zones"}`, {
+            n: bottomRows.length,
+            metric: seriesName,
+          })}
           onExport={() =>
             downloadCsv(
-              "ops-company",
-              toCsv(
-                ["company", metric],
-                data.by_company.map((r) => [companyLabel(r.key), dimMetricValue(r, metric)]),
-              ),
+              `ops-bottom-${ranked.unit}`,
+              toCsv([ranked.unit === "stores" ? "Restaurant" : "Zone", metric], bottomRows.map((r) => [r.label, r.value])),
             )
           }
-          empty={data.by_company.length === 0}
+          empty={bottomRows.length === 0}
           emptyTitle={t("emptyChart")}
         >
-          <OpsRankedBars
-            rows={rankedRows(data.by_company, (r) => companyLabel(r.key), metric)}
-            format={(value) => formatOpsMetricValue(metric, value)}
-          />
+          <OpsRankedBars rows={bottomRows} format={fmt} />
         </OpsChartCard>
       </div>
     </div>

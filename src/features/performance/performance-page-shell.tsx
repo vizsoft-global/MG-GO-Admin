@@ -447,7 +447,7 @@ export function PerformancePageShell() {
         ) : tab === "topbottom" ? (
           <OpsTopBottomTab data={data} metric={viewMetric} show={topBottomShow} />
         ) : (
-          <OpsOutsourceTab data={data} metric={viewMetric} granularity={granularity} />
+          <OpsOutsourceTab data={data} metric={viewMetric} />
         )}
       </div>
       </div>

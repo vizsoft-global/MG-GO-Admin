@@ -6,7 +6,6 @@ import { LAYOUT } from "@/components/app/layout-spacing";
 import {
   dimMetricValue,
   isChartableDimKey,
-  OPS_METRIC_COLOR,
   pairTopBottomAuto,
   pairTopBottomDisjoint,
   resolveTopBottomRequestedN,
@@ -15,9 +14,9 @@ import {
   type TopBottomShowSelection,
 } from "../performance-ops-formulas";
 import { downloadCsv, toCsv } from "../performance-ops-table";
-import { enrichOpsRider } from "../performance-ops-format";
-import type { OpsRiderView, OpsSnapshot } from "../performance-ops-types";
-import { OpsBarChart, OpsChartCard } from "./ops-charts";
+import { enrichOpsRider, formatOpsMetricValue } from "../performance-ops-format";
+import type { OpsSnapshot } from "../performance-ops-types";
+import { OpsChartCard, OpsRankedBars } from "./ops-charts";
 import { cn } from "@/lib/utils";
 
 export function OpsTopBottomTab({
@@ -106,19 +105,6 @@ export function OpsTopBottomTab({
     );
   }
 
-  function riderChart(rows: Array<OpsRiderView & { value: number }>) {
-    return rows.map((r) => ({
-      key: r.name,
-      value: r.value,
-      id: r.display_id,
-      nationality: r.nationality_label,
-      store: r.store_label,
-      vehicle: r.vehicle_label,
-      zone: r.zone ?? "—",
-      source: r.source,
-    }));
-  }
-
   const showRiderSection = auto ? requestedRiders > 0 : byRider.top.length > 0;
   const showStoreSection = auto ? requestedStores > 0 : byStore.top.length > 0;
   const showZoneSection = auto ? requestedZones > 0 : byZone.top.length > 0;
@@ -150,12 +136,9 @@ export function OpsTopBottomTab({
                 )
               }
             >
-              <OpsBarChart
-                data={riderChart(byRider.top)}
-                xKey="key"
-                series={[{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }]}
-                layout="horizontal"
-                metric={metric}
+              <OpsRankedBars
+                rows={byRider.top.map((r) => ({ key: r.name, label: r.name, value: r.value }))}
+                format={(value) => formatOpsMetricValue(metric, value)}
               />
             </OpsChartCard>
             {showRiderBottom ? (
@@ -171,12 +154,9 @@ export function OpsTopBottomTab({
                   )
                 }
               >
-                <OpsBarChart
-                  data={riderChart(byRider.bottom)}
-                  xKey="key"
-                  series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
-                  layout="horizontal"
-                  metric={metric}
+                <OpsRankedBars
+                  rows={byRider.bottom.map((r) => ({ key: r.name, label: r.name, value: r.value }))}
+                  format={(value) => formatOpsMetricValue(metric, value)}
                 />
               </OpsChartCard>
             ) : null}
@@ -206,12 +186,9 @@ export function OpsTopBottomTab({
                 )
               }
             >
-              <OpsBarChart
-                data={byStore.top.map((s) => ({ key: s.store_name ?? "—", value: s.value }))}
-                xKey="key"
-                series={[{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }]}
-                layout="horizontal"
-                metric={metric}
+              <OpsRankedBars
+                rows={byStore.top.map((s) => ({ key: s.store_name ?? "—", label: s.store_name ?? "—", value: s.value }))}
+                format={(value) => formatOpsMetricValue(metric, value)}
               />
             </OpsChartCard>
             {showStoreBottom ? (
@@ -227,12 +204,13 @@ export function OpsTopBottomTab({
                   )
                 }
               >
-                <OpsBarChart
-                  data={byStore.bottom.map((s) => ({ key: s.store_name ?? "—", value: s.value }))}
-                  xKey="key"
-                  series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
-                  layout="horizontal"
-                  metric={metric}
+                <OpsRankedBars
+                  rows={byStore.bottom.map((s) => ({
+                    key: s.store_name ?? "—",
+                    label: s.store_name ?? "—",
+                    value: s.value,
+                  }))}
+                  format={(value) => formatOpsMetricValue(metric, value)}
                 />
               </OpsChartCard>
             ) : null}
@@ -262,12 +240,9 @@ export function OpsTopBottomTab({
                 )
               }
             >
-              <OpsBarChart
-                data={byZone.top.map((z) => ({ key: z.label || z.key, value: z.value }))}
-                xKey="key"
-                series={[{ key: "value", name: seriesName, color: OPS_METRIC_COLOR[metric] }]}
-                layout="horizontal"
-                metric={metric}
+              <OpsRankedBars
+                rows={byZone.top.map((z) => ({ key: z.label || z.key, label: z.label || z.key, value: z.value }))}
+                format={(value) => formatOpsMetricValue(metric, value)}
               />
             </OpsChartCard>
             {showZoneBottom ? (
@@ -283,12 +258,13 @@ export function OpsTopBottomTab({
                   )
                 }
               >
-                <OpsBarChart
-                  data={byZone.bottom.map((z) => ({ key: z.label || z.key, value: z.value }))}
-                  xKey="key"
-                  series={[{ key: "value", name: seriesName, color: "#dc2626" }]}
-                  layout="horizontal"
-                  metric={metric}
+                <OpsRankedBars
+                  rows={byZone.bottom.map((z) => ({
+                    key: z.label || z.key,
+                    label: z.label || z.key,
+                    value: z.value,
+                  }))}
+                  format={(value) => formatOpsMetricValue(metric, value)}
                 />
               </OpsChartCard>
             ) : null}

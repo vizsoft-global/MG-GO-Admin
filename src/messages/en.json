@@ -11325,6 +11325,7 @@
           "restaurants": "Restaurants Count",
           "hoursExcluded": "Hours outside UTR"
         },
+        "noVehicle": "No vehicle",
         "chart": {
           "trend": "Trend",
           "vehicle": "By vehicle",
@@ -11361,11 +11362,11 @@
           "well_below": "Well below (<60%)"
         },
         "utrBucket": {
-          "well_above": "Well above (≥2.0)",
-          "above": "Above (1.5–2.0)",
-          "near": "Near (1.0–1.5)",
-          "below": "Below (0.5–1.0)",
-          "well_below": "Well below (<0.5)"
+          "well_above": "Above 1.60",
+          "above": "1.40 – 1.59",
+          "near": "1.20 – 1.39",
+          "below": "1.00 – 1.19",
+          "well_below": "Below 1.00"
         },
         "col": {
           "name": "Employee Name",
