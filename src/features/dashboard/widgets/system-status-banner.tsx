@@ -2,7 +2,7 @@
 
 import { AlertTriangle, Wrench } from "lucide-react";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
+import Link from "@/components/system/plain-link";
 import type { SystemStatusSummary } from "../types";
 
 export function SystemStatusBanner({

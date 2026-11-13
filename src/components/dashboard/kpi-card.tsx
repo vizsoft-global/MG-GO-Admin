@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/system/plain-link";
 import { Check, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {

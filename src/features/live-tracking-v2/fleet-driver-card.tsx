@@ -20,7 +20,7 @@ import {
   Navigation,
   Package,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/system/plain-link";
 
 import { cn } from "@/lib/utils";
 import { avatarTintFromName } from "@/features/drivers/form/driver-form-primitives";

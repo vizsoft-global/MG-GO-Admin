@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import Link from "next/link";
+import Link from "@/components/system/plain-link";
 import { useLocale, useTranslations } from "next-intl";
 import { Loader2, Minus, Plus } from "lucide-react";
 import { toast } from "sonner";

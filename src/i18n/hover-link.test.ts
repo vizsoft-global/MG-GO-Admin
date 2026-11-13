@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 /**
@@ -28,6 +28,27 @@ describe("panel link prefetch", () => {
     assert.match(component, /if \(explicit !== undefined\) return explicit;\s+return warm \? null : false;/);
     const navigation = readFileSync(new URL("./navigation.ts", import.meta.url), "utf8");
     assert.match(navigation, /export \{ Link \} from "\.\/hover-link";/);
+  });
+
+  it("leaves no panel file on next/link's default prefetch", () => {
+    // The rider cards on Live Tracking V2 used next/link directly, so the list
+    // rendered a rider profile for every card in view and the session check fell over.
+    const allowed = new Set([
+      "components/system/plain-link.tsx",
+      "features/auth/login-form.tsx",
+      "features/auth/signup-form.tsx",
+      "features/auth/forgot-password-form.tsx",
+    ]);
+    const root = new URL("../", import.meta.url);
+    const offenders: string[] = [];
+    for (const entry of readdirSync(root, { recursive: true, encoding: "utf8" })) {
+      const file = entry.replaceAll("\\", "/");
+      if (!/\.tsx?$/.test(file) || file.endsWith(".test.ts") || allowed.has(file)) continue;
+      if (/from "next\/link"/.test(readFileSync(new URL(file, root), "utf8"))) offenders.push(file);
+    }
+    assert.deepEqual(offenders, []);
+    const plain = readFileSync(new URL("../components/system/plain-link.tsx", import.meta.url), "utf8");
+    assert.match(plain, /\{ prefetch = false, \.\.\.rest \}/);
   });
 
   it("does not let the sidebar go back to prefetching every menu page", () => {

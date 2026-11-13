@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/system/plain-link";
 import { useTranslations } from "next-intl";
 import { History, Siren } from "lucide-react";
 import { Badge } from "@/components/ui/badge";

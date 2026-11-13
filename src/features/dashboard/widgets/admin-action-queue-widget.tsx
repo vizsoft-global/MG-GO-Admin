@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/system/plain-link";
 import {
   AlertTriangle,
   ArrowRight,

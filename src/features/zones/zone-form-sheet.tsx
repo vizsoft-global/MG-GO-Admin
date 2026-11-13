@@ -8,7 +8,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import Link from "next/link";
+import Link from "@/components/system/plain-link";
 import { useTranslations } from "next-intl";
 import {
   ChevronDown,

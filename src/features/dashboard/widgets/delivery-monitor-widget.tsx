@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import Link from "next/link";
+import Link from "@/components/system/plain-link";
 import { CheckCircle2, Clock, Package, ShieldAlert, Truck, XCircle } from "lucide-react";
 import { StatusPill } from "@/components/dashboard/status-pill";
 import { MetricTile } from "@/components/ui/metric-tile";

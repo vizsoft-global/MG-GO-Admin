@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/system/plain-link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
