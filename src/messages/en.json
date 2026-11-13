@@ -2850,7 +2850,7 @@
         }
       },
       "project": {
-        "title": "Project",
+        "title": "Client",
         "subtitle": "Client, driver status and operational assignment. Client replaces the old Partner field.",
         "fields": {
           "project": "Project",
