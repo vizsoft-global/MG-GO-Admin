@@ -52,6 +52,22 @@ export function notificationFiltersToQuery(state: NotificationFilterState): stri
 }
 
 /**
+ * The key `useGroupedListView` resets on.
+ *
+ * A metric card changes the bucket (and, for Sent today, the period) without touching the
+ * group or the search, so a key built from those two alone left the grid on whatever page
+ * the previous bucket ended on — clicking "Drafts" kept page 4 and read as "the card did
+ * not filter". The filter state is part of the key for that reason.
+ */
+export function notificationListResetKey(
+  groupBy: string,
+  appliedQuery: string,
+  state: NotificationFilterState,
+): string {
+  return `${groupBy}\u0001${appliedQuery}\u0001${notificationFiltersToQuery(state)}`;
+}
+
+/**
  * Merge the filter params into an existing query string.
  *
  * The page used to write the URL with `notificationFiltersToQuery` alone, which

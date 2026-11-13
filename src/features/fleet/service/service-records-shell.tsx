@@ -101,9 +101,15 @@ export function ServiceRecordsShell({
   const vendorFilter = params.get("vendor") ?? "";
 
   function setParam(key: string, value: string) {
+    setParams({ [key]: value });
+  }
+
+  function setParams(patch: Record<string, string>) {
     const next = new URLSearchParams(params.toString());
-    if (value) next.set(key, value);
-    else next.delete(key);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
     const query = next.toString();
     nextRouter.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }
@@ -137,7 +143,10 @@ export function ServiceRecordsShell({
   const filtered = useMemo(() => {
     const term = prefs.appliedQuery.trim().toLowerCase();
     return rows.filter((row) => {
-      if (stageFilter !== "all" && recordStage(row) !== stageFilter) return false;
+      const stage = recordStage(row);
+      if (stageFilter === "open") {
+        if (stage !== "new" && stage !== "running") return false;
+      } else if (stageFilter !== "all" && stage !== stageFilter) return false;
       const day = recordDay(row);
       if (from && day < from) return false;
       if (to && day > to) return false;
@@ -180,11 +189,16 @@ export function ServiceRecordsShell({
   const doneThisMonth = rows.filter(
     (row) => isDoneRecord(row) && recordDay(row).slice(0, 7) === month,
   );
+  const today = kuwaitTodayYmd();
+  const monthStart = `${month}-01`;
+  const doneMonthActive = stageFilter === "done" && from === monthStart && to === today;
   const costThisMonth = doneThisMonth.reduce((sum, row) => sum + plausibleCost(effectiveRecordCost(row)), 0);
 
-  const stageItems = (["all", "new", "running", "done", "cancelled"] as const).map((id) => ({
+  const stageItems = (["all", "open", "new", "running", "done", "cancelled"] as const).map((id) => ({
     id,
-    label: `${tStage(id)} (${id === "all" ? counts.all : counts[id]})`,
+    label: `${id === "open" ? t("kpi.open") : tStage(id)} (${
+      id === "all" ? counts.all : id === "open" ? openCount(counts) : counts[id]
+    })`,
   }));
 
   const shown = prefs.orderedColumns.filter((column) => prefs.isVisible(column.id));
@@ -295,19 +309,20 @@ export function ServiceRecordsShell({
             value: openCount(counts),
             icon: AlertTriangle,
             accent: "warning",
-            selected: stageFilter === "new" || stageFilter === "running",
-            onClick: () =>
-              setParam(
-                "stage",
-                stageFilter === "new" || stageFilter === "running" ? "" : "new",
-              ),
+            selected: stageFilter === "open",
+            onClick: () => setParam("stage", stageFilter === "open" ? "" : "open"),
           },
           {
             label: t("kpi.doneThisMonth"),
             value: doneThisMonth.length,
             icon: CheckCircle2,
-            selected: stageFilter === "done",
-            onClick: () => setParam("stage", stageFilter === "done" ? "" : "done"),
+            selected: doneMonthActive,
+            onClick: () =>
+              setParams(
+                doneMonthActive
+                  ? { stage: "", from: "", to: "" }
+                  : { stage: "done", from: monthStart, to: today },
+              ),
           },
           { label: t("kpi.costThisMonth"), value: formatKwd(costThisMonth), icon: Wallet },
           { label: t("kpi.types"), value: types.data?.length ?? 0, icon: Hash },

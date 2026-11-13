@@ -8,6 +8,7 @@ import {
   listFiltersForState,
   metricCardScope,
   notificationFiltersToQuery,
+  notificationListResetKey,
   parseNotificationFilters,
   toggleMetricCard,
 } from "./notification-filter-state";
@@ -126,4 +127,36 @@ test("sent buckets read the send timestamp, every other bucket the created one",
   assert.equal(dateFieldForBucket("drafts"), "created_at");
   assert.equal(dateFieldForBucket("scheduled"), "created_at");
   assert.equal(dateFieldForBucket("failed"), "created_at");
+});
+
+test("the list reset key moves when a metric card changes the bucket", () => {
+  const all = notificationListResetKey("none", "", EMPTY_NOTIFICATION_FILTERS);
+  const drafts = notificationListResetKey(
+    "none",
+    "",
+    toggleMetricCard(EMPTY_NOTIFICATION_FILTERS, "drafts", TODAY),
+  );
+  const scheduled = notificationListResetKey(
+    "none",
+    "",
+    toggleMetricCard(EMPTY_NOTIFICATION_FILTERS, "scheduled", TODAY),
+  );
+  assert.notEqual(drafts, all);
+  assert.notEqual(drafts, scheduled);
+  // Clearing the card returns to the same key, so the grid goes back to page 1 of All.
+  assert.equal(
+    notificationListResetKey("none", "", toggleMetricCard(
+      toggleMetricCard(EMPTY_NOTIFICATION_FILTERS, "drafts", TODAY),
+      "drafts",
+      TODAY,
+    )),
+    all,
+  );
+  // A search or a group still resets, and a period change on its own does too.
+  assert.notEqual(notificationListResetKey("none", "?q=ramadan", EMPTY_NOTIFICATION_FILTERS), all);
+  assert.notEqual(notificationListResetKey("category", "", EMPTY_NOTIFICATION_FILTERS), all);
+  assert.notEqual(
+    notificationListResetKey("none", "", { ...EMPTY_NOTIFICATION_FILTERS, from: TODAY }),
+    all,
+  );
 });

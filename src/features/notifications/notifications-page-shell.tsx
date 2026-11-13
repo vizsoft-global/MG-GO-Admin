@@ -61,7 +61,11 @@ import { useAuth } from "@/contexts/auth-context";
 import { downloadCsv } from "@/features/driver-tracking/csv-export";
 import { NOTIFICATION_CATEGORIES } from "./constants";
 import { CampaignAudienceButton } from "./notification-audience-dialog";
-import { NOTIFICATION_LIST_BUCKETS, type NotificationListBucket } from "./notification-list-buckets";
+import {
+  NOTIFICATION_LIST_BUCKETS,
+  statusInListBucket,
+  type NotificationListBucket,
+} from "./notification-list-buckets";
 import {
   dashboardScopeForState,
   EMPTY_NOTIFICATION_FILTERS,
@@ -69,6 +73,7 @@ import {
   listFiltersForState,
   mergeNotificationFilterParams,
   notificationFiltersToQuery,
+  notificationListResetKey,
   parseNotificationFilters,
   toggleMetricCard,
   type NotificationFilterState,
@@ -244,14 +249,16 @@ export function NotificationsPageShell() {
   );
   const filteredCampaigns = useMemo(
     () =>
-      campaigns.filter((row) =>
-        fieldSearchMatch(row, tablePrefs.appliedQuery, {
-          name: (item) => item.title,
-          body: (item) => item.body,
-          status: (item) => item.status,
-        }),
+      campaigns.filter(
+        (row) =>
+          statusInListBucket(filters.bucket, row.status) &&
+          fieldSearchMatch(row, tablePrefs.appliedQuery, {
+            name: (item) => item.title,
+            body: (item) => item.body,
+            status: (item) => item.status,
+          }),
       ),
-    [campaigns, tablePrefs.appliedQuery],
+    [campaigns, filters.bucket, tablePrefs.appliedQuery],
   );
   const groupedCampaigns = useMemo(
     () =>
@@ -266,10 +273,20 @@ export function NotificationsPageShell() {
       ),
     [filteredCampaigns, tablePrefs.groupBy],
   );
+  /**
+   * The bucket, category, period and creator belong in the reset key: a metric card changes
+   * them without changing the group or the search, so omitting them left the grid on page 4
+   * of the previous bucket after clicking "Drafts", which reads as "the card did not filter".
+   */
+  const listResetKey = notificationListResetKey(
+    tablePrefs.groupBy,
+    tablePrefs.appliedQuery,
+    filters,
+  );
   const listView = useGroupedListView(
     groupedCampaigns,
     tablePrefs.groupBy !== "none",
-    `${tablePrefs.groupBy}\u0001${tablePrefs.appliedQuery}`,
+    listResetKey,
   );
   useEffect(() => {
     if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
