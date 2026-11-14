@@ -65,7 +65,7 @@ export function AssetsKpiStrip({
           value={item.value.toLocaleString()}
           icon={item.icon}
           tone={item.tone}
-          className="p-2.5"
+          dense
           selected={activeKey === item.id}
           onClick={onSelectKey ? () => onSelectKey(item.id) : undefined}
           ariaLabel={item.label}

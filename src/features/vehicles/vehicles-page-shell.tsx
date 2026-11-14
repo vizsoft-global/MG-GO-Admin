@@ -609,7 +609,8 @@ export function VehiclesPageShell({
               icon={kpi.icon}
               tone={kpi.tone}
               selected={vehicleKpiSelected(kpi.key, filterState)}
-              className="h-full p-2.5"
+              dense
+              className="h-full"
             />
           </div>
         ))}
