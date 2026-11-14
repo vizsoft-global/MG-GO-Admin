@@ -11405,7 +11405,8 @@
           "dpd": "DPD",
           "dpd_eff": "كفاءة DPD",
           "tgt_eff": "كفاءة الهدف",
-          "utr": "UTR"
+          "utr": "UTR",
+          "shadeNote": "اللون الأغمق = أعلى قيمة، ويتدرج اللون إلى الأفتح كلما نزلنا في الترتيب"
         },
         "show": {
           "label": "عرض",
@@ -11420,6 +11421,7 @@
           "monthly": "شهري"
         },
         "yearLabel": "السنة",
+        "periodLabel": "الفترة",
         "filterSearch": "بحث القيم",
         "filterClear": "مسح",
         "filterApply": "تطبيق",

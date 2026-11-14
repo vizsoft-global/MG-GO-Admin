@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Bike,
@@ -74,6 +74,9 @@ export function OpsRangePills({
   const t = useTranslations("pages.performance.ops");
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      <span className="me-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {t("periodLabel")}
+      </span>
       {OPS_RANGE_PRESETS.filter((id) => id !== "custom").map((id) => (
         <ToggleChip
           key={id}
@@ -125,21 +128,14 @@ export function OpsViewByPills({
 export function OpsTopBottomShowPills({
   value,
   onChange,
-  resetKey = 0,
 }: {
   value: TopBottomShowSelection;
   onChange: (next: TopBottomShowSelection) => void;
-  resetKey?: number;
 }) {
   const t = useTranslations("pages.performance.ops");
   const inputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(value.mode === "custom" ? String(value.n) : "");
   const [invalid, setInvalid] = useState(false);
-
-  useEffect(() => {
-    setDraft("");
-    setInvalid(false);
-  }, [resetKey]);
 
   function commitCustom() {
     const parsed = parseTopBottomCustomN(draft);
@@ -304,7 +300,10 @@ export function OpsSlicerBar({
 
   return (
     <div className={cn("rounded-xl border border-border bg-card p-4 shadow-sm", LAYOUT.stackGap)}>
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+      {/* All eight slicers share the reference's single row, so every filter is the
+          same width; below the desktop breakpoint they divide 4 + 4 rather than
+          leaving Restaurant alone on a short second row. */}
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-8">
         <div className="min-w-0">
           <p className="mb-1 flex items-center gap-1 truncate text-xs font-medium text-muted-foreground">
             <ClipboardCheck className="size-3 shrink-0 opacity-70" />

@@ -142,6 +142,15 @@ export function OpsOverviewTab({
     value: dimMetricValue(p, metric),
   }));
 
+  /**
+   * The reference names the trend chart by the bucket it is drawn in — "Daily
+   * Orders Trend", "Weekly Orders Trend" — so the title says what one point
+   * spans. `seriesName` stays the legend and export name.
+   */
+  const trendTitle = t("chartTitle.trend", {
+    metric: `${t(`granularity.${granularity}`)} ${seriesName}`,
+  });
+
   const nationality = rankedRows(data.by_nationality, (r) => countryLabel(r.key), metric);
   const zones = rankedRows(data.by_zone, (r) => r.label || r.key, metric);
   const vehicles = rankedRows(data.by_vehicle, (r) => vehicleLabel(r.key), metric);
@@ -186,10 +195,10 @@ export function OpsOverviewTab({
       ) : null}
       <KpiGrid items={items} compact />
 
-      {/* Trend and nationality share a row, wider on the trend — the reference's 1.25fr / 1fr. */}
-      <div className="grid gap-2 lg:grid-cols-[1.25fr_1fr] lg:items-stretch">
+      {/* Trend and nationality share a row, wider on the trend — the reference's 1.7fr / 1fr. */}
+      <div className="grid gap-2 lg:grid-cols-[1.7fr_1fr] lg:items-stretch">
         <OpsChartCard
-          title={opsChartTitle(t, "trend", seriesName)}
+          title={trendTitle}
           onExport={() =>
             downloadCsv(
               "ops-trend",

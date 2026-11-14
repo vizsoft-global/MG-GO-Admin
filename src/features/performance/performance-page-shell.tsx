@@ -329,10 +329,21 @@ export function PerformancePageShell() {
           } as CSSProperties
         }
       >
+      <div className="flex items-center justify-between gap-2">
+        <AppBackButton />
+        <Link
+          href="/performance/settings"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--ops-line,var(--border))] px-2.5 text-sm font-semibold text-[var(--ops-title,var(--foreground))] transition-colors hover:bg-[var(--ops-soft,var(--muted))]"
+        >
+          <Settings2 className="size-3.5" />
+          {t("settingsLink")}
+        </Link>
+      </div>
       {/*
         Power BI header card: group mark, client logo, the page title with the
-        period, the five tabs, then refresh / export on the end edge. Settings
-        sits in the row above, on the end edge, beside the back button.
+        period, the five tabs, then refresh / export on the end edge. The card
+        is the whole header band; the back / settings row above it is its own
+        line so neither control costs the tab strip any width.
 
         Every colour here reads from the theme tokens rather than a hardcoded
         white: the card is `bg-card`, so white text would be invisible in light
@@ -340,16 +351,6 @@ export function PerformancePageShell() {
         `--ops-*` falls back to the design-system tokens, so the header is
         legible even if the palette fails to resolve.
       */}
-      <div className="flex items-center justify-between gap-2">
-        <AppBackButton />
-        <Link
-          href="/performance/settings"
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--ops-line,var(--border))] px-2.5 text-sm font-semibold text-[var(--ops-ink,var(--primary))] transition-colors hover:bg-[var(--ops-soft,var(--muted))]"
-        >
-          <Settings2 className="size-3.5" />
-          {t("settingsLink")}
-        </Link>
-      </div>
       <div className="flex flex-wrap items-stretch overflow-hidden rounded-lg border border-[var(--ops-line,var(--border))] bg-card shadow-sm">
         <div className="hidden items-center justify-center border-e border-border/70 bg-[var(--ops-soft,var(--muted))] px-3 sm:flex">
           <span className="text-xs font-extrabold tracking-wide text-[var(--ops-title,var(--foreground))]">
@@ -474,6 +475,7 @@ export function PerformancePageShell() {
           options={data?.options ?? { zones: [], restaurants: [], nationalities: [], partners: [] }}
           hideSourceType={tab === "outsource"}
           onChange={setSlicers}
+          onExport={data ? exportTab : undefined}
           onClear={() => {
             setSlicers(EMPTY_OPS_SLICERS);
             setFilterResetKey((k) => k + 1);
@@ -482,13 +484,16 @@ export function PerformancePageShell() {
 
         <div className="flex flex-wrap items-center gap-2">
           <OpsViewByPills tab={tab} value={viewMetric} onChange={setMetric} />
-          {tab === "topbottom" ? (
-            <OpsTopBottomShowPills
-              value={topBottomShow}
-              onChange={setTopBottomShow}
-              resetKey={filterResetKey}
-            />
-          ) : null}
+        {tab === "topbottom" ? (
+          <OpsTopBottomShowPills
+            key={filterResetKey}
+            value={topBottomShow}
+            onChange={setTopBottomShow}
+          />
+        ) : null}
+          <span className="ms-auto hidden text-[11px] text-muted-foreground lg:inline">
+            {t("ops.viewBy.shadeNote")}
+          </span>
         </div>
 
         {isLoading ? (

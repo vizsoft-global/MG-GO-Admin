@@ -49,7 +49,11 @@ export function useFrozenColumnOffsets(
         // offset after it is meaningless; leave the previous offsets alone.
         if (cell.colSpan > 1) return;
         offsets.push(start);
-        start += cell.getBoundingClientRect().width;
+        // Snapped to whole pixels. A sticky column parked on a fractional
+        // offset paints its opaque background over part of the divider on the
+        // column before it, which leaves that one line a shade lighter and
+        // broken between rows while every other column rule stays crisp.
+        start = Math.round(start + cell.getBoundingClientRect().width);
       }
       for (let index = 1; index < offsets.length; index += 1) {
         table.style.setProperty(`--fc-${index}`, `${offsets[index]}px`);

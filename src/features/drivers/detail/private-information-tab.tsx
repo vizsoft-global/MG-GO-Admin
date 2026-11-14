@@ -613,12 +613,16 @@ export function PrivateInformationTab({
               disabled={readonly}
               onChange={(event) => {
                 const next = event.target.value;
-                // One state update: the beneficiary mirror reads the same value,
-                // which keeps a fast typist from writing the previous keystroke.
+                // The Beneficiary Civil ID follows the Civil ID as it is typed,
+                // in the same state update so a fast typist cannot write a stale
+                // mirror. A beneficiary the operator typed keeps its own value.
                 setForm((current) => ({
                   ...current,
                   civilId: next,
-                  beneficiaryCivilId: beneficiaryTouched ? current.beneficiaryCivilId : next,
+                  beneficiaryCivilId:
+                    beneficiaryTouched && current.beneficiaryCivilId !== current.civilId
+                      ? current.beneficiaryCivilId
+                      : next,
                 }));
               }}
             />
