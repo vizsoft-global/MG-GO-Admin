@@ -45,8 +45,38 @@ function isProtectedPath(pathname: string): boolean {
   );
 }
 
+/**
+ * Where the bare address goes: `/`, `/en` and `/ar` all end at the dashboard.
+ *
+ * They used to get there in two redirects, and the second one was a page: `/en`
+ * rendered the whole root layout — the session read and every translated
+ * message, 570 KB — only to answer "go to /en/dashboard". That was 0.7 to 3
+ * seconds before the dashboard had even been asked for. The proxy now sends the
+ * browser there in one step. For `/` the locale is the one next-intl chose
+ * (cookie, then the browser's language), read from its own redirect.
+ */
+export function entryRedirectPath(pathname: string, intlLocation: string | null): string | null {
+  const bare = pathname.replace(/\/+$/, "");
+  if (bare === "/en" || bare === "/ar") return `${bare}/dashboard`;
+  if (bare !== "") return null;
+  let chosen: string = routing.defaultLocale;
+  if (intlLocation) {
+    try {
+      const seg = new URL(intlLocation, "https://panel.invalid").pathname.split("/")[1];
+      if (seg === "en" || seg === "ar") chosen = seg;
+    } catch {
+      // An unreadable Location keeps the default locale.
+    }
+  }
+  return `/${chosen}/dashboard`;
+}
+
 export async function proxy(request: NextRequest) {
   const intlResponse = intlMiddleware(request);
+  const entry = entryRedirectPath(request.nextUrl.pathname, intlResponse.headers.get("location"));
+  if (entry) {
+    return NextResponse.redirect(new URL(entry, request.url));
+  }
   const { response, probe } = await updateStaffSession(request, intlResponse);
   const { pathname } = request.nextUrl;
   const locale = getLocale(pathname);
