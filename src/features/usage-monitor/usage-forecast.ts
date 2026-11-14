@@ -187,6 +187,8 @@ export function functionShape(serviceName: string): { cpu: number; memGib: numbe
     case "adminapiscan":
     case "adminapiheavy":
       return { cpu: 1, memGib: 4 };
+    // The tracking server's one door since 2026-11-14; same size as the three it replaced.
+    case "workerapi":
     case "workerfleetread":
     case "adminingestdriverpositions":
     case "adminrecordfleetevents":
