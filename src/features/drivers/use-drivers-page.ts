@@ -13,12 +13,13 @@ import type { DriversColumnFilters } from "./drivers-list-query";
 /**
  * Rows per call.
  *
- * This was 100, which turned a 975-rider roster into **ten** sequential
- * callables — and each one re-read the whole roster server-side before slicing.
- * 500 makes the same roster two calls, well under the server's 5000 cap and the
- * client's own 500 clamp in `fetchDriversPage`.
+ * 100 again, since 2026-11-14. It went to 500 when every call re-read the whole
+ * roster on the server, so fewer, larger calls were cheaper. The server now cuts
+ * each page from a stored roster and the list draws 80 rows at a time as it is
+ * scrolled, so a first answer of 500 only made the opening slower: five times
+ * the rows to fill in and to send. The page fetches ahead of the scroll.
  */
-export const DRIVERS_PAGE_LIMIT = 500;
+export const DRIVERS_PAGE_LIMIT = 100;
 
 /**
  * How long a loaded page is considered fresh.

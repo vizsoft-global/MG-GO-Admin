@@ -97,8 +97,12 @@ export const SCAN_FUNCTIONS = [
   "adminOrderReconCompare",
   "adminDeliveriesStatusCounts",
   "adminDeliveriesCountsByFilters",
-  "adminListDriversPage",
-  "adminDriversFilterValues",
+  // adminListDriversPage and adminDriversFilterValues left this lane on 2026-11-14.
+  // They are cut from the stored roster now (about 1.3s of work, 0.1s from the
+  // page snapshot), and this lane scales to zero: the panel was waiting 6 to 9
+  // seconds for them, most of it this function starting up. The light lane is
+  // kept awake by the every-minute crons, and admin-api.ts still gives these two
+  // their read-through snapshot there.
   "adminLiveFleetSnapshot",
   "adminPayrollRuleSnapshot",
   "adminPayrollMonthSnapshot",
