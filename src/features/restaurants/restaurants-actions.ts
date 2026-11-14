@@ -56,6 +56,7 @@ import {
   isDeliveryForRestaurant,
   type ScopedDeliveryRow,
 } from "./restaurant-delivery-scope";
+import { withDriverRosterBump } from "@/lib/firebase/bump-driver-roster";
 
 type PgLikeError = {
   code?: string | null;
@@ -974,7 +975,14 @@ async function nextRestaurantCode(db: Firestore): Promise<string> {
   throw new Error("restaurant_code");
 }
 
-export async function saveRestaurant(formData: FormData): Promise<RestaurantMutationResult> {
+/** Bumps the stored Employees roster once `saveRestaurantImpl` has finished. */
+export async function saveRestaurant(
+  ...args: Parameters<typeof saveRestaurantImpl>
+): ReturnType<typeof saveRestaurantImpl> {
+  return withDriverRosterBump(() => saveRestaurantImpl(...args));
+}
+
+async function saveRestaurantImpl(formData: FormData): Promise<RestaurantMutationResult> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireRestaurantsManage();
@@ -1122,7 +1130,14 @@ async function nullWhere(db: Firestore, collection: string, field: string, value
   }
 }
 
-export async function deleteRestaurant(id: string): Promise<RestaurantMutationResult> {
+/** Bumps the stored Employees roster once `deleteRestaurantImpl` has finished. */
+export async function deleteRestaurant(
+  ...args: Parameters<typeof deleteRestaurantImpl>
+): ReturnType<typeof deleteRestaurantImpl> {
+  return withDriverRosterBump(() => deleteRestaurantImpl(...args));
+}
+
+async function deleteRestaurantImpl(id: string): Promise<RestaurantMutationResult> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireRestaurantsManage();

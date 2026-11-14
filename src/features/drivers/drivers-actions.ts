@@ -123,6 +123,7 @@ import { listCustomFieldDefinitions } from "@/features/custom-fields/custom-fiel
 import { parseCustomFieldsFromFormData } from "@/lib/custom-fields/serialize";
 import { parseCustomFieldsJson } from "@/lib/custom-fields/validate";
 import type { Json } from "@/types/database";
+import { withDriverRosterBump } from "@/lib/firebase/bump-driver-roster";
 
 const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
 const ALLOWED_DOC_MIME = new Set([
@@ -514,7 +515,14 @@ async function uploadIntakeDocument(
   return { path: key };
 }
 
+/** Bumps the stored Employees roster once `createDriverIntakeImpl` has finished. */
 export async function createDriverIntake(
+  ...args: Parameters<typeof createDriverIntakeImpl>
+): ReturnType<typeof createDriverIntakeImpl> {
+  return withDriverRosterBump(() => createDriverIntakeImpl(...args));
+}
+
+async function createDriverIntakeImpl(
   formData: FormData,
 ): Promise<DriverMutationResult> {
   const mutationAuth = await requireMutationAuth();
@@ -1367,7 +1375,14 @@ export async function restoreDriverIntake(
   return { success: true, id: intakeId };
 }
 
+/** Bumps the stored Employees roster once `updateDriverWorkflowStatusImpl` has finished. */
 export async function updateDriverWorkflowStatus(
+  ...args: Parameters<typeof updateDriverWorkflowStatusImpl>
+): ReturnType<typeof updateDriverWorkflowStatusImpl> {
+  return withDriverRosterBump(() => updateDriverWorkflowStatusImpl(...args));
+}
+
+async function updateDriverWorkflowStatusImpl(
   intakeId: string,
   workflowStatus: DriverWorkflowStatus,
 ): Promise<DriverMutationResult> {
@@ -1405,7 +1420,14 @@ export async function updateDriverWorkflowStatus(
   return { success: true };
 }
 
+/** Bumps the stored Employees roster once `updateDriverIntakeImpl` has finished. */
 export async function updateDriverIntake(
+  ...args: Parameters<typeof updateDriverIntakeImpl>
+): ReturnType<typeof updateDriverIntakeImpl> {
+  return withDriverRosterBump(() => updateDriverIntakeImpl(...args));
+}
+
+async function updateDriverIntakeImpl(
   formData: FormData,
 ): Promise<DriverMutationResult> {
   const auth = await requireDriversManager();
@@ -2438,7 +2460,14 @@ export type RegeneratePasscodeResult =
  * the assignment alone. Both rows get the same patch: the intake (the editable
  * draft) and the linked `drivers` row (what the list and payroll read).
  */
+/** Bumps the stored Employees roster once `saveDriverPrivateInformationImpl` has finished. */
 export async function saveDriverPrivateInformation(
+  ...args: Parameters<typeof saveDriverPrivateInformationImpl>
+): ReturnType<typeof saveDriverPrivateInformationImpl> {
+  return withDriverRosterBump(() => saveDriverPrivateInformationImpl(...args));
+}
+
+async function saveDriverPrivateInformationImpl(
   formData: FormData,
 ): Promise<DriverMutationResult> {
   const auth = await requireDriversManager();
@@ -2646,7 +2675,14 @@ async function resolveVehicleTypeKey(raw: string): Promise<string> {
  * The Project tab: which project the rider delivers for (the old Partner field
  * moved here). Assignment fields stay where they are — this writes one key.
  */
+/** Bumps the stored Employees roster once `saveDriverProjectSettingsImpl` has finished. */
 export async function saveDriverProjectSettings(
+  ...args: Parameters<typeof saveDriverProjectSettingsImpl>
+): ReturnType<typeof saveDriverProjectSettingsImpl> {
+  return withDriverRosterBump(() => saveDriverProjectSettingsImpl(...args));
+}
+
+async function saveDriverProjectSettingsImpl(
   formData: FormData,
 ): Promise<DriverMutationResult> {
   const auth = await requireDriversManager();

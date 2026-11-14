@@ -109,6 +109,7 @@ import {
   resolveZoneToken,
 } from "./import/resolve-lookups";
 import type { DriverImportLookups } from "./import/lookups";
+import { withDriverRosterBump } from "@/lib/firebase/bump-driver-roster";
 
 
 export async function requireDriversManager(verb: "create" | "edit" | "delete" = "edit") {
@@ -1672,7 +1673,14 @@ export async function applyOneImportRow(
   };
 }
 
-export async function applyDriverImportChunk(payload: {
+/** Bumps the stored Employees roster once `applyDriverImportChunkImpl` has finished. */
+export async function applyDriverImportChunk(
+  ...args: Parameters<typeof applyDriverImportChunkImpl>
+): ReturnType<typeof applyDriverImportChunkImpl> {
+  return withDriverRosterBump(() => applyDriverImportChunkImpl(...args));
+}
+
+async function applyDriverImportChunkImpl(payload: {
   fileName: string;
   mapping: Record<string, string>;
   rows: DriverImportPreviewRow[];
@@ -1829,7 +1837,14 @@ export async function applyDriverImportChunk(payload: {
   };
 }
 
-export async function applyDriverImportBatch(payload: {
+/** Bumps the stored Employees roster once `applyDriverImportBatchImpl` has finished. */
+export async function applyDriverImportBatch(
+  ...args: Parameters<typeof applyDriverImportBatchImpl>
+): ReturnType<typeof applyDriverImportBatchImpl> {
+  return withDriverRosterBump(() => applyDriverImportBatchImpl(...args));
+}
+
+async function applyDriverImportBatchImpl(payload: {
   fileName: string;
   mapping: Record<string, string>;
   rows: DriverImportPreviewRow[];
@@ -1851,7 +1866,7 @@ export async function applyDriverImportBatch(payload: {
     isImportRowReady(r, payload.duplicateStrategy),
   );
   const preSkipped = payload.rows.length - ready.length;
-  const result = await applyDriverImportChunk({
+  const result = await applyDriverImportChunkImpl({
     fileName: payload.fileName,
     mapping: payload.mapping,
     rows: ready,

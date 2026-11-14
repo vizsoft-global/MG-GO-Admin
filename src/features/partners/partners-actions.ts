@@ -17,6 +17,7 @@ import { slugifyPartnerName } from "./partner-slug";
 import { mapPartnerDbError } from "./partner-errors";
 import { resolvePartnerLogoMeta } from "./partner-logo";
 import type { PartnerRow } from "./types";
+import { withDriverRosterBump } from "@/lib/firebase/bump-driver-roster";
 
 type Row = Record<string, unknown> & { id: string };
 
@@ -167,7 +168,14 @@ export async function fetchPartnersForAdmin(): Promise<PartnerRow[]> {
   }));
 }
 
-export async function createPartner(formData: FormData): Promise<PartnerMutationResult> {
+/** Bumps the stored Employees roster once `createPartnerImpl` has finished. */
+export async function createPartner(
+  ...args: Parameters<typeof createPartnerImpl>
+): ReturnType<typeof createPartnerImpl> {
+  return withDriverRosterBump(() => createPartnerImpl(...args));
+}
+
+async function createPartnerImpl(formData: FormData): Promise<PartnerMutationResult> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requirePartnersManager("create");
@@ -223,7 +231,14 @@ export async function createPartner(formData: FormData): Promise<PartnerMutation
   return { success: true, id, logoUrl, logoWarning };
 }
 
-export async function updatePartner(formData: FormData): Promise<PartnerMutationResult> {
+/** Bumps the stored Employees roster once `updatePartnerImpl` has finished. */
+export async function updatePartner(
+  ...args: Parameters<typeof updatePartnerImpl>
+): ReturnType<typeof updatePartnerImpl> {
+  return withDriverRosterBump(() => updatePartnerImpl(...args));
+}
+
+async function updatePartnerImpl(formData: FormData): Promise<PartnerMutationResult> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requirePartnersManager("edit");
@@ -293,7 +308,14 @@ export async function updatePartner(formData: FormData): Promise<PartnerMutation
   return { success: true, id, logoUrl: logoUrl ?? undefined, logoWarning };
 }
 
-export async function deletePartner(id: string): Promise<PartnerMutationResult> {
+/** Bumps the stored Employees roster once `deletePartnerImpl` has finished. */
+export async function deletePartner(
+  ...args: Parameters<typeof deletePartnerImpl>
+): ReturnType<typeof deletePartnerImpl> {
+  return withDriverRosterBump(() => deletePartnerImpl(...args));
+}
+
+async function deletePartnerImpl(id: string): Promise<PartnerMutationResult> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requirePartnersManager("delete");

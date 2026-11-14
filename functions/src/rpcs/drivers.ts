@@ -42,6 +42,13 @@ import {
   rosterKpis,
 } from "./driver-list-plan";
 import { invalidateDriverHomeDailySafe } from "./driver-home";
+import { DRIVER_ROSTER_GENERATION, thenBumpDriverRoster } from "../router/read-snapshot";
+import {
+  driverRosterSnapshotEnabled,
+  readThroughRoster,
+  rosterGeneration,
+  rosterMemoUsable,
+} from "../router/roster-snapshot";
 import { sendDriverHomeRefresh } from "./driver-refresh";
 
 /** Asia/Kuwait is a fixed UTC+3 with no DST, so the day boundary is arithmetic. */
@@ -760,13 +767,47 @@ function tabTotalOf(tab: string, kpis: DriverKpis): number {
  * call, and it produces the same five numbers for every page of the same tab.
  * It is memoised beside `baseRowsCache` so one screen load pays for it once.
  */
-const kpiCache = new Map<string, { kpis: DriverKpis; at: number }>();
+const kpiCache = new Map<string, { kpis: DriverKpis; at: number; generation?: number }>();
 
-async function fleetKpiCounts(archived: boolean): Promise<DriverKpis> {
+/**
+ * `generation` is the stored roster's counter when the switch is on and it was
+ * read for this request. The counts then come from the shared store (one
+ * document, the same 60 seconds they are remembered for here), and a roster
+ * edit moves them on every instance at once.
+ */
+async function fleetKpiCounts(archived: boolean, generation: number | null = null): Promise<DriverKpis> {
   const key = archived ? "archived" : "live";
   const now = Date.now();
   const hit = kpiCache.get(key);
-  if (hit && now - hit.at < BASE_ROWS_TTL_MS) return hit.kpis;
+  if (
+    hit &&
+    now - hit.at < BASE_ROWS_TTL_MS &&
+    (generation === null || hit.generation === generation)
+  ) {
+    return hit.kpis;
+  }
+  let kpis: DriverKpis;
+  if (generation === null) {
+    kpis = await computeFleetKpiCounts(archived);
+  } else {
+    const read = await readThroughRoster<DriverKpis>({
+      name: DRIVER_ROSTER_GENERATION,
+      key: `kpis|${key}|v1`,
+      ttlMs: BASE_ROWS_TTL_MS,
+      generation,
+      load: () => computeFleetKpiCounts(archived),
+    });
+    kpis = read.value;
+  }
+  if (kpiCache.size >= BASE_ROWS_MAX_ENTRIES && !kpiCache.has(key)) {
+    const oldest = [...kpiCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+    if (oldest) kpiCache.delete(oldest[0]);
+  }
+  kpiCache.set(key, generation === null ? { kpis, at: now } : { kpis, at: now, generation });
+  return kpis;
+}
+
+async function computeFleetKpiCounts(archived: boolean): Promise<DriverKpis> {
   const db = getFirestore();
   const [intakeSnap, driverSnap] = await Promise.all([
     db.collection(COLLECTIONS.driverIntakes).select("archived_at", "linked_profile_id", "workflow_status").get(),
@@ -788,11 +829,6 @@ async function fleetKpiCounts(archived: boolean): Promise<DriverKpis> {
       };
     }),
   );
-  if (kpiCache.size >= BASE_ROWS_MAX_ENTRIES && !kpiCache.has(key)) {
-    const oldest = [...kpiCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
-    if (oldest) kpiCache.delete(oldest[0]);
-  }
-  kpiCache.set(key, { kpis, at: now });
   return kpis;
 }
 
@@ -931,28 +967,76 @@ async function hydrateDeferredPage(rows: Dict[], phases: PhaseMarks): Promise<vo
  */
 const BASE_ROWS_TTL_MS = 60_000;
 const BASE_ROWS_MAX_ENTRIES = 4;
-const baseRowsCache = new Map<string, { rows: Dict[]; at: number }>();
+/**
+ * How long the stored roster is served when nothing bumps its generation. Every
+ * writer that is known to change a row bumps it (`bumpDriverRoster`), so this
+ * is the limit for the ones that do not: see the list in `AGENTS.md`.
+ */
+const STORED_ROSTER_TTL_MS = 10 * 60_000;
+/** Bump the version when the shape of a roster row changes. */
+const ROSTER_STORE_KEY = "rows|live|defer|v1";
 
+type BaseRowsEntry = { rows: Dict[]; at: number; generation?: number; freshUntil?: number };
+const baseRowsCache = new Map<string, BaseRowsEntry>();
+
+function rememberBaseRows(key: string, entry: BaseRowsEntry): void {
+  if (!baseRowsCache.has(key) && baseRowsCache.size >= BASE_ROWS_MAX_ENTRIES) {
+    const oldest = [...baseRowsCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+    if (oldest) baseRowsCache.delete(oldest[0]);
+  }
+  baseRowsCache.set(key, entry);
+}
+
+/**
+ * `generation` is the stored roster's counter, read once for this request when
+ * `DRIVER_ROSTER_SNAPSHOT=1`; `null` means the switch is off or the read failed,
+ * and the path below is then exactly what it was before the store existed.
+ *
+ * Only the deferred roster of live riders is stored. The joined ("full") rows
+ * carry what changes by the minute and the rider's app passcode, and stay on
+ * the per-instance minute.
+ */
 async function loadBaseRows(
   archived: boolean,
   deferLive: boolean,
   phases: PhaseMarks,
+  generation: number | null = null,
 ): Promise<Dict[]> {
   const key = `${archived ? "archived" : "live"}|${deferLive ? "defer" : "full"}`;
   const now = Date.now();
   const hit = baseRowsCache.get(key);
-  if (hit && now - hit.at < BASE_ROWS_TTL_MS) {
+  if (generation !== null && deferLive && !archived) {
+    if (hit && rosterMemoUsable(hit, generation, now)) {
+      phases.baseRowsMs = 0;
+      return hit.rows.map((row) => ({ ...row }));
+    }
+    const started = Date.now();
+    const read = await readThroughRoster<Dict[]>({
+      name: DRIVER_ROSTER_GENERATION,
+      key: ROSTER_STORE_KEY,
+      ttlMs: STORED_ROSTER_TTL_MS,
+      generation,
+      load: () => loadDriverRows(archived, null, phases, deferLive),
+    });
+    try {
+      phases.rosterStoreMs = Date.now() - started;
+      phases.rosterStoreHit = read.outcome === "hit" ? 1 : 0;
+    } catch {
+      // A broken mark must not replace the request result.
+    }
+    rememberBaseRows(key, { rows: read.value, at: now, generation, freshUntil: read.freshUntil });
+    return read.value.map((row) => ({ ...row }));
+  }
+  // An entry kept under a generation is only as fresh as that generation; with
+  // no generation in hand it is not served.
+  if (hit && hit.generation === undefined && now - hit.at < BASE_ROWS_TTL_MS) {
     phases.baseRowsMs = 0;
     // Copies, not the cached objects: `hydrateDeferredPage` writes live fields
     // onto the rows it is handed, and that write must not reach the next caller.
     return hit.rows.map((row) => ({ ...row }));
   }
   const rows = await loadDriverRows(archived, null, phases, deferLive);
-  if (!baseRowsCache.has(key) && baseRowsCache.size >= BASE_ROWS_MAX_ENTRIES) {
-    const oldest = [...baseRowsCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
-    if (oldest) baseRowsCache.delete(oldest[0]);
-  }
-  baseRowsCache.set(key, { rows, at: now });
+  rememberBaseRows(key, { rows, at: now });
   return rows;
 }
 
@@ -964,11 +1048,18 @@ async function loadDriversForList(
 ): Promise<{ rows: Dict[]; kpis: DriverKpis | null }> {
   const marks = phases ?? {};
   const term = (search ?? "").trim();
+  // One read of the counter serves both the rows and the tile counts.
+  const generation =
+    driverRosterSnapshotEnabled() && deferLive && !archived && !term
+      ? await timedPhase(marks, "rosterGenerationMs", () => rosterGeneration(DRIVER_ROSTER_GENERATION))
+      : null;
   // A search forces the joined read, because the fields the operator is typing
   // are on the driver document, not on the intake row.
-  const rows = await loadBaseRows(archived, term ? false : deferLive, marks);
+  const rows = await loadBaseRows(archived, term ? false : deferLive, marks, generation);
   if (!term) {
-    const kpis = deferLive ? await timedPhase(marks, "kpiMs", () => fleetKpiCounts(archived)) : null;
+    const kpis = deferLive
+      ? await timedPhase(marks, "kpiMs", () => fleetKpiCounts(archived, generation))
+      : null;
     return { rows, kpis };
   }
   try {
@@ -1022,17 +1113,86 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
     staff.permissionSlugs.has("drivers.manage") ||
     staff.permissionSlugs.has("drivers.create") ||
     staff.permissionSlugs.has("drivers.edit");
-  let base = rowsForCaller(loaded.rows, staff);
-  if (!staff.isPartner) {
-    const project = scopedProjectKey(staff, pickText(data, "project", "p_project"));
+  const selection = await timedPhase(phases, "groupSortMs", async () =>
+    selectDriversPage(
+      loaded.rows,
+      loaded.kpis,
+      {
+        isPartner: staff.isPartner,
+        partnerProjectKey: staff.partnerProjectKey,
+        seesFleet,
+        project: staff.isPartner
+          ? null
+          : scopedProjectKey(staff, pickText(data, "project", "p_project")),
+      },
+      { tab, search, searchField, groupBy, filters, sortKey, desc, limit, offset },
+    ),
+  );
+  if (deferLive) await hydrateDeferredPage(selection.pageRows, phases);
+  return driversPageResult(selection);
+  } finally {
+    logPhases("adminListDriversPage", phases);
+  }
+});
+
+export type DriversPageCaller = {
+  isPartner: boolean;
+  partnerProjectKey: string | null;
+  /** Holds a drivers permission, so the list is the fleet and not one project. */
+  seesFleet: boolean;
+  /** The project a staff caller is held to or asked for. Unused for a partner. */
+  project: string | null;
+};
+
+export type DriversPageQuery = {
+  tab: string;
+  search: string | null;
+  searchField: string | null;
+  groupBy: string;
+  filters: Filters;
+  sortKey: string;
+  desc: boolean;
+  limit: number;
+  offset: number;
+};
+
+export type DriversPageSelection = {
+  pageRows: Dict[];
+  narrow: boolean;
+  filteredTotal: number;
+  tabTotal: number;
+  kpis: DriverKpis;
+  groupBy: string;
+  groupCounts: { key: string; count: number }[];
+};
+
+/**
+ * Scope, tab, search, filter, sort, group and page over the pre-filter roster.
+ *
+ * No database read happens here: the same rows give the same page whether they
+ * were just built or came from the shared store. `rows` is never changed — the
+ * caller's scope is applied to a filtered copy, and nothing of the caller is
+ * written back, which is what lets one stored roster serve a manager and a
+ * partner alike.
+ */
+export function selectDriversPage(
+  rows: Dict[],
+  fleetKpis: DriverKpis | null,
+  caller: DriversPageCaller,
+  query: DriversPageQuery,
+): DriversPageSelection {
+  const { tab, search, searchField, groupBy, filters, sortKey, desc, limit, offset } = query;
+  const { seesFleet, project } = caller;
+  let base = rowsForCaller(rows, caller);
+  if (!caller.isPartner) {
     if (!seesFleet) {
       base = project ? base.filter((row) => projectKeyMatches(row["project_key"], project)) : [];
     } else if (project) {
       base = base.filter((row) => projectKeyMatches(row["project_key"], project));
     }
   }
-  const narrow = staff.isPartner || !seesFleet;
-  const rosterKpi = narrow ? kpisFromRows(base) : loaded.kpis;
+  const narrow = caller.isPartner || !seesFleet;
+  const rosterKpi = narrow ? kpisFromRows(base) : fleetKpis;
   const tabbed = base.filter((row) => tabMatches(row, tab));
   const filtered = tabbed.filter(
     (row) => searchMatches(row, search, searchField) && rowMatches(row, filters),
@@ -1053,15 +1213,13 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
     return String(left["id"]).localeCompare(String(right["id"]));
   };
 
-  const sorted = await timedPhase(phases, "groupSortMs", async () =>
-    [...filtered].sort((left, right) => {
-      if (groupBy !== "none") {
-        const byGroup = groupKeyOf(left, groupBy).localeCompare(groupKeyOf(right, groupBy));
-        if (byGroup !== 0) return byGroup;
-      }
-      return compareRows(left, right);
-    }),
-  );
+  const sorted = [...filtered].sort((left, right) => {
+    if (groupBy !== "none") {
+      const byGroup = groupKeyOf(left, groupBy).localeCompare(groupKeyOf(right, groupBy));
+      if (byGroup !== 0) return byGroup;
+    }
+    return compareRows(left, right);
+  });
 
   const groupCounts =
     groupBy === "none"
@@ -1074,25 +1232,34 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
           }, {}),
         ).map(([key, count]) => ({ key, count }));
 
-  const pageRows = sorted.slice(offset, offset + limit);
-  if (deferLive) await hydrateDeferredPage(pageRows, phases);
-
   return {
-    rows: narrow ? pageRows.map((row) => maskDriverForPartner(row)) : pageRows,
-    filtered_total: filtered.length,
-    tab_total: rosterKpi
+    pageRows: sorted.slice(offset, offset + limit),
+    narrow,
+    filteredTotal: filtered.length,
+    tabTotal: rosterKpi
       ? tab === "multi_device"
         ? tabbed.length
         : tabTotalOf(tab, rosterKpi)
       : tabbed.length,
     kpis: rosterKpi ?? kpisFromRows(base),
-    group_by: groupBy,
-    group_counts: groupCounts,
+    groupBy,
+    groupCounts,
   };
-  } finally {
-    logPhases("adminListDriversPage", phases);
-  }
-});
+}
+
+/** The answer the panel reads. Masking is the last step, after any hydration. */
+export function driversPageResult(selection: DriversPageSelection) {
+  return {
+    rows: selection.narrow
+      ? selection.pageRows.map((row) => maskDriverForPartner(row))
+      : selection.pageRows,
+    filtered_total: selection.filteredTotal,
+    tab_total: selection.tabTotal,
+    kpis: selection.kpis,
+    group_by: selection.groupBy,
+    group_counts: selection.groupCounts,
+  };
+}
 
 /**
  * `admin_drivers_filter_values`.
@@ -1293,7 +1460,7 @@ async function endDriverDutyKeepGps(driverId: string, reason: string): Promise<v
  * Activation needs a zone or a published restaurant; leaving Active always ends
  * the shift, whatever the new status is.
  */
-export const setDriverAccountStatus = onCall(async (request) => {
+export const setDriverAccountStatus = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaffFresh(request, "drivers.manage");
 
   const data = (request.data ?? {}) as Dict;
@@ -1325,7 +1492,7 @@ export const setDriverAccountStatus = onCall(async (request) => {
   await invalidateDriverHomeDailySafe(driverId, `status:${status}`);
 
   return { ok: true, status };
-});
+}));
 
 /**
  * `set_driver_blocked`.
@@ -1334,7 +1501,7 @@ export const setDriverAccountStatus = onCall(async (request) => {
  * session and closes the open attendance log, so a blocked phone cannot keep
  * accruing work time. Unblocking only clears the flags.
  */
-export const setDriverBlocked = onCall(async (request) => {
+export const setDriverBlocked = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaffFresh(request, "drivers.manage");
 
   const data = (request.data ?? {}) as Dict;
@@ -1457,7 +1624,7 @@ export const setDriverBlocked = onCall(async (request) => {
   await invalidateDriverHomeDailySafe(driverId, "blocked");
 
   return { ok: true };
-});
+}));
 
 /**
  * `set_driver_frozen`.

@@ -33,6 +33,7 @@ import type {
 } from "./import/import-job-types";
 import type { DriverImportCredential, DriverImportPreviewRow } from "./types";
 import { requireMutationAuth } from "@/lib/auth/require-mutation-auth";
+import { withDriverRosterBump } from "@/lib/firebase/bump-driver-roster";
 
 const MAX_EVENTS = 2000;
 const PENDING_BATCH = 400;
@@ -386,7 +387,14 @@ export async function appendDriverImportRows(payload: {
   return { ok: true };
 }
 
+/** Bumps the stored Employees roster once `processDriverImportChunkImpl` has finished. */
 export async function processDriverImportChunk(
+  ...args: Parameters<typeof processDriverImportChunkImpl>
+): ReturnType<typeof processDriverImportChunkImpl> {
+  return withDriverRosterBump(() => processDriverImportChunkImpl(...args));
+}
+
+async function processDriverImportChunkImpl(
   jobId: string,
 ): Promise<
   | {

@@ -4,6 +4,7 @@ import { COLLECTIONS, FIELDS } from "../core/collections";
 import { parseIdList } from "../core/query";
 import { requireStaff } from "../core/staff";
 import { rebuildDeliveryContextSafe } from "./delivery-context-build";
+import { thenBumpDriverRoster } from "../router/read-snapshot";
 
 /** Firestore caps one commit at 500 writes, and an `in` filter at 30 values. */
 export const DELETE_CHUNK = 400;
@@ -188,7 +189,7 @@ export const adminPurgeDeliveries = onCall(async (request) => {
  * failure there leaves a driver row whose account can be cleaned up separately,
  * instead of a half-deleted account.
  */
-export const adminPurgeDrivers = onCall(async (request) => {
+export const adminPurgeDrivers = onCall(thenBumpDriverRoster(async (request) => {
   const data = (request.data ?? {}) as Record<string, unknown>;
   await requireStaff(request, "drivers.bulk_delete");
   const ids = requireIds(data);
@@ -241,10 +242,10 @@ export const adminPurgeDrivers = onCall(async (request) => {
   await deleteByIds(COLLECTIONS.profiles, ids);
 
   return { deleted: ids.length, storage_keys: storageKeys, manifest };
-});
+}));
 
 /** `admin_purge_intakes` — the intake rows and the storage prefixes they own. */
-export const adminPurgeIntakes = onCall(async (request) => {
+export const adminPurgeIntakes = onCall(thenBumpDriverRoster(async (request) => {
   const data = (request.data ?? {}) as Record<string, unknown>;
   await requireStaff(request, "drivers.bulk_delete");
   const ids = requireIds(data);
@@ -263,10 +264,10 @@ export const adminPurgeIntakes = onCall(async (request) => {
 
   await deleteByIds(COLLECTIONS.driverIntakes, ids);
   return { deleted: ids.length, storage_prefixes: storagePrefixes, storage_keys: storageKeys };
-});
+}));
 
 /** `admin_purge_restaurants` — the geofences first, then the merchant. */
-export const adminPurgeRestaurants = onCall(async (request) => {
+export const adminPurgeRestaurants = onCall(thenBumpDriverRoster(async (request) => {
   const data = (request.data ?? {}) as Record<string, unknown>;
   await requireStaff(request, "restaurants.bulk_delete");
   const ids = requireIds(data);
@@ -279,10 +280,10 @@ export const adminPurgeRestaurants = onCall(async (request) => {
   await rebuildDeliveryContextSafe("admin_purge_restaurants");
 
   return { deleted: ids.length, storage_prefixes: storagePrefixes };
-});
+}));
 
 /** `admin_purge_zones` — the zone rows, after the references that point at them. */
-export const adminPurgeZones = onCall(async (request) => {
+export const adminPurgeZones = onCall(thenBumpDriverRoster(async (request) => {
   const data = (request.data ?? {}) as Record<string, unknown>;
   await requireStaff(request, "zones.bulk_delete");
   const ids = requireIds(data);
@@ -290,7 +291,7 @@ export const adminPurgeZones = onCall(async (request) => {
   await releaseForeignKeyGuards("zones");
   await deleteByIds(COLLECTIONS.zones, ids);
   return { deleted: ids.length };
-});
+}));
 
 /** `admin_purge_delivery_rules` — the scopes go with the rule. */
 export const adminPurgeDeliveryRules = onCall(async (request) => {

@@ -62,6 +62,7 @@ import {
   PER_DELIVERY_REWARD_STEP_KWD,
 } from "./incentive-rule-form-validation";
 import { ruleScopeWrite, type RuleScopeWriteRow } from "./rule-scope-write";
+import { withDriverRosterBump } from "@/lib/firebase/bump-driver-roster";
 
 export type {
   DpdTargetImportInputRow,
@@ -790,7 +791,14 @@ export async function getIncentiveRuleById(
   return mapIncentiveRuleRow(data, maps);
 }
 
-export async function saveRestaurant(formData: FormData): Promise<DpdMutationResult> {
+/** Bumps the stored Employees roster once `saveRestaurantImpl` has finished. */
+export async function saveRestaurant(
+  ...args: Parameters<typeof saveRestaurantImpl>
+): ReturnType<typeof saveRestaurantImpl> {
+  return withDriverRosterBump(() => saveRestaurantImpl(...args));
+}
+
+async function saveRestaurantImpl(formData: FormData): Promise<DpdMutationResult> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireEarningsManage();
@@ -889,7 +897,14 @@ export async function saveRestaurant(formData: FormData): Promise<DpdMutationRes
   return { success: true, id: data.id, logoWarning: logoResult.logoWarning };
 }
 
-export async function deleteRestaurant(id: string): Promise<DpdMutationResult> {
+/** Bumps the stored Employees roster once `deleteRestaurantImpl` has finished. */
+export async function deleteRestaurant(
+  ...args: Parameters<typeof deleteRestaurantImpl>
+): ReturnType<typeof deleteRestaurantImpl> {
+  return withDriverRosterBump(() => deleteRestaurantImpl(...args));
+}
+
+async function deleteRestaurantImpl(id: string): Promise<DpdMutationResult> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireEarningsManage();

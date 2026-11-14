@@ -44,6 +44,7 @@ import {
 } from "./_shared";
 import { intakeAssigned, restaurantIdsFromEdges } from "./drivers-assignment";
 import { pickReusableDriver, type LiveDriverClash } from "./driver-approval-reuse";
+import { thenBumpDriverRoster } from "../router/read-snapshot";
 
 const DRIVER_CODE_COUNTER = "driver_code_seq";
 const DRIVER_CODE_FLOOR = 10000;
@@ -407,7 +408,7 @@ async function resolveAuthUser(
  * user this call created is deleted again if the transaction refuses, so a
  * failed approval never leaves an orphan login behind.
  */
-export const adminApproveDriver = onCall(async (request) => {
+export const adminApproveDriver = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaffFresh(request);
 
   const data = (request.data ?? {}) as Dict;
@@ -440,7 +441,7 @@ export const adminApproveDriver = onCall(async (request) => {
     await getAuth().deleteUser(uid).catch(() => undefined);
   }
   return result;
-});
+}));
 
 async function approveInTransaction(
   db: Firestore,
@@ -797,7 +798,7 @@ async function endDriverAppSession(db: Firestore, driverId: string): Promise<voi
  * `archive_driver_intake` — stamps the intake and the linked driver, then ends
  * the live app session the way the `drivers_end_session_on_archive` trigger did.
  */
-export const archiveDriverIntake = onCall(async (request) => {
+export const archiveDriverIntake = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaffFresh(request);
 
   const data = (request.data ?? {}) as Dict;
@@ -862,10 +863,10 @@ export const archiveDriverIntake = onCall(async (request) => {
   if (!outcome.found) return { ok: false, error: "intake_not_found" };
   if (outcome.linked) await endDriverAppSession(db, outcome.linked);
   return { ok: true };
-});
+}));
 
 /** `restore_driver_intake` — clears `archived_at` and takes the identity locks back. */
-export const restoreDriverIntake = onCall(async (request) => {
+export const restoreDriverIntake = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaffFresh(request);
 
   const data = (request.data ?? {}) as Dict;
@@ -936,10 +937,10 @@ export const restoreDriverIntake = onCall(async (request) => {
     }
     return { ok: true };
   });
-});
+}));
 
 /** `regenerate_driver_app_passcode` — mints a fresh code and releases the old lock. */
-export const regenerateDriverAppPasscode = onCall(async (request) => {
+export const regenerateDriverAppPasscode = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaffFresh(request);
 
   const data = (request.data ?? {}) as Dict;
@@ -965,7 +966,7 @@ export const regenerateDriverAppPasscode = onCall(async (request) => {
     tx.update(driverRef, { app_passcode: code, updated_at: now });
     return { ok: true, passcode: code };
   });
-});
+}));
 
 /** `intake_has_ops_assignment` as a callable. */
 export const intakeHasOpsAssignment = onCall(async (request) => {

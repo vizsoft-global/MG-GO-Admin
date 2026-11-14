@@ -12,7 +12,7 @@ import { COLLECTIONS } from "../core/collections";
 import { requireStaffFresh } from "../core/staff";
 import { driverSearchStamp } from "../core/search-text";
 import { logAdminActivity, pick, pickText, type Dict } from "./_shared";
-import { bumpScanSnapshots, PAYROLL_SNAPSHOTS } from "../router/read-snapshot";
+import { bumpScanSnapshots, PAYROLL_SNAPSHOTS, thenBumpDriverRoster } from "../router/read-snapshot";
 
 const EMPLOYEE_ID_RE = /^[A-Za-z0-9]{1,100}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -256,7 +256,7 @@ async function resolveActiveClientKey(
   return null;
 }
 
-export const adminSavePayrollIdentity = onCall(async (request) => {
+export const adminSavePayrollIdentity = onCall(thenBumpDriverRoster(async (request) => {
   const staff = await requireStaffFresh(request, "payroll.manage");
   const data = argsOf(request.data);
   const driverId = pickText(data, "p_driver_id", "driver_id", "driverId");
@@ -399,7 +399,7 @@ export const adminSavePayrollIdentity = onCall(async (request) => {
   });
   await bumpScanSnapshots(PAYROLL_SNAPSHOTS);
   return { ok: true };
-});
+}));
 
 export const adminSavePayrollOrders = onCall(async (request) => {
   const staff = await requireStaffFresh(request, "payroll.manage");

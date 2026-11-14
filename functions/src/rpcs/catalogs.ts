@@ -5,6 +5,7 @@ import { parseId } from "../core/query";
 import { requireStaff } from "../core/staff";
 import { stampStoredRow } from "../core/search-text";
 import { rebuildDeliveryContextSafe } from "./delivery-context-build";
+import { thenBumpDriverRoster } from "../router/read-snapshot";
 
 const ZONES = COLLECTIONS.zones;
 const ZONE_GEOFENCE_SETTINGS = "zone_geofence_settings";
@@ -134,7 +135,7 @@ function validateGeometry(kind: GeoKind, geometry: unknown): string | null {
 }
 
 /** `admin_upsert_zone` — plus the `zone_geofence_settings` row the panel writes. */
-export const adminUpsertZone = onCall(async (request) => {
+export const adminUpsertZone = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaff(request, "zones.manage");
 
   const data = asRecord(request.data);
@@ -193,9 +194,9 @@ export const adminUpsertZone = onCall(async (request) => {
   }
 
   return { success: true, id: ref.id };
-});
+}));
 
-export const adminDeleteZone = onCall(async (request) => {
+export const adminDeleteZone = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaff(request, "zones.manage");
 
   const data = asRecord(request.data);
@@ -219,9 +220,9 @@ export const adminDeleteZone = onCall(async (request) => {
   await db.collection(ZONES).doc(id).delete();
   await db.collection(ZONE_GEOFENCE_SETTINGS).doc(id).delete().catch(() => undefined);
   return { success: true };
-});
+}));
 
-export const adminUpsertPartner = onCall(async (request) => {
+export const adminUpsertPartner = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaff(request, "partners.manage");
 
   const data = asRecord(request.data);
@@ -257,9 +258,9 @@ export const adminUpsertPartner = onCall(async (request) => {
     await ref.set({ ...payload, created_at: FieldValue.serverTimestamp() });
   }
   return { success: true, id: ref.id };
-});
+}));
 
-export const adminDeletePartner = onCall(async (request) => {
+export const adminDeletePartner = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaff(request, "partners.manage");
 
   const id = parseId(asRecord(request.data).id);
@@ -277,10 +278,10 @@ export const adminDeletePartner = onCall(async (request) => {
 
   await db.collection(PARTNERS).doc(id).delete();
   return { success: true };
-});
+}));
 
 /** `admin_upsert_restaurant` / `saveRestaurant`. */
-export const adminUpsertRestaurant = onCall(async (request) => {
+export const adminUpsertRestaurant = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaff(request, "restaurants.manage");
 
   const data = asRecord(request.data);
@@ -342,9 +343,9 @@ export const adminUpsertRestaurant = onCall(async (request) => {
   // A store's coordinates and geofences are what the proximity gate measures.
   await rebuildDeliveryContextSafe("admin_upsert_restaurant");
   return { success: true, id: ref.id };
-});
+}));
 
-export const adminDeleteRestaurant = onCall(async (request) => {
+export const adminDeleteRestaurant = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaff(request, "restaurants.manage");
 
   const id = parseId(asRecord(request.data).id);
@@ -358,7 +359,7 @@ export const adminDeleteRestaurant = onCall(async (request) => {
   await batch.commit();
   await rebuildDeliveryContextSafe("admin_delete_restaurant");
   return { success: true };
-});
+}));
 
 export const adminUpsertVehicleType = onCall(async (request) => {
   await requireStaff(request, "vehicles.manage");

@@ -17,6 +17,7 @@ import { DEFAULT_GEOFENCE_SETTINGS } from "./geofence-defaults";
 import { mapZoneDbError } from "./zone-errors";
 import { normalizeZoneColor } from "./zone-colors";
 import type { ZoneGeofenceSettings } from "./types";
+import { withDriverRosterBump } from "@/lib/firebase/bump-driver-roster";
 
 export type ZoneGeofenceInput = ZoneGeofenceSettings;
 
@@ -98,7 +99,14 @@ async function requireZonesManager(verb: "create" | "edit" | "delete" = "edit") 
 
 export type ZoneMutationResult = { error?: string; success?: boolean; id?: string };
 
-export async function createZone(input: {
+/** Bumps the stored Employees roster once `createZoneImpl` has finished. */
+export async function createZone(
+  ...args: Parameters<typeof createZoneImpl>
+): ReturnType<typeof createZoneImpl> {
+  return withDriverRosterBump(() => createZoneImpl(...args));
+}
+
+async function createZoneImpl(input: {
   name: string;
   code: string;
   color: string;
@@ -165,7 +173,14 @@ export async function createZone(input: {
   return { success: true, id };
 }
 
-export async function updateZone(input: {
+/** Bumps the stored Employees roster once `updateZoneImpl` has finished. */
+export async function updateZone(
+  ...args: Parameters<typeof updateZoneImpl>
+): ReturnType<typeof updateZoneImpl> {
+  return withDriverRosterBump(() => updateZoneImpl(...args));
+}
+
+async function updateZoneImpl(input: {
   id: string;
   name: string;
   code: string;
@@ -282,7 +297,14 @@ async function clearZoneLinks(db: Firestore, zoneId: string) {
   await db.collection(SETTINGS_COLLECTION).doc(zoneId).delete();
 }
 
-export async function deleteZone(id: string, force = false): Promise<ZoneMutationResult> {
+/** Bumps the stored Employees roster once `deleteZoneImpl` has finished. */
+export async function deleteZone(
+  ...args: Parameters<typeof deleteZoneImpl>
+): ReturnType<typeof deleteZoneImpl> {
+  return withDriverRosterBump(() => deleteZoneImpl(...args));
+}
+
+async function deleteZoneImpl(id: string, force = false): Promise<ZoneMutationResult> {
   const mutationAuth = await requireMutationAuth();
   if ("error" in mutationAuth) return { error: mutationAuth.error };
   const auth = await requireZonesManager("delete");

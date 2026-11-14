@@ -25,6 +25,7 @@ import {
   undoTargetId,
   type VehicleImportBatchTip,
 } from "./import/vehicle-import-stack";
+import { withDriverRosterBump } from "@/lib/firebase/bump-driver-roster";
 
 const BATCHES = "vehicle_import_batches";
 const IMPORT_ROWS = "vehicle_import_rows";
@@ -301,7 +302,14 @@ export async function listVehicleImportRows(batchId: string): Promise<VehicleImp
   }
 }
 
-export async function applyVehicleImport(input: {
+/** Bumps the stored Employees roster once `applyVehicleImportImpl` has finished. */
+export async function applyVehicleImport(
+  ...args: Parameters<typeof applyVehicleImportImpl>
+): ReturnType<typeof applyVehicleImportImpl> {
+  return withDriverRosterBump(() => applyVehicleImportImpl(...args));
+}
+
+async function applyVehicleImportImpl(input: {
   fileName: string;
   headers: string[];
   rows: string[][];
@@ -623,11 +631,25 @@ async function syncAssignment(
   await batch.commit();
 }
 
-export async function undoVehicleImport(): Promise<{ error?: string; changed?: number }> {
+/** Bumps the stored Employees roster once `undoVehicleImportImpl` has finished. */
+export async function undoVehicleImport(
+  ...args: Parameters<typeof undoVehicleImportImpl>
+): ReturnType<typeof undoVehicleImportImpl> {
+  return withDriverRosterBump(() => undoVehicleImportImpl(...args));
+}
+
+async function undoVehicleImportImpl(): Promise<{ error?: string; changed?: number }> {
   return replay("undo");
 }
 
-export async function redoVehicleImport(): Promise<{ error?: string; changed?: number }> {
+/** Bumps the stored Employees roster once `redoVehicleImportImpl` has finished. */
+export async function redoVehicleImport(
+  ...args: Parameters<typeof redoVehicleImportImpl>
+): ReturnType<typeof redoVehicleImportImpl> {
+  return withDriverRosterBump(() => redoVehicleImportImpl(...args));
+}
+
+async function redoVehicleImportImpl(): Promise<{ error?: string; changed?: number }> {
   return replay("redo");
 }
 

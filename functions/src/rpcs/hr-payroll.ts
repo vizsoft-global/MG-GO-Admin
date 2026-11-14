@@ -4,7 +4,7 @@ import { COLLECTIONS } from "../core/collections";
 import { requireStaffAny, requireStaffFresh } from "../core/staff";
 import { logAdminActivity } from "./_shared";
 import { replaceRestaurantEdges } from "./payroll-edits";
-import { bumpScanSnapshots, PAYROLL_SNAPSHOTS } from "../router/read-snapshot";
+import { bumpScanSnapshots, PAYROLL_SNAPSHOTS, thenBumpDriverRoster } from "../router/read-snapshot";
 
 const MONTH = /^\d{4}-\d{2}$/;
 const CHUNK = 100;
@@ -327,7 +327,7 @@ export const adminHrPayrollSnapshot = onCall(async (request) => {
   return { month, opsApproved: period.exists, rows };
 });
 
-export const adminSaveHrPayrollCells = onCall(async (request) => {
+export const adminSaveHrPayrollCells = onCall(thenBumpDriverRoster(async (request) => {
   const staff = await requireStaffFresh(request, "payroll.manage");
   const data = (request.data ?? {}) as { month?: unknown; cells?: unknown };
   const month = monthOf(data.month);
@@ -693,7 +693,7 @@ export const adminSaveHrPayrollCells = onCall(async (request) => {
   });
   await bumpScanSnapshots(PAYROLL_SNAPSHOTS);
   return { saved, skipped };
-});
+}));
 
 /** `2026-10` → `2026-11`, the first instant of the next Kuwait month. */
 function nextMonthStart(month: string): Timestamp {

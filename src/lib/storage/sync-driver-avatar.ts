@@ -1,5 +1,6 @@
 import type { DocumentReference, Firestore } from "firebase-admin/firestore";
 import { getFirebaseFirestore } from "@/lib/firebase/admin";
+import { bumpDriverRoster } from "@/lib/firebase/bump-driver-roster";
 import { COLLECTIONS } from "@/lib/firebase/db";
 
 async function commitUpdates(
@@ -49,6 +50,8 @@ export async function syncDriverAvatarKey(
       writes.push(commitUpdates(db, intakes.docs.map((doc) => doc.ref), avatarPatch));
     }
     await Promise.all(writes);
+    // The Employees list shows the avatar from the intake row.
+    if (writes.length > 0) await bumpDriverRoster(db);
   } catch {
     // Missing Admin SDK config must not crash the Edit Driver server action.
   }

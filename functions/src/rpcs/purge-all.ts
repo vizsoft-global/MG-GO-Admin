@@ -49,6 +49,7 @@ export {
   adminPurgeFilteredPreview,
   adminPurgeFilteredValues,
 } from "./purge";
+import { thenBumpDriverRoster } from "../router/read-snapshot";
 
 /**
  * `delivery_matches_rules` — the predicate every payout path is gated by.
@@ -435,7 +436,7 @@ async function clearDriversBatch(
  */
 export const adminPurgeRunAll = onCall(
   { region: "me-central1", maxInstances: 20, cors: true },
-  async (request) => {
+  thenBumpDriverRoster(async (request) => {
     const data = (request.data ?? {}) as Record<string, unknown>;
     const entity = entityOf(data);
     await requirePurgeSlug(request, entity);
@@ -478,7 +479,7 @@ export const adminPurgeRunAll = onCall(
       storage_keys: storageKeys,
       manifest,
     };
-  },
+  }),
 );
 
 /* ------------------------------------------------------------------ */
@@ -905,7 +906,7 @@ async function filteredBlockersFor(
  */
 export const adminPurgeSelected = onCall(
   { region: "me-central1", maxInstances: 20, cors: true },
-  async (request) => {
+  thenBumpDriverRoster(async (request) => {
     const data = (request.data ?? {}) as Record<string, unknown>;
     const entity = entityOf(data);
 
@@ -954,7 +955,7 @@ export const adminPurgeSelected = onCall(
         ?? [],
       manifest: result.manifest ?? [],
     };
-  },
+  }),
 );
 
 /**
@@ -991,7 +992,7 @@ async function ownedSelectedIds(
  */
 export const adminPurgeFilteredRun = onCall(
   { region: "me-central1", maxInstances: 20, cors: true },
-  async (request) => {
+  thenBumpDriverRoster(async (request) => {
     const data = (request.data ?? {}) as Record<string, unknown>;
     const entity = entityOf(data);
     const limit = purgeLimit(data);
@@ -1046,7 +1047,7 @@ export const adminPurgeFilteredRun = onCall(
       storage_keys: storageKeys,
       manifest,
     };
-  },
+  }),
 );
 
 /* ------------------------------------------------------------------ */

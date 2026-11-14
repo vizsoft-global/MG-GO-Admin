@@ -13,6 +13,7 @@ import type {
   AssignDriverRow,
   DriverAssignMutationResult,
 } from "./types";
+import { withDriverRosterBump } from "@/lib/firebase/bump-driver-roster";
 
 async function requireDriversManage() {
   const session = await getSessionUser();
@@ -406,7 +407,14 @@ export async function fetchDriverAssignmentPreview(
   return rows[0] ?? null;
 }
 
-export async function assignDriverToRestaurant(input: {
+/** Bumps the stored Employees roster once `assignDriverToRestaurantImpl` has finished. */
+export async function assignDriverToRestaurant(
+  ...args: Parameters<typeof assignDriverToRestaurantImpl>
+): ReturnType<typeof assignDriverToRestaurantImpl> {
+  return withDriverRosterBump(() => assignDriverToRestaurantImpl(...args));
+}
+
+async function assignDriverToRestaurantImpl(input: {
   driverId: string;
   restaurantId: string;
   zoneId?: string | null;
@@ -524,7 +532,14 @@ export async function assignDriverToRestaurant(input: {
   };
 }
 
-export async function assignDriverToZone(input: {
+/** Bumps the stored Employees roster once `assignDriverToZoneImpl` has finished. */
+export async function assignDriverToZone(
+  ...args: Parameters<typeof assignDriverToZoneImpl>
+): ReturnType<typeof assignDriverToZoneImpl> {
+  return withDriverRosterBump(() => assignDriverToZoneImpl(...args));
+}
+
+async function assignDriverToZoneImpl(input: {
   driverId: string;
   zoneId: string;
 }): Promise<DriverAssignMutationResult> {
@@ -605,7 +620,14 @@ export async function assignDriverToZone(input: {
   };
 }
 
-export async function unassignDriverFromRestaurant(input: {
+/** Bumps the stored Employees roster once `unassignDriverFromRestaurantImpl` has finished. */
+export async function unassignDriverFromRestaurant(
+  ...args: Parameters<typeof unassignDriverFromRestaurantImpl>
+): ReturnType<typeof unassignDriverFromRestaurantImpl> {
+  return withDriverRosterBump(() => unassignDriverFromRestaurantImpl(...args));
+}
+
+async function unassignDriverFromRestaurantImpl(input: {
   driverId: string;
   restaurantId: string;
 }): Promise<DriverAssignMutationResult> {

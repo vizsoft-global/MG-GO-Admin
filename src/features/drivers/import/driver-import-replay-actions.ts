@@ -21,6 +21,7 @@ import {
   type DriverImportJournal,
   type DriverImportSnapshot,
 } from "./driver-import-stack";
+import { withDriverRosterBump } from "@/lib/firebase/bump-driver-roster";
 
 function monthStart(): string {
   return `${kuwaitToday().slice(0, 7)}-01`;
@@ -266,7 +267,14 @@ async function applyRedo(row: DriverImportJournal): Promise<"skip" | "done" | { 
   return error ? { error } : "done";
 }
 
-export async function undoDriverImport(): Promise<
+/** Bumps the stored Employees roster once `undoDriverImportImpl` has finished. */
+export async function undoDriverImport(
+  ...args: Parameters<typeof undoDriverImportImpl>
+): ReturnType<typeof undoDriverImportImpl> {
+  return withDriverRosterBump(() => undoDriverImportImpl(...args));
+}
+
+async function undoDriverImportImpl(): Promise<
   { success: true; count: number } | { error: string }
 > {
   const mutationAuth = await requireMutationAuth();
@@ -289,7 +297,14 @@ export async function undoDriverImport(): Promise<
   return { success: true, count: touched.length };
 }
 
-export async function redoDriverImport(): Promise<
+/** Bumps the stored Employees roster once `redoDriverImportImpl` has finished. */
+export async function redoDriverImport(
+  ...args: Parameters<typeof redoDriverImportImpl>
+): ReturnType<typeof redoDriverImportImpl> {
+  return withDriverRosterBump(() => redoDriverImportImpl(...args));
+}
+
+async function redoDriverImportImpl(): Promise<
   { success: true; count: number } | { error: string }
 > {
   const mutationAuth = await requireMutationAuth();
@@ -349,14 +364,28 @@ async function replaySelected(
   return { success: true, count: touched.length };
 }
 
+/** Bumps the stored Employees roster once `undoDriverImportRowsImpl` has finished. */
 export async function undoDriverImportRows(
+  ...args: Parameters<typeof undoDriverImportRowsImpl>
+): ReturnType<typeof undoDriverImportRowsImpl> {
+  return withDriverRosterBump(() => undoDriverImportRowsImpl(...args));
+}
+
+async function undoDriverImportRowsImpl(
   batchId: string,
   rowIndexes: number[],
 ): Promise<{ success: true; count: number } | { error: string }> {
   return replaySelected(batchId, rowIndexes, "undo");
 }
 
+/** Bumps the stored Employees roster once `redoDriverImportRowsImpl` has finished. */
 export async function redoDriverImportRows(
+  ...args: Parameters<typeof redoDriverImportRowsImpl>
+): ReturnType<typeof redoDriverImportRowsImpl> {
+  return withDriverRosterBump(() => redoDriverImportRowsImpl(...args));
+}
+
+async function redoDriverImportRowsImpl(
   batchId: string,
   rowIndexes: number[],
 ): Promise<{ success: true; count: number } | { error: string }> {

@@ -13,6 +13,7 @@
  * live, and the Worker `/latest` path is the fast read.
  */
 import { createHash } from "node:crypto";
+import type { CallableRequest } from "firebase-functions/v2/https";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { FieldValue, Timestamp, getFirestore } from "../core/fs";
 import { COLLECTIONS } from "../core/collections";
@@ -34,6 +35,27 @@ export const ATTENDANCE_SNAPSHOTS = [
 export const OPERATIONS_SNAPSHOTS = [
   "adminOperationsDashboard",
   "adminClientPortalDashboard",
+] as const;
+
+/**
+ * The generation of the stored Employees roster (`roster-snapshot.ts`, read by
+ * `rpcs/drivers.ts`). It is not a handler name: it has no entry in
+ * `SNAPSHOT_TTL_MS`.
+ */
+export const DRIVER_ROSTER_GENERATION = "driverRosterBase";
+
+/**
+ * Everything a change to a roster row must move: the stored roster itself and
+ * the two per-arguments results that are cut from it.
+ *
+ * The panel's own direct writes bump the same three names from
+ * `src/lib/firebase/bump-driver-roster.ts`; `driver-roster-bump.test.ts` fails
+ * if the two lists drift.
+ */
+export const DRIVER_ROSTER_SNAPSHOTS = [
+  DRIVER_ROSTER_GENERATION,
+  "adminListDriversPage",
+  "adminDriversFilterValues",
 ] as const;
 
 /** How long a stored result may be served before the handler runs again. */
@@ -217,6 +239,35 @@ export async function readThroughScanSnapshot(
 /** Leave and sick requests change the same numbers as a leave-plan write. */
 export function bumpOperationsDashboards(): Promise<void> {
   return bumpScanSnapshots(OPERATIONS_SNAPSHOTS);
+}
+
+/**
+ * Call after any write that changes what an Employees list row shows. One
+ * document write, whatever the number of riders changed: call it once per
+ * request, after the loop, never per rider.
+ */
+export function bumpDriverRoster(): Promise<void> {
+  return bumpScanSnapshots(DRIVER_ROSTER_SNAPSHOTS);
+}
+
+/**
+ * Wrap a callable's handler so the roster is bumped once it has finished.
+ *
+ * A handler that throws does not bump: a refused or unauthenticated call must
+ * not be able to make the next opening of Employees rebuild the roster. A
+ * handler that failed half way through its writes is therefore left to the
+ * stored roster's time limit.
+ */
+export function thenBumpDriverRoster<R>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the same request type `onCall` hands an unwrapped handler
+  handler: (request: CallableRequest<any>) => R | Promise<R>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): (request: CallableRequest<any>) => Promise<R> {
+  return async (request) => {
+    const result = await handler(request);
+    await bumpDriverRoster();
+    return result;
+  };
 }
 
 /** One write moves every cached copy of these handlers. The next read recomputes. */

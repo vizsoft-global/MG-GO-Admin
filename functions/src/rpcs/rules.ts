@@ -7,6 +7,7 @@ import { requireStaff, requireStaffFresh } from "../core/staff";
 import { bumpEpoch } from "../core/epoch-write";
 import { catalogPrefixQueries, stampStoredRow } from "../core/search-text";
 import { fullScanFallback, lowercaseFieldIndexed, prefixMatchIds } from "../core/search-query";
+import { thenBumpDriverRoster } from "../router/read-snapshot";
 
 const DELIVERY_RULES = COLLECTIONS.deliveryRules;
 const DELIVERY_RULE_SCOPES = COLLECTIONS.deliveryRuleScopes;
@@ -311,7 +312,7 @@ export const adminInsertDeliveryRuleWithScope = onCall(async (request) => {
 });
 
 /** `admin_upsert_source_company` — keyed on the lowercased key. */
-export const adminUpsertSourceCompany = onCall(async (request) => {
+export const adminUpsertSourceCompany = onCall(thenBumpDriverRoster(async (request) => {
   await requireStaffFresh(request, "companies.manage");
 
   const data = asRecord(request.data);
@@ -416,7 +417,7 @@ export const adminUpsertSourceCompany = onCall(async (request) => {
     incentive_below_kwd: docNumber(saved, "incentive_below_kwd"),
     effective_from: docString(saved, "effective_from"),
   };
-});
+}));
 
 type ScopeInput = { scopeType: ScopeType; ids: string[] };
 

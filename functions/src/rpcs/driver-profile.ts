@@ -18,6 +18,7 @@ import {
   pickText,
   type Dict,
 } from "./_shared";
+import { thenBumpDriverRoster } from "../router/read-snapshot";
 
 const LOGIN_VERIFICATIONS = "driver_login_verifications";
 
@@ -176,7 +177,7 @@ async function rejectAvatarKey(uid: string, reason: "path_traversal" | "outside_
   throw riderError("invalid-argument", "invalid_object_key", { reason });
 }
 
-export const driverUpdateAvatar = onCall(async (request) => {
+export const driverUpdateAvatar = onCall(thenBumpDriverRoster(async (request) => {
   const rider = await requireRider(request);
   const data = (request.data ?? {}) as Dict;
   const key = pickText(data, "p_object_key", "object_key", "objectKey");
@@ -232,7 +233,7 @@ export const driverUpdateAvatar = onCall(async (request) => {
     avatar_object_key: key,
     avatar_updated_at: isoTimestamp(now),
   };
-});
+}));
 
 /**
  * Flutter `device_profile_reporter` still calls `driver_report_device_meta`.

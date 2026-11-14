@@ -42,6 +42,7 @@ import type {
   VehicleStatus,
   VehicleTypeRow,
 } from "./types";
+import { withDriverRosterBump } from "@/lib/firebase/bump-driver-roster";
 
 type Row = Record<string, unknown> & { id: string };
 
@@ -455,7 +456,14 @@ async function updateLinkedIntakes(
   if (pending > 0) await batch.commit();
 }
 
+/** Bumps the stored Employees roster once `saveVehicleImpl` has finished. */
 export async function saveVehicle(
+  ...args: Parameters<typeof saveVehicleImpl>
+): ReturnType<typeof saveVehicleImpl> {
+  return withDriverRosterBump(() => saveVehicleImpl(...args));
+}
+
+async function saveVehicleImpl(
   formData: FormData,
 ): Promise<{ error?: string; id?: string }> {
   const mutationAuth = await requireMutationAuth();
@@ -621,7 +629,14 @@ export async function saveVehicle(
   return { id: vehicleId };
 }
 
+/** Bumps the stored Employees roster once `assignVehicleDriverImpl` has finished. */
 export async function assignVehicleDriver(
+  ...args: Parameters<typeof assignVehicleDriverImpl>
+): ReturnType<typeof assignVehicleDriverImpl> {
+  return withDriverRosterBump(() => assignVehicleDriverImpl(...args));
+}
+
+async function assignVehicleDriverImpl(
   vehicleId: string,
   driverId: string | null,
 ): Promise<{ error?: string }> {
@@ -689,7 +704,14 @@ export async function assignVehicleDriver(
 
 const BULK_VEHICLE_CAP = 50;
 
+/** Bumps the stored Employees roster once `bulkAssignVehicleDriversImpl` has finished. */
 export async function bulkAssignVehicleDrivers(
+  ...args: Parameters<typeof bulkAssignVehicleDriversImpl>
+): ReturnType<typeof bulkAssignVehicleDriversImpl> {
+  return withDriverRosterBump(() => bulkAssignVehicleDriversImpl(...args));
+}
+
+async function bulkAssignVehicleDriversImpl(
   pairs: { vehicleId: string; driverId: string | null }[],
 ): Promise<{ error?: string; updated?: number }> {
   const auth = await requireVehicles("vehicles.manage");
@@ -703,7 +725,7 @@ export async function bulkAssignVehicleDrivers(
     .slice(0, BULK_VEHICLE_CAP);
   if (next.length === 0) return { error: "missing_fields" };
   for (const pair of next) {
-    const result = await assignVehicleDriver(pair.vehicleId, pair.driverId);
+    const result = await assignVehicleDriverImpl(pair.vehicleId, pair.driverId);
     if (result.error) return result;
   }
   return { updated: next.length };
