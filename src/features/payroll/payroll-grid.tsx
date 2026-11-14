@@ -1285,8 +1285,13 @@ export function PayrollSummaryTable({
         </div>
       ) : null}
       <div ref={scrollRef} className="max-h-[min(420px,46dvh)] overflow-auto">
-        <table className="w-max min-w-full border-collapse text-xs">
-          <thead className="sticky top-0 z-10 bg-card">
+        {/* Separated borders: in a collapsed table Chrome paints one shared edge
+            per column, which drops a sticky cell's bottom rule and lets the
+            scrolled rows bleed through the pinned headers. Each header and body
+            cell now carries its own border, so the identity block stays a solid,
+            opaque corner on both scroll axes. */}
+        <table className="w-max min-w-full border-separate border-spacing-0 text-xs">
+          <thead>
             <tr>
               {columns.map((column, index) => {
                 const sticky = stickyIdentityStyle(
@@ -1307,8 +1312,12 @@ export function PayrollSummaryTable({
                   sort={sort}
                   onSort={setSort}
                   numeric={column.numeric}
-                  className={cn(TABLE_HEAD_CLASS, "px-2 py-2", sticky?.className)}
-                  style={sticky?.style}
+                  className={cn(
+                    TABLE_HEAD_CLASS,
+                    "border-b border-border px-2 py-2",
+                    sticky?.className ?? "sticky top-0 bg-card",
+                  )}
+                  style={sticky ? { ...sticky.style, zIndex: 50 } : { top: 0, zIndex: 40 }}
                 />
                 );
               })}
@@ -1316,7 +1325,11 @@ export function PayrollSummaryTable({
                 key="row-action"
                 scope="col"
                 aria-label={t("common.openEmployee")}
-                className={cn(TABLE_HEAD_CLASS, "w-9 px-1 py-2 text-center")}
+                className={cn(
+                  TABLE_HEAD_CLASS,
+                  "sticky top-0 w-9 border-b border-border bg-card px-1 py-2 text-center",
+                )}
+                style={{ zIndex: 40 }}
               />
             </tr>
           </thead>
@@ -1351,7 +1364,7 @@ export function PayrollSummaryTable({
                     <td
                       key={column.id}
                       className={cn(
-                        "whitespace-nowrap px-2 py-1.5",
+                        "whitespace-nowrap border-b border-border/60 px-2 py-1.5",
                         sticky?.className,
                         column.id === "name" && "font-medium",
                       )}
@@ -1361,7 +1374,7 @@ export function PayrollSummaryTable({
                     </td>
                     );
                   })}
-                  <td className="w-9 px-1 py-1.5 text-center">
+                  <td className="w-9 border-b border-border/60 px-1 py-1.5 text-center">
                     <PayrollRowLink driverId={row.driverId} />
                   </td>
                 </tr>

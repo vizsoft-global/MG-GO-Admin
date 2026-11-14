@@ -81,6 +81,19 @@ export function validateBankDetails(
     !beneficiary && !bankCode && !account && !iban && currency === DEFAULT_PAYMENT_CURRENCY;
   if (empty) return { ok: true, value: { ...EMPTY_BANK_DETAILS } };
 
+  /**
+   * A beneficiary Civil ID on its own is a complete answer. Every rider gets one
+   * mirrored from their own Civil ID, and most have no bank picked yet, so
+   * demanding a bank here would refuse a save the operator has nothing to fix.
+   */
+  if (!bankCode && !account && !iban) {
+    if (currency !== DEFAULT_PAYMENT_CURRENCY) return { ok: false, error: "bank_required" };
+    return {
+      ok: true,
+      value: { ...EMPTY_BANK_DETAILS, beneficiary_civil_id: beneficiary || null, currency },
+    };
+  }
+
   if (!bankCode) return { ok: false, error: "bank_required" };
 
   // Cash is a complete answer, not a half-filled bank: no account, no IBAN.

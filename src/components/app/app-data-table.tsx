@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { TableStage } from "./table-toolbar/table-stage";
-import { AppTableScrollRail } from "./app-table-scroll-rail";
 import { AppTableBackToTop } from "./app-table-back-to-top";
 import { TABLE_HEAD_CLASS } from "./constants";
 import { FitViewport } from "./fit-viewport";
@@ -93,7 +92,6 @@ export function AppDataTable({
           className,
         )}
       >
-        <AppTableScrollRail />
         {surface}
       </div>
     );
@@ -140,7 +138,6 @@ export function AppDataTable({
     <div className={cn("flex flex-col", className)}>
       <div className="sticky top-0 z-20 flex h-[calc(100dvh-0.75rem)] min-h-[320px] flex-col">
         <TableStage toolbar={toolbar} />
-        <AppTableScrollRail />
         <div
           data-table-scroll=""
           className="min-h-0 flex-1 overflow-auto [&_[data-slot=table-container]]:overflow-visible"
