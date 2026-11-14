@@ -41,6 +41,31 @@ const WRITERS_LEFT_ON_THE_TIME_LIMIT: Record<string, string> = {
     "writes restaurants.zone_id only; a list row shows the restaurant's name, not its zone",
 };
 
+/** The same collections under the names the staff client (`db.from("...")`) uses. */
+const ROSTER_TABLES = [
+  "driver_intakes",
+  "driver_restaurants",
+  "driver_intake_restaurants",
+  "partners",
+  "zones",
+  "source_companies",
+  "restaurants",
+];
+
+/**
+ * Files that write a roster table and do not bump themselves, because every
+ * caller of their helper is a wrapped action. A new caller fails the test.
+ */
+const TABLE_WRITERS_BUMPED_BY_THEIR_CALLER: Record<string, { helper: string; callers: string[] }> = {
+  "src/features/drivers/import/driver-import-write.ts": {
+    helper: "syncImportRestaurants",
+    callers: [
+      "src/features/drivers/drivers-import-actions.ts",
+      "src/features/drivers/import/driver-import-replay-actions.ts",
+    ],
+  },
+};
+
 /** The server actions that are wrapped, file by file. */
 const WRAPPED_ACTIONS: Record<string, string[]> = {
   "src/features/drivers/drivers-actions.ts": [
@@ -150,6 +175,41 @@ describe("stored Employees roster: panel-side invalidation", () => {
       missing.push(`${path} (${touches.join(", ")})`);
     }
     assert.deepEqual(missing, []);
+  });
+
+  it("is called by every panel file that writes a roster table through the staff client", () => {
+    // Most of the panel's writes to these tables are `db.from("driver_intakes").update(...)`,
+    // which the `COLLECTIONS.x` scan above cannot see.
+    const tables = ROSTER_TABLES.join("|");
+    const write = new RegExp(
+      `\\.from\\("(${tables})"\\)[^;]{0,600}?\\.(insert|update|upsert|delete)\\(`,
+      "g",
+    );
+    const missing: string[] = [];
+    let seen = 0;
+    for (const path of sourceFiles("src")) {
+      const text = read(path);
+      const touched = [...new Set([...text.matchAll(write)].map((match) => match[1]))];
+      if (touched.length === 0) continue;
+      seen += 1;
+      if (text.includes("bumpDriverRoster(") || text.includes("withDriverRosterBump(")) continue;
+      if (path in TABLE_WRITERS_BUMPED_BY_THEIR_CALLER) continue;
+      missing.push(`${path} (${touched.join(", ")})`);
+    }
+    assert.ok(seen >= 5, "the scan no longer finds the known writers; its pattern is stale");
+    assert.deepEqual(missing, []);
+  });
+
+  it("reaches the unbumped table writers only from wrapped actions", () => {
+    for (const [path, { helper, callers }] of Object.entries(TABLE_WRITERS_BUMPED_BY_THEIR_CALLER)) {
+      const found = sourceFiles("src").filter(
+        (file) => file !== path && read(file).includes(`${helper}(`),
+      );
+      assert.deepEqual(found.sort(), [...callers].sort(), `${helper} gained a caller`);
+      for (const caller of callers) {
+        assert.ok(read(caller).includes("withDriverRosterBump("), `${caller} does not bump`);
+      }
+    }
   });
 
   for (const [path, names] of Object.entries(WRAPPED_ACTIONS)) {
