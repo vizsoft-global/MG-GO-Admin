@@ -84,3 +84,6 @@ firebase.deployonly.json
 .agents/mcp/
 
 # function signer key (local).fn-signer.json
+
+# Claude Code local tooling config
+.claude/
