@@ -11402,7 +11402,8 @@
           "dpd": "DPD",
           "dpd_eff": "DPD Efficiency",
           "tgt_eff": "Target Efficiency",
-          "utr": "UTR"
+          "utr": "UTR",
+          "shadeNote": "Darkest shade = highest value; lightening down the ranking"
         },
         "show": {
           "label": "Show",
@@ -11417,6 +11418,7 @@
           "monthly": "Monthly"
         },
         "yearLabel": "Year",
+        "periodLabel": "Period",
         "filterSearch": "Search values",
         "filterClear": "Clear",
         "filterApply": "Apply",

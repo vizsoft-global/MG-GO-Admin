@@ -1152,6 +1152,7 @@ function DriversPageContent() {
                           columnId="select"
                           isVisible={isColumnVisible}
                           onClick={(e) => e.stopPropagation()}
+                          className="w-10"
                         >
                           <Checkbox
                             checked={selectedIds.has(driver.id)}
