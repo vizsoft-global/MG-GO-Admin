@@ -83,6 +83,92 @@ export function rosterKpis(rows: readonly RosterKpiRow[]): RosterKpis {
   };
 }
 
+type PlanRow = Record<string, unknown>;
+
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+/**
+ * The tile-count rows for the fleet, from roster rows already in hand.
+ *
+ * The roster of live riders is exactly the set of non-archived intakes, and a
+ * roster row carries the two intake fields the counts use. So with the roster
+ * loaded, only the drivers' status and duty have to be read: the second pass
+ * over `driver_intakes` is the same documents again.
+ */
+export function kpiRowsFromRoster(
+  rows: readonly PlanRow[],
+  driverById: ReadonlyMap<string, PlanRow>,
+): RosterKpiRow[] {
+  return rows.map((row) => {
+    const linked = text(row["linked_profile_id"]);
+    const driver = linked ? driverById.get(linked) : undefined;
+    return {
+      linkedProfileId: linked,
+      workflowStatus: text(row["workflow_status"]),
+      accountStatus: (driver ? text(driver["status"]) : null) ?? "pending",
+      onDuty: driver ? driver["is_on_duty"] === true : false,
+    };
+  });
+}
+
+/**
+ * The vehicle a page row must read to fill its live vehicle fields, or `null`
+ * when the row already holds them.
+ *
+ * A deferred roster row is built with the label and type of the intake's
+ * vehicle. When the driver document names that same vehicle there is nothing
+ * newer to read: every edit of a vehicle's plate or type, and every
+ * assignment, rebuilds the roster. Only a rider whose driver document names a
+ * different vehicle needs the read.
+ */
+export function vehicleToRead(row: PlanRow, driver: PlanRow): string | null {
+  const live = text(driver["vehicle_id"]) ?? text(row["vehicle_id"]);
+  if (live === null) return null;
+  return live === text(row["vehicle_id"]) ? null : live;
+}
+
+export type LiveVehicleFields = {
+  vehicle_id: string | null;
+  vehicle_label: string | null;
+  vehicle_type_key: string | null;
+  assigned_vehicle_type_key: string | null;
+};
+
+/**
+ * The four vehicle fields of a hydrated page row. `fetched` holds the vehicles
+ * `vehicleToRead` asked for; a row that needed no read keeps what it was built
+ * with, which is what a fresh read of the same vehicle would give.
+ */
+export function liveVehicleFields(
+  row: PlanRow,
+  driver: PlanRow,
+  fetched: ReadonlyMap<string, PlanRow>,
+): LiveVehicleFields {
+  const vehicleId = text(driver["vehicle_id"]) ?? text(row["vehicle_id"]);
+  const driverType = text(driver["vehicle_type_key"]);
+  if (vehicleToRead(row, driver) === null) {
+    const assigned = vehicleId === null ? null : text(row["assigned_vehicle_type_key"]);
+    return {
+      vehicle_id: vehicleId,
+      vehicle_label: text(row["vehicle_label"]),
+      vehicle_type_key: driverType ?? assigned ?? text(row["vehicle_type_key"]),
+      assigned_vehicle_type_key: assigned,
+    };
+  }
+  const vehicle = vehicleId ? fetched.get(vehicleId) : undefined;
+  return {
+    vehicle_id: vehicleId,
+    vehicle_label: vehicle
+      ? text(vehicle["reg_number"]) ?? text(vehicle["bike_id"]) ?? null
+      : text(row["vehicle_label"]),
+    vehicle_type_key:
+      driverType ?? (vehicle ? text(vehicle["vehicle_type_key"]) : null) ?? text(row["vehicle_type_key"]),
+    assigned_vehicle_type_key: vehicle ? text(vehicle["vehicle_type_key"]) : null,
+  };
+}
+
 const SEARCH_FIELD_ALIASES: Record<string, string> = {
   employee_id: "employeeId",
   civil_id: "civilId",

@@ -39,7 +39,10 @@ import {
   canonicalDriversGroupBy,
   canonicalDriversSearchField,
   dedupeRestaurantEdges,
+  kpiRowsFromRoster,
+  liveVehicleFields,
   rosterKpis,
+  vehicleToRead,
 } from "./driver-list-plan";
 import { invalidateDriverHomeDailySafe } from "./driver-home";
 import { DRIVER_ROSTER_GENERATION, thenBumpDriverRoster } from "../router/read-snapshot";
@@ -775,7 +778,12 @@ const kpiCache = new Map<string, { kpis: DriverKpis; at: number; generation?: nu
  * document, the same 60 seconds they are remembered for here), and a roster
  * edit moves them on every instance at once.
  */
-async function fleetKpiCounts(archived: boolean, generation: number | null = null): Promise<DriverKpis> {
+async function fleetKpiCounts(
+  archived: boolean,
+  generation: number | null = null,
+  /** The live roster, when the caller has just loaded it: saves the intake pass. */
+  rosterRows: readonly Dict[] | null = null,
+): Promise<DriverKpis> {
   const key = archived ? "archived" : "live";
   const now = Date.now();
   const hit = kpiCache.get(key);
@@ -788,14 +796,14 @@ async function fleetKpiCounts(archived: boolean, generation: number | null = nul
   }
   let kpis: DriverKpis;
   if (generation === null) {
-    kpis = await computeFleetKpiCounts(archived);
+    kpis = await computeFleetKpiCounts(archived, rosterRows);
   } else {
     const read = await readThroughRoster<DriverKpis>({
       name: DRIVER_ROSTER_GENERATION,
       key: `kpis|${key}|v1`,
       ttlMs: BASE_ROWS_TTL_MS,
       generation,
-      load: () => computeFleetKpiCounts(archived),
+      load: () => computeFleetKpiCounts(archived, rosterRows),
     });
     kpis = read.value;
   }
@@ -807,8 +815,17 @@ async function fleetKpiCounts(archived: boolean, generation: number | null = nul
   return kpis;
 }
 
-async function computeFleetKpiCounts(archived: boolean): Promise<DriverKpis> {
+async function computeFleetKpiCounts(
+  archived: boolean,
+  rosterRows: readonly Dict[] | null = null,
+): Promise<DriverKpis> {
   const db = getFirestore();
+  if (rosterRows && !archived) {
+    // The roster in hand is the non-archived intakes; only status and duty are missing.
+    const snap = await db.collection(COLLECTIONS.drivers).select("status", "is_on_duty").get();
+    const byId = new Map(snap.docs.map((doc) => [doc.id, doc.data() as Dict]));
+    return rosterKpis(kpiRowsFromRoster(rosterRows, byId));
+  }
   const [intakeSnap, driverSnap] = await Promise.all([
     db.collection(COLLECTIONS.driverIntakes).select("archived_at", "linked_profile_id", "workflow_status").get(),
     db.collection(COLLECTIONS.drivers).select("status", "is_on_duty").get(),
@@ -865,10 +882,20 @@ async function hydrateDeferredPage(rows: Dict[], phases: PhaseMarks): Promise<vo
         .get(),
       (async () => {
         const devicesSeen = new Map<string, Set<string>>();
-        for (let index = 0; index < linked.length; index += 30) {
-          const chunk = linked.slice(index, index + 30);
-          if (chunk.length === 0) continue;
-          const snap = await db.collection(COLLECTIONS.driverDeviceSessions).where("driver_id", "in", chunk).get();
+        // The chunks do not depend on each other: asked together, not one after another.
+        const chunks: string[][] = [];
+        for (let index = 0; index < linked.length; index += 30) chunks.push(linked.slice(index, index + 30));
+        const snaps = await Promise.all(
+          chunks.map((chunk) =>
+            db.collection(COLLECTIONS.driverDeviceSessions).where("driver_id", "in", chunk).get(),
+          ),
+        );
+        try {
+          phases.pageSessionDocs = snaps.reduce((sum, snap) => sum + snap.size, 0);
+        } catch {
+          // A broken mark must not replace the request result.
+        }
+        for (const snap of snaps) {
           for (const doc of snap.docs) {
             const driverId = asStr(doc.get("driver_id"));
             const deviceId = asStr(doc.get("device_id"));
@@ -897,12 +924,22 @@ async function hydrateDeferredPage(rows: Dict[], phases: PhaseMarks): Promise<vo
       const zoneSnaps = await db.getAll(...zoneIds.map((id) => db.collection(COLLECTIONS.zones).doc(id)));
       for (const snap of zoneSnaps) zoneName.set(snap.id, asStr(snap.get("name")));
     }
+    // Only the vehicles a row does not already describe: see `vehicleToRead`.
     const vehicleIds = [...new Set(
-      [...driverById.values()]
-        .map((driver) => asStr(driver["vehicle_id"]))
-        .concat(rows.map((row) => asStr(row["vehicle_id"])))
+      rows
+        .map((row) => {
+          const linkedId = asStr(row["linked_profile_id"]);
+          const driver = linkedId ? driverById.get(linkedId) : undefined;
+          return driver ? vehicleToRead(row, driver) : null;
+        })
         .filter((id): id is string => id !== null),
     )];
+    try {
+      phases.pageDeliveryDocs = deliverySnap.size;
+      phases.pageVehicleDocs = vehicleIds.length;
+    } catch {
+      // A broken mark must not replace the request result.
+    }
     const vehicleById = new Map<string, Dict>();
     if (vehicleIds.length > 0) {
       const vehicleSnaps = await db.getAll(...vehicleIds.map((id) => db.collection(COLLECTIONS.vehicles).doc(id)));
@@ -920,17 +957,7 @@ async function hydrateDeferredPage(rows: Dict[], phases: PhaseMarks): Promise<vo
       row["mg_id"] = asStr(driver["employee_id"]) ?? asStr(row["mg_id"]);
       row["zone_id"] = zoneId;
       row["zone_name"] = zoneId ? zoneName.get(zoneId) ?? asStr(row["zone_name"]) : null;
-      const vehicleId = asStr(driver["vehicle_id"]) ?? asStr(row["vehicle_id"]);
-      const vehicle = vehicleId ? vehicleById.get(vehicleId) : undefined;
-      row["vehicle_id"] = vehicleId;
-      row["vehicle_label"] = vehicle
-        ? asStr(vehicle["reg_number"]) ?? asStr(vehicle["bike_id"]) ?? null
-        : asStr(row["vehicle_label"]);
-      row["vehicle_type_key"] =
-        asStr(driver["vehicle_type_key"]) ??
-        (vehicle ? asStr(vehicle["vehicle_type_key"]) : null) ??
-        asStr(row["vehicle_type_key"]);
-      row["assigned_vehicle_type_key"] = vehicle ? asStr(vehicle["vehicle_type_key"]) : null;
+      Object.assign(row, liveVehicleFields(row, driver, vehicleById));
       row["account_status"] = accountStatus;
       row["status_key"] = isBlocked ? "blocked" : accountStatus;
       row["is_blocked"] = isBlocked;
@@ -1058,7 +1085,9 @@ async function loadDriversForList(
   const rows = await loadBaseRows(archived, term ? false : deferLive, marks, generation);
   if (!term) {
     const kpis = deferLive
-      ? await timedPhase(marks, "kpiMs", () => fleetKpiCounts(archived, generation))
+      ? await timedPhase(marks, "kpiMs", () =>
+          fleetKpiCounts(archived, generation, archived ? null : rows),
+        )
       : null;
     return { rows, kpis };
   }
@@ -1105,6 +1134,19 @@ export const adminListDriversPage = measureOnCall("adminListDriversPage", async 
     filterCount: Object.keys(filters).length,
     sortKey,
   });
+
+  try {
+    // The shape of the request, never its text: which opening this line is.
+    phases.qTab = ["all", "pending", "on_duty", "multi_device", "archived"].indexOf(tab);
+    phases.qDefer = deferLive ? 1 : 0;
+    phases.qSearch = (search ?? "").trim() === "" ? 0 : 1;
+    phases.qFilters = Object.keys(filters).length;
+    phases.qSortIntake = canDeferDriverJoin({ tab: "all", search: null, filterCount: 0, sortKey }) ? 1 : 0;
+    phases.qOffset = offset;
+    phases.qLimit = limit;
+  } catch {
+    // A broken mark must not replace the request result.
+  }
 
   const loaded = await loadDriversForList(tab === "archived", search, phases, deferLive);
   const seesFleet =
