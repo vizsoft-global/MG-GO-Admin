@@ -7,6 +7,7 @@ import { requireStaff } from "../core/staff";
 import { routerRequirePath } from "./legacy-modules";
 import { callableOptionsForLane, laneOf, type LaneId } from "./lanes";
 import {
+  SNAPSHOT_TTL_MS,
   readThroughScanSnapshot,
   scanSnapshotEnabled,
   snapshotScope,
@@ -131,7 +132,10 @@ export async function dispatchAdminLane(
     try {
       if (!fn) return await runLane(lane, request, fn, load);
       return await runWithCallableName(fn, async () => {
-        if (lane !== "scan" || !scanSnapshotEnabled()) {
+        // The scan lane, and any handler on another lane that has a snapshot
+        // lifetime of its own (the Employees list and its filter values).
+        const snapshotted = lane === "scan" || (lane === "light" && SNAPSHOT_TTL_MS[fn] != null);
+        if (!snapshotted || !scanSnapshotEnabled()) {
           return runLane(lane, request, fn, load);
         }
         const staff = await requireStaff(request as CallableRequest<unknown>);
