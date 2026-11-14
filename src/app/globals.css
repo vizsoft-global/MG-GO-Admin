@@ -229,6 +229,13 @@ html[data-font="plus-jakarta-sans"] {
   color: var(--ops-ink, inherit);
 }
 
+/* A selected KPI card paints the ink behind its own label, value and delta, and
+   each of those carries a colour utility of its own — without this they draw
+   navy on navy. Unlayered so the utilities cannot outrank it. */
+.ops-surface [aria-pressed="true"][data-ops-kpi] :is(p, span, div) {
+  color: inherit;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
