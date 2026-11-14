@@ -450,7 +450,7 @@ DIAGRAMS['arch-platform'] = figure(
       h: 72,
       title: 'Vercel · bom1 — Next.js 16.2.6',
       lines: [
-        'RSC render · server actions · 49 API routes · 13 cron routes · maxDuration 300 s on scan work',
+        'RSC render · server actions · 53 API routes · 13 cron routes · maxDuration 300 s on scan work',
         'Stateless: holds no database, no session store, no queue',
       ],
       tone: 'accent',
