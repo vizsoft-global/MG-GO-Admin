@@ -7,6 +7,7 @@ import { resolveWorkDay, scanUpperMs } from "../core/shift-day";
 import { parseId, parseIdList } from "../core/query";
 import { requireStaff, requireStaffFresh } from "../core/staff";
 import { overlayZoneMonthDocs } from "../core/rollups";
+import { deliveredSliceStatuses, openSliceStatuses } from "../core/ops-delivery-slice";
 import { EMPTY_ROW, asDate, loadAllDocs, loadDocMap, num, toRow, type Row } from "./fleet";
 import { loadNationalityLabels, nationalityLabel } from "../core/nationality-label";
 import {
@@ -876,8 +877,13 @@ async function buildRoll(args: OpsArgs): Promise<{
   hoursByDay: Map<string, number>;
 }> {
   const db = getFirestore();
-  const wantsDelivered = args.orderStatuses.some((status) => status === "verified" || status === "pending");
-  const wantsOpen = args.orderStatuses.includes("in_transit");
+  // One list, used twice: as the query filter and as the filter `pushDelivery`
+  // applies. Keeping them derived from the same call is what makes the narrower
+  // read the same answer rather than a second, drifting rule.
+  const deliveredStatuses = deliveredSliceStatuses(args.orderStatuses);
+  const openStatuses = openSliceStatuses(args.orderStatuses);
+  const wantsDelivered = deliveredStatuses.length > 0;
+  const wantsOpen = openStatuses.length > 0;
   const [driverSnaps, deliverySnaps, openSnaps, attendanceSnaps, ruleSnaps, scopeSnaps, vehicleDocs, restaurantDocs, zoneDocs, partnerDocs, targetSnaps, shiftSnaps, verifiedSnaps] =
     await Promise.all([
       db
@@ -910,6 +916,12 @@ async function buildRoll(args: OpsArgs): Promise<{
             // Past midnight of `to`, so an overnight shift's tail is read; the
             // day filter below is what keeps it on the shift's own day.
             .where(FIELDS.deliveries.deliveredAt, "<", new Date(scanUpperMs(args.to)))
+            // Only the statuses `pushDelivery` would keep. Without this the read
+            // returned every delivery in the window — rejected and cancelled
+            // included — to discard them one by one, which was the bulk of this
+            // handler's document reads. The composite `status, delivered_at`
+            // index already existed.
+            .where("status", "in", deliveredStatuses)
             .select(
               "status",
               "driver_id",
@@ -926,6 +938,7 @@ async function buildRoll(args: OpsArgs): Promise<{
             .collection(COLLECTIONS.deliveries)
             .where(FIELDS.deliveries.pickupAt, ">=", kuwaitDayStart(args.from))
             .where(FIELDS.deliveries.pickupAt, "<", kuwaitDayEnd(args.to))
+            .where("status", "in", openStatuses)
             .select("status", "driver_id", "delivered_at", "pickup_at", "restaurant_id", "started_to_restaurant_at")
             .get()
         : Promise.resolve(null),
@@ -992,8 +1005,8 @@ async function buildRoll(args: OpsArgs): Promise<{
       minutes: null,
     });
   };
-  const deliveredAllowed = new Set(args.orderStatuses.filter((status) => status === "verified" || status === "pending"));
-  const openAllowed = new Set(args.orderStatuses.filter((status) => status === "in_transit"));
+  const deliveredAllowed = new Set(deliveredStatuses);
+  const openAllowed = new Set(openStatuses);
   for (const doc of deliverySnaps?.docs ?? []) pushDelivery(doc, deliveredAllowed);
   for (const doc of openSnaps?.docs ?? []) pushDelivery(doc, openAllowed);
 
@@ -1616,8 +1629,8 @@ async function buildRecentOpsTail(data: Dict, minutes: number): Promise<Dict> {
   const statuses = countedStatuses(data.order_status ?? data.orderStatus);
   const db = getFirestore();
 
-  const delivered = statuses.filter((status) => status !== "in_transit");
-  const wantsOpen = statuses.includes("in_transit");
+  const delivered = deliveredSliceStatuses(statuses);
+  const wantsOpen = openSliceStatuses(statuses).length > 0;
   const day = kuwaitDayString(now);
 
   // `in_transit` has no `delivered_at`, so an order still running is counted on
@@ -1629,6 +1642,7 @@ async function buildRecentOpsTail(data: Dict, minutes: number): Promise<Dict> {
       ? db
           .collection(COLLECTIONS.deliveries)
           .where(FIELDS.deliveries.deliveredAt, ">=", cutoff)
+          .where("status", "in", delivered)
           .select("status", "driver_id", "delivered_at", "pickup_at", "started_to_restaurant_at")
           .get()
       : Promise.resolve(null),

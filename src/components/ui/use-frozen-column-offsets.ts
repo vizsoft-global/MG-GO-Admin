@@ -3,7 +3,7 @@
 import * as React from "react";
 
 /** The leading columns `globals.css` knows how to freeze. */
-export const FROZEN_COLUMN_LIMIT = 3;
+export const FROZEN_COLUMN_LIMIT = 4;
 
 const useIsomorphicLayoutEffect =
   typeof window === "undefined" ? React.useEffect : React.useLayoutEffect;

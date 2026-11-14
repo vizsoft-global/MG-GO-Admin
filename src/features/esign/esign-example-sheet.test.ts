@@ -95,7 +95,11 @@ describe("bulk sheet column groups", () => {
     assert.deepEqual(groups.system, [
       "Company",
       "Employee name",
-      "Driver ID",
+      /**
+       * `driver_code` prints as **Client ID** since the client renamed the
+       * employee's platform reference; the key is unchanged.
+       */
+      "Client ID",
       "Civil ID",
       "Joining date",
       "Accommodation",

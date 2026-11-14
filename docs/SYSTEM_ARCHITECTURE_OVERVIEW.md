@@ -15,6 +15,12 @@
 4. [Cloud Functions, Serverless Endpoints & Background Jobs](#4-cloud-functions-serverless-endpoints--background-jobs)
 5. [Complete Feature Matrix](#5-complete-feature-matrix)
 6. [Appendices](#6-appendices)
+   - [6.1 Environment variables](#61-environment-variables-names-only)
+   - [6.2 Test suites](#62-test-suites-27-npm-run-test-scripts)
+   - [6.3 Firestore indexes, TTL and the query budget](#63-firestore-indexes-ttl-and-the-query-budget)
+   - [6.4 Cloud Function deployment inventory](#64-cloud-function-deployment-inventory)
+   - [6.5 Every route under `src/app/api`](#65-every-route-under-srcappapi)
+   - [6.6 Known constraints and open items](#66-known-constraints-and-open-items)
 
 ---
 
@@ -602,7 +608,7 @@ All callables live in **one** Firebase functions package and are reached through
 | `service-odometer-sync.ts` / `service-distance-sweep.ts` | 1 / 1 | scheduled, see §4.4 |
 | others | — | `fuel.ts`, `payouts.ts`, `earnings.ts`, `driver-list-plan.ts`, `misc-admin.ts`, `sync-staff-claims.ts`, `home-snapshot-repair.ts`, `leave-plans.ts`, `loan-tenure.ts`, `order-exceptions.ts`, `employee-dashboard`, `deliveries-counts/status`, `check-in-gate`, `delivery-context*`, `bites-*` |
 
-### 4.3 Next.js API routes — 49 `route.ts` files
+### 4.3 Next.js API routes — 53 `route.ts` files
 
 | Group | Routes | Method | Auth | Purpose |
 |---|---|---|---|---|
@@ -766,7 +772,105 @@ All callables live in **one** Firebase functions package and are reached through
 
 `test:geo` · `test:zones` · `test:drivers` · `test:permissions` · `test:i18n` (**12,625 keys × 2**) · `test:service` · `test:storage` · `test:assistant` · `test:recon` (57) · `test:vehicles` · `test:driver-devices` · `test:auth` · `test:performance` · `test:payroll` · `test:dpd` · `test:deliveries` · `test:earnings` · `test:visits` · `test:esign` · `test:templates` · `test:employeedesk` · `test:requests` · `test:compliance` · `test:notifications` · `test:attendance` · `test:fleet` (308) · `test:accidents` · `test:portal` · functions `npm test` (496).
 
-### 6.3 Known constraints and open items
+### 6.3 Firestore indexes, TTL and the query budget
+
+The database is **Enterprise edition**, which creates **no single-field index by default**. A query with no matching index is answered by reading the whole collection, billed by bytes in 4 KiB units. Every shape the code issues is therefore declared.
+
+| Item | Count | Where |
+|---|---|---|
+| Composite index definitions | **429** | `firestore.indexes.json` (145 KB) |
+| Distinct collection groups covered | **115** | same |
+| Live indexes in the database | **431** | 429 file + 2 hand-made `drivers` indexes |
+| TTL field overrides | **5** | `fieldOverrides` |
+| Index definitions written by the audit script | 208 of 231 detected shapes | `npm run audit:indexes --write` |
+
+**The fifteen collections that carry the most indexes** — the count follows the number of filter/order permutations the list screens can emit, not the table's size:
+
+| Collection | Indexes | Why |
+|---|---|---|
+| `deliveries` | 127 | status × zone × partner × date × order-id prefix × shift-day, plus every sort the list offers |
+| `drivers` | 17 | employee id / civil id / passport / phone prefix and the roster sorts |
+| `esign_requests` | 9 | status × category × signer × due date |
+| `attendance_logs` | 9 | driver × day range, zone, restaurant, status |
+| `admin_activity_logs` | 9 | actor × entity × action × date |
+| `notification_campaigns` | 9 | status × category × creator × schedule |
+| `notification_dispatch_items` | 8 | campaign × driver × status × dismissed |
+| `driver_operation_events` | 8 | driver × event × date, retention sweep |
+| `driver_location_events` | 8 | driver × day, history and export windows |
+| `fleet_events` | 8 | driver × type × cooldown windows |
+| `driver_telemetry_events` | 8 | driver × event type × day |
+| `asset_assignments` | 8 | driver × catalog × state |
+| `driver_intakes` | 7 | employee id / phone / civil id lock checks |
+| `order_exceptions` | 6 | rider × kind × status × day |
+| `restaurants` | 6 | partner × zone × name prefix |
+
+**TTL (all on an `expire_at` timestamp field):**
+
+| Collection | Retention | Written by |
+|---|---|---|
+| `driver_telemetry_events` | 14 days | `driverIngestTelemetry` |
+| `driver_operation_events` | 30 days | `log_driver_operation`, `log_driver_operation_autonomous` |
+| `driver_location_events` | 90 days | `driverReportLocation`, `adminIngestDriverPositions` |
+| `page_read_snapshots` | per-entry (`fresh_until`) | the scan-lane read-through cache |
+| `admin_cost_samples` | sampling window | cost telemetry |
+
+**How an index gets added.** `npm run audit:indexes` walks `functions/src` and `src` with the TypeScript compiler API, resolves every `COLLECTIONS.*` / `FIELDS.*` reference to its literal, collects each query's equality / range / order fields and checks them against an index list (the file, or a saved `firebase firestore:indexes` dump). `--write` appends the missing definitions; a single-field shape is written as `[field, __name__]` because Enterprise edition will not create one. Shapes that cannot be resolved — a field named at run time, a query assembled filter by filter — are reported, not guessed. Deployment is `firebase deploy --only firestore:indexes --non-interactive`; indexes build online, so a query keeps scanning until its index is ready.
+
+**Two index rules that are load-bearing, not stylistic.** A `ORDER BY created_at DESC NULLS LAST` shape needs the `NULLS LAST` twin of a plain `DESC` index — PostgREST/Firestore emit the former, and the mismatch is what once made a list degrade to a 114 MB scan. And a `driver_locations.last_seen_at` index is deliberately absent: that field is rewritten on every GPS report, so indexing it would tax the hottest write path to serve a cleanup job.
+
+### 6.4 Cloud Function deployment inventory
+
+| Attribute | Value |
+|---|---|
+| Project | `musallam-delivery-prod` |
+| Region | `me-central1` (Doha) |
+| Generation | Cloud Functions **gen2** (Cloud Run underneath) |
+| Runtime target | Node 20 LTS (`.nvmrc`) |
+| Callable exports | **319** across **73** module files |
+| Routed exports | `adminApi`, `adminApiScan`, `adminApiHeavy`, `workerApi` |
+| Scheduled exports | 5 (`serviceOdometerSync`, `serviceVehicleDistanceSweep`, `deliveryProximitySweep`, `homeSnapshotRepair`, `bitesMirrorSweep`) |
+| HTTP exports | `workerFleetRead`, `adminIngestDriverPositions`, `adminRecordFleetEvents` (secret-gated) + `workerApi` (single door) |
+| Authentication | Firebase ID token → `requireStaff` → permission slug; workers use `X-Worker-Secret` |
+| Secrets | `SERVICE_ODOMETER_APP_SECRET`, `WORKER_SHARED_SECRET` (Secret Manager) |
+
+| Lane | Memory | Concurrency | Instances | Timeout | Typical members |
+|---|---|---|---|---|---|
+| `adminApi` | 2 GiB | 8 | 0–8 | 60 s | Default for every admin callable not listed below |
+| `adminApiScan` | 4 GiB | 2 | 0–6 | 180 s | The 19 readers in §4.1 |
+| `adminApiHeavy` | 4 GiB | 1 | 0–3 | 300 s | 17 purge callables, earnings recalculation, eSign compose, import chunk claim, level sweep |
+| `workerApi` | 256 MiB | 40 | warm | 120 s | The three worker doors, chosen by the last path segment |
+
+**Deployment rules that are part of the architecture, not process preference:**
+
+- `assertPartition()` fails the build if a callable is on two lanes or missing from an export — a name cannot be shipped unrouted.
+- `laneOf(name)` is the only switch; moving a function between lanes is one edit, not a search.
+- The three worker doors retain a **standby** shape (`minInstances: 0`) so a burst can still land on them after `workerApi` takes the steady traffic.
+- Every lane holds a per-call `{"perf":"router"}` log line (`lane`, `fn`, `ms`, `snapshot: hit|miss`), which is how the read-snapshot hit rate is observed without adding a metric.
+
+### 6.5 Every route under `src/app/api`
+
+| Route | Route | Route |
+|---|---|---|
+| `/admin/app-releases/presign` | `/admin/driver-documents/expiry` | `/cron/roster-alerts` |
+| `/admin/app-releases/register` | `/admin/driver-documents/upload` | `/cron/storage-uploads-cleanup` |
+| `/admin/app-releases/setup-cors` | `/admin/locales` | `/deliveries/[id]/gps` |
+| `/admin/driver-documents` | `/admin/locales/[code]` | `/deliveries/proof-download` |
+| `/admin/translations/[locale]` | `/assistant/chat` | `/drivers/import-jobs` |
+| `/build-id` | `/cron/attendance-auto-checkout` | `/drivers/import-template.xlsx` |
+| `/cron/dpd-shift-notices` | `/cron/driver-ops-retention` | `/drivers/levels` |
+| `/cron/driver-telemetry-retention` | `/cron/esign-batch-drain` | `/drivers/page` |
+| `/cron/expire-stale-pickups` | `/cron/locations-cleanup` | `/driver-uploads/confirm` |
+| `/cron/notifications-automations` | `/cron/notifications-dispatch` | `/driver-uploads/mine` |
+| `/cron/performance-rollup` | `/cron/requests-sweep` | `/driver-uploads/presign` |
+| `/driver-uploads/proxy` | `/driver-uploads/read` | `/driver-app/active-release` |
+| `/driver-app/firebase-config` | `/driver-app/notification-media` | `/driver-app/notifications` |
+| `/esign/batch-zip` | `/esign/document-download` | `/esign/render-bench` |
+| `/launcher/weather` | `/live-tracking-v2/token` | `/menu-icons/[file]` |
+| `/nav/badges` | `/notifications/events` | `/order-recon/commit` |
+| `/order-recon/comparison` | `/order-recon/preview` | `/order-recon/redo` |
+| `/order-recon/undo` | `/storage/signed-url` | `/usage-monitor/data` |
+
+### 6.6 Known constraints and open items
 
 | Item | State |
 |---|---|

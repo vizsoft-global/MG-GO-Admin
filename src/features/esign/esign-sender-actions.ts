@@ -568,6 +568,12 @@ export async function upsertEsignTemplateField(input: {
   if (!input.label_en.trim()) return { ok: false, error: "invalid_input" };
   const { data, error } = await callAdminFunction("admin_upsert_esign_template_field", {
     p_field: {
+      /**
+       * Present only when this is an existing row. The callable updates by id
+       * when it sees one, which is what makes a renamed field_key an update
+       * instead of a second insert beside the old row.
+       */
+      ...(input.id ? { id: input.id } : {}),
       template_id: input.template_id,
       field_key: key,
       label_en: input.label_en.trim(),

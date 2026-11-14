@@ -173,9 +173,23 @@ function shouldIgnoreRowNavigation(target: EventTarget | null): boolean {
   );
 }
 
+/**
+ * The five leading columns of the Employees table, in the order they always
+ * appear: the row checkbox, S No., MG ID, Client ID, then Employee Name.
+ * `drivers-page-shell` hoists these ahead of whatever order the operator saved,
+ * and the table freezes the first three (see `frozenColumns={3}` below) so a
+ * sideways scroll loses neither the row's selection control nor its identity.
+ */
+const DRIVERS_LEAD_COLUMNS: readonly string[] = [
+  "select",
+  "sno",
+  "employeeId",
+  "clientId",
+  "name",
+];
+
 /** Table column id → server filter/sort column. Passcode, select and actions have none. */
-const COLUMN_FILTER_KEY: Record<string, DriversFixedColumn> = {
-  driverId: "driverId",
+const COLUMN_FILTER_KEY: Record<string, DriversFixedColumn> = {  driverId: "driverId",
   employeeId: "mgId",
   riderCategory: "riderCategory",
   companyClientId: "companyClientId",
@@ -259,13 +273,22 @@ function DriversPageContent() {
   );
   const toolbarColumns = useMemo<TableToolbarColumn[]>(
     () => [
+      /**
+       * The checkbox leads the table and is the first frozen column, so the
+       * selection control stays under the cursor at every scroll position.
+       */
       { id: "select", label: t("selectAll"), locked: true },
+      /**
+       * S No. is the row number: locked so it cannot be hidden, and declared
+       * here so `useTablePrefs` can order it like every other column.
+       */
+      { id: "sno", label: t("colSerial"), locked: true },
       { id: "employeeId", label: t("colEmployeeId") },
       { id: "clientId", label: t("colClientId"), locked: true },
+      { id: "name", label: t("colName"), locked: true },
       { id: "riderCategory", label: t("colRiderCategory") },
       { id: "companyClientId", label: t("colCompanyClientId") },
       { id: "companyName", label: t("colCompanyName") },
-      { id: "name", label: t("colName"), locked: true },
       { id: "phone", label: t("colPhone") },
       { id: "restaurants", label: t("colRestaurants") },
       { id: "zone", label: t("colZone"), categorical: true },
@@ -293,7 +316,22 @@ function DriversPageContent() {
   const prefs = useTablePrefs("drivers", toolbarColumns);
   const debouncedSearch = prefs.appliedQuery.trim();
   const isColumnVisible = prefs.isVisible;
-  const orderedVisibleIds = prefs.orderedColumns.map((column) => column.id);
+  /**
+   * The leading run, in the order it must always appear.
+   *
+   * `prefs.orderedColumns` comes from the operator's saved column preference, so
+   * a list saved before S No. existed would keep Employee Name far to the end.
+   * These five are hoisted on every render — a stable hoist, so every other
+   * column keeps the relative order the operator chose — which is also what the
+   * frozen-cell CSS relies on: it freezes by position, and position is only
+   * meaningful if the leading run is known.
+   */
+  const orderedVisibleIds = useMemo(() => {
+    const ids = prefs.orderedColumns.map((column) => column.id);
+    const lead = DRIVERS_LEAD_COLUMNS.filter((id) => ids.includes(id));
+    const rest = ids.filter((id) => !DRIVERS_LEAD_COLUMNS.includes(id));
+    return [...lead, ...rest];
+  }, [prefs.orderedColumns]);
   const approveDriver = useApproveDriverIntake();
   const restoreDriver = useRestoreDriverIntake();
   const archiveMany = useArchiveDriverIntakes();
@@ -394,6 +432,25 @@ function DriversPageContent() {
     if (!levelIndex.data) return [];
     return drivers.filter((driver) => matchesLevelFilter(levelIndex.data?.get(driver.id), levelFilter));
   }, [drivers, levelFilter, levelIndex.data]);
+  /**
+   * Row number per driver id, from the order the table is rendering.
+   *
+   * Derived from `shownDrivers` (the list after the level filter, in server sort
+   * order) rather than from the rendered row index, because the table is grouped
+   * and paged: a counter incremented while painting would restart inside each
+   * group and skip when a group is collapsed. A number that moved when a group
+   * was opened would not be a row number.
+   */
+  const rowNumbers = useMemo(() => {
+    const out = new Map<string, number>();
+    shownDrivers.forEach((driver, index) => out.set(driver.id, index + 1));
+    return out;
+  }, [shownDrivers]);
+  const rowNumber = useCallback(
+    (driverId: string) => rowNumbers.get(driverId) ?? "",
+    [rowNumbers],
+  );
+
   const groupedDrivers = useMemo(() => {
     const statusRows = statusesQuery.data ?? [];
     const labels: Record<string, string> = {};
@@ -824,12 +881,22 @@ function DriversPageContent() {
         ),
         className: "w-10",
       },
+      /**
+       * S No. is a plain right-aligned number: not sortable and not filterable,
+       * because a row number is a position, not a value. It sits directly after
+       * the checkbox so the frozen run is checkbox + S No. + MG ID.
+       */
+      {
+        id: "sno",
+        label: t("colSerial"),
+        className: "w-[64px] text-end",
+      },
       fixed("employeeId", t("colEmployeeId")),
       fixed("clientId", t("colClientId")),
+      fixed("name", t("colName")),
       fixed("riderCategory", t("colRiderCategory")),
       fixed("companyClientId", t("colCompanyClientId")),
       fixed("companyName", t("colCompanyName")),
-      fixed("name", t("colName")),
       fixed("phone", t("colPhone")),
       fixed("restaurants", t("colRestaurants")),
       fixed("zone", t("colZone")),
@@ -1219,6 +1286,7 @@ function DriversPageContent() {
             <AppDataTable
               toolbar={listToolbar}
               fitViewport
+              frozenColumns={3}
               columns={tableColumns}
               headerRowClassName="bg-primary/5 hover:bg-primary/5"
               empty={
@@ -1282,11 +1350,11 @@ function DriversPageContent() {
                           />
                         </VisibleTableCell>
                         <VisibleTableCell
-                          columnId="clientId"
+                          columnId="sno"
                           isVisible={isColumnVisible}
-                          className="font-mono text-sm text-muted-foreground"
+                          className="w-[64px] text-end tabular-nums text-sm text-muted-foreground"
                         >
-                          {driver.client_id ?? "—"}
+                          {rowNumber(driver.id)}
                         </VisibleTableCell>
                         <VisibleTableCell
                           columnId="employeeId"
@@ -1294,6 +1362,13 @@ function DriversPageContent() {
                           className="font-mono text-sm text-muted-foreground"
                         >
                           {driver.employee_id ?? "—"}
+                        </VisibleTableCell>
+                        <VisibleTableCell
+                          columnId="clientId"
+                          isVisible={isColumnVisible}
+                          className="font-mono text-sm text-muted-foreground"
+                        >
+                          {driver.client_id ?? "—"}
                         </VisibleTableCell>
                         <VisibleTableCell
                           columnId="riderCategory"

@@ -166,6 +166,22 @@ export function pickSendableHubTemplate<
     const pool = templatesForHubCategory(sendable, aligned);
     return pool[0] ?? null;
   }
+  /**
+   * A penalty child with no template of its own opens the parent penalty sheet.
+   *
+   * This used to answer `null`, and the "Others" tile — whose key
+   * `penalty_others` is not one of the eight parents — therefore opened the send
+   * screen with no template at all: an empty page rather than a form. Every
+   * penalty child is signed on the same notice, so the parent sheet is the right
+   * fallback; a child that does have its own template is still matched exactly
+   * above.
+   */
+  if (isPenaltyHubQuery(aligned)) {
+    const parent = sendable.find((row) => effectiveOutgoingCategoryKey(row) === "penalty");
+    if (parent) return parent;
+    const pool = templatesForHubCategory(sendable, aligned);
+    return pool[0] ?? null;
+  }
   return null;
 }
 

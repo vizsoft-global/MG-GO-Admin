@@ -414,6 +414,16 @@ export function TemplateBuilderShell({
           continue;
         }
         const res = await upsertEsignTemplateField({
+          /**
+           * Send the row id so the callable UPDATES this field rather than
+           * matching on `(template_id, field_key)`.
+           *
+           * That match is the reason a rename looked like a failed save: the new
+           * key found no row, so a second field was inserted and the old one
+           * survived — and on reload the old label came back. An existing row's
+           * id makes the rename an update; a new row has none and still inserts.
+           */
+          ...(field.isNew ? {} : { id: field.id }),
           template_id: templateId,
           field_key: field.field_key,
           label_en: field.label_en,

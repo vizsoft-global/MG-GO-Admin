@@ -441,10 +441,13 @@ function matchesCancel(row: Row, code: string): boolean {
 
 function needsMemoryFilter(params: DeliveriesQueryFilter): boolean {
   /*
-   * Delegated so the rule has one definition: a flag is NOT a reason to scan
-   * (it is an indexed equality); free-text search and the cancel-reason list are,
+   * Delegated so the rule has one definition: a flag alone used to force the
+   * scan; now it does not, but a flag **combined with anything else** still does,
+   * because the flag query is deliberately flag-plus-sort only (see
+   * `indexedQuery`). Free-text search and the cancel-reason list are scans too,
    * because neither is a stored field.
    */
+  if (params.flags && params.flags !== "all") return true;
   return needsMemoryScan(params);
 }
 
@@ -483,7 +486,36 @@ function indexedQuery(db: Firestore, params: DeliveriesQueryFilter): Query {
    * every other filter instead of forcing the in-memory scan below.
    */
   const flag = flagFilterOf(params.flags);
-  if (flag) query = query.where(flag.field, "==", flag.value);
+  if (flag) {
+    /*
+     * A flag narrows to a **single equality plus the sort**, and nothing else.
+     *
+     * Adding `status` / `zone_id` / `partner_id` to the same query asks for a
+     * composite of every combination of (flag × status/zone/partner × the two
+     * sort columns) — three flags, three filters and two directions is dozens of
+     * indexes that all have to build in the background before the page answers
+     * anything. The queries it *can* serve need no new index at all:
+     * `is_early_drop | created_at` and `is_early_drop | delivered_at` already
+     * exist, and a flagged set is a small slice of the collection, so the
+     * remaining filters are cheaper applied to it in memory than indexed.
+     *
+     * That is why `needsMemoryFilter` answers true whenever a flag is set: the
+     * page path must go through `scanDeliveryRows`, which is also what applies
+     * the scalar filters below.
+     */
+    query = query.where(flag.field, "==", flag.value);
+    if (params.dateFrom) query = query.where("delivered_at", ">=", new Date(params.dateFrom));
+    if (params.dateTo) {
+      query = query.where(
+        "delivered_at",
+        params.dateToExclusive ? "<" : "<=",
+        new Date(params.dateTo),
+      );
+    }
+    return hasDateWindow
+      ? query.orderBy("delivered_at", "desc")
+      : query.orderBy("created_at", "desc");
+  }
   if (params.status && params.status !== "all") {
     if (params.status === "in_progress") {
       query = query.where("status", "in", [...IN_PROGRESS_DELIVERY_STATUSES]);
@@ -514,6 +546,31 @@ function rowMatches(row: Row, params: DeliveriesQueryFilter, driverIds: string[]
     return false;
   }
   if (!rowMatchesFlag(row, params.flags)) return false;
+  /*
+   * The scalar filters only need re-checking on the flag path, where the query is
+   * flag-plus-sort and `indexedQuery` has already applied them everywhere else.
+   * Applying them again is harmless (a row that matched still matches) and keeps
+   * one predicate instead of two that could drift.
+   */
+  if (params.flags && params.flags !== "all") {
+    if (!rowMatchesScalarFilters(row, params)) return false;
+  }
+  return true;
+}
+
+/** Status / zone / partner / restaurant, for the flag path's post-filter. */
+function rowMatchesScalarFilters(row: Row, params: DeliveriesQueryFilter): boolean {
+  if (params.status && params.status !== "all") {
+    const wanted =
+      params.status === "in_progress"
+        ? (IN_PROGRESS_DELIVERY_STATUSES as readonly string[])
+        : [normalizeDeliveryStatusFilter(params.status)];
+    if (!wanted.includes(str(row.status))) return false;
+  }
+  if (params.zoneId && params.zoneId !== "all" && str(row.zone_id) !== params.zoneId) return false;
+  if (params.partnerId && params.partnerId !== "all" && str(row.partner_id) !== params.partnerId) {
+    return false;
+  }
   return true;
 }
 

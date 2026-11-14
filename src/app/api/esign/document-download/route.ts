@@ -136,6 +136,20 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
 
+  /**
+   * The three artifacts are not the same permission.
+   *
+   * A signer has to be able to read the *document* they are asked to sign, but
+   * the executed copy — the one carrying every signature — and the collected
+   * signature image are the employee's record, and handing them to anyone who
+   * can sign would let a line manager download another rider's ink. So the
+   * `signed` and `signature` kinds are HR/Admin only (`requests.manage` /
+   * `employeedesk.manage`); `esign.sign` alone still reaches the source PDF.
+   */
+  if ((kind === "signed" || kind === "signature") && !canManage) {
+    return NextResponse.json({ error: "not_authorized" }, { status: 403 });
+  }
+
   const db = await staffDb();
   if (!db) return NextResponse.json({ error: "read_failed" }, { status: 500 });
 

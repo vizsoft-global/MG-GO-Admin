@@ -550,7 +550,7 @@ export function RcmV2HubShell() {
             onClick={() => router.replace("/employeedesk?tab=outgoing")}
             aria-current={tab === "outgoing" ? "page" : undefined}
             className={cn(
-              "flex w-[260px] flex-col gap-0.5 rounded-[12px] px-[18px] py-3 text-start transition-colors duration-150 motion-reduce:transition-none",
+              "flex w-[260px] cursor-pointer flex-col gap-0.5 rounded-[12px] px-[18px] py-3 text-start transition-colors duration-150 motion-reduce:transition-none",
               tab === "outgoing" &&
                 "bg-white shadow-[0_0_1px_0_rgba(0,0,0,0.04),0_2px_6px_0_rgba(122,74,42,0.08)]",
             )}
@@ -572,7 +572,7 @@ export function RcmV2HubShell() {
             onClick={() => router.replace("/employeedesk?tab=incoming")}
             aria-current={tab === "incoming" ? "page" : undefined}
             className={cn(
-              "flex w-[260px] flex-col gap-0.5 rounded-[12px] px-[18px] py-3 text-start transition-colors duration-150 motion-reduce:transition-none",
+              "flex w-[260px] cursor-pointer flex-col gap-0.5 rounded-[12px] px-[18px] py-3 text-start transition-colors duration-150 motion-reduce:transition-none",
               tab === "incoming" &&
                 "bg-white shadow-[0_0_1px_0_rgba(0,0,0,0.04),0_2px_6px_0_rgba(122,74,42,0.08)]",
             )}

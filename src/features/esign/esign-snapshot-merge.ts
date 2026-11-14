@@ -31,28 +31,39 @@ function snapText(snapshot: Record<string, string> | null | undefined, key: stri
 }
 
 /**
- * Switching the selected rider replaces every cell that still holds that
- * rider's snapshot. A cell the operator typed (different from the previous
- * snapshot) stays. A blank cell on the next rider clears the previous rider's
- * leftover name, bank number, or date.
+ * Switching the selected rider replaces every cell on the next rider.
+ *
+ * The previous version inferred "the operator typed this" by comparing the cell
+ * against the previous snapshot, and treated a cell that matched as untouched.
+ * That works only while the previous snapshot is known, and the caller nulled it
+ * on any failed fetch — after which every one of the previous rider's values
+ * looked operator-typed and survived the switch. It also could not tell a value
+ * the operator retyped identically from one the app filled in, and a draft
+ * restored from `field_values` looked entirely typed.
+ *
+ * `touched` is the answer instead: the component records the keys a human
+ * actually edited, and nothing else is treated as typed. Everything else takes
+ * the new rider's snapshot, including a key the previous rider had a value for —
+ * which is what stops rider A's civil ID printing under rider B's name.
+ *
+ * A key the next snapshot does not carry is cleared rather than left holding the
+ * previous rider's value. The one exception is a hidden control (a penalty
+ * checkbox, the request kind): those are not rider data, so they are reported in
+ * `touched` by the caller and keep their state.
  */
 export function applyEmployeeSnapshotChange(
-  previous: Record<string, string> | null | undefined,
   nextSnap: Record<string, string> | null | undefined,
   values: Record<string, string>,
   fields: readonly SnapshotMergeField[],
+  touched: ReadonlySet<string>,
 ): Record<string, string> {
-  if (!previous) {
-    return mergeFieldValuesForSend(nextSnap, values, fields);
-  }
   const next: Record<string, string> = { ...values };
   const keys = new Set(fields.map((field) => field.field_key));
-  for (const key of Object.keys(previous)) keys.add(key);
+  for (const key of Object.keys(values)) keys.add(key);
   for (const key of Object.keys(nextSnap ?? {})) keys.add(key);
+
   for (const key of keys) {
-    const typed = values[key]?.trim() ?? "";
-    const fromPrev = snapText(previous, key);
-    if (typed && typed !== fromPrev) continue;
+    if (touched.has(key)) continue;
     next[key] = snapText(nextSnap, key);
   }
   return next;
