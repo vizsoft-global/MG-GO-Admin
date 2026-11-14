@@ -224,6 +224,14 @@ html[data-font="plus-jakarta-sans"] {
   --tw-ring-color: color-mix(in srgb, var(--ops-ink, #000) 40%, transparent);
 }
 
+/* A selected chip's label is white by contract, so a child that carries its own
+   colour — a count, an icon span, a muted suffix — cannot repaint it back onto
+   the navy fill and make the chip read as empty. */
+.ops-surface [aria-pressed="true"] *,
+.ops-surface [aria-checked="true"] * {
+  color: inherit;
+}
+
 .ops-surface [aria-pressed="false"],
 .ops-surface [aria-checked="false"] {
   color: var(--ops-ink, inherit);
@@ -669,56 +677,84 @@ svg.lucide {
 [data-frozen-cols="2"] thead th:nth-child(2),
 [data-frozen-cols="2"] tbody td:nth-child(2):not([colspan]),
 [data-frozen-cols="3"] thead th:nth-child(2),
-[data-frozen-cols="3"] tbody td:nth-child(2):not([colspan]) {
+[data-frozen-cols="3"] tbody td:nth-child(2):not([colspan]),
+[data-frozen-cols="4"] thead th:nth-child(2),
+[data-frozen-cols="4"] tbody td:nth-child(2):not([colspan]) {
   position: sticky;
   inset-inline-start: var(--fc-1, 0px);
 }
 
 [data-frozen-cols="3"] thead th:nth-child(3),
-[data-frozen-cols="3"] tbody td:nth-child(3):not([colspan]) {
+[data-frozen-cols="3"] tbody td:nth-child(3):not([colspan]),
+[data-frozen-cols="4"] thead th:nth-child(3),
+[data-frozen-cols="4"] tbody td:nth-child(3):not([colspan]) {
   position: sticky;
   inset-inline-start: var(--fc-2, 0px);
 }
 
+/* The Employees list freezes its three leading columns — the row checkbox,
+   S No., MG ID — so the selection control and the row's identity stay visible
+   while the rest pan. The `4` variant below stays supported by
+   `Table frozenColumns`, but no list uses it today; it is here so a future
+   table can freeze one more without touching this file. */
+[data-frozen-cols="4"] thead th:nth-child(4):not([colspan]),
+[data-frozen-cols="4"] tbody td:nth-child(4):not([colspan]) {
+  position: sticky;
+  inset-inline-start: var(--fc-3, 0px);
+}
+
 /* Header cells above the scrollable header cells and above every body cell. */
-[data-frozen-cols] thead th:nth-child(-n + 3):not([colspan]) {
+[data-frozen-cols] thead th:nth-child(-n + 3):not([colspan]),
+[data-frozen-cols="4"] thead th:nth-child(4):not([colspan]) {
   z-index: 30;
 }
 
 /* Body cells above the cells that pan underneath them. */
-[data-frozen-cols] tbody td:nth-child(-n + 3):not([colspan]) {
+[data-frozen-cols] tbody td:nth-child(-n + 3):not([colspan]),
+[data-frozen-cols="4"] tbody td:nth-child(4):not([colspan]) {
   z-index: 10;
 }
 
 /* The seam that says "everything after this scrolls". */
 [data-frozen-cols="3"] thead th:nth-child(3):not([colspan]),
-[data-frozen-cols="3"] tbody td:nth-child(3):not([colspan]) {
+[data-frozen-cols="3"] tbody td:nth-child(3):not([colspan]),
+[data-frozen-cols="4"] thead th:nth-child(4):not([colspan]),
+[data-frozen-cols="4"] tbody td:nth-child(4):not([colspan]) {
   border-inline-end: 1px solid var(--border);
 }
 
 @layer components {
   [data-frozen-cols] thead th:nth-child(-n + 3):not([colspan]),
-  [data-frozen-cols] tbody td:nth-child(-n + 3):not([colspan]) {
+  [data-frozen-cols] tbody td:nth-child(-n + 3):not([colspan]),
+  [data-frozen-cols="4"] thead th:nth-child(4):not([colspan]),
+  [data-frozen-cols="4"] tbody td:nth-child(4):not([colspan]) {
     background-color: var(--card);
   }
 
   /* Row state, mirrored onto the opaque frozen cells. */
   [data-frozen-cols] tbody tr[class*="bg-muted"] > td:nth-child(-n + 3):not([colspan]),
-  [data-frozen-cols] thead tr[class*="bg-muted"] > th:nth-child(-n + 3) {
+  [data-frozen-cols] thead tr[class*="bg-muted"] > th:nth-child(-n + 3),
+  [data-frozen-cols="4"] tbody tr[class*="bg-muted"] > td:nth-child(4):not([colspan]),
+  [data-frozen-cols="4"] thead tr[class*="bg-muted"] > th:nth-child(4) {
     background-color: color-mix(in oklab, var(--muted) 24%, var(--card));
   }
 
   [data-frozen-cols] tbody tr[class*="bg-primary"] > td:nth-child(-n + 3):not([colspan]),
-  [data-frozen-cols] thead tr[class*="bg-primary"] > th:nth-child(-n + 3) {
+  [data-frozen-cols] thead tr[class*="bg-primary"] > th:nth-child(-n + 3),
+  [data-frozen-cols="4"] tbody tr[class*="bg-primary"] > td:nth-child(4):not([colspan]),
+  [data-frozen-cols="4"] thead tr[class*="bg-primary"] > th:nth-child(4) {
     background-color: color-mix(in oklab, var(--primary) 5%, var(--card));
   }
 
   [data-frozen-cols] tbody tr[data-state="selected"] > td:nth-child(-n + 3):not([colspan]),
-  [data-frozen-cols] tbody tr[aria-selected="true"] > td:nth-child(-n + 3):not([colspan]) {
+  [data-frozen-cols] tbody tr[aria-selected="true"] > td:nth-child(-n + 3):not([colspan]),
+  [data-frozen-cols="4"] tbody tr[data-state="selected"] > td:nth-child(4):not([colspan]),
+  [data-frozen-cols="4"] tbody tr[aria-selected="true"] > td:nth-child(4):not([colspan]) {
     background-color: var(--muted);
   }
 
-  [data-frozen-cols] tbody tr:hover > td:nth-child(-n + 3):not([colspan]) {
+  [data-frozen-cols] tbody tr:hover > td:nth-child(-n + 3):not([colspan]),
+  [data-frozen-cols="4"] tbody tr:hover > td:nth-child(4):not([colspan]) {
     background-color: color-mix(in oklab, var(--muted) 40%, var(--card));
   }
 }

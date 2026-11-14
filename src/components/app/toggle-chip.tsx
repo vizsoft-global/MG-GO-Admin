@@ -38,7 +38,7 @@ export function ToggleChip({
         "inline-flex cursor-pointer items-center rounded-md border font-semibold transition-[color,background-color,border-color,box-shadow] duration-150 ease-out",
         sizeClass,
         selected
-          ? "border-primary bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/40"
+          ? "border-primary bg-primary text-white shadow-sm ring-1 ring-primary/40"
           : "border-border bg-muted/30 text-muted-foreground hover:border-muted-foreground/30 hover:bg-muted/50 hover:text-foreground",
         "disabled:cursor-not-allowed disabled:opacity-50",
         className,
@@ -50,7 +50,7 @@ export function ToggleChip({
         </span>
       ) : Icon ? (
         <Icon
-          className={cn("h-3 w-3 shrink-0", selected ? "text-primary-foreground" : "opacity-50")}
+          className={cn("h-3 w-3 shrink-0", selected ? "text-white" : "opacity-50")}
           aria-hidden
         />
       ) : selected ? (
@@ -85,7 +85,7 @@ export function SegmentOption({
       className={cn(
         "inline-flex h-8 cursor-pointer items-center justify-center gap-1 rounded-md border text-xs font-semibold transition-[color,background-color,border-color,box-shadow] duration-150 ease-out",
         selected
-          ? "border-primary bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/40"
+          ? "border-primary bg-primary text-white shadow-sm ring-1 ring-primary/40"
           : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
         "disabled:cursor-not-allowed disabled:opacity-50",
       )}

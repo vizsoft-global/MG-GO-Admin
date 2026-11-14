@@ -41,6 +41,7 @@ export function AppDataTable({
   stickyHeader = false,
   toolbar,
   fitViewport = false,
+  frozenColumns = 3,
 }: {
   columns: { id: string; label: ReactNode; className?: string }[];
   children: ReactNode;
@@ -57,11 +58,17 @@ export function AppDataTable({
    * nothing to scroll and the table's scroller is the only one. Needs `toolbar`.
    */
   fitViewport?: boolean;
+  /**
+   * Leading columns that hold their place while the rest pan sideways. Three by
+   * default; a list whose leading run includes a row-selection control passes 4
+   * so the three columns after it are the ones that stay put.
+   */
+  frozenColumns?: number;
 }) {
   const sticky = stickyHeader || Boolean(toolbar);
   const surface = (
     <>
-      <Table>
+      <Table frozenColumns={frozenColumns}>
         <TableHeader className="sticky top-0 z-20 bg-card shadow-sm">
           <TableRow className={cn("bg-card hover:bg-card", headerRowClassName)}>
             {columns.map((col) => (
