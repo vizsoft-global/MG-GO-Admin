@@ -12,6 +12,7 @@ import { TableStage } from "./table-toolbar/table-stage";
 import { AppTableScrollRail } from "./app-table-scroll-rail";
 import { AppTableBackToTop } from "./app-table-back-to-top";
 import { TABLE_HEAD_CLASS } from "./constants";
+import { FitViewport } from "./fit-viewport";
 
 /**
  * Height of the sticky table viewport.
@@ -40,6 +41,7 @@ export function AppDataTable({
   headerRowClassName,
   stickyHeader = false,
   toolbar,
+  fitViewport = false,
 }: {
   columns: { id: string; label: ReactNode; className?: string }[];
   children: ReactNode;
@@ -51,6 +53,11 @@ export function AppDataTable({
   stickyHeader?: boolean;
   /** Shared toolbar. Sits above the table and pins with its header on scroll. */
   toolbar?: ReactNode;
+  /**
+   * Size the table to the screen space left under it, so the page itself has
+   * nothing to scroll and the table's scroller is the only one. Needs `toolbar`.
+   */
+  fitViewport?: boolean;
 }) {
   const sticky = stickyHeader || Boolean(toolbar);
   const surface = (
@@ -111,6 +118,24 @@ export function AppDataTable({
    * rows below it stay on screen instead of being cut off by a fixed 640px
    * ceiling.
    */
+  if (fitViewport) {
+    // One scroller: no sticky frame, no second horizontal rail (the table's own
+    // bar is always on screen at the bottom of a fitted box), no back-to-top.
+    return (
+      <div className={cn("flex flex-col", className)}>
+        <FitViewport>
+          <TableStage toolbar={toolbar} />
+          <div
+            data-table-scroll=""
+            className="min-h-0 flex-1 overflow-auto [&_[data-slot=table-container]]:overflow-visible"
+          >
+            {surface}
+          </div>
+        </FitViewport>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("flex flex-col", className)}>
       <div className="sticky top-0 z-20 flex h-[calc(100dvh-0.75rem)] min-h-[320px] flex-col">

@@ -13,18 +13,23 @@ export function useGroupedListView<T>(
   grouped: boolean,
   resetKey = "",
   flatTotal?: number,
+  /** Ungrouped rows appear as the list is scrolled, instead of a pager. */
+  options: { reveal?: boolean } = {},
 ) {
   const groupKeySig = `${grouped ? "g" : "f"}\u0001${resetKey}\u0001${groups.map((group) => group.key).join("\u0001")}`;
   const [sig, setSig] = useState(groupKeySig);
   const [openKeys, setOpenKeys] = useState<ReadonlySet<string>>(() => new Set());
   const [groupPage, setGroupPage] = useState<Readonly<Record<string, number>>>({});
   const [flatPage, setFlatPage] = useState(0);
+  const [revealCount, setRevealCount] = useState(LIST_PAGE_SIZE);
+  const reveal = options.reveal === true;
 
   if (sig !== groupKeySig) {
     setSig(groupKeySig);
     setOpenKeys(new Set());
     setGroupPage({});
     setFlatPage(0);
+    setRevealCount(LIST_PAGE_SIZE);
   }
 
   const built = useMemo(
@@ -36,8 +41,9 @@ export function useGroupedListView<T>(
         groupPage,
         flatPage,
         totalOverride: flatTotal,
+        flatReveal: reveal ? revealCount : undefined,
       }),
-    [flatPage, flatTotal, groupPage, grouped, groups, openKeys],
+    [flatPage, flatTotal, groupPage, grouped, groups, openKeys, reveal, revealCount],
   );
 
   const toggle = useCallback((key: string) => {
@@ -70,7 +76,14 @@ export function useGroupedListView<T>(
     [lastFlatPage],
   );
 
+  const revealMore = useCallback(() => {
+    setRevealCount((prev) => prev + LIST_PAGE_SIZE);
+  }, []);
+
   return {
+    flatHasMore: built.flatHasMore,
+    revealCount,
+    revealMore,
     sections: built.sections as BuiltSection<T>[],
     scopeRows: built.scopeRows,
     flatPager: built.flatPager,

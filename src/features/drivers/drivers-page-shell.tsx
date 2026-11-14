@@ -435,6 +435,8 @@ function DriversPageContent() {
     prefs.groupBy !== "none",
     selectionResetKey,
     flatTotal,
+    // Rows appear as the list is scrolled; there is no pager in the flat view.
+    { reveal: true },
   );
   const tabTotal = hardFailed ? 0 : firstPage?.tabTotal ?? 0;
   const isLoading = pageQuery.isLoading;
@@ -491,18 +493,36 @@ function DriversPageContent() {
     tDriverDetail,
   ]);
 
+  const { flatHasMore, revealCount, revealMore } = listView;
+  const moreToShow = flatHasMore || Boolean(hasNextPage);
   useEffect(() => {
     const el = loadMoreRef.current;
-    if (!el || !hasNextPage) return;
+    if (!el || !moreToShow) return;
     const obs = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting && !isFetchingNextPage) void fetchNextPage();
+        if (!entries[0]?.isIntersecting) return;
+        // Rows already in the browser appear at once; the server is asked only
+        // when the rows held are about to run out.
+        revealMore();
+        if (hasNextPage && !isFetchingNextPage && revealCount + LIST_PAGE_SIZE >= drivers.length) {
+          void fetchNextPage();
+        }
       },
       { rootMargin: "240px" },
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage, drivers.length]);
+  }, [moreToShow, hasNextPage, isFetchingNextPage, fetchNextPage, drivers.length, revealCount, revealMore]);
+
+  /**
+   * Fetch the next server page before the operator reaches the end of the rows
+   * held, so scrolling does not stop at a spinner: two screens of rows ahead.
+   */
+  useEffect(() => {
+    if (prefs.groupBy !== "none" || levelFilter !== "all") return;
+    if (!hasNextPage || isFetchingNextPage) return;
+    if (revealCount + 2 * LIST_PAGE_SIZE >= drivers.length) void fetchNextPage();
+  }, [drivers.length, fetchNextPage, hasNextPage, isFetchingNextPage, levelFilter, prefs.groupBy, revealCount]);
 
   /**
    * Only a client-side filter needs the whole roster.
@@ -1198,6 +1218,7 @@ function DriversPageContent() {
           <CardContent className="p-0">
             <AppDataTable
               toolbar={listToolbar}
+              fitViewport
               columns={tableColumns}
               headerRowClassName="bg-primary/5 hover:bg-primary/5"
               empty={
@@ -1582,7 +1603,7 @@ function DriversPageContent() {
                       </AppDataTableRow>
                     )),
                   ])}
-                    {hasNextPage ? (
+                    {moreToShow ? (
                       <AppDataTableRow
                         ref={(el) => {
                           loadMoreRef.current = el;

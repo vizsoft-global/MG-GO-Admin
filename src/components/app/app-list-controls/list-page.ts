@@ -61,16 +61,43 @@ export function buildGroupSections<T>(input: {
    * against that number while still slicing the rows it holds.
    */
   totalOverride?: number;
+  /**
+   * Ungrouped lists only: show the first this-many rows and no pager. The caller
+   * raises it as the bottom of the list comes into view.
+   */
+  flatReveal?: number;
 }): {
   sections: BuiltSection<T>[];
   scopeRows: T[];
   flatPager: { page: number; total: number } | null;
+  /** Reveal mode: rows are held, or exist on the server, beyond the ones shown. */
+  flatHasMore: boolean;
 } {
   const pageSize = input.pageSize ?? LIST_PAGE_SIZE;
   if (!input.grouped) {
     const rows = input.groups.flatMap((group) => [...group.rows]);
     const override = input.totalOverride ?? 0;
     const total = override > rows.length ? override : rows.length;
+    if (input.flatReveal != null) {
+      const shown = Math.max(pageSize, Math.floor(input.flatReveal));
+      return {
+        sections: [
+          {
+            key: "all",
+            label: "",
+            total: rows.length,
+            open: true,
+            page: 0,
+            showHeader: false,
+            showPager: false,
+            visibleRows: rows.slice(0, shown),
+          },
+        ],
+        scopeRows: rows,
+        flatPager: null,
+        flatHasMore: shown < total,
+      };
+    }
     const page = clampPage(input.flatPage, total, pageSize);
     const start = page * pageSize;
     return {
@@ -88,6 +115,7 @@ export function buildGroupSections<T>(input: {
       ],
       scopeRows: rows,
       flatPager: total > pageSize ? { page, total } : null,
+      flatHasMore: false,
     };
   }
 
@@ -108,7 +136,7 @@ export function buildGroupSections<T>(input: {
       visibleRows: open ? pageSlice(group.rows, page, pageSize) : [],
     });
   }
-  return { sections, scopeRows, flatPager: null };
+  return { sections, scopeRows, flatPager: null, flatHasMore: false };
 }
 
 export function scopeSelectionState(
