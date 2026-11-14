@@ -2062,6 +2062,7 @@
         }
       },
       "colClientId": "Client ID",
+      "colSerial": "S No.",
       "colClientName": "Client",
       "colCompanyClientId": "Company Client ID",
       "colCompanyName": "Company Name",
@@ -10404,7 +10405,6 @@
           "orders": "Count of Orders",
           "wd": "Count of Working Days",
           "ah": "Actual Working Hours",
-          "ahApp": "Worked hours (app)",
           "restDpd": "Restaurant DPD",
           "riderDpd": "Rider DPD",
           "eff": "Efficiency",

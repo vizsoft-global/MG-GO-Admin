@@ -445,7 +445,6 @@ export function HrPayrollTab(props: {
       orders: t("cols.orders"),
       wd: t("cols.wd"),
       ah: t("cols.ah"),
-      ahApp: t("cols.ahApp"),
       restDpd: t("cols.restDpd"),
       riderDpd: t("cols.riderDpd"),
       eff: t("cols.eff"),

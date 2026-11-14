@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Building2, ChevronLeft, FileClock, FileText, Loader2, Paperclip, PencilLine, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -134,6 +134,29 @@ const PAYSLIP_KD_KEYS = new Set([
   "previous_loan_outstanding_kwd",
 ]);
 
+/**
+ * Payslip rows that are never "required", whatever the template says.
+ *
+ * A nil deduction is an ordinary month — the amount is zero and there is no
+ * reason to print — so asking the operator for one (`Administration deduction
+ * (KD) *`) and refusing to send with it blank describes a missing fact that does
+ * not exist. The template inspector can still tick Required, so the guard has to
+ * live here rather than only in the seed: the asterisk and the send gate both
+ * read `fieldIsRequired`.
+ */
+const PAYSLIP_ALWAYS_OPTIONAL = new Set([
+  "deduction_amount_kwd",
+  "admin_deduction",
+  "deduction_reason",
+  "extra_input",
+  "extra_input_kwd",
+]);
+
+function fieldIsRequired(field: EsignTemplateFieldRow): boolean {
+  if (PAYSLIP_ALWAYS_OPTIONAL.has(field.field_key)) return false;
+  return field.is_required;
+}
+
 function partitionPayslipFields(fields: EsignTemplateFieldRow[]) {
   const periodKeys = new Set<string>(PAYSLIP_PERIOD_ORDER);
   const moneyKeys = new Set(Object.keys(PAYSLIP_MONEY_CODES));
@@ -258,7 +281,24 @@ export function EsignSendShell({
    * protect. Same reason the template default effect below defers to it.
    */
   const draftAppliedRef = useRef(false);
-  const lastSnapshotValuesRef = useRef<Record<string, string> | null>(null);
+  /**
+   * The keys a human has actually edited on this form.
+   *
+   * Records intent, not equality. Every previous attempt to decide "did the
+   * operator type this?" by comparing the cell against the last snapshot failed
+   * the moment the previous snapshot was unavailable — a failed fetch, a draft
+   * restore, or a value retyped identically — and the previous rider's name and
+   * civil ID survived a switch to a different rider. A set cannot be wrong about
+   * what was clicked.
+   */
+  const touchedKeysRef = useRef<Set<string>>(new Set());
+  /**
+   * Whether an empty required field should already be outlined red.
+   *
+   * Off on a fresh form so a blank document does not open covered in red; on
+   * after the first edit or the first Send attempt.
+   */
+  const [requiredVisible, setRequiredVisible] = useState(false);
   const snapshotFetchGenRef = useRef(0);
 
   const isPayslip = template?.document_kind === "payslip";
@@ -274,9 +314,25 @@ export function EsignSendShell({
     // Seed the stored value once, so a saved draft and the sent request carry
     // the kind even when the operator never touches the select.
     if (!requestKindValue) {
+      touchedKeysRef.current.add(REQUEST_KIND_KEY);
       setValues((prev) => ({ ...prev, [REQUEST_KIND_KEY]: next }));
     }
   }, [isAccident, requestKindValue]);
+  /**
+   * One writer for every form cell.
+   *
+   * Marks the key as operator-edited so a rider switch cannot overwrite it, then
+   * sets the value. Every onChange in this form goes through here — a cell that
+   * wrote `setValues` directly would be indistinguishable from one the snapshot
+   * filled, and would be silently replaced the next time the rider changed.
+   */
+  const setFieldValue = useCallback((key: string, value: string) => {
+    touchedKeysRef.current.add(key);
+    // Once anything is edited the form is "being filled", so an empty required
+    // field elsewhere can show its red outline without every fresh form doing so.
+    setRequiredVisible(true);
+    setValues((prev) => ({ ...prev, [key]: value }));
+  }, []);
   const payslipGroups = useMemo(
     () => (template ? partitionPayslipFields(template.fields) : null),
     [template],
@@ -303,7 +359,20 @@ export function EsignSendShell({
   );
   const previewValues = useMemo(() => {
     if (!template) return {};
-    return { ...previewFieldValues(template.fields, values, snapshot), ...values, ...penaltyValues };
+    /**
+     * `values` is the base so non-template keys survive, then the merged view
+     * for every template field, then the penalty controls.
+     *
+     * The previous order ended with `...values`, which put the stale cell back
+     * on top of the snapshot-derived value — so the blue box (read straight from
+     * `snapshot`) showed rider B while the preview printed rider A. The merged
+     * view is the one that knows which keys to take from the snapshot.
+     */
+    return {
+      ...values,
+      ...previewFieldValues(template.fields, values, snapshot),
+      ...penaltyValues,
+    };
   }, [penaltyValues, snapshot, template, values]);
   const sheetFields = useMemo(() => {
     if (!template) return [];
@@ -376,6 +445,12 @@ export function EsignSendShell({
     if (draft.title) setTitle(draft.title);
     if (draft.due_at) setDueAt(draft.due_at.slice(0, 10));
     if (draft.description) setDescription(draft.description);
+    /**
+     * A restored draft is operator intent by definition — those cells were typed
+     * before the tab closed. Marking them all keeps the restore, and still lets
+     * a rider switch replace anything the draft never carried.
+     */
+    for (const key of Object.keys(draft.field_values)) touchedKeysRef.current.add(key);
     setValues(draft.field_values);
     const firstRow = draft.rows[0];
     if (firstRow?.driver_id) setDriverId(firstRow.driver_id);
@@ -415,16 +490,14 @@ export function EsignSendShell({
     const fields = template?.fields ?? [];
     if (!driverId) {
       setSnapshot(null);
-      setValues((prev) => applyEmployeeSnapshotChange(lastSnapshotValuesRef.current, null, prev, fields));
-      lastSnapshotValuesRef.current = null;
+      setValues((prev) => applyEmployeeSnapshotChange(null, prev, fields, touchedKeysRef.current));
       return;
     }
     void fetchEsignSnapshot(driverId).then((result) => {
       if (gen !== snapshotFetchGenRef.current) return;
       if (!result.snapshot) {
         setSnapshot(null);
-        setValues((prev) => applyEmployeeSnapshotChange(lastSnapshotValuesRef.current, null, prev, fields));
-        lastSnapshotValuesRef.current = null;
+        setValues((prev) => applyEmployeeSnapshotChange(null, prev, fields, touchedKeysRef.current));
         const code = classifyEsignResolveError(result.error ?? "unknown_id");
         const mapped = mappedEsignErrorKey(code === "failed" ? "unknown_id" : code);
         if (mapped) toast.error(t(`errors.${mapped}`));
@@ -432,8 +505,9 @@ export function EsignSendShell({
       }
       const nextSnap = snapshotValues(result.snapshot);
       setSnapshot(result.snapshot);
-      setValues((prev) => applyEmployeeSnapshotChange(lastSnapshotValuesRef.current, nextSnap, prev, fields));
-      lastSnapshotValuesRef.current = nextSnap;
+      // Unconditional: every key the operator did not edit takes the new rider,
+      // whether or not a previous snapshot was ever available.
+      setValues((prev) => applyEmployeeSnapshotChange(nextSnap, prev, fields, touchedKeysRef.current));
     });
   }, [driverId, t, template?.fields]);
 
@@ -500,19 +574,22 @@ export function EsignSendShell({
   }
 
   async function submit() {
+    /**
+     * Show the red outlines before returning, so a refusal names a field the
+     * operator can see is wrong rather than a toast about an invisible one.
+     */
+    setRequiredVisible(true);
     if (!driverId || !templateId || !resolvedTitle) {
       toast.error(t("errors.missingFields"));
       return;
     }
-    if (
-      isPayslip &&
-      template?.fields.some(
-        (field) =>
-          isSheetInput(field) &&
-          field.is_required &&
-          !(values[field.field_key] ?? "").trim(),
-      )
-    ) {
+    const requiredMissing = template?.fields.some(
+      (field) =>
+        isSheetInput(field) &&
+        fieldIsRequired(field) &&
+        !(values[field.field_key] ?? "").trim(),
+    );
+    if (requiredMissing) {
       toast.error(t("errors.missingFields"));
       return;
     }
@@ -649,8 +726,19 @@ export function EsignSendShell({
       ? LOAN_INSTALLMENT_CHOICES
       : selectOptionsForField(field, template?.category_key ?? "");
     const placeholder = fieldInputPlaceholder(field);
+    /**
+     * An empty required field is outlined red once the operator has started
+     * filling the form (or pressed Send), for every document kind.
+     *
+     * It used to apply to the payslip only, so a Loan or Accident form showed the
+     * asterisk and then refused the send with a toast naming a field the operator
+     * could not see was wrong. Gating on `requiredVisible` keeps a brand-new
+     * blank form from painting every cell red before anyone has touched it.
+     */
     const missing =
-      isPayslip && field.is_required && !(values[field.field_key] ?? "").trim();
+      (isPayslip || requiredVisible) &&
+      fieldIsRequired(field) &&
+      !(values[field.field_key] ?? "").trim();
     const controlClass = cn(missing && "border-destructive ring-1 ring-destructive/40");
     const useSelect = installment || (field.field_type === "select" && options.length > 0);
     return (
@@ -662,7 +750,7 @@ export function EsignSendShell({
               {isPayslip && PAYSLIP_KD_KEYS.has(field.field_key) && !field.label_en.includes("(KD)")
                 ? " (KD)"
                 : ""}
-              {field.is_required ? <span className="text-destructive"> *</span> : null}
+              {fieldIsRequired(field) ? <span className="text-destructive"> *</span> : null}
             </span>
             {code ? (
               <span className="rounded border border-border bg-muted/50 px-1 py-px text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -688,9 +776,7 @@ export function EsignSendShell({
                 keywords: [option],
               }))}
               value={values[field.field_key] || null}
-              onChange={(next) =>
-                setValues((prev) => ({ ...prev, [field.field_key]: next ?? "" }))
-              }
+              onChange={(next) => setFieldValue(field.field_key, next ?? "")}
               placeholder={t("fieldSelectPlaceholder")}
               searchPlaceholder={t("fieldSelectSearch")}
               recentsKey={`esign-send-select-${field.field_key}`}
@@ -699,9 +785,7 @@ export function EsignSendShell({
           ) : (
             <Select
               value={values[field.field_key] || undefined}
-              onValueChange={(next) =>
-                setValues((prev) => ({ ...prev, [field.field_key]: next ?? "" }))
-              }
+              onValueChange={(next) => setFieldValue(field.field_key, next ?? "")}
             >
               <SelectTrigger className={cn("h-9 w-full", controlClass)}>
                 <SelectValue placeholder={t("fieldSelectPlaceholder")} />
@@ -720,9 +804,7 @@ export function EsignSendShell({
             className={cn("min-h-16", controlClass)}
             value={values[field.field_key] ?? ""}
             placeholder={placeholder}
-            onChange={(e) =>
-              setValues((prev) => ({ ...prev, [field.field_key]: e.target.value }))
-            }
+            onChange={(e) => setFieldValue(field.field_key, e.target.value)}
           />
         ) : (
           <Input
@@ -730,9 +812,7 @@ export function EsignSendShell({
             type={field.field_type === "number" ? "number" : field.field_type === "date" ? "date" : "text"}
             value={values[field.field_key] ?? ""}
             placeholder={placeholder}
-            onChange={(e) =>
-              setValues((prev) => ({ ...prev, [field.field_key]: e.target.value }))
-            }
+            onChange={(e) => setFieldValue(field.field_key, e.target.value)}
           />
         )}
       </div>
@@ -1045,7 +1125,7 @@ export function EsignSendShell({
                   onValueChange={(next) => {
                     const kind = normalizeAccidentKind(next);
                     setAccidentKind(kind);
-                    setValues((prev) => ({ ...prev, [REQUEST_KIND_KEY]: kind }));
+                    setFieldValue(REQUEST_KIND_KEY, kind);
                   }}
                 >
                   <SelectTrigger className="h-9 w-full">
@@ -1068,7 +1148,7 @@ export function EsignSendShell({
                     value={values.requested_documents ?? ""}
                     placeholder={tAccident("requestedDocumentsHint")}
                     onChange={(event) =>
-                      setValues((prev) => ({ ...prev, requested_documents: event.target.value }))
+                      setFieldValue("requested_documents", event.target.value)
                     }
                   />
                 </div>
@@ -1110,7 +1190,7 @@ export function EsignSendShell({
                       value={values.absence_from ?? ""}
                       placeholder={t("fieldAbsenceFrom")}
                       onChange={(e) =>
-                        setValues((prev) => ({ ...prev, absence_from: e.target.value }))
+                        setFieldValue("absence_from", e.target.value)
                       }
                     />
                   </div>
@@ -1127,7 +1207,7 @@ export function EsignSendShell({
                       value={values.absence_to ?? ""}
                       placeholder={t("fieldAbsenceTo")}
                       onChange={(e) =>
-                        setValues((prev) => ({ ...prev, absence_to: e.target.value }))
+                        setFieldValue("absence_to", e.target.value)
                       }
                     />
                   </div>

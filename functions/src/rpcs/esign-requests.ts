@@ -1182,18 +1182,42 @@ export const adminUpsertEsignTemplateField = onCall(async (request) => {
   const templateSnap = await templateRef.get();
   if (!templateSnap.exists) return { ok: false, error: "not_found" };
 
-  const existing = await db
-    .collection(COLLECTIONS.esignTemplateFields)
-    .where("template_id", "==", templateId)
-    .where("field_key", "==", fieldKey)
-    .limit(1)
-    .get();
-  const fieldRef = existing.empty
-    ? db.collection(COLLECTIONS.esignTemplateFields).doc()
-    : existing.docs[0].ref;
+  const fieldsRef = db.collection(COLLECTIONS.esignTemplateFields);
+  /**
+   * An existing row is addressed by its **id**, and the key match is only the
+   * fallback for a caller that has no id.
+   *
+   * Matching on `(template_id, field_key)` meant a rename found nothing, inserted
+   * a second row under the new key, and left the old row in place — so the
+   * builder reported a successful save and the old label came back on reload.
+   * The id is the row; a rename has to move it, not shadow it.
+   */
+  const rowId = pickId(field, "id", "field_id", "fieldId");
+  let fieldRef = rowId ? fieldsRef.doc(rowId) : null;
+  if (fieldRef) {
+    const row = await fieldRef.get();
+    // An id from another template (or a deleted row) must not be written: fall
+    // back to the key lookup rather than editing a stranger's field.
+    if (!row.exists || trimmedOrNull(row.get("template_id")) !== templateId) {
+      fieldRef = null;
+    }
+  }
+  const existing = fieldRef
+    ? null
+    : await fieldsRef
+        .where("template_id", "==", templateId)
+        .where("field_key", "==", fieldKey)
+        .limit(1)
+        .get();
+  const isInsert = !fieldRef && (existing?.empty ?? true);
+  if (!fieldRef) {
+    fieldRef = existing && !existing.empty
+      ? existing.docs[0]!.ref
+      : fieldsRef.doc();
+  }
 
   const batch = db.batch();
-  if (existing.empty) {
+  if (isInsert) {
     batch.set(fieldRef, { ...body, created_at: FieldValue.serverTimestamp() });
   } else {
     batch.set(fieldRef, body, { merge: true });

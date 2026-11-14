@@ -46,6 +46,13 @@ export function useDeliveriesKpis() {
   return useQuery({
     queryKey: queryKeys.deliveries.kpis(),
     queryFn: fetchDeliveriesKpis,
+    /**
+     * The counts are filter-independent — one query key, five numbers over the
+     * whole collection — so they do not need to be re-read on every navigation or
+     * sit in the same request burst as the page the operator actually asked for.
+     * A write still invalidates them through `deliveries.all()`.
+     */
+    staleTime: 60_000,
     retry: false,
   });
 }

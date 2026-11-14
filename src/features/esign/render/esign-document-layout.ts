@@ -63,6 +63,31 @@ export type SignSlotRole =
   | "hr_manager"
   | "general_manager";
 
+/**
+ * The one list of valid slot roles.
+ *
+ * It exists because the parser carried its own copy that stopped at the six
+ * original boxes, so a Leave sheet's four manager slots were never read back —
+ * the geometry was in the document, the reader refused it, and the rider's ink
+ * had nowhere to land.
+ */
+const SIGN_SLOT_ROLES = [
+  "employee",
+  "hr",
+  "gm",
+  "ceo",
+  "ack_received",
+  "ack_not_received",
+  "direct_manager",
+  "hr_responsibility",
+  "hr_manager",
+  "general_manager",
+] as const satisfies readonly SignSlotRole[];
+
+export function isSignSlotRole(value: string): value is SignSlotRole {
+  return (SIGN_SLOT_ROLES as readonly string[]).includes(value);
+}
+
 export type SignSlot = {
   id: string;
   role: SignSlotRole;
@@ -615,15 +640,7 @@ export function parseSignatureSlots(raw: unknown): SignSlot[] | null {
     if (!item || typeof item !== "object") return null;
     const row = item as Record<string, unknown>;
     const role = String(row.role ?? "");
-    const roles: SignSlotRole[] = [
-      "employee",
-      "hr",
-      "gm",
-      "ceo",
-      "ack_received",
-      "ack_not_received",
-    ];
-    if (!roles.includes(role as SignSlotRole)) return null;
+    if (!isSignSlotRole(role)) return null;
     const slotRow: SignSlot = {
       id: String(row.id ?? role),
       role: role as SignSlotRole,

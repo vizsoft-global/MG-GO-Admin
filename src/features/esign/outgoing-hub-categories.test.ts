@@ -212,7 +212,13 @@ describe("outgoing hub categories", () => {
     ];
     assert.equal(pickSendableHubTemplate(rows, "late_attendance")?.id, "late");
     assert.equal(pickSendableHubTemplate(rows, "penalty")?.id, "parent");
-    assert.equal(pickSendableHubTemplate(rows, "written_warning"), null);
+    /**
+     * A penalty child with no sheet of its own opens the parent notice rather
+     * than a blank page — `penalty_others` (the "Others" tile) is exactly this
+     * case.
+     */
+    assert.equal(pickSendableHubTemplate(rows, "written_warning")?.id, "parent");
+    assert.equal(pickSendableHubTemplate(rows, "penalty_others")?.id, "parent");
     assert.equal(pickSendableHubTemplate(rows, "loan")?.id, "loan");
   });
 
